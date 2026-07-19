@@ -151,12 +151,21 @@ build_handler "cognito-pre-signup" \
 build_handler "cognito-pre-token-client-deny" \
   "$REPO_ROOT/packages/api/src/handlers/cognito-pre-token-client-deny.ts"
 
+# Rollback-only WorkOS bridge artifacts remain in release bundles until the
+# explicit auth retirement phase removes their Terraform resources. They are
+# never referenced by the native login UI or public auth options.
+build_handler "cognito-custom-auth" \
+  "$REPO_ROOT/packages/api/src/handlers/cognito-custom-auth.ts"
+
 
 build_handler "public-auth-options" \
   "$REPO_ROOT/packages/api/src/handlers/public-auth-options.ts"
 
 build_handler "auth-provider-reconcile" \
   "$REPO_ROOT/packages/api/src/handlers/auth-provider-reconcile.ts"
+
+build_handler "workos-auth" \
+  "$REPO_ROOT/packages/api/src/handlers/workos-auth.ts"
 
 
 # Public artifact share links (THINK-208): unauthenticated GET /share/{token}.

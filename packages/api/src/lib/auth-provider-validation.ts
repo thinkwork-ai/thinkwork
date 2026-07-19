@@ -9,6 +9,10 @@ const PROVIDER_NAME_RE = /^[\w][\w .-]{0,127}$/;
 const STAGE_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MICROSOFT_TENANT_ISSUER_RE = new RegExp(
+  `^https://login\\.microsoftonline\\.com/(${UUID_RE.source.slice(1, -1)})/v2\\.0/?$`,
+  "i",
+);
 const SHA256_RE = /^[a-f0-9]{64}$/;
 
 const CONNECTION_KINDS = new Set([
@@ -158,6 +162,18 @@ function validateUrl(value: string, path: string, httpsOnly = true): string {
     );
   }
   return value.trim();
+}
+
+function validateMicrosoftTenantIssuer(value: string, path: string): string {
+  const validated = validateUrl(value, path);
+  const match = MICROSOFT_TENANT_ISSUER_RE.exec(validated);
+  if (!match) {
+    throw new AuthProviderValidationError(
+      "invalid_microsoft_issuer",
+      `${path} must be the exact https://login.microsoftonline.com/<tenant-guid>/v2.0 issuer; common, organizations, and consumers aliases are not accepted by Cognito`,
+    );
+  }
+  return `https://login.microsoftonline.com/${match[1]!.toLowerCase()}/v2.0`;
 }
 
 function validateRouteUri(value: string, path: string, family: string): string {
@@ -367,6 +383,49 @@ function parseConnection(
     };
   });
 
+  const rawIssuerUrl = optionalString(value.issuerUrl, `${path}.issuerUrl`);
+  const issuerUrl =
+    providerKind === "microsoft_organizations" ||
+    providerKind === "microsoft_tenant"
+      ? validateMicrosoftTenantIssuer(
+          string(rawIssuerUrl, `${path}.issuerUrl`),
+          `${path}.issuerUrl`,
+        )
+      : rawIssuerUrl
+        ? validateUrl(rawIssuerUrl, `${path}.issuerUrl`)
+        : undefined;
+
+  if (providerKind === "microsoft_organizations") {
+    if (
+      connectionKey !== "microsoft:organizations" ||
+      providerKey !== "microsoft" ||
+      providerName !== "MicrosoftOrganizations" ||
+      tenantBindings.length !== 0
+    ) {
+      throw new AuthProviderValidationError(
+        "invalid_microsoft_scope",
+        `${path} must be the deployment-wide MicrosoftOrganizations connection with no tenant binding`,
+      );
+    }
+  }
+  if (providerKind === "microsoft_tenant") {
+    const issuerTenantId = MICROSOFT_TENANT_ISSUER_RE.exec(
+      issuerUrl ?? "",
+    )?.[1]?.toLowerCase();
+    if (
+      !issuerTenantId ||
+      connectionKey !== `microsoft:tenant:${issuerTenantId}` ||
+      providerKey !== "microsoft" ||
+      !/^Entra_[a-f0-9]{16}_[a-f0-9]{8}$/.test(providerName) ||
+      tenantBindings.length !== 1
+    ) {
+      throw new AuthProviderValidationError(
+        "invalid_microsoft_scope",
+        `${path} must bind one ThinkWork tenant to the exact Entra directory encoded by its issuer and connection key`,
+      );
+    }
+  }
+
   return {
     connectionKey,
     providerKey,
@@ -376,12 +435,7 @@ function parseConnection(
       lifecycleState as SafeAuthConnectionMetadata["lifecycleState"],
     cognitoUserPoolId: poolId,
     cognitoIdentityProviderName: providerName,
-    issuerUrl: value.issuerUrl
-      ? validateUrl(
-          string(value.issuerUrl, `${path}.issuerUrl`),
-          `${path}.issuerUrl`,
-        )
-      : undefined,
+    issuerUrl,
     clientId: optionalString(value.clientId, `${path}.clientId`),
     clientSecretRef: validateSecretRef(
       optionalString(value.clientSecretRef, `${path}.clientSecretRef`),
@@ -458,16 +512,48 @@ function parseRoute(
       `${path}.cognitoAppClientId is invalid`,
     );
   }
+  const providerNames = stringArray(
+    value.providerNames,
+    `${path}.providerNames`,
+  );
+  const explicitAuthFlows = stringArray(
+    value.explicitAuthFlows,
+    `${path}.explicitAuthFlows`,
+  );
+  if (providerNames.length !== 1) {
+    throw new AuthProviderValidationError(
+      "invalid_route_provider",
+      `${path} must allow exactly one identity provider`,
+    );
+  }
+  const expectedFlows =
+    providerNames[0] === "COGNITO"
+      ? new Set([
+          "ALLOW_USER_PASSWORD_AUTH",
+          "ALLOW_USER_SRP_AUTH",
+          "ALLOW_REFRESH_TOKEN_AUTH",
+        ])
+      : new Set(["ALLOW_REFRESH_TOKEN_AUTH"]);
+  if (
+    explicitAuthFlows.some((flow) => !expectedFlows.has(flow)) ||
+    !explicitAuthFlows.includes("ALLOW_REFRESH_TOKEN_AUTH") ||
+    (providerNames[0] === "COGNITO" &&
+      !explicitAuthFlows.some((flow) =>
+        ["ALLOW_USER_PASSWORD_AUTH", "ALLOW_USER_SRP_AUTH"].includes(flow),
+      ))
+  ) {
+    throw new AuthProviderValidationError(
+      "unsafe_auth_flow",
+      `${path} enables an authentication flow outside its route boundary`,
+    );
+  }
   return {
     routeKey: string(value.routeKey, `${path}.routeKey`).toLowerCase(),
     clientFamily: family as SafeAuthRouteClientMetadata["clientFamily"],
     cognitoUserPoolId: poolId,
     cognitoAppClientId: appClientId,
-    providerNames: stringArray(value.providerNames, `${path}.providerNames`),
-    explicitAuthFlows: stringArray(
-      value.explicitAuthFlows,
-      `${path}.explicitAuthFlows`,
-    ),
+    providerNames,
+    explicitAuthFlows,
     redirectUris: stringArray(value.redirectUris, `${path}.redirectUris`).map(
       (uri) => validateRouteUri(uri, `${path}.redirectUris`, family),
     ),

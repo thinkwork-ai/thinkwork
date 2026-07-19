@@ -14,6 +14,12 @@ locals {
   # deployment jobs — plan 2026-06-12-001 U10); the TWENTY config key is
   # retired.
   optional_integration_handler_names = concat(
+    var.auth_retirement_phase == "retired" ? [
+      # The native login UI never publishes this handler. It remains reachable
+      # only as an operator-controlled rollback seam through coexistence and
+      # cutover/soak, then Terraform removes the Lambda and routes atomically.
+      "workos-auth",
+    ] : [],
     var.deployment_control_plane_enabled ? [] : [
       # Host-only onboarding/deployment API. Customer foundations disable the
       # deployment control plane, so release-based customer installs must not
@@ -349,6 +355,21 @@ locals {
       AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
       AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
       AGENTCORE_GATEWAY_POLICY_REVISION   = "platform-tools-v4-user-questions"
+    }
+    "workos-auth" = {
+      # During cutover/soak the callback, bridge, and logout paths remain for
+      # already-issued state, but the handler independently refuses every new
+      # WorkOS authorize start. Terraform removes the handler in retired.
+      AUTH_RETIREMENT_PHASE = var.auth_retirement_phase
+    }
+    "public-auth-options" = {
+      AUTH_RETIREMENT_PHASE = var.auth_retirement_phase
+    }
+    "auth-me" = {
+      AUTH_MIGRATION_RECOVERY_DEADLINE = var.auth_migration_recovery_deadline
+    }
+    "auth-enrollment" = {
+      AUTH_MIGRATION_RECOVERY_DEADLINE = var.auth_migration_recovery_deadline
     }
     # Analyst query broker (THINK-228 U3). Reader role + caller credential
     # secrets, and the workspace bucket's analyst-staging/ prefix for
@@ -779,6 +800,7 @@ resource "aws_lambda_function" "handler" {
     "subscription-invalidation",
     "public-auth-options",
     "auth-provider-reconcile",
+    "workos-auth",
     # Public artifact share links (THINK-208): GET /share/{token}, token
     # verified in handler code (no gateway auth, uniform 404 on any miss).
     "artifact-share",
@@ -1592,6 +1614,16 @@ locals {
       # Operator/deployment-only metadata seam. The Lambda independently
       # verifies API_AUTH_SECRET and rejects raw secret values.
       "POST /api/auth/providers/reconcile" = "auth-provider-reconcile"
+      # Rollback-only routes. No native client links to these, and the entire
+      # handler is filtered from Lambda/API Gateway in the retired phase.
+      "GET /api/auth/workos/authorize"     = "workos-auth"
+      "OPTIONS /api/auth/workos/authorize" = "workos-auth"
+      "GET /api/auth/workos/callback"      = "workos-auth"
+      "OPTIONS /api/auth/workos/callback"  = "workos-auth"
+      "POST /api/auth/workos/bridge"       = "workos-auth"
+      "OPTIONS /api/auth/workos/bridge"    = "workos-auth"
+      "POST /api/auth/workos/logout"       = "workos-auth"
+      "OPTIONS /api/auth/workos/logout"    = "workos-auth"
 
       # Agents
       "ANY /api/agents/{proxy+}" = "agents"
@@ -1765,6 +1797,10 @@ locals {
       "OPTIONS /api/auth/subscription-ticket"                                   = "auth-subscription-ticket"
       "POST /api/auth/enrollment/consume"                                       = "auth-enrollment"
       "OPTIONS /api/auth/enrollment/consume"                                    = "auth-enrollment"
+      "POST /api/auth/enrollment/recover"                                       = "auth-enrollment"
+      "OPTIONS /api/auth/enrollment/recover"                                    = "auth-enrollment"
+      "POST /api/auth/enrollment/migrate"                                       = "auth-enrollment"
+      "OPTIONS /api/auth/enrollment/migrate"                                    = "auth-enrollment"
       "ANY /api/extensions/{extensionId}"                                       = "extension-proxy"
       "ANY /api/extensions/{extensionId}/{proxy+}"                              = "extension-proxy"
 

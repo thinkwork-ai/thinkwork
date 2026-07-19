@@ -1,12 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   AuthAdmissionError,
+  admitCognitoTenant,
+  discoverCognitoTenantAdmissions,
+  evaluateRollbackRouteAdmission,
   evaluateRouteAdmission,
   evaluateTenantAdmission,
+  resolveCognitoRouteProvenance,
   type CognitoRouteProvenance,
   type IdentityAdmissionCandidate,
   type RouteAdmissionCandidate,
+  type AuthAdmissionRepository,
 } from "./auth-admission.js";
 
 const googleRoute = route({
@@ -39,6 +44,13 @@ describe("Cognito route provenance", () => {
     expectAdmissionCode(
       () =>
         evaluateRouteAdmission([
+          { ...googleRoute, connectionValidationStatus: "partially_valid" },
+        ]),
+      "unknown_client",
+    );
+    expectAdmissionCode(
+      () =>
+        evaluateRouteAdmission([
           { ...googleRoute, connectionAppClientIds: ["some-other-client"] },
         ]),
       "unknown_client",
@@ -47,6 +59,44 @@ describe("Cognito route provenance", () => {
       () => evaluateRouteAdmission([googleRoute, { ...googleRoute }]),
       "ambiguous_client",
     );
+  });
+
+  it("admits the legacy WorkOS client only while its bounded route is in coexistence", () => {
+    const rollback = rollbackRoute();
+    expect(evaluateRollbackRouteAdmission([rollback])).toMatchObject({
+      lifecycleState: "coexistence",
+      providerKind: "legacy_workos",
+      appClientId: "client-workos",
+    });
+    expectAdmissionCode(
+      () =>
+        evaluateRollbackRouteAdmission([
+          { ...rollback, routeLifecycleState: "denied" },
+        ]),
+      "unknown_client",
+    );
+    expectAdmissionCode(
+      () =>
+        evaluateRollbackRouteAdmission([
+          { ...rollback, connectionLifecycleState: "native" },
+        ]),
+      "unknown_client",
+    );
+  });
+
+  it("does not bypass an explicit denied route with the provider fallback", async () => {
+    const repository = rollbackRepository([]);
+    vi.mocked(repository.loadRouteCandidates).mockResolvedValue([
+      { ...rollbackRoute(), routeLifecycleState: "denied" },
+    ]);
+
+    await expect(
+      resolveCognitoRouteProvenance(
+        { userPoolId: "pool-1", appClientId: "client-workos" },
+        repository,
+      ),
+    ).rejects.toMatchObject({ code: "unknown_client" });
+    expect(repository.loadRollbackRouteCandidates).not.toHaveBeenCalled();
   });
 });
 
@@ -198,6 +248,119 @@ describe("tenant admission", () => {
   });
 });
 
+describe("tenant discovery", () => {
+  it("returns every route-compatible membership without choosing one", async () => {
+    const route = evaluateRouteAdmission([googleRoute]);
+    const repository: AuthAdmissionRepository = {
+      loadRouteCandidates: async () => [],
+      loadRollbackRouteCandidates: async () => [],
+      loadIdentityCandidates: async () => [identity(route)],
+      loadMemberships: async () => [
+        membership("tenant-a"),
+        membership("tenant-b"),
+        membership("tenant-disabled"),
+      ],
+      loadTenantPolicies: async () => [
+        policy("tenant-a"),
+        policy("tenant-b"),
+        { ...policy("tenant-disabled"), status: "disabled" },
+      ],
+      loadTenantConnectionReferences: async () => [],
+      loadRollbackSessionCandidates: async () => [],
+    };
+
+    await expect(
+      discoverCognitoTenantAdmissions(
+        {
+          authType: "cognito",
+          principalId: "cognito-sub",
+          cognitoIssuer: "https://issuer.example",
+          route,
+          tenantId: null,
+          email: "member@example.com",
+          emailVerified: true,
+          agentId: null,
+        },
+        repository,
+      ),
+    ).resolves.toMatchObject({
+      userId: "user-1",
+      tenants: [
+        { tenantId: "tenant-a", role: "member" },
+        { tenantId: "tenant-b", role: "member" },
+      ],
+    });
+  });
+});
+
+describe("WorkOS rollback tenant admission", () => {
+  const route = evaluateRollbackRouteAdmission([rollbackRoute()]);
+  const auth = {
+    authType: "cognito" as const,
+    principalId: "cognito-sub",
+    cognitoIssuer: "https://issuer.example",
+    route,
+    tenantId: null,
+    email: "changed@example.com",
+    emailVerified: true,
+    agentId: null,
+  };
+
+  it("admits only an exact active session with active membership", async () => {
+    const repository = rollbackRepository([
+      rollbackSession(),
+      { ...rollbackSession(), sessionId: "session-2" },
+    ]);
+    await expect(
+      admitCognitoTenant(auth, "tenant-a", repository),
+    ).resolves.toMatchObject({
+      userId: "user-1",
+      tenantId: "tenant-a",
+      role: "member",
+      route: { lifecycleState: "coexistence" },
+    });
+    expect(repository.loadIdentityCandidates).not.toHaveBeenCalled();
+    expect(repository.loadRollbackSessionCandidates).toHaveBeenCalledWith(
+      "cognito-sub",
+      "connection-workos",
+      "tenant-a",
+    );
+  });
+
+  it("resolves the legacy client fallback and admits its exact session end to end", async () => {
+    const repository = rollbackRepository([rollbackSession()]);
+    const resolvedRoute = await resolveCognitoRouteProvenance(
+      { userPoolId: "pool-1", appClientId: "client-workos" },
+      repository,
+    );
+
+    await expect(
+      admitCognitoTenant(
+        { ...auth, route: resolvedRoute },
+        "tenant-a",
+        repository,
+      ),
+    ).resolves.toMatchObject({
+      userId: "user-1",
+      tenantId: "tenant-a",
+      route: { providerKind: "legacy_workos", lifecycleState: "coexistence" },
+    });
+  });
+
+  it("rejects inactive membership, expired sessions, and wrong subjects", async () => {
+    for (const sessions of [
+      [{ ...rollbackSession(), membershipStatus: "inactive" }],
+      [{ ...rollbackSession(), referenceStatus: "disabled" }],
+      [{ ...rollbackSession(), expiresAt: new Date("2020-01-01") }],
+      [],
+    ]) {
+      await expect(
+        admitCognitoTenant(auth, "tenant-a", rollbackRepository(sessions)),
+      ).rejects.toMatchObject({ code: "tenant_not_admitted" });
+    }
+  });
+});
+
 function route(
   overrides: Pick<
     RouteAdmissionCandidate,
@@ -229,6 +392,48 @@ function routeCandidate(
     connectionLifecycleState: "native",
     connectionValidationStatus: "valid",
     connectionAppClientIds: [`client-${overrides.routeKey}`],
+  };
+}
+
+function rollbackRoute(): RouteAdmissionCandidate {
+  return {
+    ...routeCandidate({
+      routeKey: "workos",
+      providerKind: "legacy_workos",
+      identityProviderName: "WORKOS",
+      connectionKey: "workos",
+    }),
+    appClientId: "client-workos",
+    routeLifecycleState: "coexistence",
+    connectionLifecycleState: "coexistence",
+    connectionAppClientIds: ["client-workos"],
+  };
+}
+
+function rollbackSession() {
+  return {
+    sessionId: "session-1",
+    userId: "user-1",
+    tenantId: "tenant-a",
+    role: "member",
+    sessionStatus: "active",
+    membershipStatus: "active",
+    referenceStatus: "enabled",
+    expiresAt: new Date("2099-01-01"),
+  };
+}
+
+function rollbackRepository(
+  sessions: ReturnType<typeof rollbackSession>[],
+): AuthAdmissionRepository {
+  return {
+    loadRouteCandidates: vi.fn(async () => []),
+    loadRollbackRouteCandidates: vi.fn(async () => [rollbackRoute()]),
+    loadIdentityCandidates: vi.fn(async () => []),
+    loadMemberships: vi.fn(async () => []),
+    loadTenantPolicies: vi.fn(async () => []),
+    loadTenantConnectionReferences: vi.fn(async () => []),
+    loadRollbackSessionCandidates: vi.fn(async () => sessions),
   };
 }
 

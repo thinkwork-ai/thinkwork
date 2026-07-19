@@ -3,6 +3,7 @@ import { readRuntimeEnv } from "./runtime-config";
 export interface PublicAuthOptions {
   password: { enabled: boolean; clientId?: string };
   oauthOptions: PublicOAuthOption[];
+  legacyMigration?: { authorizePath: string };
 }
 
 export interface PublicOAuthOption {
@@ -53,13 +54,31 @@ export function parsePublicAuthOptions(raw: unknown): PublicAuthOptions {
   }
   const record = raw as Record<string, unknown>;
   const password = parsePassword(record.password);
-  const oauthOptions = Array.isArray(record.oauthOptions)
-    ? record.oauthOptions.flatMap((entry) => {
-        const option = parseOAuthOption(entry);
-        return option ? [option] : [];
-      })
+  const rawOAuthOptions = Array.isArray(record.oauthOptions)
+    ? record.oauthOptions
     : [];
-  return { password, oauthOptions };
+  const oauthOptions = rawOAuthOptions.flatMap((entry) => {
+    const option = parseOAuthOption(entry);
+    return option ? [option] : [];
+  });
+  const legacyMigration = parseLegacyMigration(record.legacyMigration);
+  return {
+    password,
+    oauthOptions,
+    ...(legacyMigration ? { legacyMigration } : {}),
+  };
+}
+
+function parseLegacyMigration(
+  raw: unknown,
+): PublicAuthOptions["legacyMigration"] | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const authorizePath = safeString(
+    (raw as Record<string, unknown>).authorizePath,
+  );
+  return authorizePath === "/api/auth/workos/authorize"
+    ? { authorizePath }
+    : undefined;
 }
 
 function parsePassword(raw: unknown): { enabled: boolean; clientId?: string } {
@@ -67,7 +86,14 @@ function parsePassword(raw: unknown): { enabled: boolean; clientId?: string } {
     return FALLBACK_AUTH_OPTIONS.password;
   }
   const record = raw as Record<string, unknown>;
-  const clientId = safeString(record.clientId);
+  // During the staged rollout the deployed options endpoint may still return
+  // the legacy `{ enabled: true }` password shape. The static deployment
+  // profile already contains the exact Cognito app client used by that
+  // environment, so preserve local/password access until the control-plane
+  // reconciliation starts publishing route-specific client IDs.
+  const clientId =
+    safeString(record.clientId) ||
+    (record.enabled === true ? readRuntimeEnv("VITE_COGNITO_CLIENT_ID") : "");
   return {
     enabled: record.enabled === true && Boolean(clientId),
     ...(clientId ? { clientId } : {}),

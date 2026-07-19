@@ -141,6 +141,7 @@ export function writeTenantEntraSecret(
     directoryId: string;
     clientId: string;
     clientSecret: string;
+    versionStage?: "AWSPENDING";
   },
   aws: AwsExecutor = defaultAws,
 ): string {
@@ -179,7 +180,13 @@ export function writeTenantEntraSecret(
         "--output",
         "text",
       ],
-      { SecretId: existingArn, SecretString: secretString },
+      {
+        SecretId: existingArn,
+        SecretString: secretString,
+        ...(options.versionStage
+          ? { VersionStages: [options.versionStage] }
+          : {}),
+      },
     );
     return existingArn;
   }
@@ -361,12 +368,16 @@ async function runIdentityProviderOperation(
       directoryId,
       clientId: required(clientId, "--client-id is required for create"),
       clientSecret,
+      ...(action === "rotate" ? { versionStage: "AWSPENDING" as const } : {}),
     });
     connection = buildTenantEntraConnectionMetadata({
       directoryId,
       thinkworkTenantId: connection.tenantBindings[0].tenantId,
       clientId: connection.clientId,
       clientSecretRef: secretArn,
+      ...(action === "rotate"
+        ? { clientSecretVersionStage: "AWSPENDING" as const }
+        : {}),
       displayName: connection.displayName,
       label: connection.tenantBindings[0].label,
       hostnames: connection.tenantBindings[0].hostnames,

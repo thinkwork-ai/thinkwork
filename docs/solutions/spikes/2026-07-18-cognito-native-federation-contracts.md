@@ -36,8 +36,10 @@ The target architecture retains three user-visible choices:
 
 - Email and password in the Cognito user pool.
 - Google through Cognito's native Google identity provider.
-- Microsoft through direct Cognito OIDC providers: one `organizations` route
-  and tenant-GUID routes for enforced enterprise connections.
+- Microsoft through direct Cognito OIDC providers: one exact tenant-GUID route
+  for the deployment's default directory plus separately named tenant-GUID
+  routes for customer enterprise connections. Cognito cannot use the generic
+  `organizations` issuer because Entra returns a concrete tenant issuer.
 
 All successful routes must finish with Cognito tokens. Clients and APIs must
 not exchange or accept WorkOS tokens.
@@ -120,15 +122,15 @@ The following remain explicit gates. They must be recorded from unpublished
 route-specific fixtures before cutover; they must not be inferred from the
 shared development clients:
 
-| Contract                | Required evidence                                                                                                                                                        |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Local email/password    | Local-only client accepts password/SRP as designed, rejects every external provider, and refresh preserves its client provenance.                                        |
-| Google                  | Google-only hosted-UI route rejects local and Microsoft initiation, returns Cognito tokens with the Google identity, and refresh stays on the same client.               |
-| Microsoft organizations | Organizations-only route accepts eligible work/school accounts, rejects personal Microsoft accounts, returns Cognito tokens, and preserves client provenance on refresh. |
-| Tenant Entra            | Tenant-GUID route accepts only the configured tenant and rejects another tenant through both direct initiation and callback handling.                                    |
-| API admission           | Each route is admitted only for the intended app-client/provider pair; stale, mismatched, unverified, and conflicting identities fail closed.                            |
-| Realtime                | A fresh Cognito token completes AppSync WebSocket connect, subscription start, authorized delivery, and invalidation; a forbidden route receives no data.                |
-| Capacity                | The route manifest plus canary/rollback reserve fits actual account quotas for app clients, identity providers, callbacks, logout URLs, and Lambda trigger wiring.       |
+| Contract                    | Required evidence                                                                                                                                                                         |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local email/password        | Local-only client accepts password/SRP as designed, rejects every external provider, and refresh preserves its client provenance.                                                         |
+| Google                      | Google-only hosted-UI route rejects local and Microsoft initiation, returns Cognito tokens with the Google identity, and refresh stays on the same client.                                |
+| Default Microsoft directory | Exact tenant-GUID route accepts that directory's work/school accounts, rejects personal and other-directory accounts, returns Cognito tokens, and preserves client provenance on refresh. |
+| Tenant Entra                | Tenant-GUID route accepts only the configured tenant and rejects another tenant through both direct initiation and callback handling.                                                     |
+| API admission               | Each route is admitted only for the intended app-client/provider pair; stale, mismatched, unverified, and conflicting identities fail closed.                                             |
+| Realtime                    | A fresh Cognito token completes AppSync WebSocket connect, subscription start, authorized delivery, and invalidation; a forbidden route receives no data.                                 |
+| Capacity                    | The route manifest plus canary/rollback reserve fits actual account quotas for app clients, identity providers, callbacks, logout URLs, and Lambda trigger wiring.                        |
 
 The repository can proceed with provider-neutral schema and control-plane work
 while these fixtures are constructed. Production cutover cannot proceed until

@@ -93,6 +93,26 @@ describe("resolvePublicAuthOptions", () => {
     expect(serialized).not.toContain("must-not-leak");
     expect(serialized).not.toContain("resource");
   });
+
+  it("publishes a dedicated legacy migration start only during coexistence", async () => {
+    vi.stubEnv("AUTH_RETIREMENT_PHASE", "coexistence");
+    await expect(
+      resolvePublicAuthOptions({
+        routingHost: "app.thinkwork.ai",
+        deps: deps(),
+      }),
+    ).resolves.toMatchObject({
+      legacyMigration: { authorizePath: "/api/auth/workos/authorize" },
+    });
+
+    vi.stubEnv("AUTH_RETIREMENT_PHASE", "cutover");
+    await expect(
+      resolvePublicAuthOptions({
+        routingHost: "app.thinkwork.ai",
+        deps: deps(),
+      }),
+    ).resolves.not.toHaveProperty("legacyMigration");
+  });
 });
 
 describe("createPublicAuthOptionsHandler", () => {

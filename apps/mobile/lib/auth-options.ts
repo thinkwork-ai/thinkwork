@@ -26,7 +26,9 @@ export interface PublicAuthOptionsResult {
 }
 
 export const FALLBACK_AUTH_OPTIONS: PublicAuthOptions = {
-  password: { enabled: true },
+  // A failed catalog lookup must not fall back to the deployment-profile
+  // client: only a reconciled route-specific client is admitted server-side.
+  password: { enabled: false },
   oauthOptions: [],
 };
 
@@ -61,12 +63,13 @@ export function parsePublicAuthOptions(raw: unknown): PublicAuthOptions {
   }
   const record = raw as Record<string, unknown>;
   const password = parsePassword(record.password);
-  const oauthOptions = Array.isArray(record.oauthOptions)
-    ? record.oauthOptions.flatMap((entry) => {
-        const option = parseOAuthOption(entry);
-        return option ? [option] : [];
-      })
+  const rawOAuthOptions = Array.isArray(record.oauthOptions)
+    ? record.oauthOptions
     : [];
+  const oauthOptions = rawOAuthOptions.flatMap((entry) => {
+    const option = parseOAuthOption(entry);
+    return option ? [option] : [];
+  });
   return { password, oauthOptions };
 }
 
@@ -96,7 +99,9 @@ function parsePassword(raw: unknown): { enabled: boolean; clientId?: string } {
     return FALLBACK_AUTH_OPTIONS.password;
   }
   const record = raw as Record<string, unknown>;
-  const clientId = safeString(record.clientId);
+  const clientId =
+    safeString(record.clientId) ||
+    (record.enabled === true ? getPlatformConfig().cognitoClientId.trim() : "");
   return {
     enabled: record.enabled !== false && Boolean(clientId),
     ...(clientId ? { clientId } : {}),

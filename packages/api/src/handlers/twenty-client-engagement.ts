@@ -2,10 +2,12 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { eq } from "drizzle-orm";
-import { schema } from "@thinkwork/database-pg";
 import { db } from "../lib/db.js";
 import { authenticate } from "../lib/cognito-auth.js";
+import {
+  admitCognitoTenant,
+  AuthAdmissionError,
+} from "../lib/auth-admission.js";
 import {
   error,
   forbidden,
@@ -21,8 +23,6 @@ import {
   resolveTwentyContext,
   stringValue,
 } from "../lib/twenty/rest-client.js";
-
-const { users } = schema;
 
 const LOG_PREFIX = "[twenty-client-engagement]";
 const API_BASE_PATH = "/api/plugin-apps/twenty/client-engagement";
@@ -138,20 +138,21 @@ export async function handler(
   const auth = await authenticate(
     event.headers as Record<string, string | undefined>,
   );
-  if (!auth || auth.authType !== "cognito" || !auth.email) {
+  if (!auth || auth.authType !== "cognito") {
     return unauthorized("Authentication required");
   }
 
-  const [userRow] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, auth.email.toLowerCase()))
-    .limit(1);
-  if (!userRow?.tenant_id) return forbidden("No tenant resolved for caller");
+  let admission;
+  try {
+    admission = await admitCognitoTenant(auth, auth.tenantId ?? undefined);
+  } catch (cause) {
+    if (!(cause instanceof AuthAdmissionError)) throw cause;
+    return forbidden("No tenant resolved for caller");
+  }
 
   const resolved = await resolveTwentyContext(db, {
-    tenantId: userRow.tenant_id,
-    userId: userRow.id,
+    tenantId: admission.tenantId,
+    userId: admission.userId,
     logPrefix: LOG_PREFIX,
   });
   if (!resolved) {

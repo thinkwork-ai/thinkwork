@@ -748,10 +748,16 @@ module "cognito" {
   google_oauth_client_secret            = var.google_oauth_client_secret
   microsoft_oauth_client_id             = var.microsoft_oauth_client_id
   microsoft_oauth_client_secret         = var.microsoft_oauth_client_secret
+  microsoft_oauth_tenant                = var.microsoft_oauth_tenant
   tenant_entra_connections              = var.tenant_entra_connections
   oidc_identity_providers               = var.oidc_identity_providers
   saml_identity_providers               = var.saml_identity_providers
   pre_signup_lambda_zip                 = var.pre_signup_lambda_zip
+  auth_retirement_phase                 = var.auth_retirement_phase
+  custom_auth_lambda_zip                = var.cognito_custom_auth_lambda_zip
+  custom_auth_lambda_s3_bucket          = var.require_lambda_artifacts ? var.lambda_artifact_bucket : ""
+  custom_auth_lambda_s3_key             = var.require_lambda_artifacts && var.lambda_artifact_bucket != "" ? "${trim(trimspace(var.lambda_artifact_prefix), "/")}/cognito-custom-auth.zip" : ""
+  api_auth_secret                       = var.api_auth_secret
   pre_token_generation_lambda_s3_bucket = var.require_lambda_artifacts ? var.lambda_artifact_bucket : ""
   pre_token_generation_lambda_s3_key    = var.require_lambda_artifacts && var.lambda_artifact_bucket != "" ? "${trim(trimspace(var.lambda_artifact_prefix), "/")}/cognito-pre-token-client-deny.zip" : ""
   denied_app_client_ids                 = var.cognito_denied_app_client_ids
@@ -789,7 +795,12 @@ module "cognito" {
     local.customer_domain_legacy_retired ? [] : (local.legacy_end_user_app_domain != "" ? ["https://${local.legacy_end_user_app_domain}", "https://${local.legacy_end_user_app_domain}/auth/callback"] : []),
     local.customer_domain_web_enabled ? ["https://${var.customer_domain}", "https://${var.customer_domain}/auth/callback"] : [],
     local.customer_domain_legacy_retired ? [] : (var.computer_domain != "" ? ["https://${var.computer_domain}", "https://${var.computer_domain}/auth/callback"] : []),
-    ["http://localhost:5180", "http://localhost:5180/auth/callback"]
+    [
+      "http://localhost:5180",
+      "http://localhost:5180/auth/callback",
+      "http://127.0.0.1:5180",
+      "http://127.0.0.1:5180/auth/callback",
+    ]
   ))
   admin_logout_urls = distinct(concat(
     var.admin_logout_urls,
@@ -797,7 +808,7 @@ module "cognito" {
     local.customer_domain_legacy_retired ? [] : (local.legacy_end_user_app_domain != "" ? ["https://${local.legacy_end_user_app_domain}"] : []),
     local.customer_domain_web_enabled ? ["https://${var.customer_domain}"] : [],
     local.customer_domain_legacy_retired ? [] : (var.computer_domain != "" ? ["https://${var.computer_domain}"] : []),
-    ["http://localhost:5180"]
+    ["http://localhost:5180", "http://127.0.0.1:5180"]
   ))
   desktop_callback_urls = var.desktop_callback_urls
   cli_callback_urls     = var.cli_callback_urls
@@ -1034,9 +1045,11 @@ module "api" {
   }])
   subscription_ticket_private_key_secret = aws_secretsmanager_secret.subscription_ticket_signing_key.name
 
-  stage      = var.stage
-  account_id = var.account_id
-  region     = var.region
+  stage                            = var.stage
+  account_id                       = var.account_id
+  region                           = var.region
+  auth_retirement_phase            = var.auth_retirement_phase
+  auth_migration_recovery_deadline = var.auth_migration_recovery_deadline
 
   lambda_artifact_bucket   = var.lambda_artifact_bucket
   lambda_artifact_prefix   = var.lambda_artifact_prefix

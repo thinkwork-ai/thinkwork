@@ -16,7 +16,7 @@ import {
   DescribeIdentityProviderCommand,
   DescribeUserPoolClientCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   authProviderResources,
   authReconciliationSets,
@@ -40,6 +40,8 @@ export class AuthReconciliationConflict extends Error {
   constructor(
     public readonly code: string,
     message: string,
+    public readonly affectedConnectionKeys: string[] = [],
+    public readonly affectedRouteKeys: string[] = [],
   ) {
     super(message);
     this.name = "AuthReconciliationConflict";
@@ -59,7 +61,7 @@ export interface ReconciliationTransitionInput {
 
 export function assertReconciliationTransition(
   input: ReconciliationTransitionInput,
-): "apply" | "replay" {
+): "apply" | "replay" | "latest_replay" {
   if (input.replayFingerprint !== undefined) {
     if (input.replayFingerprint !== input.manifestFingerprint) {
       throw new AuthReconciliationConflict(
@@ -68,6 +70,12 @@ export function assertReconciliationTransition(
       );
     }
     return "replay";
+  }
+  if (
+    input.revision === input.latestRevision &&
+    input.latestFingerprint === input.manifestFingerprint
+  ) {
+    return "latest_replay";
   }
   if (
     input.expectedPreviousRevision !== input.latestRevision ||
@@ -147,6 +155,7 @@ export async function verifyReconciledAwsMetadata(
         throw new AuthReconciliationConflict(
           "aws_metadata_mismatch",
           `Cognito identity provider ${connection.connectionKey} does not match submitted safe metadata.`,
+          [connection.connectionKey],
         );
       }
     }
@@ -162,14 +171,27 @@ export async function verifyReconciledAwsMetadata(
       const appClient = response.UserPoolClient;
       if (
         appClient?.ClientId !== route.cognitoAppClientId ||
+        appClient?.GenerateSecret === true ||
+        appClient?.EnableTokenRevocation !== true ||
+        appClient?.PreventUserExistenceErrors !== "ENABLED" ||
         !sameSet(appClient?.SupportedIdentityProviders, route.providerNames) ||
         !sameSet(appClient?.ExplicitAuthFlows, route.explicitAuthFlows) ||
         !sameSet(appClient?.CallbackURLs, route.redirectUris) ||
-        !sameSet(appClient?.LogoutURLs, route.logoutUris)
+        !sameSet(appClient?.LogoutURLs, route.logoutUris) ||
+        (route.providerNames[0] !== "COGNITO" &&
+          (appClient?.AllowedOAuthFlowsUserPoolClient !== true ||
+            !sameSet(appClient?.AllowedOAuthFlows, ["code"]) ||
+            !sameSet(appClient?.AllowedOAuthScopes, [
+              "openid",
+              "email",
+              "profile",
+            ])))
       ) {
         throw new AuthReconciliationConflict(
           "aws_metadata_mismatch",
           `Cognito app-client route ${route.routeKey}:${route.clientFamily} does not match submitted safe metadata.`,
+          [],
+          [`${route.routeKey}:${route.clientFamily}`],
         );
       }
     }
@@ -203,6 +225,7 @@ export async function reconcileAuthProviderMetadata(
       .select({
         revision: authReconciliationSets.revision,
         fingerprint: authReconciliationSets.manifest_fingerprint,
+        status: authReconciliationSets.status,
       })
       .from(authReconciliationSets)
       .where(eq(authReconciliationSets.stage, payload.stage))
@@ -221,7 +244,7 @@ export async function reconcileAuthProviderMetadata(
             .where(
               and(
                 inArray(authProviderResources.cognito_user_pool_id, poolIds),
-                ne(authProviderResources.lifecycle_state, "denied"),
+                eq(authProviderResources.lifecycle_state, "native"),
               ),
             );
 
@@ -245,6 +268,15 @@ export async function reconcileAuthProviderMetadata(
         );
       }
       return { status: "replayed", revision: replay.revision };
+    }
+    if (transition === "latest_replay") {
+      if (latest?.status !== "applied") {
+        throw new AuthReconciliationConflict(
+          "replay_not_applied",
+          "The matching latest reconciliation has not reached applied state.",
+        );
+      }
+      return { status: "replayed", revision: latest.revision };
     }
 
     await tx.insert(authReconciliationSets).values({
@@ -490,6 +522,9 @@ export async function recordRejectedAuthProviderMetadata(
   database: AuthDb = db,
 ): Promise<void> {
   await database.transaction(async (tx) => {
+    const hasScopedTargets =
+      rejection.affectedConnectionKeys.length > 0 ||
+      rejection.affectedRouteKeys.length > 0;
     await tx
       .insert(authReconciliationSets)
       .values({
@@ -506,6 +541,12 @@ export async function recordRejectedAuthProviderMetadata(
       .onConflictDoNothing();
 
     for (const connection of payload.connections) {
+      if (
+        hasScopedTargets &&
+        !rejection.affectedConnectionKeys.includes(connection.connectionKey)
+      ) {
+        continue;
+      }
       const resources = await tx
         .update(authProviderResources)
         .set({
@@ -562,6 +603,14 @@ export async function recordRejectedAuthProviderMetadata(
     }
 
     for (const route of payload.routeClients) {
+      if (
+        hasScopedTargets &&
+        !rejection.affectedRouteKeys.includes(
+          `${route.routeKey}:${route.clientFamily}`,
+        )
+      ) {
+        continue;
+      }
       await tx
         .update(authRouteClients)
         .set({
@@ -612,7 +661,7 @@ export async function handler(
       return json({ error: cause.code, message: cause.message }, 400);
     }
     if (cause instanceof AuthReconciliationConflict) {
-      if (payload && cause.code.startsWith("aws_")) {
+      if (payload && cause.code === "aws_metadata_mismatch") {
         try {
           await recordRejectedAuthProviderMetadata(payload, cause);
         } catch (recordCause) {
@@ -626,6 +675,12 @@ export async function handler(
           );
           return error("Internal server error", 500);
         }
+      }
+      if (cause.code === "aws_describe_failed") {
+        return json(
+          { error: cause.code, message: cause.message, retryable: true },
+          503,
+        );
       }
       return json({ error: cause.code, message: cause.message }, 409);
     }

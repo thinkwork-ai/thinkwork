@@ -112,16 +112,25 @@ describe("enterprise Terraform release artifacts", () => {
     }
   });
 
-  it("does not package the retired Cognito custom-auth bridge", () => {
+  it("retains the rollback bridge through cutover and removes it only when retired", () => {
     const variables = read(COGNITO_VARIABLES);
     const cognito = read(COGNITO_MAIN);
     const thinkwork = read(THINKWORK_MAIN);
+    const handlers = read(LAMBDA_API_HANDLERS);
 
-    expect(variables).not.toMatch(/custom_auth_lambda/);
-    expect(cognito).not.toMatch(
-      /cognito-custom-auth|custom_auth_lambda|define_auth_challenge|create_auth_challenge|verify_auth_challenge_response/,
+    expect(variables).toMatch(/variable "auth_retirement_phase"/);
+    expect(variables).toMatch(/variable "custom_auth_lambda_s3_bucket"/);
+    expect(cognito).toMatch(
+      /workos_rollback_enabled\s*=\s*var\.auth_retirement_phase != "retired"/,
     );
-    expect(thinkwork).not.toMatch(/cognito-custom-auth|custom_auth_lambda/);
+    expect(cognito).toMatch(/local\.workos_rollback_enabled/);
+    expect(cognito).toMatch(/define_auth_challenge/);
+    expect(cognito).toMatch(/create_auth_challenge/);
+    expect(cognito).toMatch(/verify_auth_challenge_response/);
+    expect(thinkwork).toMatch(/cognito-custom-auth\.zip/);
+    expect(handlers).toMatch(
+      /var\.auth_retirement_phase == "retired" \? \[\s*#.*\n(?:.*\n)*?\s*"workos-auth"/,
+    );
   });
 
   it("dependent routes, queues, schedules, and outputs turn on for remote artifacts", () => {

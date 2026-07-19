@@ -410,7 +410,15 @@ export class DesktopOAuthController {
       "",
     );
     if (raw.startsWith("https://")) return raw;
-    return `https://${raw}.auth.us-east-1.amazoncognito.com`;
+    const userPoolId = requireConfig(
+      env.cognito.userPoolId,
+      "Cognito user pool ID",
+    );
+    const region = userPoolId.split("_", 1)[0];
+    if (!region || !/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/.test(region)) {
+      throw new Error("Cognito user pool ID does not contain a valid region");
+    }
+    return `https://${raw}.auth.${region}.amazoncognito.com`;
   }
 }
 

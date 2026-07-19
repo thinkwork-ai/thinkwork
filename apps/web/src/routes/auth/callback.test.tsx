@@ -8,11 +8,13 @@ const routerMocks = vi.hoisted(() => ({
     state: "",
     error: "",
     error_description: "",
+    workos_bridge: "",
   },
 }));
 
 const authMocks = vi.hoisted(() => ({
   exchangeCodeForSession: vi.fn(),
+  exchangeLegacyWorkosBridge: vi.fn(),
   storeTokensInCognitoStorage: vi.fn(),
 }));
 
@@ -33,6 +35,7 @@ beforeEach(() => {
     state: "",
     error: "",
     error_description: "",
+    workos_bridge: "",
   };
   authMocks.exchangeCodeForSession.mockReset();
   authMocks.storeTokensInCognitoStorage.mockReset();
@@ -67,6 +70,7 @@ describe("AuthCallback native Cognito route", () => {
       state: "bound-state",
       error: "",
       error_description: "",
+      workos_bridge: "",
     };
     authMocks.exchangeCodeForSession.mockResolvedValue({
       tokens,
@@ -87,5 +91,38 @@ describe("AuthCallback native Cognito route", () => {
       "bound-state",
     );
     expect(window.location.href).toBe("/new");
+  });
+
+  it("exchanges the dedicated legacy migration bridge without native OAuth state", async () => {
+    const tokens = {
+      id_token: "id-token",
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    };
+    routerMocks.search = {
+      code: "",
+      state: "",
+      error: "",
+      error_description: "",
+      workos_bridge: "one-use-bridge",
+    };
+    authMocks.exchangeLegacyWorkosBridge.mockResolvedValue({
+      tokens,
+      clientId: "legacy-client",
+      next: "/new",
+    });
+
+    render(<AuthCallback />);
+
+    await waitFor(() =>
+      expect(authMocks.storeTokensInCognitoStorage).toHaveBeenCalledWith(
+        tokens,
+        "legacy-client",
+      ),
+    );
+    expect(authMocks.exchangeLegacyWorkosBridge).toHaveBeenCalledWith(
+      "one-use-bridge",
+    );
+    expect(authMocks.exchangeCodeForSession).not.toHaveBeenCalled();
   });
 });

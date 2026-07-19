@@ -134,6 +134,7 @@ export interface PriorControllerInput {
   customerDomain?: string;
   customerDomainDelegated?: boolean;
   customerDomainLegacyRetired?: boolean;
+  authRetirementPhase?: "coexistence" | "cutover" | "retired";
   enableHindsight?: boolean;
   hindsightDatabaseName?: string;
   features?: unknown;
@@ -157,6 +158,18 @@ function booleanValue(value: unknown): boolean | undefined {
     return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
   }
   return undefined;
+}
+
+function authRetirementPhaseValue(
+  value: unknown,
+): PriorControllerInput["authRetirementPhase"] {
+  if (value === undefined) return undefined;
+  if (value === "coexistence" || value === "cutover" || value === "retired") {
+    return value;
+  }
+  throw new Error(
+    "Previous controller execution input has an invalid authRetirementPhase.",
+  );
 }
 
 /** Validate and narrow a prior execution's parsed input JSON. */
@@ -211,6 +224,7 @@ export function parsePriorControllerInput(raw: unknown): PriorControllerInput {
     customerDomainLegacyRetired:
       booleanValue(input.customerDomainLegacyRetired) ??
       booleanValue(preservedConfig.customerDomainLegacyRetired),
+    authRetirementPhase: authRetirementPhaseValue(input.authRetirementPhase),
     enableHindsight:
       booleanValue(input.enableHindsight) ??
       booleanValue(preservedConfig.enableHindsight),
@@ -362,6 +376,10 @@ export function buildControllerUpdateInput(options: {
     releaseManifestSha256: release.manifestSha256,
     terraformModuleSource: THINKWORK_REGISTRY_MODULE_SOURCE,
     terraformModuleVersion: release.version.replace(/^v/, ""),
+    ...(prior.authRetirementPhase
+      ? { authRetirementPhase: prior.authRetirementPhase }
+      : {}),
+    finalizeAuthRetirement: false,
     release: releasePin,
     ...(prior.agentcorePiSourceImageUri
       ? { agentcorePiSourceImageUri: prior.agentcorePiSourceImageUri }

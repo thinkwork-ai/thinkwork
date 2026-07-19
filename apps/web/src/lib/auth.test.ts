@@ -172,6 +172,76 @@ describe("native Cognito callback exchange", () => {
     ).rejects.toThrow(/missing, expired, or already used/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("binds a native subject with the one-use legacy-session migration grant before returning tokens", async () => {
+    stubLocation("https://app.example");
+    const auth = await import("./auth");
+    const authorizeUrl = new URL(
+      await auth.getAuthOptionIdentityMigrationUrl(
+        {
+          key: "microsoft",
+          label: "Microsoft",
+          icon: "microsoft",
+          provider: "microsoft",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "microsoft-client",
+            identityProvider: "MicrosoftOrganizations",
+          },
+        },
+        {
+          startToken: "migration-start-token",
+          recipientChallenge: "12345678",
+        },
+        "/spaces",
+      ),
+    );
+    const state = authorizeUrl.searchParams.get("state")!;
+    const nonce = authorizeUrl.searchParams.get("nonce")!;
+    const issuer =
+      "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool";
+    const idToken = makeIdToken({
+      token_use: "id",
+      aud: "microsoft-client",
+      nonce,
+      iss: issuer,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({
+          id_token: idToken,
+          access_token: makeIdToken({
+            token_use: "access",
+            client_id: "microsoft-client",
+            iss: issuer,
+            exp: Math.floor(Date.now() / 1000) + 3600,
+          }),
+          refresh_token: "refresh-token",
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ outcome: "consumed" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await auth.exchangeCodeForSession("one-time-code", state);
+
+    expect(result.next).toBe("/spaces");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new URL(String(fetchMock.mock.calls[1][0])).pathname).toBe(
+      "/api/auth/enrollment/consume",
+    );
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      method: "POST",
+      headers: expect.objectContaining({ Authorization: `Bearer ${idToken}` }),
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({
+      startToken: "migration-start-token",
+      recipientChallenge: "12345678",
+      redirectUri: "https://app.example/auth/callback",
+    });
+  });
 });
 
 describe("signOut", () => {
@@ -188,6 +258,68 @@ describe("signOut", () => {
     // Cognito LogoutURLs allowlist contains bare origins; the `_authed` route
     // guard bounces the unauthenticated user to /sign-in once they land.
     expect(target.searchParams.get("logout_uri")).toBe("https://app.example");
+  });
+
+  it("revokes the refresh token before deleting local credentials", async () => {
+    const { signOut, storeTokensInCognitoStorage } = await import("./auth");
+    const { navigations } = stubLocation("https://app.example");
+    const idToken = makeIdToken({
+      sub: "user-sub",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    storeTokensInCognitoStorage({
+      id_token: idToken,
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    });
+    const prefix = "CognitoIdentityServiceProvider.test-client-id";
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        expect(
+          window.localStorage.getItem(`${prefix}.user-sub.refreshToken`),
+        ).toBe("refresh-token");
+        expect(init).toMatchObject({
+          method: "POST",
+          headers: expect.objectContaining({
+            Authorization: `Bearer ${idToken}`,
+          }),
+          body: JSON.stringify({ refreshToken: "refresh-token" }),
+        });
+        return Response.json({ revoked: true });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await signOut();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(new URL(String(fetchMock.mock.calls[0][0])).pathname).toBe(
+      "/api/auth/revoke",
+    );
+    expect(
+      window.localStorage.getItem(`${prefix}.user-sub.refreshToken`),
+    ).toBeNull();
+    expect(new URL(navigations[0]).pathname).toBe("/logout");
+  });
+
+  it("still clears local credentials and logs out when revocation fails", async () => {
+    const { signOut, storeTokensInCognitoStorage } = await import("./auth");
+    const { navigations } = stubLocation("https://app.example");
+    storeTokensInCognitoStorage({
+      id_token: makeIdToken({ sub: "user-sub" }),
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Promise.reject(new Error("offline"))),
+    );
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(signOut()).resolves.toBeUndefined();
+
+    expect(window.localStorage.length).toBe(0);
+    expect(new URL(navigations[0]).pathname).toBe("/logout");
   });
 });
 

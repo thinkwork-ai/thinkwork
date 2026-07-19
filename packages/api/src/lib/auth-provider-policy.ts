@@ -52,7 +52,7 @@ export interface ResolvedNativeAuthPolicy {
   oauthOptions: NativeAuthOption[];
 }
 
-const VALIDATION_STATES = new Set(["valid", "partially_valid"]);
+const VALIDATION_STATES = new Set(["valid"]);
 
 /**
  * Resolve a public login catalog from already-validated control-plane rows.

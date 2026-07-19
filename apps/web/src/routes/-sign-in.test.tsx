@@ -11,7 +11,10 @@ import { SignInPage } from "./sign-in";
 
 const routerMocks = vi.hoisted(() => ({
   navigate: vi.fn(),
-  search: { next: undefined as string | undefined },
+  search: {
+    next: undefined as string | undefined,
+    legacyMigration: undefined as "workos" | undefined,
+  },
 }));
 
 const authContextMocks = vi.hoisted(() => ({
@@ -23,6 +26,7 @@ const authMocks = vi.hoisted(() => ({
   confirmForgotPassword: vi.fn(),
   forgotPassword: vi.fn(),
   getAuthOptionSignInUrl: vi.fn(),
+  getLegacyIdentityMigrationStartUrl: vi.fn(),
   isPasswordSignInConfigured: vi.fn(),
 }));
 
@@ -69,6 +73,8 @@ vi.mock("@/lib/auth", () => ({
   confirmForgotPassword: authMocks.confirmForgotPassword,
   forgotPassword: authMocks.forgotPassword,
   getAuthOptionSignInUrl: authMocks.getAuthOptionSignInUrl,
+  getLegacyIdentityMigrationStartUrl:
+    authMocks.getLegacyIdentityMigrationStartUrl,
   isPasswordSignInConfigured: authMocks.isPasswordSignInConfigured,
 }));
 
@@ -133,12 +139,15 @@ beforeEach(() => {
   authMocks.getAuthOptionSignInUrl.mockResolvedValue(
     "https://thinkwork-test.auth.us-east-1.amazoncognito.com/oauth2/authorize?client_id=google-client",
   );
+  authMocks.getLegacyIdentityMigrationStartUrl.mockReturnValue(
+    "https://api.example.com/api/auth/workos/authorize?migration=1",
+  );
   authMocks.isPasswordSignInConfigured.mockReturnValue(false);
   authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
     password: { enabled: true, clientId: "local-client" },
     oauthOptions: [],
   });
-  routerMocks.search = { next: undefined };
+  routerMocks.search = { next: undefined, legacyMigration: undefined };
   desktopRuntimeMocks.isDesktopBuild.mockReturnValue(false);
 });
 
@@ -154,6 +163,57 @@ afterEach(() => {
 });
 
 describe("SignInPage", () => {
+  it("never renders the legacy migration action on the normal sign-in route", async () => {
+    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+      password: { enabled: false },
+      oauthOptions: [],
+      legacyMigration: { authorizePath: "/api/auth/workos/authorize" },
+    });
+
+    render(<SignInPage />);
+
+    await waitFor(() =>
+      expect(authOptionsMocks.fetchPublicAuthOptions).toHaveBeenCalled(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Continue account migration" }),
+    ).toBeNull();
+  });
+
+  it("renders the dedicated migration action only for an explicit coexistence entry", async () => {
+    routerMocks.search = { next: "/new", legacyMigration: "workos" };
+    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+      password: { enabled: true, clientId: "local-client" },
+      oauthOptions: [],
+      legacyMigration: { authorizePath: "/api/auth/workos/authorize" },
+    });
+    const navigations: string[] = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        set href(target: string) {
+          navigations.push(target);
+        },
+        get href() {
+          return navigations.at(-1) ?? "https://app.example/sign-in";
+        },
+      },
+    });
+
+    render(<SignInPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Continue account migration" }),
+    );
+
+    expect(screen.queryByLabelText("Email")).toBeNull();
+    expect(authMocks.getLegacyIdentityMigrationStartUrl).toHaveBeenCalledWith(
+      "/api/auth/workos/authorize",
+      "/new",
+    );
+    expect(navigations).toEqual([
+      "https://api.example.com/api/auth/workos/authorize?migration=1",
+    ]);
+  });
   it("renders no browser OAuth button when public auth options are empty", () => {
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
@@ -240,7 +300,10 @@ describe("SignInPage", () => {
       startOAuth,
       onOAuthError: () => () => {},
     });
-    routerMocks.search = { next: "/automations/123" };
+    routerMocks.search = {
+      next: "/automations/123",
+      legacyMigration: undefined,
+    };
 
     render(<SignInPage />);
     fireEvent.click(
@@ -636,6 +699,8 @@ describe("SignInPage", () => {
     expect(
       screen.getByRole("button", { name: "Continue with Microsoft" }),
     ).toBeTruthy();
+    expect(screen.getByText("Google")).toBeTruthy();
+    expect(screen.getByText("Microsoft")).toBeTruthy();
     expect(screen.getByText("or")).toBeTruthy();
     expect(screen.getByLabelText("Email")).toBeTruthy();
 

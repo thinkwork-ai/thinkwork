@@ -3,6 +3,7 @@ import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
 const {
   mockAuthenticate,
+  mockAdmitCognitoTenant,
   mockSelectLimit,
   mockBuildMcpConfigs,
   mockListTools,
@@ -11,6 +12,7 @@ const {
   mockRenderTuple,
 } = vi.hoisted(() => ({
   mockAuthenticate: vi.fn(),
+  mockAdmitCognitoTenant: vi.fn(),
   mockSelectLimit: vi.fn(),
   mockBuildMcpConfigs: vi.fn(),
   mockListTools: vi.fn(),
@@ -20,6 +22,11 @@ const {
 }));
 
 vi.mock("../lib/cognito-auth.js", () => ({ authenticate: mockAuthenticate }));
+vi.mock("../lib/auth-admission.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/auth-admission.js")>();
+  return { ...actual, admitCognitoTenant: mockAdmitCognitoTenant };
+});
 
 vi.mock("../lib/db.js", () => ({
   db: {
@@ -35,7 +42,6 @@ vi.mock("../lib/db.js", () => ({
 
 vi.mock("@thinkwork/database-pg", () => ({
   schema: {
-    users: { email: "users.email" },
     agents: { id: "agents.id", tenant_id: "agents.tenant_id" },
   },
 }));
@@ -66,6 +72,7 @@ vi.mock("../lib/mcp-client-call.js", async () => {
 
 import { handler } from "./mcp-proxy";
 import { McpTransportError } from "../lib/mcp-client-call.js";
+import { AuthAdmissionError } from "../lib/auth-admission.js";
 
 function event(
   path: string,
@@ -110,6 +117,7 @@ const RECORD_LINK_HINTS = {
 
 beforeEach(() => {
   mockAuthenticate.mockReset();
+  mockAdmitCognitoTenant.mockReset();
   mockSelectLimit.mockReset();
   mockBuildMcpConfigs.mockReset();
   mockListTools.mockReset();
@@ -118,7 +126,8 @@ beforeEach(() => {
   mockCacheTools.mockResolvedValue(true);
   mockRenderTuple.mockReset();
 
-  // Google-federated caller: JWT tenantId is null, resolved by email.
+  // Google-federated caller: JWT tenantId is null, resolved by immutable
+  // issuer/sub admission rather than mutable email.
   mockAuthenticate.mockResolvedValue({
     principalId: "p1",
     tenantId: null,
@@ -126,10 +135,14 @@ beforeEach(() => {
     authType: "cognito",
     agentId: null,
   });
-  // 1st select → user row (by email); 2nd select → agent row (tenant-scoped)
-  mockSelectLimit
-    .mockReturnValueOnce([{ id: "u1", tenant_id: "t1" }])
-    .mockReturnValueOnce([{ id: "ag1" }]);
+  mockAdmitCognitoTenant.mockResolvedValue({
+    userId: "u1",
+    tenantId: "t1",
+    role: "member",
+    identityId: "identity-1",
+    route: {},
+  });
+  mockSelectLimit.mockReturnValueOnce([{ id: "ag1" }]);
   mockBuildMcpConfigs.mockResolvedValue([SERVER_A]);
 });
 
@@ -169,15 +182,13 @@ describe("mcp-proxy handler", () => {
 
   it("folder-dispatch agent: renders the tuple read-only and passes the manifest (R20)", async () => {
     mockSelectLimit.mockReset();
-    mockSelectLimit
-      .mockReturnValueOnce([{ id: "u1", tenant_id: "t1" }])
-      .mockReturnValueOnce([
-        {
-          id: "ag1",
-          capability_folder_dispatch: true,
-          runtime_config: { defaultSpaceId: "sp1" },
-        },
-      ]);
+    mockSelectLimit.mockReturnValueOnce([
+      {
+        id: "ag1",
+        capability_folder_dispatch: true,
+        runtime_config: { defaultSpaceId: "sp1" },
+      },
+    ]);
     const manifest = { fingerprint: "f".repeat(64), active: [], withheld: [] };
     mockRenderTuple.mockResolvedValue({ capabilities: { manifest } });
     mockListTools.mockResolvedValue([{ name: "list_object_metadata_names" }]);
@@ -200,11 +211,9 @@ describe("mcp-proxy handler", () => {
 
   it("folder-dispatch agent without a default Space → 502, render never attempted", async () => {
     mockSelectLimit.mockReset();
-    mockSelectLimit
-      .mockReturnValueOnce([{ id: "u1", tenant_id: "t1" }])
-      .mockReturnValueOnce([
-        { id: "ag1", capability_folder_dispatch: true, runtime_config: {} },
-      ]);
+    mockSelectLimit.mockReturnValueOnce([
+      { id: "ag1", capability_folder_dispatch: true, runtime_config: {} },
+    ]);
 
     const res = await handler(event(LIST_PATH, { agentId: "ag1" }));
     expect(res.statusCode).toBe(502);
@@ -214,15 +223,13 @@ describe("mcp-proxy handler", () => {
 
   it("folder-dispatch render fault → 502 (no silent legacy fallback)", async () => {
     mockSelectLimit.mockReset();
-    mockSelectLimit
-      .mockReturnValueOnce([{ id: "u1", tenant_id: "t1" }])
-      .mockReturnValueOnce([
-        {
-          id: "ag1",
-          capability_folder_dispatch: true,
-          runtime_config: { defaultSpaceId: "sp1" },
-        },
-      ]);
+    mockSelectLimit.mockReturnValueOnce([
+      {
+        id: "ag1",
+        capability_folder_dispatch: true,
+        runtime_config: { defaultSpaceId: "sp1" },
+      },
+    ]);
     mockRenderTuple.mockRejectedValue(new Error("render boom"));
 
     const res = await handler(event(LIST_PATH, { agentId: "ag1" }));
@@ -575,17 +582,16 @@ describe("mcp-proxy handler", () => {
   });
 
   it("authenticated non-member (no tenant resolved) → 403", async () => {
-    mockSelectLimit.mockReset();
-    mockSelectLimit.mockReturnValueOnce([]); // no user row
+    mockAdmitCognitoTenant.mockRejectedValueOnce(
+      new AuthAdmissionError("tenant_not_admitted", "not admitted"),
+    );
     const res = await handler(event(LIST_PATH, { agentId: "ag1" }));
     expect(res.statusCode).toBe(403);
   });
 
   it("agent not in caller's tenant → 404", async () => {
     mockSelectLimit.mockReset();
-    mockSelectLimit
-      .mockReturnValueOnce([{ id: "u1", tenant_id: "t1" }])
-      .mockReturnValueOnce([]); // no agent in tenant
+    mockSelectLimit.mockReturnValueOnce([]); // no agent in tenant
     const res = await handler(
       event(CALL_PATH, { agentId: "ag1", name: "crm__x" }),
     );

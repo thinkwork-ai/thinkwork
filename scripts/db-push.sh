@@ -76,6 +76,43 @@ fi
 
 export DATABASE_URL
 
+echo "Checking auth migration phase safety..."
+AUTH_PHASE_STATE=$(psql "$DATABASE_URL" -X -qAt -v ON_ERROR_STOP=1 -c "
+  SELECT CASE WHEN
+    to_regclass('public.workos_auth_bridges') IS NOT NULL
+    OR to_regclass('public.workos_auth_sessions') IS NOT NULL
+    OR EXISTS (
+      SELECT 1
+      FROM pg_constraint AS constraint_record
+      JOIN pg_class AS table_record ON table_record.oid = constraint_record.conrelid
+      JOIN pg_namespace AS schema_record ON schema_record.oid = table_record.relnamespace
+      WHERE schema_record.nspname = 'public'
+        AND table_record.relname IN ('auth_provider_resources', 'auth_route_clients')
+        AND constraint_record.contype = 'c'
+        AND pg_get_constraintdef(constraint_record.oid) LIKE '%coexistence%'
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM pg_attrdef AS default_record
+      JOIN pg_attribute AS column_record
+        ON column_record.attrelid = default_record.adrelid
+       AND column_record.attnum = default_record.adnum
+      JOIN pg_class AS table_record ON table_record.oid = default_record.adrelid
+      JOIN pg_namespace AS schema_record ON schema_record.oid = table_record.relnamespace
+      WHERE schema_record.nspname = 'public'
+        AND table_record.relname = 'auth_provider_resources'
+        AND column_record.attname = 'lifecycle_state'
+        AND pg_get_expr(default_record.adbin, default_record.adrelid) LIKE '%coexistence%'
+    )
+  THEN 'transitional' ELSE 'safe' END;
+")
+
+if [ "$AUTH_PHASE_STATE" != "safe" ]; then
+  echo "ERROR: Standard db:push is disabled while auth rollback tables or transitional lifecycle constraints exist."
+  echo "Apply and verify the phase-specific auth migrations instead; db:push is safe again after migration 0263 retires the rollback boundary."
+  exit 1
+fi
+
 echo ""
 echo "Pushing Drizzle schema to database..."
 cd "$REPO_ROOT/packages/database-pg"

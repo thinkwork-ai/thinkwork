@@ -20,6 +20,8 @@ import {
 } from "./cognito-storage";
 import { getPlatformConfig } from "./platform-config";
 import * as Crypto from "expo-crypto";
+import * as WebBrowser from "expo-web-browser";
+import { Platform } from "react-native";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -166,11 +168,94 @@ export function confirmSignUp(email: string, code: string): Promise<void> {
 // ---------------------------------------------------------------------------
 // Sign out
 // ---------------------------------------------------------------------------
-export function signOut(): void {
-  const pool = getUserPool();
-  if (!pool) return;
+const REMOTE_SIGN_OUT_TIMEOUT_MS = 4_000;
+const MOBILE_LOGOUT_URI = "thinkwork://";
 
-  const user = pool.getCurrentUser();
+async function settleWithin<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+): Promise<{ timedOut: false; value: T } | { timedOut: true }> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise.then((value) => ({ timedOut: false as const, value })),
+      new Promise<{ timedOut: true }>((resolve) => {
+        timeout = setTimeout(() => resolve({ timedOut: true }), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+export async function signOut(): Promise<void> {
+  const config = getPlatformConfig();
+  const refreshToken = getStoredOAuthRefreshToken();
+  const clientId =
+    getStoredOAuthClientId() || _passwordAuthClientId || config.cognitoClientId;
+
+  if (refreshToken && clientId && config.cognitoDomain) {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      REMOTE_SIGN_OUT_TIMEOUT_MS,
+    );
+    try {
+      await fetch(`${config.cognitoDomain}/oauth2/revoke`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          token: refreshToken,
+          client_id: clientId,
+        }).toString(),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      console.warn(
+        "[auth] refresh-token revocation failed during sign-out:",
+        error,
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  if (clientId && config.cognitoDomain) {
+    const logoutUri =
+      Platform.OS === "web" ? globalThis.location?.origin : MOBILE_LOGOUT_URI;
+    if (logoutUri) {
+      const logoutUrl = new URL(`${config.cognitoDomain}/logout`);
+      logoutUrl.searchParams.set("client_id", clientId);
+      logoutUrl.searchParams.set("logout_uri", logoutUri);
+      try {
+        if (Platform.OS === "web") {
+          globalThis.location?.assign(logoutUrl.toString());
+        } else {
+          const logout = await settleWithin(
+            // Login uses the persistent ASWebAuthenticationSession cookie jar.
+            // Logout must use that same jar so the hosted session is cleared.
+            WebBrowser.openAuthSessionAsync(logoutUrl.toString(), logoutUri),
+            REMOTE_SIGN_OUT_TIMEOUT_MS,
+          );
+          if (logout.timedOut) {
+            try {
+              WebBrowser.dismissAuthSession();
+            } catch (error) {
+              console.warn(
+                "[auth] timed-out Cognito logout session could not be dismissed:",
+                error,
+              );
+            }
+          }
+        }
+      } catch (error) {
+        console.warn("[auth] Cognito hosted-session logout failed:", error);
+      }
+    }
+  }
+
+  const pool = getUserPool();
+  const user = pool?.getCurrentUser();
   if (user) {
     user.signOut();
   }
@@ -307,6 +392,7 @@ export interface OAuthAuthorizeRequest {
   authorizeUrl: string;
   clientId: string;
   codeVerifier: string;
+  nonce: string;
   redirectUri: string;
   state: string;
 }
@@ -350,6 +436,7 @@ export async function createOAuthAuthorizeRequest(
     authorizeUrl: `${config.cognitoDomain}/oauth2/authorize?${params.toString()}`,
     clientId: option.route.clientId,
     codeVerifier,
+    nonce,
     redirectUri,
     state,
   };
@@ -389,14 +476,13 @@ export async function exchangeCodeForTokens(
   });
 
   if (!response.ok) {
-    const text = await response.text();
+    await response.text();
     console.error("[auth] token exchange failed", {
       status: response.status,
-      body: text,
       redirectUri,
       codeLen: code.length,
     });
-    throw new Error(`Token exchange failed: ${text}`);
+    throw new Error(`Token exchange failed (${response.status})`);
   }
 
   return response.json();
@@ -404,8 +490,73 @@ export async function exchangeCodeForTokens(
 
 /** Decode a JWT payload without verification (tokens come from Cognito over TLS). */
 function decodeJwtPayload(token: string): Record<string, unknown> {
-  const base64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+  const parts = token.split(".");
+  if (parts.length !== 3 || !parts[1]) throw new Error("Malformed OAuth token");
+  const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
   return JSON.parse(atob(base64));
+}
+
+function expectedCognitoIssuer(): string {
+  const poolId = getPlatformConfig().cognitoUserPoolId;
+  const region = poolId.split("_")[0];
+  if (!poolId || !region || region === poolId) {
+    throw new Error("Auth not configured");
+  }
+  return `https://cognito-idp.${region}.amazonaws.com/${poolId}`;
+}
+
+function requireCurrentClaim(
+  payload: Record<string, unknown>,
+  claim: string,
+  expected: string,
+): void {
+  if (payload[claim] !== expected) {
+    throw new Error(`OAuth token ${claim} verification failed`);
+  }
+}
+
+function requireUnexpired(payload: Record<string, unknown>): void {
+  const exp = payload["exp"];
+  if (typeof exp !== "number" || exp <= Math.floor(Date.now() / 1000) - 60) {
+    throw new Error("OAuth token has expired");
+  }
+}
+
+/**
+ * Validate the claims bound to Cognito's TLS token response before any token
+ * reaches persistent storage. API requests still perform full JWKS signature
+ * verification; the mobile client pins issuer, app client, token type, nonce,
+ * expiry, and subject here to prevent callback/session mix-ups.
+ */
+export function validateOAuthTokens(
+  tokens: Pick<OAuthTokens, "id_token" | "access_token">,
+  expected: { clientId: string; nonce?: string; subject?: string },
+): Record<string, unknown> {
+  const id = decodeJwtPayload(tokens.id_token);
+  const access = decodeJwtPayload(tokens.access_token);
+  const issuer = expectedCognitoIssuer();
+
+  requireCurrentClaim(id, "iss", issuer);
+  requireCurrentClaim(id, "aud", expected.clientId);
+  requireCurrentClaim(id, "token_use", "id");
+  requireCurrentClaim(access, "iss", issuer);
+  requireCurrentClaim(access, "client_id", expected.clientId);
+  requireCurrentClaim(access, "token_use", "access");
+  requireUnexpired(id);
+  requireUnexpired(access);
+
+  const subject = id["sub"];
+  if (typeof subject !== "string" || !subject || access["sub"] !== subject) {
+    throw new Error("OAuth token subject verification failed");
+  }
+  if (expected.subject && subject !== expected.subject) {
+    throw new Error("OAuth refresh subject verification failed");
+  }
+  if (expected.nonce !== undefined && id["nonce"] !== expected.nonce) {
+    throw new Error("OAuth nonce verification failed");
+  }
+
+  return id;
 }
 
 /**
@@ -573,6 +724,21 @@ export async function refreshOAuthTokens(): Promise<string | null> {
       if (!prefix) return null;
       const username = CognitoSecureStorage.getItem(`${prefix}.LastAuthUser`);
       if (!username) return null;
+      const currentIdToken = CognitoSecureStorage.getItem(
+        `${prefix}.${username}.idToken`,
+      );
+      const currentSubject = currentIdToken
+        ? decodeJwtPayload(currentIdToken)["sub"]
+        : undefined;
+      validateOAuthTokens(
+        { id_token: body.id_token, access_token: body.access_token },
+        {
+          clientId: oauthClientId,
+          ...(typeof currentSubject === "string"
+            ? { subject: currentSubject }
+            : {}),
+        },
+      );
       CognitoSecureStorage.setItem(
         `${prefix}.${username}.idToken`,
         body.id_token,
@@ -607,7 +773,7 @@ export function resetAuthEngineForEnvironmentChange(): void {
 }
 
 export function clearAuthStorageForDeploymentChange(): void {
-  signOut();
+  void signOut();
   _userPool = null;
   _userPoolKey = null;
   _oauthRefreshInFlight = null;
@@ -619,7 +785,7 @@ export async function clearAuthStorageForEnvironment(
   cognitoClientId: string,
 ): Promise<void> {
   const activeClientId = getPlatformConfig().cognitoClientId;
-  if (activeClientId === cognitoClientId) signOut();
+  if (activeClientId === cognitoClientId) await signOut();
   if (activeClientId === cognitoClientId) {
     _userPool = null;
     _userPoolKey = null;

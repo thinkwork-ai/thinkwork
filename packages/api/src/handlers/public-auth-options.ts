@@ -26,6 +26,7 @@ type DbLike = typeof defaultDb;
 export interface PublicAuthOptionsResponse {
   password: { enabled: boolean; clientId?: string };
   oauthOptions: NativeAuthOption[];
+  legacyMigration?: { authorizePath: string };
 }
 
 export type PublicOAuthOption = NativeAuthOption;
@@ -95,10 +96,20 @@ export async function resolvePublicAuthOptions(args: {
       ? normalizeTrustedHost(args.trustedDomainName)
       : args.routingHost;
   const clientFamily = args.clientFamily ?? "web";
-  return resolveNativeAuthPolicy(
+  const resolved = resolveNativeAuthPolicy(
     await deps.loadPolicy(host ?? null, clientFamily),
     clientFamily,
   );
+  return {
+    ...resolved,
+    ...(process.env.AUTH_RETIREMENT_PHASE === "coexistence"
+      ? {
+          legacyMigration: {
+            authorizePath: "/api/auth/workos/authorize",
+          },
+        }
+      : {}),
+  };
 }
 
 export function createDefaultPublicAuthOptionsDeps(

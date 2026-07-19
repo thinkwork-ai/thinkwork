@@ -150,6 +150,29 @@ describe("top-level enterprise deploy routing", () => {
     expect(localDeploy).not.toHaveBeenCalled();
   });
 
+  it("rejects auth retirement finalization on enterprise routing", async () => {
+    const localDeploy = vi.fn();
+    const enterpriseDeploy = vi.fn();
+
+    await expect(
+      runDeployCommand(
+        {
+          bootstrap: true,
+          customer: "acme",
+          repo: "acme/deploy",
+          stage: "dev",
+          component: "all",
+          yes: true,
+          finalizeAuthRetirement: true,
+        },
+        { localDeploy, enterpriseDeploy },
+      ),
+    ).rejects.toThrow(/not supported by enterprise deploy routing/);
+
+    expect(enterpriseDeploy).not.toHaveBeenCalled();
+    expect(localDeploy).not.toHaveBeenCalled();
+  });
+
   it("preserves the local Terraform path outside enterprise context", async () => {
     const localDeploy = vi.fn();
     const enterpriseDeploy = vi.fn();

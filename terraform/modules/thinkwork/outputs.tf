@@ -33,6 +33,11 @@ output "auth_route_clients" {
   value       = module.cognito.auth_route_clients
 }
 
+output "auth_retirement_phase" {
+  description = "Applied authentication retirement phase used for safe controller upgrades."
+  value       = module.cognito.auth_retirement_phase
+}
+
 output "web_local_client_id" {
   description = "Local-password-only Cognito app client for web login."
   value       = module.cognito.web_local_client_id

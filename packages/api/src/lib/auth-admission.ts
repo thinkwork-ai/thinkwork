@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import type { Database } from "@thinkwork/database-pg";
 import {
   authProviderResources,
@@ -10,16 +10,17 @@ import {
 } from "@thinkwork/database-pg/schema";
 
 import { db } from "./db.js";
+import { legacyWorkosAuthSessions as workosAuthSessions } from "./legacy-workos-schema.js";
 import type { AuthResult } from "./cognito-auth.js";
 
-const VALIDATION_STATES = new Set(["valid", "partially_valid"]);
+const VALIDATION_STATES = new Set(["valid"]);
 
 export interface CognitoRouteProvenance {
   routeClientId: string;
   routeKey: string;
   clientFamily: string;
   appClientId: string;
-  lifecycleState: "native";
+  lifecycleState: "native" | "coexistence";
   connectionId: string;
   connectionKey: string;
   providerKind: string;
@@ -52,6 +53,17 @@ export interface IdentityAdmissionCandidate {
   status: string;
 }
 
+export interface RollbackSessionAdmissionCandidate {
+  sessionId: string;
+  userId: string;
+  tenantId: string;
+  role: string;
+  sessionStatus: string;
+  membershipStatus: string;
+  referenceStatus: string;
+  expiresAt: Date;
+}
+
 export interface MembershipAdmissionCandidate {
   tenantId: string;
   role: string;
@@ -77,6 +89,10 @@ export interface AuthAdmissionRepository {
     userPoolId: string,
     appClientId: string,
   ): Promise<RouteAdmissionCandidate[]>;
+  loadRollbackRouteCandidates(
+    userPoolId: string,
+    appClientId: string,
+  ): Promise<RouteAdmissionCandidate[]>;
   loadIdentityCandidates(
     cognitoIssuer: string,
     cognitoSub: string,
@@ -91,6 +107,11 @@ export interface AuthAdmissionRepository {
   loadTenantConnectionReferences(
     tenantIds: string[],
   ): Promise<Array<TenantConnectionReference & { tenantId: string }>>;
+  loadRollbackSessionCandidates(
+    cognitoSub: string,
+    connectionId: string,
+    requestedTenantId?: string,
+  ): Promise<RollbackSessionAdmissionCandidate[]>;
 }
 
 export interface TenantAdmissionResult {
@@ -99,6 +120,13 @@ export interface TenantAdmissionResult {
   role: string;
   identityId: string;
   route: CognitoRouteProvenance;
+}
+
+export interface CognitoTenantDiscoveryResult {
+  userId: string;
+  identityId: string;
+  route: CognitoRouteProvenance;
+  tenants: Array<{ tenantId: string; role: string }>;
 }
 
 export class AuthAdmissionError extends Error {
@@ -148,6 +176,38 @@ export function evaluateRouteAdmission(
   };
 }
 
+export function evaluateRollbackRouteAdmission(
+  candidates: RouteAdmissionCandidate[],
+): CognitoRouteProvenance {
+  const admitted = candidates.filter(
+    (candidate) =>
+      candidate.routeLifecycleState === "coexistence" &&
+      candidate.connectionLifecycleState === "coexistence" &&
+      candidate.providerKind === "legacy_workos" &&
+      VALIDATION_STATES.has(candidate.routeValidationStatus) &&
+      VALIDATION_STATES.has(candidate.connectionValidationStatus) &&
+      candidate.connectionAppClientIds.includes(candidate.appClientId),
+  );
+  if (admitted.length !== 1) {
+    throw new AuthAdmissionError(
+      admitted.length === 0 ? "unknown_client" : "ambiguous_client",
+      "Cognito app client is not admitted to exactly one rollback route.",
+    );
+  }
+  const candidate = admitted[0]!;
+  return {
+    routeClientId: candidate.routeClientId,
+    routeKey: candidate.routeKey,
+    clientFamily: candidate.clientFamily,
+    appClientId: candidate.appClientId,
+    lifecycleState: "coexistence",
+    connectionId: candidate.connectionId,
+    connectionKey: candidate.connectionKey,
+    providerKind: candidate.providerKind,
+    providerIssuer: candidate.providerIssuer,
+  };
+}
+
 export async function resolveCognitoRouteProvenance(
   args: { userPoolId: string; appClientId: string },
   repository: AuthAdmissionRepository = createDbAuthAdmissionRepository(),
@@ -156,7 +216,25 @@ export async function resolveCognitoRouteProvenance(
     args.userPoolId,
     args.appClientId,
   );
-  return evaluateRouteAdmission(candidates);
+  try {
+    return evaluateRouteAdmission(candidates);
+  } catch (error) {
+    if (
+      !(error instanceof AuthAdmissionError) ||
+      error.code !== "unknown_client"
+    ) {
+      throw error;
+    }
+  }
+  if (candidates.length > 0) {
+    return evaluateRollbackRouteAdmission(candidates);
+  }
+  return evaluateRollbackRouteAdmission(
+    await repository.loadRollbackRouteCandidates(
+      args.userPoolId,
+      args.appClientId,
+    ),
+  );
 }
 
 export function evaluateTenantAdmission(args: {
@@ -239,6 +317,16 @@ export async function admitCognitoTenant(
       "Cognito route provenance is required for tenant admission.",
     );
   }
+  if (
+    auth.route.lifecycleState === "coexistence" &&
+    auth.route.providerKind === "legacy_workos"
+  ) {
+    return admitWorkosRollbackTenant(
+      { ...auth, route: auth.route },
+      requestedTenantId,
+      repository,
+    );
+  }
   const identities = await repository.loadIdentityCandidates(
     auth.cognitoIssuer,
     auth.principalId,
@@ -276,6 +364,170 @@ export async function admitCognitoTenant(
     references,
     requestedTenantId: effectiveTenantId,
   });
+}
+
+/**
+ * Resolve the exact active identity and return only memberships that the
+ * current route is permitted to enter. This is discovery, not admission: a
+ * multi-tenant caller still has no tenant until it explicitly selects one.
+ */
+export async function discoverCognitoTenantAdmissions(
+  auth: AuthResult,
+  repository: AuthAdmissionRepository = createDbAuthAdmissionRepository(),
+): Promise<CognitoTenantDiscoveryResult> {
+  if (
+    auth.authType !== "cognito" ||
+    !auth.principalId ||
+    !auth.cognitoIssuer ||
+    !auth.route
+  ) {
+    throw new AuthAdmissionError(
+      "cognito_context_missing",
+      "Cognito route provenance is required for tenant discovery.",
+    );
+  }
+  if (
+    auth.route.lifecycleState === "coexistence" &&
+    auth.route.providerKind === "legacy_workos"
+  ) {
+    const sessions = await repository.loadRollbackSessionCandidates(
+      auth.principalId,
+      auth.route.connectionId,
+    );
+    const bindings = uniqueActiveRollbackBindings(sessions);
+    if (bindings.length === 0) {
+      throw new AuthAdmissionError(
+        "tenant_not_admitted",
+        "No active WorkOS rollback session permits tenant discovery.",
+      );
+    }
+    const userIds = new Set(bindings.map((binding) => binding.userId));
+    if (userIds.size !== 1) {
+      throw new AuthAdmissionError(
+        "identity_ambiguous",
+        "WorkOS rollback principal is bound to multiple users.",
+      );
+    }
+    return {
+      userId: bindings[0]!.userId,
+      identityId: `workos-session:${bindings[0]!.sessionId}`,
+      route: auth.route,
+      tenants: bindings.map(({ tenantId, role }) => ({ tenantId, role })),
+    };
+  }
+  const identities = await repository.loadIdentityCandidates(
+    auth.cognitoIssuer,
+    auth.principalId,
+  );
+  const activeIdentities = identities.filter(
+    (identity) =>
+      identity.status === "active" &&
+      identity.authProviderResourceId === auth.route?.connectionId,
+  );
+  if (activeIdentities.length !== 1) {
+    throw new AuthAdmissionError(
+      activeIdentities.length === 0
+        ? "identity_not_bound"
+        : "identity_ambiguous",
+      "Cognito principal is not bound to exactly one active ThinkWork identity.",
+    );
+  }
+  const identity = activeIdentities[0]!;
+  const memberships = await repository.loadMemberships(identity.userId);
+  const tenantIds = [...new Set(memberships.map((value) => value.tenantId))];
+  const [policies, references] = await Promise.all([
+    repository.loadTenantPolicies(tenantIds),
+    repository.loadTenantConnectionReferences(tenantIds),
+  ]);
+  const policyByTenant = new Map(
+    policies.map((policy) => [policy.tenantId, policy]),
+  );
+  const referencesByTenant = new Map<string, TenantConnectionReference[]>();
+  for (const reference of references) {
+    const values = referencesByTenant.get(reference.tenantId) ?? [];
+    values.push(reference);
+    referencesByTenant.set(reference.tenantId, values);
+  }
+  const tenants = memberships
+    .filter((membership) => {
+      if (membership.status !== "active") return false;
+      const policy = policyByTenant.get(membership.tenantId);
+      return Boolean(
+        policy &&
+        policy.status === "active" &&
+        tenantPolicyAllowsConnection(
+          auth.route!,
+          policy,
+          referencesByTenant.get(membership.tenantId) ?? [],
+        ),
+      );
+    })
+    .map(({ tenantId, role }) => ({ tenantId, role }));
+
+  if (tenants.length === 0) {
+    throw new AuthAdmissionError(
+      "tenant_not_admitted",
+      "No active membership permits this authentication connection.",
+    );
+  }
+  return {
+    userId: identity.userId,
+    identityId: identity.identityId,
+    route: auth.route,
+    tenants,
+  };
+}
+
+async function admitWorkosRollbackTenant(
+  auth: AuthResult & { route: CognitoRouteProvenance },
+  requestedTenantId: string | undefined,
+  repository: AuthAdmissionRepository,
+): Promise<TenantAdmissionResult> {
+  const sessions = await repository.loadRollbackSessionCandidates(
+    auth.principalId!,
+    auth.route.connectionId,
+    requestedTenantId,
+  );
+  const bindings = uniqueActiveRollbackBindings(sessions);
+  if (bindings.length !== 1) {
+    const tenantCount = new Set(bindings.map((binding) => binding.tenantId))
+      .size;
+    throw new AuthAdmissionError(
+      bindings.length === 0
+        ? "tenant_not_admitted"
+        : tenantCount > 1
+          ? "tenant_selection_required"
+          : "identity_ambiguous",
+      "WorkOS rollback principal is not bound to one active tenant membership.",
+    );
+  }
+  const binding = bindings[0]!;
+  return {
+    userId: binding.userId,
+    tenantId: binding.tenantId,
+    role: binding.role,
+    identityId: `workos-session:${binding.sessionId}`,
+    route: auth.route,
+  };
+}
+
+function uniqueActiveRollbackBindings(
+  sessions: RollbackSessionAdmissionCandidate[],
+): RollbackSessionAdmissionCandidate[] {
+  const unique = new Map<string, RollbackSessionAdmissionCandidate>();
+  for (const session of sessions) {
+    if (
+      session.sessionStatus !== "active" ||
+      session.membershipStatus !== "active" ||
+      session.referenceStatus !== "enabled" ||
+      session.expiresAt.getTime() <= Date.now()
+    ) {
+      continue;
+    }
+    const key = [session.userId, session.tenantId, session.role].join("\u0000");
+    if (!unique.has(key)) unique.set(key, session);
+  }
+  return [...unique.values()];
 }
 
 function tenantPolicyAllowsConnection(
@@ -356,6 +608,38 @@ export function createDbAuthAdmissionRepository(
         );
       return connections.map((connection) => ({ ...route, ...connection }));
     },
+    async loadRollbackRouteCandidates(userPoolId, appClientId) {
+      const connections = await database
+        .select({
+          connectionId: authProviderResources.id,
+          connectionKey: authProviderResources.connection_key,
+          providerKind: authProviderResources.provider_kind,
+          identityProviderName:
+            authProviderResources.cognito_identity_provider_name,
+          providerIssuer: authProviderResources.issuer_url,
+          connectionLifecycleState: authProviderResources.lifecycle_state,
+          connectionValidationStatus: authProviderResources.validation_status,
+          connectionAppClientIds: authProviderResources.cognito_app_client_ids,
+        })
+        .from(authProviderResources)
+        .where(
+          and(
+            eq(authProviderResources.cognito_user_pool_id, userPoolId),
+            eq(authProviderResources.provider_kind, "legacy_workos"),
+            sql`${authProviderResources.cognito_app_client_ids} @> ${JSON.stringify([appClientId])}::jsonb`,
+          ),
+        );
+      return connections.map((connection) => ({
+        routeClientId: `workos-rollback:${connection.connectionId}`,
+        routeKey: "workos-rollback",
+        clientFamily: "rollback",
+        appClientId,
+        routeLifecycleState: connection.connectionLifecycleState,
+        routeValidationStatus: connection.connectionValidationStatus,
+        providerNames: [connection.identityProviderName],
+        ...connection,
+      }));
+    },
     async loadIdentityCandidates(cognitoIssuer, cognitoSub) {
       return database
         .select({
@@ -422,6 +706,60 @@ export function createDbAuthAdmissionRepository(
           ),
         )
         .where(inArray(tenantAuthProviderReferences.tenant_id, tenantIds));
+    },
+    async loadRollbackSessionCandidates(
+      cognitoSub,
+      connectionId,
+      requestedTenantId,
+    ) {
+      return database
+        .select({
+          sessionId: workosAuthSessions.id,
+          userId: workosAuthSessions.user_id,
+          tenantId: workosAuthSessions.tenant_id,
+          role: tenantMembers.role,
+          sessionStatus: workosAuthSessions.status,
+          membershipStatus: tenantMembers.status,
+          referenceStatus: tenantAuthProviderReferences.status,
+          expiresAt: workosAuthSessions.expires_at,
+        })
+        .from(workosAuthSessions)
+        .innerJoin(
+          tenantMembers,
+          and(
+            eq(tenantMembers.principal_type, "user"),
+            eq(tenantMembers.principal_id, workosAuthSessions.user_id),
+            eq(tenantMembers.tenant_id, workosAuthSessions.tenant_id),
+          ),
+        )
+        .innerJoin(
+          tenantAuthProviderReferences,
+          and(
+            eq(
+              tenantAuthProviderReferences.id,
+              workosAuthSessions.tenant_auth_provider_reference_id,
+            ),
+            eq(
+              tenantAuthProviderReferences.tenant_id,
+              workosAuthSessions.tenant_id,
+            ),
+            eq(
+              tenantAuthProviderReferences.auth_provider_resource_id,
+              workosAuthSessions.auth_provider_resource_id,
+            ),
+          ),
+        )
+        .where(
+          and(
+            eq(workosAuthSessions.cognito_principal_id, cognitoSub),
+            eq(workosAuthSessions.auth_provider_resource_id, connectionId),
+            eq(workosAuthSessions.status, "active"),
+            gt(workosAuthSessions.expires_at, new Date()),
+            ...(requestedTenantId
+              ? [eq(workosAuthSessions.tenant_id, requestedTenantId)]
+              : []),
+          ),
+        );
     },
   };
 }

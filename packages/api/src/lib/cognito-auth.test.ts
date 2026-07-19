@@ -299,7 +299,6 @@ describe("authenticate — Cognito JWT path", () => {
     expect(routeAdmissionMock).toHaveBeenCalledWith({
       userPoolId: "us-east-1_test",
       appClientId: "client-web",
-      cognitoSub: "user-sub",
     });
   });
 
@@ -343,7 +342,6 @@ describe("authenticate — Cognito JWT path", () => {
     expect(routeAdmissionMock).toHaveBeenLastCalledWith({
       userPoolId: "us-east-1_test",
       appClientId: "client-access",
-      cognitoSub: "user-sub",
     });
   });
 

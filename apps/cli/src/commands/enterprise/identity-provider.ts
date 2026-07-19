@@ -67,6 +67,8 @@ export interface TenantEntraConnectionMetadata {
   displayName: string;
   clientId: string;
   clientSecretRef: string;
+  /** Runner-only Secrets Manager label; stripped before API reconciliation. */
+  clientSecretVersionStage?: "AWSPENDING";
   issuerUrl: string;
   tenantBindings: Array<{
     tenantId: string;
@@ -80,6 +82,7 @@ export interface TenantEntraConnectionInput {
   thinkworkTenantId: string;
   clientId: string;
   clientSecretRef: string;
+  clientSecretVersionStage?: "AWSPENDING";
   displayName: string;
   label: string;
   hostnames: string[];
@@ -124,6 +127,9 @@ export function buildTenantEntraConnectionMetadata(
     ),
     clientId,
     clientSecretRef,
+    ...(input.clientSecretVersionStage
+      ? { clientSecretVersionStage: input.clientSecretVersionStage }
+      : {}),
     issuerUrl: `https://login.microsoftonline.com/${directoryId}/v2.0`,
     tenantBindings: [
       {

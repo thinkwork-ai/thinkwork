@@ -264,3 +264,19 @@ resource "aws_lambda_permission" "placeholder_apigw" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
+resource "terraform_data" "auth_migration_recovery_deadline_guard" {
+  input = {
+    phase    = var.auth_retirement_phase
+    deadline = var.auth_migration_recovery_deadline
+  }
+
+  lifecycle {
+    precondition {
+      condition = var.auth_retirement_phase != "coexistence" || (
+        trimspace(var.auth_migration_recovery_deadline) != "" &&
+        can(timecmp(var.auth_migration_recovery_deadline, var.auth_migration_recovery_deadline))
+      )
+      error_message = "auth_migration_recovery_deadline must be an RFC3339 timestamp when auth_retirement_phase is coexistence."
+    }
+  }
+}

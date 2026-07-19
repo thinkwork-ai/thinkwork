@@ -11,8 +11,8 @@
 -- creates: public.uq_tenant_auth_provider_references_tenant_resource
 -- creates: public.tenant_auth_policies
 -- creates: public.uq_tenant_auth_policies_tenant
--- creates: public.ensure_default_tenant_auth_policy
--- creates: public.tenants.trg_tenants_default_auth_policy
+-- creates-function: public.ensure_default_tenant_auth_policy
+-- creates-trigger: public.tenants.trg_tenants_default_auth_policy
 -- creates: public.tenant_auth_hosts
 -- creates: public.uq_tenant_auth_hosts_hostname
 -- creates: public.idx_tenant_auth_hosts_tenant_status
@@ -69,6 +69,7 @@ ALTER TABLE public.auth_provider_resources
 
 ALTER TABLE public.auth_provider_resources
   DROP CONSTRAINT IF EXISTS auth_provider_resources_no_public_without_valid,
+  DROP CONSTRAINT IF EXISTS auth_provider_resources_lifecycle_state_allowed,
   ADD CONSTRAINT auth_provider_resources_lifecycle_state_allowed
     CHECK (lifecycle_state IN ('coexistence', 'native', 'denied')),
   ADD CONSTRAINT auth_provider_resources_no_public_without_valid

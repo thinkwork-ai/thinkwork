@@ -60,6 +60,20 @@ describe("auth provider reconciliation transition", () => {
     ).toBe("replay");
   });
 
+  it("converges when the API applied but the caller lost its state write", () => {
+    expect(
+      assertReconciliationTransition({
+        latestRevision: 5,
+        latestFingerprint: "a".repeat(64),
+        expectedPreviousRevision: 4,
+        revision: 5,
+        manifestFingerprint: "a".repeat(64),
+        existingConnectionKeys: [],
+        desiredConnectionKeys: [],
+      }),
+    ).toBe("latest_replay");
+  });
+
   it("rejects concurrent revision loss", () => {
     expect(() =>
       assertReconciliationTransition({
@@ -125,7 +139,8 @@ describe("independent Cognito metadata verification", () => {
         lifecycleState: "native",
         cognitoUserPoolId: "us-east-1_Example",
         cognitoIdentityProviderName: "MicrosoftOrganizations",
-        issuerUrl: "https://login.microsoftonline.com/organizations/v2.0/",
+        issuerUrl:
+          "https://login.microsoftonline.com/9d65869f-0798-433d-b4e6-8c20d113dfbc/v2.0",
         clientId: "client-id",
         authorizeScopes: "openid email profile",
         tenantBindings: [],
@@ -154,15 +169,22 @@ describe("independent Cognito metadata verification", () => {
           ProviderType: "OIDC",
           ProviderDetails: {
             client_id: "client-id",
-            oidc_issuer: "https://login.microsoftonline.com/organizations/v2.0",
+            oidc_issuer:
+              "https://login.microsoftonline.com/9d65869f-0798-433d-b4e6-8c20d113dfbc/v2.0",
           },
         },
       },
       {
         UserPoolClient: {
           ClientId: "1234567890abcdefghijklmnop",
+          GenerateSecret: false,
+          EnableTokenRevocation: true,
+          PreventUserExistenceErrors: "ENABLED",
           SupportedIdentityProviders: ["MicrosoftOrganizations"],
           ExplicitAuthFlows: ["ALLOW_REFRESH_TOKEN_AUTH"],
+          AllowedOAuthFlowsUserPoolClient: true,
+          AllowedOAuthFlows: ["code"],
+          AllowedOAuthScopes: ["openid", "email", "profile"],
           CallbackURLs: ["https://app.example.com/auth/callback"],
           LogoutURLs: ["https://app.example.com/sign-in"],
         },

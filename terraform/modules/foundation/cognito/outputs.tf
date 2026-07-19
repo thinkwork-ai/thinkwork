@@ -49,6 +49,11 @@ output "auth_route_clients" {
   } : var.existing_auth_route_clients
 }
 
+output "auth_retirement_phase" {
+  description = "Applied authentication retirement phase used for safe controller upgrades."
+  value       = var.auth_retirement_phase
+}
+
 output "web_local_client_id" {
   description = "Local-password-only Cognito app client for the web client family."
   value = local.create ? aws_cognito_user_pool_client.auth_route["web:local"].id : try(
@@ -66,6 +71,6 @@ output "mobile_local_client_id" {
 }
 
 output "microsoft_identity_provider_name" {
-  description = "Direct Microsoft organizations Cognito provider name, or null when not configured."
+  description = "Default tenant-specific Microsoft Cognito provider name, or null when not configured."
   value       = var.microsoft_oauth_client_id != "" ? "MicrosoftOrganizations" : null
 }

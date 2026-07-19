@@ -26,6 +26,10 @@ import type {
 import { and, eq } from "drizzle-orm";
 import { authenticate } from "../lib/cognito-auth.js";
 import {
+  admitCognitoTenant,
+  AuthAdmissionError,
+} from "../lib/auth-admission.js";
+import {
   handleCors,
   json,
   error,
@@ -36,7 +40,7 @@ import {
 import { db } from "../lib/db.js";
 import { schema } from "@thinkwork/database-pg";
 
-const { users, threads, messages } = schema;
+const { threads, messages } = schema;
 
 interface RecordTurnBody {
   threadId?: string;
@@ -59,19 +63,18 @@ export async function handler(
   const auth = await authenticate(
     event.headers as Record<string, string | undefined>,
   );
-  if (!auth || auth.authType !== "cognito" || !auth.email) {
+  if (!auth || auth.authType !== "cognito") {
     return unauthorized("Authentication required");
   }
 
-  const [userRow] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, auth.email.toLowerCase()))
-    .limit(1);
-  if (!userRow || !userRow.tenant_id) {
+  let admission;
+  try {
+    admission = await admitCognitoTenant(auth, auth.tenantId ?? undefined);
+  } catch (cause) {
+    if (!(cause instanceof AuthAdmissionError)) throw cause;
     return forbidden("No tenant resolved for caller");
   }
-  const tenantId = userRow.tenant_id;
+  const tenantId = admission.tenantId;
 
   let body: RecordTurnBody;
   try {
@@ -100,7 +103,7 @@ export async function handler(
       role: "user",
       content: body.userText,
       sender_type: "user",
-      sender_id: userRow.id,
+      sender_id: admission.userId,
     })
     .returning({ id: messages.id });
 

@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   configurePasswordAuthClient,
   getAuthOptionSignInUrl,
+  getLegacyIdentityMigrationStartUrl,
   isPasswordSignInConfigured,
 } from "@/lib/auth";
 import {
@@ -22,16 +23,23 @@ import {
   normalizeDesktopNext,
 } from "@/lib/desktop-runtime";
 
+interface SignInSearch {
+  next?: string;
+  legacyMigration?: "workos";
+}
+
 export const Route = createFileRoute("/sign-in")({
-  validateSearch: (search: Record<string, unknown>) => ({
+  validateSearch: (search: Record<string, unknown>): SignInSearch => ({
     next: normalizeDesktopNext(search.next),
+    legacyMigration:
+      search.legacyMigration === "workos" ? ("workos" as const) : undefined,
   }),
   component: SignInPage,
 });
 
 export function SignInPage() {
   const { isAuthenticated, isLoading } = useAuth();
-  const { next } = Route.useSearch();
+  const { next, legacyMigration } = Route.useSearch();
   const navigate = useNavigate();
   const isDesktop = isDesktopBuild();
   const canCreateEnvironment = isCentralOnboardingHost();
@@ -209,11 +217,33 @@ export function SignInPage() {
     }
   }
 
+  function handleLegacyIdentityMigration() {
+    const migration = authOptions.legacyMigration;
+    if (!migration) return;
+    setError(null);
+    try {
+      window.location.href = getLegacyIdentityMigrationStartUrl(
+        migration.authorizePath,
+        next || "/new",
+      );
+    } catch (migrationError) {
+      setError(
+        migrationError instanceof Error
+          ? migrationError.message
+          : "Account migration could not be started.",
+      );
+    }
+  }
+
   const webConfigBlocked = !isDesktop && !webDeploymentProfile.okForOAuth;
   const publicOAuthOptions = authOptions.oauthOptions;
   const showPasswordForm =
     authOptions.password.enabled && isPasswordSignInConfigured();
   const showPublicOAuthOptions = publicOAuthOptions.length > 0;
+  const showLegacyMigration =
+    !isDesktop &&
+    legacyMigration === "workos" &&
+    Boolean(authOptions.legacyMigration);
   const loginBlocked = isDesktop
     ? Boolean(desktopConfig && !desktopConfig.configured)
     : webConfigBlocked;
@@ -274,35 +304,64 @@ export function SignInPage() {
           </div>
         )}
         <div className="flex w-full flex-col items-center gap-4">
-          {showPublicOAuthOptions &&
-            publicOAuthOptions.map((option) => (
+          {showLegacyMigration && (
+            <div className="flex w-full flex-col gap-3 text-center">
+              <p className="text-sm text-muted-foreground">
+                Verify your previous account before choosing a new sign-in
+                method.
+              </p>
               <Button
-                key={option.key}
-                onClick={() =>
-                  void (isDesktop
-                    ? handleDesktopOAuth(option)
-                    : handlePublicOAuth(option))
-                }
                 size="lg"
-                variant={showPasswordForm ? "outline" : "default"}
-                className={showPasswordForm ? "w-full" : "min-w-40"}
-                disabled={
-                  isLoading || isStartingOAuth || isProfileBusy || loginBlocked
-                }
+                className="w-full"
+                disabled={isLoading || isStartingOAuth || webConfigBlocked}
+                onClick={handleLegacyIdentityMigration}
               >
-                {isLoading ? (
-                  "Checking session..."
-                ) : isStartingOAuth ? (
-                  "Opening..."
-                ) : (
-                  <>
-                    <ProviderIcon icon={option.icon} />
-                    {option.label}
-                  </>
-                )}
+                Continue account migration
               </Button>
-            ))}
-          {showPasswordForm && (
+            </div>
+          )}
+          {!showLegacyMigration && showPublicOAuthOptions && (
+            <div className="grid w-full gap-3 min-[360px]:grid-cols-2">
+              {publicOAuthOptions.map((option) => (
+                <Button
+                  key={option.key}
+                  aria-label={
+                    isLoading
+                      ? "Checking session..."
+                      : isStartingOAuth
+                        ? "Opening..."
+                        : option.label
+                  }
+                  onClick={() =>
+                    void (isDesktop
+                      ? handleDesktopOAuth(option)
+                      : handlePublicOAuth(option))
+                  }
+                  size="lg"
+                  variant={showPasswordForm ? "outline" : "default"}
+                  className="w-full min-w-0"
+                  disabled={
+                    isLoading ||
+                    isStartingOAuth ||
+                    isProfileBusy ||
+                    loginBlocked
+                  }
+                >
+                  {isLoading ? (
+                    "Checking session..."
+                  ) : isStartingOAuth ? (
+                    "Opening..."
+                  ) : (
+                    <>
+                      <ProviderIcon icon={option.icon} />
+                      {option.label.replace(/^Continue with\s+/i, "")}
+                    </>
+                  )}
+                </Button>
+              ))}
+            </div>
+          )}
+          {!showLegacyMigration && showPasswordForm && (
             <>
               {showPublicOAuthOptions && (
                 <div
@@ -317,11 +376,13 @@ export function SignInPage() {
               <EmailPasswordForm disabled={isLoading || loginBlocked} />
             </>
           )}
-          {!showPasswordForm && !showPublicOAuthOptions && (
-            <p className="text-center text-sm text-muted-foreground">
-              Sign-in options are unavailable.
-            </p>
-          )}
+          {!showLegacyMigration &&
+            !showPasswordForm &&
+            !showPublicOAuthOptions && (
+              <p className="text-center text-sm text-muted-foreground">
+                Sign-in options are unavailable.
+              </p>
+            )}
           {!isDesktop && (
             <div className="text-center text-xs text-muted-foreground/60">
               <p>

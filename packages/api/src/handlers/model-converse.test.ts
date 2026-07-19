@@ -1,34 +1,27 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
-const { mockAuthenticate, mockSend, mockUserRows, mockRecordCostEvents } =
-  vi.hoisted(() => ({
-    mockAuthenticate: vi.fn(),
-    mockSend: vi.fn(),
-    mockUserRows: vi.fn(),
-    mockRecordCostEvents: vi.fn(),
-  }));
+const {
+  mockAdmitCognitoTenant,
+  mockAuthenticate,
+  mockSend,
+  mockRecordCostEvents,
+} = vi.hoisted(() => ({
+  mockAdmitCognitoTenant: vi.fn(),
+  mockAuthenticate: vi.fn(),
+  mockSend: vi.fn(),
+  mockRecordCostEvents: vi.fn(),
+}));
 
 vi.mock("../lib/cognito-auth.js", () => ({ authenticate: mockAuthenticate }));
+vi.mock("../lib/auth-admission.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/auth-admission.js")>();
+  return { ...actual, admitCognitoTenant: mockAdmitCognitoTenant };
+});
 
 vi.mock("../lib/cost-recording.js", () => ({
   recordCostEvents: mockRecordCostEvents,
-}));
-
-vi.mock("../lib/db.js", () => ({
-  db: {
-    select: () => ({
-      from: () => ({
-        where: () => ({
-          limit: () => Promise.resolve(mockUserRows() as unknown[]),
-        }),
-      }),
-    }),
-  },
-}));
-
-vi.mock("@thinkwork/database-pg", () => ({
-  schema: { users: { email: "users.email" } },
 }));
 
 vi.mock("@aws-sdk/client-bedrock-runtime", async () => {
@@ -44,6 +37,7 @@ vi.mock("@aws-sdk/client-bedrock-runtime", async () => {
 });
 
 import { handler } from "./model-converse";
+import { AuthAdmissionError } from "../lib/auth-admission.js";
 
 const MODEL = "us.anthropic.claude-sonnet-4-5-20250929-v1:0";
 
@@ -72,8 +66,8 @@ function converseOutput(content: unknown[], stopReason = "end_turn") {
 
 beforeEach(() => {
   mockAuthenticate.mockReset();
+  mockAdmitCognitoTenant.mockReset();
   mockSend.mockReset();
-  mockUserRows.mockReset();
   mockRecordCostEvents.mockReset();
   mockRecordCostEvents.mockResolvedValue({
     totalUsd: 0,
@@ -87,9 +81,13 @@ beforeEach(() => {
     authType: "cognito",
     agentId: null,
   });
-  mockUserRows.mockReturnValue([
-    { id: "u1", email: "eric@example.com", tenant_id: "t1" },
-  ]);
+  mockAdmitCognitoTenant.mockResolvedValue({
+    userId: "u1",
+    tenantId: "t1",
+    role: "member",
+    identityId: "identity-1",
+    route: {},
+  });
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -124,11 +122,11 @@ describe("model-converse handler", () => {
     ]);
   });
 
-  it("resolves tenant by email when the JWT tenantId is null", async () => {
+  it("resolves tenant through immutable Cognito admission when the JWT tenantId is null", async () => {
     mockSend.mockResolvedValue(converseOutput([{ text: "ok" }]));
     const res = await handler(event());
     expect(res.statusCode).toBe(200);
-    // the email lookup is what produced a tenant; a 200 proves it resolved
+    expect(mockAdmitCognitoTenant).toHaveBeenCalledTimes(1);
   });
 
   it("fails loud (400) on an un-prefixed model id; never calls Bedrock", async () => {
@@ -197,7 +195,9 @@ describe("model-converse handler", () => {
   });
 
   it("fails closed (403) when the caller has no resolved tenant", async () => {
-    mockUserRows.mockReturnValue([]); // no user row
+    mockAdmitCognitoTenant.mockRejectedValueOnce(
+      new AuthAdmissionError("tenant_not_admitted", "not admitted"),
+    );
     const res = await handler(event());
     expect(res.statusCode).toBe(403);
     expect(mockSend).not.toHaveBeenCalled();

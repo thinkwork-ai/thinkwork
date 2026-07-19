@@ -129,6 +129,23 @@ describe("resolveNativeAuthPolicy", () => {
     });
   });
 
+  it("does not publish partially validated providers or route clients", () => {
+    const result = resolveNativeAuthPolicy({
+      scope: "deployment",
+      localPasswordEnabled: true,
+      routes: routes.map((route) => ({
+        ...route,
+        validationStatus: "partially_valid",
+      })),
+      connections: connections.map((connection) => ({
+        ...connection,
+        validationStatus: "partially_valid",
+      })),
+    });
+
+    expect(result).toEqual({ password: { enabled: false }, oauthOptions: [] });
+  });
+
   it("fails closed for an ambiguous host policy", () => {
     expect(
       resolveNativeAuthPolicy({

@@ -28,8 +28,11 @@ import {
   BedrockRuntimeClient,
   ConverseCommand,
 } from "@aws-sdk/client-bedrock-runtime";
-import { eq } from "drizzle-orm";
 import { authenticate } from "../lib/cognito-auth.js";
+import {
+  admitCognitoTenant,
+  AuthAdmissionError,
+} from "../lib/auth-admission.js";
 import {
   handleCors,
   json,
@@ -37,8 +40,6 @@ import {
   unauthorized,
   forbidden,
 } from "../lib/response.js";
-import { db } from "../lib/db.js";
-import { schema } from "@thinkwork/database-pg";
 import { recordCostEvents } from "../lib/cost-recording.js";
 import {
   ModelResolutionError,
@@ -50,8 +51,6 @@ import {
   type ProxyRequest,
   type ProxyResponse,
 } from "../lib/model-proxy/converse-mapping.js";
-
-const { users } = schema;
 
 function region(): string {
   return process.env.AWS_REGION || "us-east-1";
@@ -92,21 +91,18 @@ export async function handler(
   const auth = await authenticate(
     event.headers as Record<string, string | undefined>,
   );
-  if (!auth || auth.authType !== "cognito" || !auth.email) {
+  if (!auth || auth.authType !== "cognito") {
     return unauthorized("Authentication required");
   }
 
-  // Tenant by email — JWT tenantId is null for Google-federated users. Gate Bedrock
-  // spend to bootstrapped tenant members (fail closed).
-  const [userRow] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, auth.email.toLowerCase()))
-    .limit(1);
-  if (!userRow || !userRow.tenant_id) {
+  let admission;
+  try {
+    admission = await admitCognitoTenant(auth, auth.tenantId ?? undefined);
+  } catch (cause) {
+    if (!(cause instanceof AuthAdmissionError)) throw cause;
     return forbidden("No tenant resolved for caller");
   }
-  const tenantId = userRow.tenant_id;
+  const tenantId = admission.tenantId;
 
   let body: ProxyRequest;
   try {
@@ -154,7 +150,7 @@ export async function handler(
     try {
       await recordCostEvents({
         tenantId,
-        userId: userRow.id,
+        userId: admission.userId,
         requestId: `model-converse:${event.requestContext.requestId}`,
         model: modelId,
         inputTokens: response.usage.inputTokens,
@@ -174,7 +170,7 @@ export async function handler(
       "[model-converse]",
       JSON.stringify({
         tenantId,
-        userId: userRow.id,
+        userId: admission.userId,
         modelId,
         stopReason: response.stopReason,
         inputTokens: response.usage.inputTokens,

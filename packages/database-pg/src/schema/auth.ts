@@ -21,6 +21,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { tenants, users } from "./core.js";
+import { pluginInstalls } from "./plugins.js";
 
 export const AUTH_PROVIDER_VALIDATION_STATUSES = [
   "unconfigured",
@@ -43,7 +44,11 @@ export const AUTH_PROVIDER_PUBLIC_OPTION_MODES = [
 export type AuthProviderPublicOptionMode =
   (typeof AUTH_PROVIDER_PUBLIC_OPTION_MODES)[number];
 
-export const AUTH_CONNECTION_LIFECYCLE_STATES = ["native", "denied"] as const;
+export const AUTH_CONNECTION_LIFECYCLE_STATES = [
+  "coexistence",
+  "native",
+  "denied",
+] as const;
 
 export type AuthConnectionLifecycleState =
   (typeof AUTH_CONNECTION_LIFECYCLE_STATES)[number];
@@ -178,7 +183,7 @@ export const authProviderResources = pgTable(
     ),
     check(
       "auth_provider_resources_no_public_without_valid",
-      sql`${table.public_options_published} = false OR (${table.validation_status} IN ('valid', 'partially_valid') AND ${table.lifecycle_state} <> 'denied')`,
+      sql`${table.public_options_published} = false OR (${table.validation_status} = 'valid' AND ${table.lifecycle_state} <> 'denied')`,
     ),
   ],
 );
@@ -193,7 +198,10 @@ export const tenantAuthProviderReferences = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "restrict" }),
     /** Optional legacy ownership pointer; its DB FK uses ON DELETE SET NULL. */
-    plugin_install_id: uuid("plugin_install_id"),
+    plugin_install_id: uuid("plugin_install_id").references(
+      () => pluginInstalls.id,
+      { onDelete: "set null" },
+    ),
     auth_provider_resource_id: uuid("auth_provider_resource_id")
       .notNull()
       .references(() => authProviderResources.id, { onDelete: "restrict" }),
@@ -459,6 +467,8 @@ export const authIdentityEnrollments = pgTable(
     redirect_uri: text("redirect_uri").notNull(),
     nonce_digest: text("nonce_digest").notNull(),
     recipient_challenge_digest: text("recipient_challenge_digest").notNull(),
+    failed_attempts: integer("failed_attempts").notNull().default(0),
+    locked_at: timestamp("locked_at", { withTimezone: true }),
     status: text("status").notNull().default("pending"),
     expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
     consumed_at: timestamp("consumed_at", { withTimezone: true }),
@@ -489,7 +499,11 @@ export const authIdentityEnrollments = pgTable(
     ),
     check(
       "auth_identity_enrollments_grant_kind_allowed",
-      sql`${table.recipient_grant_kind} IN ('membership', 'pending_owner')`,
+      sql`${table.recipient_grant_kind} IN ('membership', 'pending_owner', 'identity_recovery', 'session_migration')`,
+    ),
+    check(
+      "auth_identity_enrollments_failed_attempts_nonnegative",
+      sql`${table.failed_attempts} >= 0`,
     ),
   ],
 );
@@ -715,6 +729,10 @@ export const tenantAuthProviderReferencesRelations = relations(
     tenant: one(tenants, {
       fields: [tenantAuthProviderReferences.tenant_id],
       references: [tenants.id],
+    }),
+    install: one(pluginInstalls, {
+      fields: [tenantAuthProviderReferences.plugin_install_id],
+      references: [pluginInstalls.id],
     }),
     resource: one(authProviderResources, {
       fields: [tenantAuthProviderReferences.auth_provider_resource_id],

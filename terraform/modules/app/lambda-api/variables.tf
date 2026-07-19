@@ -13,6 +13,30 @@ variable "region" {
   type        = string
 }
 
+variable "auth_retirement_phase" {
+  description = "Native-auth migration phase. Fresh deployments default to retired; WorkOS callback/bridge routes exist only for explicitly configured upgrade rollback windows."
+  type        = string
+  default     = "retired"
+
+  validation {
+    condition     = contains(["coexistence", "cutover", "retired"], var.auth_retirement_phase)
+    error_message = "auth_retirement_phase must be coexistence, cutover, or retired."
+  }
+}
+
+variable "auth_migration_recovery_deadline" {
+  description = "RFC3339 deadline for completing legacy-session identity migration. Required while auth_retirement_phase is coexistence."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = trimspace(var.auth_migration_recovery_deadline) == "" || (
+      can(timecmp(var.auth_migration_recovery_deadline, var.auth_migration_recovery_deadline))
+    )
+    error_message = "auth_migration_recovery_deadline must be empty or an RFC3339 timestamp."
+  }
+}
+
 variable "lambda_artifact_bucket" {
   description = "S3 bucket containing Lambda deployment artifacts"
   type        = string

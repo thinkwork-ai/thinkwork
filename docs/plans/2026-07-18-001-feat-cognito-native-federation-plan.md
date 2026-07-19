@@ -13,7 +13,7 @@ deepened: 2026-07-18
 
 Replace the WorkOS authentication broker and Cognito custom-auth bridge with
 direct Amazon Cognito federation. ThinkWork will support four independently
-controlled login paths: local Cognito email/password, Google, general Microsoft
+controlled login paths: local Cognito email/password, Google, default-directory Microsoft
 work/school accounts, and tenant-specific Microsoft Entra OIDC. Every path ends
 in the existing Cognito token contract.
 
@@ -26,12 +26,12 @@ membership. Provider-specific Cognito subjects map many-to-one onto the stable
 ThinkWork user; new providers are not consolidated into one Cognito profile.
 WorkOS remains available only during a bounded, reversible migration window.
 
-| Login path | Upstream trust | Cognito app-client boundary | Tenant admission |
-| --- | --- | --- | --- |
-| Local password | Cognito user pool | `COGNITO` only | Policy permits local + active membership |
-| Google | Native Cognito Google IdP | `Google` only | Policy permits Google + active membership |
-| General Microsoft | Entra `organizations` OIDC | General Microsoft IdP only | Policy permits general Microsoft + active membership |
-| Tenant Entra | Tenant-GUID Entra OIDC | That tenant IdP only | Connection belongs to tenant + active membership |
+| Login path                  | Upstream trust               | Cognito app-client boundary          | Tenant admission                                             |
+| --------------------------- | ---------------------------- | ------------------------------------ | ------------------------------------------------------------ |
+| Local password              | Cognito user pool            | `COGNITO` only                       | Policy permits local + active membership                     |
+| Google                      | Native Cognito Google IdP    | `Google` only                        | Policy permits Google + active membership                    |
+| Default Microsoft directory | Exact tenant-GUID Entra OIDC | Default-directory Microsoft IdP only | Policy permits that configured directory + active membership |
+| Tenant Entra                | Tenant-GUID Entra OIDC       | That tenant IdP only                 | Connection belongs to tenant + active membership             |
 
 ---
 
@@ -50,7 +50,7 @@ safe replacement. Generic OIDC exists in Terraform without a complete operator
 mutation path; public auth options and clients are WorkOS-specific; current
 pre-sign-up linking trusts email too broadly; and the API verifier accepts a set
 of Cognito app clients without retaining which client issued the token. Hiding
-general Microsoft on a tenant host would therefore be presentation only unless
+default-directory Microsoft on a tenant host would therefore be presentation only unless
 the provider route and downstream tenant admission are also enforced.
 
 ---
@@ -59,9 +59,9 @@ the provider route and downstream tenant admission are also enforced.
 
 - R1. Preserve local Cognito email/password as an independently configurable option. → U2, U3, U6-U9, U15
 - R2. Route Google directly through Cognito without WorkOS. → U1-U3, U6-U9, U15
-- R3. Support general Microsoft work/school accounts through Entra `organizations`; exclude personal accounts. → U1-U3, U6-U9, U15
+- R3. Support Microsoft work/school accounts from the deployment's configured Entra directory through its exact tenant-GUID issuer; exclude personal accounts and every other directory. → U1-U3, U6-U9, U15
 - R4. Support independently named tenant-specific Entra OIDC connections. → U1-U4, U6-U9, U15
-- R5. Resolve host policy to multiple options; tenant Entra replaces general Microsoft by default while local and Google remain independent. → U3, U4, U6-U9, U15
+- R5. Resolve host policy to multiple options; tenant Entra replaces default-directory Microsoft by default while local and Google remain independent. → U3, U4, U6-U9, U15
 - R6. Accept only Cognito-issued application tokens. → U1, U2, U4, U6-U10, U14-U15
 - R7. Preserve the existing ThinkWork user and memberships for approved WorkOS migrations. → U1, U4, U5, U9, U15
 - R8. Require a resolved ThinkWork user and active tenant membership after authentication. → U1, U4, U6-U9, U14-U15
@@ -78,7 +78,7 @@ the provider route and downstream tenant admission are also enforced.
 
 **Origin actors:** A1 end user, A2 tenant administrator, A3 ThinkWork operator, A4 ThinkWork platform, A5 Google or Microsoft Entra.
 
-**Origin flows:** F1 local sign-in, F2 direct Google/general Microsoft, F3 tenant Entra, F4 existing-user migration, F5 logout/account switching.
+**Origin flows:** F1 local sign-in, F2 direct Google/default-directory Microsoft, F3 tenant Entra, F4 existing-user migration, F5 logout/account switching.
 
 **Origin acceptance examples:** AE1 standard local/Google/Microsoft options; AE2 enterprise host policy; AE3 Cognito tokens and refresh; AE4 same-user migration; AE5 wrong-directory denial; AE6 invalid provider hidden; AE7 fresh selection after logout; AE8 WorkOS-free end state; AE9 operator onboarding and secret safety.
 
@@ -86,7 +86,7 @@ the provider route and downstream tenant admission are also enforced.
 
 ## Scope Boundaries
 
-- No Microsoft personal accounts; use `organizations`, not `common`.
+- No Microsoft personal accounts and no `common`, `organizations`, or `consumers` issuer aliases. Cognito requires the exact tenant-GUID issuer; additional customer directories use separately named tenant Entra connections.
 - No SAML in this release.
 - No tenant-admin self-service connection portal.
 - No replacement broker, identity-provider marketplace, or user-pool-per-tenant topology.
@@ -163,7 +163,8 @@ the provider route and downstream tenant admission are also enforced.
 - Cognito ID tokens carry app-client `aud`; access tokens carry `client_id`:
   <https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-tokens-verifying-a-jwt.html>.
 - Microsoft defines `organizations` as work/school only and a tenant GUID as a
-  tenant-specific authority:
+  tenant-specific authority. Cognito's OIDC issuer check requires the latter
+  because Entra ID tokens carry the concrete tenant-GUID issuer:
   <https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc>.
 - Microsoft documents `(tid, oid)` as durable directory/user identity and warns
   that email and preferred username are mutable:
@@ -199,23 +200,23 @@ the provider route and downstream tenant admission are also enforced.
 
 ## Key Technical Decisions
 
-| Decision | Rationale | Rejected alternative |
-| --- | --- | --- |
-| One Cognito user pool remains the issuer boundary. | Preserves every existing verifier and token consumer while staying below Cognito IdP/app-client quotas. | User pool per enterprise and multiple trusted issuers. |
-| Use a separate public app client for each provider path and client family, with only that path's IdP/auth flows enabled. | Cognito enforces both assigned IdPs and explicit auth flows; token `aud`/`client_id` proves the current path. A federated client cannot mint password, SRP, or custom-auth tokens. | Infer current provider from `identities`, or leave password/custom auth enabled on every client. |
-| General Microsoft uses `organizations`; enterprise Entra uses a tenant-GUID issuer and unique provider/app-client names. | Cleanly separates any-work/school login from customer-specific trust and excludes personal Microsoft accounts. | `common`, email-domain routing, or one shared Microsoft connection. |
-| API authorization retains app-client provenance and maps it to a provider-neutral connection/policy for the independently requested resource tenant. | A hidden button is not authorization; a token from a disallowed client must not enter the tenant, including for a user who belongs to several tenants. | UI-only host policy, default membership, or raw `custom:tenant_id`. |
-| Give every app client an explicit `coexistence`, `native`, or `denied` lifecycle. | Migration needs a bounded period in which old WorkOS sessions remain usable without treating their clients as native provenance. Cutover can then deny legacy clients atomically and measurably. | Reject all legacy clients before migration proof, or accept them indefinitely as native clients. |
-| Keep the public auth-options API, but make requested host/platform routing input non-authoritative. | The browser host is useful for selecting public options but may not equal API Gateway's domain. Security comes from app-client and membership enforcement, not trusting `Host`/`Origin`. | Put tenant auth state in static Vite config or treat request headers as authorization evidence. |
-| Move the retained generic auth records into a core auth schema and add `user_auth_identities`. | Preserves useful validation/publication state without plugin ownership and maps several Cognito/provider subjects to one ThinkWork user without Cognito's five-link ceiling. | Keep `plugin_install_id` mandatory or force every provider into one Cognito destination profile. |
-| Existing-user migration proves both sessions and stores an exact immutable identity mapping instead of calling `AdminLinkProviderForUser`. | An active WorkOS session plus a newly verified provider session proves possession of both identities. Mapping provider/issuer/subject and Cognito sub to the existing ThinkWork user avoids email linking, random-password users, cross-system consume races, and the five-linked-identities limit. | First-match email, an email-bound approval ledger, or Cognito account consolidation. |
-| Static Google/general Microsoft remain Terraform-managed; the existing deployment-control-plane runner reconciles tenant Entra. | Terraform `sensitive` does not keep an IdP secret out of state. The CLI writes the secret directly to a deterministic Secrets Manager path, then the runner receives only the ARN/safe metadata, validates its stage/account prefix, reads it inside CodeBuild, and emits redacted evidence. | Plain tfvars/state secrets, a second reconciliation Lambda, or AWS-console-only setup. |
-| Verify pool signature/issuer/expiry/token use first, then require dynamic app-client admission from the database. | Route-specific clients should not expand a comma-separated Lambda environment allowlist. `aws-jwt-verify` supports Cognito field validation with client checking deferred; an unknown same-pool client remains unauthenticated until it maps to one active connection/policy. | Trust every same-pool client or copy a growing client list into runtime config. |
-| Replace public AppSync API-key subscription access with short-lived, operation-bound subscription tickets and a Lambda authorizer; publish backend notifications with IAM. | AppSync's pool/client regex cannot enforce current membership and requested-resource ownership, while the current browser API key bypasses user authentication entirely. A ticket minted only after API admission can bind the user, tenant, operation, and canonical variables. | Pool-only AppSync auth, a public API key, or client regex as the complete tenant boundary. |
-| Bind first-time supported identities through a high-entropy, single-use invite or pending-owner enrollment ceremony. | WorkOS migration covers existing users but not a new invitee's first Google/Entra login. The enrollment proof binds the intended user/membership to the exact verified Cognito/provider identity without using email as authorization. | Email auto-linking, automatic workspace bootstrap, or indefinite operator-only mapping. |
-| Treat token `custom:tenant_id` as an untrusted claim hint for Cognito users. | The codebase has many direct consumers; admitted tenant authority exists only after stable identity, exact target tenant, connection policy, and active membership resolve together. Nulling the raw value makes missed migrations fail closed. | Continue mixing token claims and database-resolved tenant authority. |
-| Tenant-specific issuer + provider-only app client is the v1 trust boundary; inbound-federation validation is defense in depth. | AWS supports the trigger, but the Terraform provider does not yet document wiring it. Initial correctness must not depend on an unsupported provider field. | Block all work on a custom Terraform workaround or omit claim validation research. |
-| Disable legacy WorkOS-capable clients in every consumer, revoke sessions, drain one maximum JWT lifetime, and invalidate/drain AppSync connections before destructive removal. | Global sign-out blocks refresh but offline JWT consumers and already registered realtime subscriptions can outlive it. Client denial, a controlled refresh-rejection proof, elapsed token lifetime, and zero legacy AppSync delivery through invalidation or the full connection lifetime form the retirement boundary. | Assume button removal, WorkOS expiry, global sign-out, or JWT drain alone drains every consumer. |
+| Decision                                                                                                                                                                                                   | Rationale                                                                                                                                                                                                                                                                                                               | Rejected alternative                                                                                        |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| One Cognito user pool remains the issuer boundary.                                                                                                                                                         | Preserves every existing verifier and token consumer while staying below Cognito IdP/app-client quotas.                                                                                                                                                                                                                 | User pool per enterprise and multiple trusted issuers.                                                      |
+| Use a separate public app client for each provider path and client family, with only that path's IdP/auth flows enabled.                                                                                   | Cognito enforces both assigned IdPs and explicit auth flows; token `aud`/`client_id` proves the current path. A federated client cannot mint password, SRP, or custom-auth tokens.                                                                                                                                      | Infer current provider from `identities`, or leave password/custom auth enabled on every client.            |
+| Every Microsoft route uses an exact tenant-GUID issuer and a unique provider/app-client name; the deployment default is a compatibility-named `microsoft:organizations` connection bound to one directory. | Matches Cognito's exact issuer enforcement, excludes personal/other-tenant accounts, and makes each customer directory an explicit trust boundary.                                                                                                                                                                      | `common`/`organizations` issuer aliases, email-domain routing, or one cross-directory Microsoft connection. |
+| API authorization retains app-client provenance and maps it to a provider-neutral connection/policy for the independently requested resource tenant.                                                       | A hidden button is not authorization; a token from a disallowed client must not enter the tenant, including for a user who belongs to several tenants.                                                                                                                                                                  | UI-only host policy, default membership, or raw `custom:tenant_id`.                                         |
+| Give every app client an explicit `coexistence`, `native`, or `denied` lifecycle.                                                                                                                          | Migration needs a bounded period in which old WorkOS sessions remain usable without treating their clients as native provenance. Cutover can then deny legacy clients atomically and measurably.                                                                                                                        | Reject all legacy clients before migration proof, or accept them indefinitely as native clients.            |
+| Keep the public auth-options API, but make requested host/platform routing input non-authoritative.                                                                                                        | The browser host is useful for selecting public options but may not equal API Gateway's domain. Security comes from app-client and membership enforcement, not trusting `Host`/`Origin`.                                                                                                                                | Put tenant auth state in static Vite config or treat request headers as authorization evidence.             |
+| Move the retained generic auth records into a core auth schema and add `user_auth_identities`.                                                                                                             | Preserves useful validation/publication state without plugin ownership and maps several Cognito/provider subjects to one ThinkWork user without Cognito's five-link ceiling.                                                                                                                                            | Keep `plugin_install_id` mandatory or force every provider into one Cognito destination profile.            |
+| Existing-user migration proves both sessions and stores an exact immutable identity mapping instead of calling `AdminLinkProviderForUser`.                                                                 | An active WorkOS session plus a newly verified provider session proves possession of both identities. Mapping provider/issuer/subject and Cognito sub to the existing ThinkWork user avoids email linking, random-password users, cross-system consume races, and the five-linked-identities limit.                     | First-match email, an email-bound approval ledger, or Cognito account consolidation.                        |
+| Static Google/default-directory Microsoft remain Terraform-managed; the existing deployment-control-plane runner reconciles tenant Entra.                                                                  | Terraform `sensitive` does not keep an IdP secret out of state. The CLI writes the secret directly to a deterministic Secrets Manager path, then the runner receives only the ARN/safe metadata, validates its stage/account prefix, reads it inside CodeBuild, and emits redacted evidence.                            | Plain tfvars/state secrets, a second reconciliation Lambda, or AWS-console-only setup.                      |
+| Verify pool signature/issuer/expiry/token use first, then require dynamic app-client admission from the database.                                                                                          | Route-specific clients should not expand a comma-separated Lambda environment allowlist. `aws-jwt-verify` supports Cognito field validation with client checking deferred; an unknown same-pool client remains unauthenticated until it maps to one active connection/policy.                                           | Trust every same-pool client or copy a growing client list into runtime config.                             |
+| Replace public AppSync API-key subscription access with short-lived, operation-bound subscription tickets and a Lambda authorizer; publish backend notifications with IAM.                                 | AppSync's pool/client regex cannot enforce current membership and requested-resource ownership, while the current browser API key bypasses user authentication entirely. A ticket minted only after API admission can bind the user, tenant, operation, and canonical variables.                                        | Pool-only AppSync auth, a public API key, or client regex as the complete tenant boundary.                  |
+| Bind first-time supported identities through a high-entropy, single-use invite or pending-owner enrollment ceremony.                                                                                       | WorkOS migration covers existing users but not a new invitee's first Google/Entra login. The enrollment proof binds the intended user/membership to the exact verified Cognito/provider identity without using email as authorization.                                                                                  | Email auto-linking, automatic workspace bootstrap, or indefinite operator-only mapping.                     |
+| Treat token `custom:tenant_id` as an untrusted claim hint for Cognito users.                                                                                                                               | The codebase has many direct consumers; admitted tenant authority exists only after stable identity, exact target tenant, connection policy, and active membership resolve together. Nulling the raw value makes missed migrations fail closed.                                                                         | Continue mixing token claims and database-resolved tenant authority.                                        |
+| Tenant-specific issuer + provider-only app client is the v1 trust boundary; inbound-federation validation is defense in depth.                                                                             | AWS supports the trigger, but the Terraform provider does not yet document wiring it. Initial correctness must not depend on an unsupported provider field.                                                                                                                                                             | Block all work on a custom Terraform workaround or omit claim validation research.                          |
+| Disable legacy WorkOS-capable clients in every consumer, revoke sessions, drain one maximum JWT lifetime, and invalidate/drain AppSync connections before destructive removal.                             | Global sign-out blocks refresh but offline JWT consumers and already registered realtime subscriptions can outlive it. Client denial, a controlled refresh-rejection proof, elapsed token lifetime, and zero legacy AppSync delivery through invalidation or the full connection lifetime form the retirement boundary. | Assume button removal, WorkOS expiry, global sign-out, or JWT drain alone drains every consumer.            |
 
 ---
 
@@ -277,7 +278,7 @@ the provider route and downstream tenant admission are also enforced.
 
 ## High-Level Technical Design
 
-> *This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce.*
+> _This illustrates the intended approach and is directional guidance for review, not implementation specification. The implementing agent should treat it as context, not code to reproduce._
 
 ```mermaid
 sequenceDiagram
@@ -381,6 +382,7 @@ failure cases before changing production paths.
 **Dependencies:** None.
 
 **Files:**
+
 - Create: `packages/api/scripts/cognito-native-federation-spike.ts`
 - Create: `packages/api/src/handlers/cognito-pre-signup.test.ts`
 - Modify: `packages/api/src/graphql/resolvers/core/resolve-auth-user.test.ts`
@@ -389,7 +391,8 @@ failure cases before changing production paths.
 - Modify: `apps/cli/__tests__/terraform-cognito-identity-provider-fixture.test.ts`
 
 **Approach:**
-- Deploy hidden Google, Entra `organizations`, and tenant-GUID OIDC fixtures
+
+- Deploy hidden Google, default-directory tenant-GUID, and customer tenant-GUID OIDC fixtures
   with provider-only app clients and exact callbacks.
 - Capture redacted Cognito ID/access claims for local, Google, general
   Microsoft, and tenant Entra; prove ID-token `aud` and access-token `client_id`
@@ -413,13 +416,15 @@ failure cases before changing production paths.
 linking/resolution code. Keep provider resources unpublished during the spike.
 
 **Patterns to follow:**
+
 - `docs/solutions/spikes/2026-05-21-electron-oauth-cold-start-validation.md`
 - `packages/api/src/lib/workos-primary-auth-spike.ts`
 
 **Test scenarios:**
+
 - Integration: each of the four paths returns Cognito tokens with the expected
   route-specific app-client identifier and no WorkOS token/session.
-- Integration: requesting general Microsoft through the tenant-Entra-only app
+- Integration: requesting default-directory Microsoft through the tenant-Entra-only app
   client fails before ThinkWork receives a session.
 - Security: password, SRP, and custom-auth attempts against every federated
   client fail; custom auth against the new local-only client also fails.
@@ -438,6 +443,7 @@ linking/resolution code. Keep provider resources unpublished during the spike.
   guest without membership and a user from another `tid` are denied.
 
 **Verification:**
+
 - The spike document contains redacted deployed evidence for every assertion,
   callback family, claim source, quota assumption, and remaining AWS limitation.
 - U2-U4 and U14-U15 have no unresolved question about provider routing, token
@@ -454,6 +460,7 @@ evidence one plugin-independent source of truth before native resources exist.
 **Dependencies:** U1.
 
 **Files:**
+
 - Create: `packages/database-pg/src/schema/auth.ts`
 - Modify: `packages/database-pg/src/schema/index.ts`
 - Modify: `packages/database-pg/src/schema/plugins.ts`
@@ -471,6 +478,7 @@ evidence one plugin-independent source of truth before native resources exist.
 - Modify: `scripts/build-lambdas.sh`
 
 **Approach:**
+
 - Move the retained physical `auth_provider_resources` and
   `tenant_auth_provider_references` declarations out of `plugins.ts`, remove
   mandatory plugin ownership, and add core tenant auth-policy/host records.
@@ -514,11 +522,13 @@ evidence one plugin-independent source of truth before native resources exist.
   write directly to public policy tables.
 
 **Patterns to follow:**
+
 - Current generic auth tables in `packages/database-pg/src/schema/plugins.ts`
 - Same-transaction compliance outbox in `packages/api/src/lib/compliance/emit.ts`
 - Durable claim/evidence lifecycle in `packages/database-pg/src/workflow-interpreter-db.ts`
 
 **Test scenarios:**
+
 - Migration: WorkOS rows remain readable while native connections/policies no
   longer depend on `plugin_install_id`; plugin uninstall cannot delete them.
 - Identity: one ThinkWork user can hold six provider identities without a
@@ -542,13 +552,14 @@ evidence one plugin-independent source of truth before native resources exist.
   or active identity mappings without an explicit retirement transition.
 
 **Verification:**
+
 - U2 has an authenticated, provider-neutral place to record reconciled AWS
   state, and U3/U4 can consume stable policy/identity records without WorkOS.
 - Migration/drift tooling recognizes every object and constraint.
 
 - U2. **Provision route-specific Cognito providers and app clients**
 
-**Goal:** Make local, Google, general Microsoft, and tenant Entra deployable
+**Goal:** Make local, Google, default-directory Microsoft, and tenant Entra deployable
 without WorkOS or manual AWS-console mutation.
 
 **Requirements:** R1-R4, R6, R11-R14; AE1-AE3, AE9.
@@ -556,6 +567,7 @@ without WorkOS or manual AWS-console mutation.
 **Dependencies:** U1, U11.
 
 **Files:**
+
 - Modify: `terraform/modules/foundation/cognito/main.tf`
 - Modify: `terraform/modules/foundation/cognito/variables.tf`
 - Modify: `terraform/modules/foundation/cognito/outputs.tf`
@@ -578,22 +590,24 @@ without WorkOS or manual AWS-console mutation.
 - Test: `terraform/modules/app/deployment-control-plane/test_runner_bundle.py`
 
 **Approach:**
+
 - Replace the current all-provider app-client assignment with route-specific
-  public clients per client family: local only, Google only, general Microsoft
+  public clients per client family: local only, Google only, default-directory Microsoft
   only, and one tenant-Entra-only client per enterprise connection.
 - Federated clients allow only authorization-code/refresh behavior and exclude
   password, SRP, and custom auth. The new local clients allow the intended local
   password/SRP/refresh paths but exclude custom auth. Existing admin/mobile
   clients become explicitly legacy during coexistence.
-- Keep Google native. Wire general Microsoft to the `organizations` issuer and
-  tenant Entra to normalized GUID issuers with deterministic, collision-safe
-  provider names.
+- Keep Google native. Wire both the default Microsoft route and customer Entra
+  routes to normalized GUID issuers with deterministic, collision-safe provider
+  names. The historical `MicrosoftOrganizations` provider name is only a
+  compatibility identifier; it does not widen the accepted issuer.
 - Map only U1-proven immutable identity evidence needed by U4/U5 (for Entra,
   tenant/object identifiers plus provider subject) into mutable, client-readable
   Cognito attributes. Because new providers keep separate Cognito profiles,
   another provider cannot overwrite those attributes on the same profile;
   session provenance still comes from the app client, not mapped attributes.
-- Terraform-manage static Google/general Microsoft resources. The CLI writes a
+- Terraform-manage static Google/default-directory Microsoft resources. The CLI writes a
   tenant-Entra secret directly to a deterministic stage/account connection path
   in Secrets Manager. Extend the existing `enterprise identity-provider`
   command as the single create/validate/rotate/disable surface; do not create a
@@ -624,12 +638,14 @@ without WorkOS or manual AWS-console mutation.
   upstream secret.
 
 **Patterns to follow:**
+
 - Existing generic OIDC and `supported_identity_providers` resources in
   `terraform/modules/foundation/cognito/main.tf`
 - Existing plan/redaction behavior in
   `apps/cli/src/commands/enterprise/identity-provider.ts`
 
 **Test scenarios:**
+
 - Covers AE1/AE2. Terraform fixture produces distinct local, Google, general
   Microsoft, and tenant Entra clients with exact allowed providers.
 - Covers AE9. Tenant Entra plan/apply stores a secret in Secrets Manager,
@@ -654,6 +670,7 @@ without WorkOS or manual AWS-console mutation.
   cross the U1 headroom threshold.
 
 **Verification:**
+
 - Normal deploy and enterprise CLI workflows can create, validate, rotate, and
   disable every in-scope provider without AWS-console edits.
 - Scheduled and failure-driven validation prevents a stale `valid` record from
@@ -670,6 +687,7 @@ returns every validated option allowed for a host and platform.
 **Dependencies:** U2, U11.
 
 **Files:**
+
 - Modify: `packages/database-pg/src/schema/auth.ts`
 - Modify: `packages/api/src/handlers/public-auth-options.ts`
 - Modify: `packages/api/src/handlers/public-auth-options.test.ts`
@@ -679,8 +697,9 @@ returns every validated option allowed for a host and platform.
 - Modify: `terraform/modules/app/lambda-api/handlers.tf`
 
 **Approach:**
+
 - Activate U11's core tenant auth-policy record for host mapping and local-password
-  policy, plus provider references for Google, general Microsoft, and tenant
+  policy, plus provider references for Google, default-directory Microsoft, and tenant
   Entra. Enforce one unambiguous active policy per normalized host.
 - Move provider-policy validation/publication out of the plugin handler into the
   core library. During coexistence, the WorkOS plugin handler may delegate to it
@@ -691,21 +710,23 @@ returns every validated option allowed for a host and platform.
 - Accept requested host/platform only as public routing input. A forged host can
   select a different public option but cannot pass U4 tenant authorization.
 - Publish only connections that are valid, attached to the selected client,
-  and explicitly enabled. When tenant Entra is enabled, omit general Microsoft
+  and explicitly enabled. When tenant Entra is enabled, omit default-directory Microsoft
   by default; local and Google remain independent.
 
 **Execution note:** Characterize the existing WorkOS response and fail-closed
 fallback first, then generalize it without exposing diagnostics or secrets.
 
 **Patterns to follow:**
+
 - `packages/api/src/handlers/public-auth-options.ts`
 - The migration-marker conventions in recent hand-authored Drizzle migrations
 
 **Test scenarios:**
+
 - Covers AE1. Standard host returns local password, Google, and general
   Microsoft in deterministic order and no enterprise option.
 - Covers AE2. Enterprise host returns configured local/Google/tenant Entra and
-  omits general Microsoft by default.
+  omits default-directory Microsoft by default.
 - Covers AE6. Invalid, drifting, unpublished, or partially attached connection
   is absent while password follows its independent flag.
 - Error path: zero or multiple active host matches returns the safe deployment
@@ -717,6 +738,7 @@ fallback first, then generalize it without exposing diagnostics or secrets.
 - Migration: plugin uninstall no longer cascades a native auth policy.
 
 **Verification:**
+
 - All clients can obtain every allowed route from one provider-neutral
   contract, and no native policy depends on plugin install/component state.
 - Migration drift tooling recognizes every new/changed database object.
@@ -731,6 +753,7 @@ login path, principal binding, and active membership are all approved.
 **Dependencies:** U2, U3, U11.
 
 **Files:**
+
 - Modify: `packages/api/src/lib/cognito-auth.ts`
 - Modify: `packages/api/src/handlers/workos-auth.ts`
 - Modify: `packages/api/src/lib/workos-auth-session.ts`
@@ -761,6 +784,7 @@ login path, principal binding, and active membership are all approved.
 - Test: `packages/api/src/graphql/resolvers/core/bootstrapUser.mutation.test.ts`
 
 **Approach:**
+
 - Verify issuer, signature, expiry, and ID-token `token_use` for the one pool,
   retain `aud`, then map it to exactly one admitted app-client record. Unknown,
   disabled, denied, or ambiguous same-pool clients fail before business logic.
@@ -787,7 +811,7 @@ login path, principal binding, and active membership are all approved.
   only when exactly one compatible active membership exists, otherwise they
   require an explicit tenant selection.
 - For tenant Entra, require the route connection to belong to the requested
-  tenant and its configured tenant-GUID issuer. General Microsoft, Google, and
+  tenant and its configured tenant-GUID issuer. Default-directory Microsoft, Google, and
   local access must also be enabled by that same tenant policy.
 - Route `/api/auth/me` through the stable resolver and active
   `tenant_members`. Audit and migrate every direct `auth.tenantId`/
@@ -806,6 +830,7 @@ login path, principal binding, and active membership are all approved.
   and retain at most a noncredential diagnostic hash/status.
 
 **Patterns to follow:**
+
 - Stable-sub and verified-email invariants in
   `docs/plans/2026-05-29-006-fix-google-federated-identity-resolution-plan.md`
 - Existing active-membership lookup in `packages/api/src/handlers/auth-me.ts`
@@ -813,6 +838,7 @@ login path, principal binding, and active membership are all approved.
   application-owned dynamic client admission
 
 **Test scenarios:**
+
 - Covers AE3. Each route's Cognito token resolves the expected connection and
   stable ThinkWork user after refresh.
 - Covers AE4. An active exact `user_auth_identities` row maps a new provider's
@@ -843,6 +869,7 @@ login path, principal binding, and active membership are all approved.
   persist no reusable token.
 
 **Verification:**
+
 - Authentication, identity resolution, and authorization are distinct gates;
   no successful Cognito sign-in alone grants a workspace.
 - Logs/audit events contain connection/principal/result identifiers but no raw
@@ -858,6 +885,7 @@ tenant, membership, and resource boundary as HTTP requests.
 **Dependencies:** U4, U11.
 
 **Files:**
+
 - Create: `packages/api/src/handlers/auth-subscription-ticket.ts`
 - Create: `packages/api/src/handlers/auth-subscription-ticket.test.ts`
 - Create: `packages/api/src/handlers/appsync-subscription-authorizer.ts`
@@ -904,6 +932,7 @@ tenant, membership, and resource boundary as HTTP requests.
 - Modify: `packages/react-native-sdk/src/graphql/appsync-ws.ts`
 
 **Approach:**
+
 - Inventory every AppSync-key producer, output, secret/runtime-config reader,
   deployment-profile field, build-time injection, client fallback, smoke test,
   and direct publisher before removal. Replace direct mutation callers with one
@@ -968,6 +997,7 @@ tenant, membership, and resource boundary as HTTP requests.
   that class with an authenticated WebSocket path before native cutover.
 
 **Test scenarios:**
+
 - Security: a copied public API key, Cognito JWT presented directly to Lambda
   auth, unknown/legacy client, expired/replayed ticket, modified operation, or
   modified variables cannot register a subscription.
@@ -990,6 +1020,7 @@ tenant, membership, and resource boundary as HTTP requests.
   a recoverable UI state and never downgrades authorization.
 
 **Verification:**
+
 - AppSync has no public API-key consumer path and no subscription can register
   without a current U4-admitted, operation-bound ticket.
 - Repository/deployed-state inventory finds no AppSync API-key resource, output,
@@ -1001,7 +1032,7 @@ tenant, membership, and resource boundary as HTTP requests.
 
 - U15. **Enroll invited and pending-owner users into a first supported identity**
 
-**Goal:** Make local Cognito, Google, general Microsoft, and tenant Entra usable
+**Goal:** Make local Cognito, Google, default-directory Microsoft, and tenant Entra usable
 for new users after WorkOS is gone without authorizing by email.
 
 **Requirements:** R1-R10, R15; F1-F3, AE1-AE5.
@@ -1009,6 +1040,7 @@ for new users after WorkOS is gone without authorizing by email.
 **Dependencies:** U4, U11.
 
 **Files:**
+
 - Modify: `packages/api/src/graphql/resolvers/core/inviteMember.mutation.ts`
 - Modify: `packages/api/src/graphql/resolvers/core/addManualUser.mutation.ts`
 - Modify: `packages/api/src/graphql/resolvers/core/bootstrapUser.mutation.ts`
@@ -1021,6 +1053,7 @@ for new users after WorkOS is gone without authorizing by email.
 - Modify: `terraform/modules/app/lambda-api/handlers.tf`
 
 **Approach:**
+
 - Consume the enrollment records and constraints created by U11; U15 owns no
   second enrollment migration. Extend invitation and the existing explicit
   pending-owner workflow to issue a cryptographically random enrollment grant
@@ -1048,18 +1081,20 @@ for new users after WorkOS is gone without authorizing by email.
   management remain deferred.
 
 **Test scenarios:**
-- New local, Google, general Microsoft, and tenant-Entra invitees bind the exact
+
+- New local, Google, default-directory Microsoft, and tenant-Entra invitees bind the exact
   identity and enter only the intended active membership.
 - A forwarded/stolen start link without the independent recipient challenge,
   matching email without the grant, wrong tenant directory/immutable subject,
   wrong app client, modified redirect, replay, expiry, or concurrent double
   callback cannot bind an identity or activate membership.
-- A pending owner cannot bootstrap a different tenant or use general Microsoft
+- A pending owner cannot bootstrap a different tenant or use default-directory Microsoft
   where the tenant requires its Entra connection.
 - Reissuing an expired/cancelled grant preserves the intended user and does not
   create a duplicate usable ThinkWork account.
 
 **Verification:**
+
 - A brand-new invitee can complete each enabled login path end to end without
   WorkOS, email auto-linking, or operator database intervention.
 - Identity creation and membership activation commit together or not at all.
@@ -1074,6 +1109,7 @@ new provider identity to the existing ThinkWork user without email linking.
 **Dependencies:** U1, U4, U11.
 
 **Files:**
+
 - Create: `apps/cli/src/commands/enterprise/auth-migration.ts`
 - Modify: `apps/cli/src/commands/enterprise/index.ts`
 - Create: `apps/cli/__tests__/enterprise-auth-migration.test.ts`
@@ -1087,6 +1123,7 @@ new provider identity to the existing ThinkWork user without email linking.
 - Modify: `terraform/modules/app/lambda-api/handlers.tf`
 
 **Approach:**
+
 - Paginate the WorkOS user/directory source while its secret exists and Cognito
   users/identities, then reconcile them with all bridge/session rows,
   `users.cognito_sub`, and active `tenant_members`. Persist source cutoffs,
@@ -1130,6 +1167,7 @@ new provider identity to the existing ThinkWork user without email linking.
   separately approved compliance requirement.
 
 **Test scenarios:**
+
 - Covers AE4. WorkOS-session plus exact native proof creates one identity mapping
   to the existing ThinkWork user and preserves all active memberships.
 - Inventory: a WorkOS user absent from local session tables is found through the
@@ -1149,6 +1187,7 @@ new provider identity to the existing ThinkWork user without email linking.
   unnecessary profile fields.
 
 **Verification:**
+
 - Every WorkOS directory user has one recorded class; active/recent identities
   are proven or explicitly deactivated, while dormant conflicts are terminally
   quarantined/waived with the U15 recovery path rather than blocking retirement.
@@ -1166,6 +1205,7 @@ rollback branch isolated until U10 removes it.
 **Dependencies:** U3, U4, U14, U15.
 
 **Files:**
+
 - Modify: `apps/web/src/lib/auth-options.ts`
 - Modify: `apps/web/src/lib/auth-options.test.ts`
 - Modify: `apps/web/src/lib/auth.ts`
@@ -1179,18 +1219,19 @@ rollback branch isolated until U10 removes it.
 - Modify: `apps/web/src/routes/onboarding/welcome.tsx`
 
 **Approach:**
+
 - Parse/render all catalog options with deterministic labels/icons and their
   route-specific app clients; keep password independently visible only after the
   loaded policy enables it. Use one presentation contract across clients:
   provider kind, visible label, optional customer-approved organization label,
   icon token, accessible label, and stable order. Use “Microsoft work or school”
-  for general Microsoft and “Sign in to {approved organization name}” for tenant
+  for default-directory Microsoft and “Sign in to {approved organization name}” for tenant
   Entra so routes are distinguishable without exposing tenant internals.
 - Use one catalog state model: initial loading has no actionable route; success
   may be full or partial; fetch failure offers retry; zero valid methods explains
   unavailability; provider cancellation/expired callback returns safely to the
   loaded sign-in screen. Never flash a default password or provider option.
-- Generalize authorize/token exchange for local, Google, general Microsoft, and
+- Generalize authorize/token exchange for local, Google, default-directory Microsoft, and
   tenant Entra. Add state, nonce where applicable, and S256 PKCE with one-time,
   short-lived verifier storage. Bind state to deployment/environment, selected
   app client, exact redirect URI, and initiating host to prevent cross-host
@@ -1207,6 +1248,7 @@ rollback branch isolated until U10 removes it.
   tested rollback branch and callback until U10's post-cutover removal.
 
 **Test scenarios:**
+
 - Covers AE1/AE2. Standard and enterprise catalogs render every expected option
   and no disallowed one.
 - Covers AE3. Each provider callback exchanges with the selected app client and
@@ -1226,6 +1268,7 @@ rollback branch isolated until U10 removes it.
   signed-out destination, and explains that remote cleanup was not confirmed.
 
 **Verification:**
+
 - Web's selected native path is provider-neutral; the only remaining WorkOS code
   is the disabled, isolated rollback branch owned by U10.
 
@@ -1239,6 +1282,7 @@ refresh, membership, and logout contract.
 **Dependencies:** U3, U4, U14, U15.
 
 **Files:**
+
 - Modify: `apps/mobile/lib/auth-options.ts`
 - Modify: `apps/mobile/lib/auth-options.test.ts`
 - Modify: `apps/mobile/components/auth/AuthOptions.tsx`
@@ -1256,6 +1300,7 @@ refresh, membership, and logout contract.
 - Create: `packages/react-native-sdk/src/auth/cognito.test.ts`
 
 **Approach:**
+
 - Render every option rather than index zero and remove Google-only route
   construction from mobile and the React Native SDK. Consume the same ordered
   presentation and loading/partial/failure/empty/retry contract as web; do not
@@ -1273,6 +1318,7 @@ refresh, membership, and logout contract.
   until U10.
 
 **Test scenarios:**
+
 - Covers AE2/AE3. Multiple enterprise options render and selected provider/app
   client survive browser callback into Cognito token storage.
 - Error path: app restart, callback replay, wrong environment, missing PKCE
@@ -1286,6 +1332,7 @@ refresh, membership, and logout contract.
 - Regression: refresh tokens remain isolated by deployed environment.
 
 **Verification:**
+
 - Mobile and the SDK contain no hardcoded Google-only path; the only WorkOS path
   is the disabled rollback branch owned by U10.
 
@@ -1299,6 +1346,7 @@ callback, refresh, and revocation contract.
 **Dependencies:** U3, U4, U14, U15.
 
 **Files:**
+
 - Modify: `apps/desktop/src/main/oauth.ts`
 - Modify: `apps/desktop/src/main/deep-link.ts`
 - Modify: `apps/desktop/src/main/auth-bridge.ts`
@@ -1311,6 +1359,7 @@ callback, refresh, and revocation contract.
 - Test: `apps/cli/__tests__/cognito-oauth.test.ts`
 
 **Approach:**
+
 - Extend desktop's existing `cognitoHostedUi` request to carry the selected
   public route and consume every catalog option using the shared ordered labels,
   accessibility metadata, and loading/error rules. Retain its state/PKCE expiry,
@@ -1325,6 +1374,7 @@ callback, refresh, and revocation contract.
   credential or leaving the CLI locally authenticated.
 
 **Test scenarios:**
+
 - Covers AE3. Desktop deep-link and CLI loopback complete all published provider
   routes with the expected Cognito app client.
 - Error path: wrong deep link/port/state/verifier, callback replay, timeout, or
@@ -1338,6 +1388,7 @@ callback, refresh, and revocation contract.
   intact.
 
 **Verification:**
+
 - Desktop and CLI pass the same route-provenance and session-lifecycle matrix as
   web/mobile; disabled WorkOS rollback types remain only until U10.
 
@@ -1351,6 +1402,7 @@ and rollback behavior in a deployed stack before destructive WorkOS removal.
 **Dependencies:** U5-U8.
 
 **Files:**
+
 - Create: `docs/solutions/runbooks/cognito-native-auth-cutover.md`
 - Create: `scripts/verify-native-auth-cutover.sh`
 - Modify: `packages/api/src/handlers/public-auth-options.ts`
@@ -1364,6 +1416,7 @@ and rollback behavior in a deployed stack before destructive WorkOS removal.
 - Test: `packages/api/src/handlers/auth-migration.test.ts`
 
 **Approach:**
+
 - Deploy native providers hidden, validate callbacks/tokens for every exposing
   client, complete a full U5 snapshot plus final delta, and publish to a canary
   host while WorkOS remains rollback-capable.
@@ -1415,12 +1468,13 @@ and rollback behavior in a deployed stack before destructive WorkOS removal.
   recovery verification, and every rollback-triggering check has passed.
 
 **Test scenarios:**
+
 - Covers AE3. Every exposed client/provider completes login, refresh, app
   restart/restore, and active-membership access with Cognito tokens.
 - Covers AE4. Approved migrated users retain exact user ID, roles, and
   memberships through a distinct exact native identity mapping; no duplicate
   usable ThinkWork account appears.
-- Covers AE5. Cross-tenant app-client/provider URLs and general Microsoft cannot
+- Covers AE5. Cross-tenant app-client/provider URLs and default-directory Microsoft cannot
   enter a tenant-Entra-only policy.
 - Covers AE6. Drift or failed validation unpublishes only the affected option
   and leaves safe alternatives available.
@@ -1444,6 +1498,7 @@ and rollback behavior in a deployed stack before destructive WorkOS removal.
   full connection drain, while all native paths continue working.
 
 **Verification:**
+
 - A signed/redacted cutover record shows every acceptance example passing on
   web, mobile, desktop, and CLI where that client exposes the option.
 - U10 is blocked until the rollback window closes; inventory pagination/deltas
@@ -1462,6 +1517,7 @@ can start WorkOS auth or read/write WorkOS bridge/session state.
 **Dependencies:** U9 rollback window completed.
 
 **Files:**
+
 - Delete: `packages/api/src/handlers/workos-auth.ts`
 - Delete: `packages/api/src/handlers/cognito-custom-auth.ts`
 - Delete: `packages/api/src/lib/workos-auth.ts`
@@ -1482,6 +1538,7 @@ can start WorkOS auth or read/write WorkOS bridge/session state.
 - Modify: WorkOS branches in web, mobile, desktop, and `packages/desktop-ipc`
 
 **Approach:**
+
 - Remove WorkOS public routes/callbacks, bridge/session libraries, new custom
   challenge creation, client callback unions, auth-source/logout branches, and
   build/release wiring. Retire the WorkOS-specific migration command, handler,
@@ -1500,10 +1557,12 @@ search-and-delete. Characterize the final supported auth surface before each
 destructive step.
 
 **Patterns to follow:**
+
 - U9 zero-traffic and rollback evidence
 
 **Test scenarios:**
-- Covers AE8. Local, Google, general Microsoft, and tenant Entra pass after
+
+- Covers AE8. Local, Google, default-directory Microsoft, and tenant Entra pass after
   WorkOS routes/runtime/client branches are absent.
 - Infrastructure: WorkOS API routes/build artifacts are removed without state
   import conflicts or unrelated Cognito replacement.
@@ -1511,6 +1570,7 @@ destructive step.
   appears for the documented window.
 
 **Verification:**
+
 - No supported login, session restore, logout, deployment, or API path can use
   WorkOS; no WorkOS-specific migration surface remains; native conformance is
   green while retained data remains untouched.
@@ -1525,6 +1585,7 @@ proves no runtime dependency remains.
 **Dependencies:** U10.
 
 **Files:**
+
 - Delete: `plugins/workos-auth/`
 - Delete: `apps/web/src/components/settings/plugins/workos.ts`
 - Delete: `packages/api/src/graphql/resolvers/plugins/workos-settings.ts`
@@ -1534,6 +1595,7 @@ proves no runtime dependency remains.
 - Regenerate: API, web, mobile, and CLI GraphQL artifacts
 
 **Approach:**
+
 - Remove WorkOS catalog/manifest, settings mutations/resolvers/UI, and plugin
   lifecycle branches. Generate the first-party registry through its normal
   generator rather than hand-editing generated output.
@@ -1541,6 +1603,7 @@ proves no runtime dependency remains.
   until U13's purge/drop barrier.
 
 **Test scenarios:**
+
 - GraphQL/client: schema and generated consumers contain no WorkOS settings
   types or mutations and native auth policy remains available.
 - Plugin: catalog generation and install/settings tests contain no active WorkOS
@@ -1549,6 +1612,7 @@ proves no runtime dependency remains.
   operator-accessible without plugin install state.
 
 **Verification:**
+
 - No active plugin, GraphQL, or settings surface can create or configure WorkOS;
   a deployed native-auth smoke remains green.
 
@@ -1562,6 +1626,7 @@ soak evidence proves every dependency is gone.
 **Dependencies:** U12 and a clean U10 soak.
 
 **Files:**
+
 - Modify: `packages/database-pg/src/schema/plugins.ts`
 - Modify: `packages/database-pg/src/schema/core.ts`
 - Create: `packages/database-pg/drizzle/NNNN_drop_workos_auth_runtime.sql`
@@ -1576,6 +1641,7 @@ soak evidence proves every dependency is gone.
 - Modify: `terraform/modules/app/lambda-api/handlers.tf`
 
 **Approach:**
+
 - Purge raw WorkOS session/profile PII according to U5's minimization rule while
   retaining only the durable digests, counts, terminal dispositions, and audit
   evidence in core tables. Do not create a new raw archive unless a separate
@@ -1592,11 +1658,13 @@ soak evidence proves every dependency is gone.
   and Secrets Manager/SSM values only after the database drop succeeds.
 
 **Patterns to follow:**
+
 - Guarded archive/drop pattern in
   `packages/database-pg/drizzle/0253_drop_brain_substrate.sql`
 - U9/U10 machine-readable cutover and soak evidence
 
 **Test scenarios:**
+
 - Database: every missing cutover/minimization/terminal-state predicate raises
   before a drop; any separately mandated export check is conditional on its
   approved compliance record. The migration uses a transaction/advisory lock,
@@ -1612,6 +1680,7 @@ soak evidence proves every dependency is gone.
   passes after the drop and infrastructure cleanup.
 
 **Verification:**
+
 - No supported or deployed surface depends on WorkOS, and the final monorepo,
   schema/codegen, Lambda, Terraform, migration-drift, and native conformance
   gates are green.
@@ -1668,17 +1737,17 @@ flowchart TB
 
 ## Alternative Approaches Considered
 
-| Approach | Why not selected |
-| --- | --- |
-| One app client with every IdP | Cannot prove the provider used for the current linked session; UI hiding is bypassable. |
-| Provider-neutral Cognito client plus `identities` parsing | `identities` lists all linked providers, not the current one. |
-| Store `last_provider` on the Cognito profile | Shared mutable profile state can race and drift across concurrent sessions/refresh. |
-| Consolidate every provider with `AdminLinkProviderForUser` | Linking is security-sensitive, email proof is insufficient, and Cognito's five-linked-identities limit is below Google + general Microsoft + four enterprise directories. |
-| Static runtime-config provider catalog | Cannot safely represent tenant-host policy and adds pressure to the API's small SSM runtime config. |
-| Keep native auth under plugin installs | Retains the coupling and cascade lifecycle the WorkOS removal is meant to eliminate. |
-| Pure Terraform for tenant Entra secrets | Sensitive values remain in Terraform plan/state; the existing deployment runner can reconcile from a validated secret ARN. |
-| User pool per enterprise | Multiplies issuer/verifier/client complexity and is unnecessary at expected scale. |
-| Flag-day WorkOS deletion | Risks duplicate identities, active refresh sessions, callback outages, and an unrecoverable rollback. |
+| Approach                                                   | Why not selected                                                                                                                                                                    |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One app client with every IdP                              | Cannot prove the provider used for the current linked session; UI hiding is bypassable.                                                                                             |
+| Provider-neutral Cognito client plus `identities` parsing  | `identities` lists all linked providers, not the current one.                                                                                                                       |
+| Store `last_provider` on the Cognito profile               | Shared mutable profile state can race and drift across concurrent sessions/refresh.                                                                                                 |
+| Consolidate every provider with `AdminLinkProviderForUser` | Linking is security-sensitive, email proof is insufficient, and Cognito's five-linked-identities limit is below Google + default-directory Microsoft + four enterprise directories. |
+| Static runtime-config provider catalog                     | Cannot safely represent tenant-host policy and adds pressure to the API's small SSM runtime config.                                                                                 |
+| Keep native auth under plugin installs                     | Retains the coupling and cascade lifecycle the WorkOS removal is meant to eliminate.                                                                                                |
+| Pure Terraform for tenant Entra secrets                    | Sensitive values remain in Terraform plan/state; the existing deployment runner can reconcile from a validated secret ARN.                                                          |
+| User pool per enterprise                                   | Multiplies issuer/verifier/client complexity and is unnecessary at expected scale.                                                                                                  |
+| Flag-day WorkOS deletion                                   | Risks duplicate identities, active refresh sessions, callback outages, and an unrecoverable rollback.                                                                               |
 
 ---
 
@@ -1732,17 +1801,17 @@ flowchart TB
 
 ## Risks & Dependencies
 
-| Risk | Likelihood | Impact | Mitigation |
-| --- | --- | --- | --- |
-| Existing replacement identity is not present in WorkOS data | High | High | Complete inventory creates candidates only; active WorkOS + native proof or authoritative exact provider subject creates the mapping. |
-| General Microsoft token reaches tenant-Entra workspace | Medium | Critical | Provider-only app clients + API client-to-policy admission + two-tenant bypass tests. |
-| Terraform/provider lag for inbound federation | High | Medium | Do not make v1 trust depend on it; spike custom resource as defense in depth. |
-| Secret leaks into state/output | Medium | High | Secrets Manager-first tenant reconciler, redacted plan/output, state audit. |
-| Cross-client callback/PKCE regressions | Medium | High | Copy desktop posture, per-platform tests, deployed U9 matrix. |
-| Raw `custom:tenant_id` bypasses admission in a legacy consumer | Medium | Critical | Null it for Cognito callers, migrate every direct consumer, and add API/AppSync wrong-tenant tests. |
-| WorkOS refresh sessions/offline JWTs survive UI cutover | High | High | Shut down legacy clients, deny audiences everywhere, global signout, controlled refresh proof, and full maximum-JWT drain. |
-| Cognito quotas grow with app clients/callbacks | Low at expected scale | Medium | U1 counts both client and callback formulas with canary/rollback headroom; onboarding refuses unsafe capacity. |
-| Destructive DB/Terraform removal drifts or erases evidence | Medium | High | U13 retains minimal durable digests/counts/dispositions, requires explicit non-CASCADE predicates, and verifies a no-op redeploy without creating a new raw archive. |
+| Risk                                                             | Likelihood            | Impact   | Mitigation                                                                                                                                                           |
+| ---------------------------------------------------------------- | --------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Existing replacement identity is not present in WorkOS data      | High                  | High     | Complete inventory creates candidates only; active WorkOS + native proof or authoritative exact provider subject creates the mapping.                                |
+| Default-directory Microsoft token reaches tenant-Entra workspace | Medium                | Critical | Provider-only app clients + API client-to-policy admission + two-tenant bypass tests.                                                                                |
+| Terraform/provider lag for inbound federation                    | High                  | Medium   | Do not make v1 trust depend on it; spike custom resource as defense in depth.                                                                                        |
+| Secret leaks into state/output                                   | Medium                | High     | Secrets Manager-first tenant reconciler, redacted plan/output, state audit.                                                                                          |
+| Cross-client callback/PKCE regressions                           | Medium                | High     | Copy desktop posture, per-platform tests, deployed U9 matrix.                                                                                                        |
+| Raw `custom:tenant_id` bypasses admission in a legacy consumer   | Medium                | Critical | Null it for Cognito callers, migrate every direct consumer, and add API/AppSync wrong-tenant tests.                                                                  |
+| WorkOS refresh sessions/offline JWTs survive UI cutover          | High                  | High     | Shut down legacy clients, deny audiences everywhere, global signout, controlled refresh proof, and full maximum-JWT drain.                                           |
+| Cognito quotas grow with app clients/callbacks                   | Low at expected scale | Medium   | U1 counts both client and callback formulas with canary/rollback headroom; onboarding refuses unsafe capacity.                                                       |
+| Destructive DB/Terraform removal drifts or erases evidence       | Medium                | High     | U13 retains minimal durable digests/counts/dispositions, requires explicit non-CASCADE predicates, and verifies a no-op redeploy without creating a new raw archive. |
 
 ---
 
@@ -1750,7 +1819,7 @@ flowchart TB
 
 - Update web/mobile/desktop/CLI authentication docs with the shared Cognito flow,
   callback registration, supported options, and bounded logout semantics.
-- Add an operator guide for Google/general Microsoft static configuration and
+- Add an operator guide for Google/default-directory Microsoft static configuration and
   tenant Entra create/validate/rotate/disable commands.
 - Add dashboards/alarms for provider validation state, unknown app-client
   tokens, tenant-policy denial, identity-proof/mapping conflicts, enrollment

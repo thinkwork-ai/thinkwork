@@ -51,26 +51,26 @@ variable "google_oauth_client_secret" {
 }
 
 variable "microsoft_oauth_client_id" {
-  description = "Microsoft Entra application client ID for direct Cognito organizations OIDC login."
+  description = "Microsoft Entra application client ID for the deployment's default tenant-specific Cognito OIDC route."
   type        = string
   default     = ""
 }
 
 variable "microsoft_oauth_client_secret" {
-  description = "Microsoft Entra application client secret for direct Cognito organizations OIDC login."
+  description = "Microsoft Entra application client secret for the deployment's default tenant-specific Cognito OIDC route."
   type        = string
   sensitive   = true
   default     = ""
 }
 
 variable "microsoft_oauth_tenant" {
-  description = "Microsoft authority for the shared work/school route. Only organizations is supported; tenant-specific GUID authorities use tenant_entra_connections."
+  description = "Microsoft Entra directory GUID for the deployment's default Microsoft login route. Cognito requires the exact tenant issuer; organizations/common authorities are not valid token issuers."
   type        = string
-  default     = "organizations"
+  default     = ""
 
   validation {
-    condition     = var.microsoft_oauth_tenant == "organizations"
-    error_message = "microsoft_oauth_tenant must be organizations; use tenant_entra_connections for tenant-GUID Entra routes."
+    condition     = var.microsoft_oauth_tenant == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$", var.microsoft_oauth_tenant))
+    error_message = "microsoft_oauth_tenant must be an Entra directory GUID."
   }
 }
 
@@ -1035,8 +1035,12 @@ variable "admin_callback_urls" {
   default = [
     "http://localhost:5174",
     "http://localhost:5174/auth/callback",
+    "http://127.0.0.1:5174",
+    "http://127.0.0.1:5174/auth/callback",
     "http://localhost:5175",
     "http://localhost:5175/auth/callback",
+    "http://127.0.0.1:5175",
+    "http://127.0.0.1:5175/auth/callback",
     "http://127.0.0.1:42010/callback",
     "http://localhost:42010/callback",
   ]
@@ -1046,7 +1050,9 @@ variable "admin_logout_urls" {
   type = list(string)
   default = [
     "http://localhost:5174",
+    "http://127.0.0.1:5174",
     "http://localhost:5175",
+    "http://127.0.0.1:5175",
   ]
 }
 
@@ -1091,6 +1097,36 @@ variable "mobile_logout_urls" {
 
 variable "pre_signup_lambda_zip" {
   description = "Path to the Cognito pre-signup Lambda zip"
+  type        = string
+  default     = ""
+}
+
+variable "auth_retirement_phase" {
+  description = "Native-auth migration phase. Fresh deployments default to retired (no WorkOS runtime); existing deployments must explicitly select coexistence/cutover until their evidence-gated retirement is complete."
+  type        = string
+  default     = "retired"
+
+  validation {
+    condition     = contains(["coexistence", "cutover", "retired"], var.auth_retirement_phase)
+    error_message = "auth_retirement_phase must be coexistence, cutover, or retired."
+  }
+}
+
+variable "auth_migration_recovery_deadline" {
+  description = "RFC3339 deadline for legacy-session identity migration. Must be supplied explicitly for coexistence deployments."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = trimspace(var.auth_migration_recovery_deadline) == "" || (
+      can(timecmp(var.auth_migration_recovery_deadline, var.auth_migration_recovery_deadline))
+    )
+    error_message = "auth_migration_recovery_deadline must be empty or an RFC3339 timestamp."
+  }
+}
+
+variable "cognito_custom_auth_lambda_zip" {
+  description = "Local WorkOS bridge custom-auth artifact retained only as a rollback runtime before auth retirement."
   type        = string
   default     = ""
 }

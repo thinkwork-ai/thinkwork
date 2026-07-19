@@ -55,6 +55,10 @@ export default function AuthCallbackScreen() {
         request.codeVerifier,
       )
       .then((tokens) => {
+        auth.validateOAuthTokens(tokens, {
+          clientId: request.clientId,
+          nonce: request.nonce,
+        });
         auth.storeOAuthTokens(tokens, request.clientId);
         setAuthToken(tokens.id_token);
         // Full reload so AuthProvider picks up the stored session

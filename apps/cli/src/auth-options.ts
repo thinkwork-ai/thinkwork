@@ -19,6 +19,7 @@ interface PublicAuthOptions {
 export async function fetchCliAuthOptions(input: {
   apiBaseUrl: string;
   host?: string;
+  fallbackClientId?: string;
   fetchImpl?: typeof fetch;
 }): Promise<CliAuthOption[]> {
   const url = new URL(
@@ -37,7 +38,9 @@ export async function fetchCliAuthOptions(input: {
 
   const raw = (await response.json()) as PublicAuthOptions;
   const result: CliAuthOption[] = [];
-  const passwordClientId = cleanString(raw.password?.clientId);
+  const passwordClientId =
+    cleanString(raw.password?.clientId) ||
+    (raw.password?.enabled === true ? cleanString(input.fallbackClientId) : "");
   if (raw.password?.enabled === true && passwordClientId) {
     result.push({
       key: "local",
@@ -46,7 +49,10 @@ export async function fetchCliAuthOptions(input: {
     });
   }
 
-  for (const entry of Array.isArray(raw.oauthOptions) ? raw.oauthOptions : []) {
+  const rawOAuthOptions = Array.isArray(raw.oauthOptions)
+    ? raw.oauthOptions
+    : [];
+  for (const entry of rawOAuthOptions) {
     const option = parseOAuthOption(entry);
     if (option) result.push(option);
   }

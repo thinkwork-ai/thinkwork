@@ -110,6 +110,42 @@ describe("enterprise identity provider bootstrap validation", () => {
     );
   });
 
+  it("stages a rotated credential without replacing AWSCURRENT before reconciliation", () => {
+    const calls: Array<{ args: string[]; input?: unknown }> = [];
+    const existingArn =
+      "arn:aws:secretsmanager:us-east-1:123456789012:" +
+      "secret:thinkwork/dev/auth/entra/00000000-0000-4000-8000-000000000123-ABC123";
+    const aws: AwsExecutor = {
+      read(args) {
+        calls.push({ args });
+        return existingArn;
+      },
+      writeJson(args, input) {
+        calls.push({ args, input });
+        return existingArn;
+      },
+    };
+
+    writeTenantEntraSecret(
+      {
+        stage: "dev",
+        directoryId: "00000000-0000-4000-8000-000000000123",
+        clientId: "entra-client-id",
+        clientSecret: "rotated-secret",
+        versionStage: "AWSPENDING",
+      },
+      aws,
+    );
+
+    expect(calls[1]?.input).toMatchObject({
+      SecretId: existingArn,
+      VersionStages: ["AWSPENDING"],
+    });
+    expect(calls[1]?.input).not.toMatchObject({
+      VersionStages: ["AWSCURRENT"],
+    });
+  });
+
   it("builds deterministic tenant-Entra safe metadata without retaining its secret", () => {
     const tenantId = "00000000-0000-4000-8000-000000000123";
     const plan = buildEnterpriseIdentityProviderPlan({

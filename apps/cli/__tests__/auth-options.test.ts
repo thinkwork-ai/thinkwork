@@ -90,4 +90,36 @@ describe("fetchCliAuthOptions", () => {
       }),
     ).resolves.toEqual([]);
   });
+
+  it("never fabricates native providers from a legacy WorkOS catalog", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          password: { enabled: true },
+          oauthOptions: [
+            {
+              key: "workos",
+              provider: "workos",
+              route: { type: "workosAuthorize" },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(
+      fetchCliAuthOptions({
+        apiBaseUrl: "https://api.example.com",
+        fallbackClientId: "deployment-client",
+        fetchImpl,
+      }),
+    ).resolves.toEqual([
+      {
+        key: "local",
+        label: "Email and password",
+        clientId: "deployment-client",
+      },
+    ]);
+  });
 });

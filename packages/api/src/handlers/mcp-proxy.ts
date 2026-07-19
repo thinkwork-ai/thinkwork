@@ -42,6 +42,10 @@ import type {
 import { and, eq } from "drizzle-orm";
 import { authenticate } from "../lib/cognito-auth.js";
 import {
+  admitCognitoTenant,
+  AuthAdmissionError,
+} from "../lib/auth-admission.js";
+import {
   handleCors,
   json,
   error,
@@ -61,7 +65,7 @@ import {
 import { cacheDiscoveredMcpTools } from "../lib/mcp-tool-cache.js";
 import type { CapabilitiesManifest } from "../lib/capabilities/manifest-compile.js";
 
-const { users, agents } = schema;
+const { agents } = schema;
 
 /**
  * The Space a spaceless turn renders in (agents.runtime_config.defaultSpaceId)
@@ -138,20 +142,18 @@ export async function handler(
   const auth = await authenticate(
     event.headers as Record<string, string | undefined>,
   );
-  if (!auth || auth.authType !== "cognito" || !auth.email) {
+  if (!auth || auth.authType !== "cognito") {
     return unauthorized("Authentication required");
   }
 
-  // Tenant by email — JWT tenantId is null for Google-federated users.
-  const [userRow] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, auth.email.toLowerCase()))
-    .limit(1);
-  if (!userRow || !userRow.tenant_id) {
+  let admission;
+  try {
+    admission = await admitCognitoTenant(auth, auth.tenantId ?? undefined);
+  } catch (cause) {
+    if (!(cause instanceof AuthAdmissionError)) throw cause;
     return forbidden("No tenant resolved for caller");
   }
-  const tenantId = userRow.tenant_id;
+  const tenantId = admission.tenantId;
 
   let body: ProxyBody;
   try {
@@ -207,7 +209,7 @@ export async function handler(
           tenantId,
           agentId: body.agentId,
           spaceId,
-          userId: userRow.id,
+          userId: admission.userId,
         },
         { persist: false },
       );
@@ -217,7 +219,10 @@ export async function handler(
     }
     configs = await buildMcpConfigs(
       body.agentId,
-      { humanPairId: userRow.id, requesterUserId: userRow.id },
+      {
+        humanPairId: admission.userId,
+        requesterUserId: admission.userId,
+      },
       LOG_PREFIX,
       folderCapabilities ? { folderCapabilities } : undefined,
     );
@@ -227,9 +232,9 @@ export async function handler(
   }
 
   if (isList) {
-    return handleList(configs, { tenantId, userId: userRow.id });
+    return handleList(configs, { tenantId, userId: admission.userId });
   }
-  return handleCall(configs, body, { tenantId, userId: userRow.id });
+  return handleCall(configs, body, { tenantId, userId: admission.userId });
 }
 
 async function handleList(

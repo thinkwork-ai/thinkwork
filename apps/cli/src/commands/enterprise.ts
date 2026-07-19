@@ -1,6 +1,7 @@
 import { Command } from "commander";
 
 import { registerEnterpriseBootstrapCommand } from "./enterprise/bootstrap.js";
+import { registerEnterpriseAuthRecoveryCommand } from "./enterprise/auth-recovery.js";
 import { registerEnterpriseIdentityProviderCommand } from "./enterprise/identity-provider-command.js";
 import { registerEnterpriseOverlayCommand } from "./enterprise/overlay.js";
 
@@ -12,6 +13,7 @@ export function registerEnterpriseCommand(program: Command): void {
     );
 
   registerEnterpriseBootstrapCommand(enterprise);
+  registerEnterpriseAuthRecoveryCommand(enterprise);
   registerEnterpriseIdentityProviderCommand(enterprise);
   registerEnterpriseOverlayCommand(enterprise);
 }

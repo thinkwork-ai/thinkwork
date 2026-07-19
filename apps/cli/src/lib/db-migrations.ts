@@ -49,6 +49,8 @@ export interface MigrationsSummary {
   skippedFiles: string[];
 }
 
+const AUTH_RETIREMENT_MARKER = "-- deployment-phase: auth-retired";
+
 /** Drizzle-compatible migration hash: sha256 of the whole file content. */
 export function migrationHash(sql: string): string {
   return createHash("sha256").update(sql).digest("hex");
@@ -329,6 +331,8 @@ export async function applyMigrations(options: {
   connect?: (connection: PgConnection) => Promise<SqlRunner>;
   exec?: (args: string[]) => ExecResult;
   log?: (line: string) => void;
+  /** Apply irreversible auth-retirement migrations after U9/U10 evidence. */
+  includeAuthRetirement?: boolean;
 }): Promise<MigrationsSummary> {
   const log = options.log ?? (() => {});
   const exec = options.exec ?? defaultExec;
@@ -390,6 +394,17 @@ export async function applyMigrations(options: {
         continue;
       }
 
+      if (
+        raw.includes(AUTH_RETIREMENT_MARKER) &&
+        options.includeAuthRetirement !== true
+      ) {
+        summary.skippedFiles.push(file);
+        log(
+          `deferring ${file} (requires explicit --finalize-auth-retirement after cutover evidence)`,
+        );
+        continue;
+      }
+
       let sql = stripPsqlMetaLines(raw);
       const unresolved: string[] = [];
       for (const name of findPsqlVariables(raw)) {
@@ -427,7 +442,7 @@ export async function applyMigrations(options: {
     const errors = new Map<string, string>();
     while (pending.length > 0) {
       let progressed = false;
-      for (let i = 0; i < pending.length;) {
+      for (let i = 0; i < pending.length; ) {
         const { file, hash, sql } = pending[i];
         try {
           // psql executes statements in autocommit; wrap files that neither

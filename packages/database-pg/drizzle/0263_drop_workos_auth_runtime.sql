@@ -11,9 +11,10 @@
 -- drops-constraint: public.plugin_components.plugin_components_type_allowed
 -- drops-constraint: public.auth_provider_resources.auth_provider_resources_lifecycle_state_allowed
 -- drops-constraint: public.auth_route_clients.auth_route_clients_lifecycle_allowed
--- creates: public.plugin_components_type_allowed
--- creates: public.auth_provider_resources_lifecycle_state_allowed
--- creates: public.auth_route_clients_lifecycle_allowed
+-- creates-constraint: public.plugin_components.plugin_components_type_allowed
+-- creates-constraint: public.auth_provider_resources.auth_provider_resources_lifecycle_state_allowed
+-- creates-constraint: public.auth_route_clients.auth_route_clients_lifecycle_allowed
+-- deployment-phase: auth-retired
 
 \set ON_ERROR_STOP on
 
@@ -23,6 +24,7 @@ SET LOCAL lock_timeout = '30s';
 SET LOCAL statement_timeout = '300s';
 
 SELECT pg_advisory_xact_lock(hashtext('drop_workos_auth_runtime'));
+SELECT set_config('thinkwork.auth_retirement_stage', :'stage', true);
 
 DO $$
 DECLARE
@@ -67,16 +69,25 @@ BEGIN
 
   SELECT * INTO cutover
   FROM public.auth_cutover_runs
-  WHERE status = 'complete' AND completed_at IS NOT NULL
-  ORDER BY completed_at DESC
+  WHERE stage = current_setting('thinkwork.auth_retirement_stage')
+  ORDER BY created_at DESC, id DESC
   LIMIT 1;
 
   IF cutover.id IS NULL THEN
-    RAISE EXCEPTION 'WorkOS retirement blocked: no completed auth_cutover_runs evidence';
+    RAISE EXCEPTION 'WorkOS retirement blocked: no auth_cutover_runs evidence for stage %',
+      current_setting('thinkwork.auth_retirement_stage');
+  END IF;
+
+  IF cutover.status <> 'complete' OR cutover.completed_at IS NULL THEN
+    RAISE EXCEPTION 'WorkOS retirement blocked: newest auth_cutover_runs evidence for stage % is %',
+      current_setting('thinkwork.auth_retirement_stage'), cutover.status;
   END IF;
 
   IF COALESCE((cutover.terminal_dispositions->>'allTerminal')::boolean, false) IS NOT TRUE
     OR COALESCE((cutover.terminal_dispositions->>'unresolved')::bigint, -1) <> 0
+    OR COALESCE((cutover.terminal_dispositions->>'signoutExpected')::bigint, -1) <= 0
+    OR COALESCE((cutover.terminal_dispositions->>'signoutAttempts')::bigint, -1)
+      <> COALESCE((cutover.terminal_dispositions->>'signoutExpected')::bigint, -2)
     OR COALESCE((cutover.terminal_dispositions->>'signoutFailures')::bigint, -1) <> 0
     OR COALESCE((cutover.terminal_dispositions->>'compatibilityFallbackReads')::bigint, -1) <> 0
   THEN
@@ -97,6 +108,43 @@ BEGIN
     OR COALESCE((cutover.drain_evidence->>'activeLegacySubscriptions')::bigint, -1) <> 0
   THEN
     RAISE EXCEPTION 'WorkOS retirement blocked: traffic, persistence, or realtime drain evidence is incomplete';
+  END IF;
+
+  IF COALESCE(cutover.drain_evidence->'provenance'->>'domain', '')
+      <> 'thinkwork.auth-cutover-evidence.v1'
+    OR COALESCE(cutover.drain_evidence->'provenance'->>'source', '')
+      <> 'verify-native-auth-cutover'
+    OR COALESCE(cutover.drain_evidence->'provenance'->>'stage', '')
+      <> current_setting('thinkwork.auth_retirement_stage')
+    OR COALESCE(cutover.drain_evidence->'provenance'->>'runId', '') <> cutover.id::text
+    OR COALESCE(cutover.drain_evidence->'provenance'->>'deploymentRevision', '')
+      !~ '^([a-f0-9]{40}|[a-f0-9]{64})$'
+    OR COALESCE(cutover.drain_evidence->'provenance'->>'payloadHash', '')
+      !~ '^[a-f0-9]{64}$'
+    OR length(COALESCE(cutover.drain_evidence->'provenance'->>'signature', '')) < 40
+    OR (cutover.drain_evidence->'provenance'->>'observedAt')::timestamptz < cutover.started_at
+    OR cutover.completed_at < (cutover.drain_evidence->'provenance'->>'observedAt')::timestamptz
+    OR cutover.completed_at > (cutover.drain_evidence->'provenance'->>'expiresAt')::timestamptz
+  THEN
+    RAISE EXCEPTION 'WorkOS retirement blocked: signed stage/revision/time provenance is missing or stale';
+  END IF;
+
+  IF COALESCE((cutover.drain_evidence->>'guardEnabled')::boolean, false) IS NOT TRUE
+    -- AppSync GraphQL WebSocket connections can survive for 24 hours, longer
+    -- than the legacy clients' one-hour ID/access tokens.
+    OR COALESCE((cutover.drain_evidence->>'requiredSoakSeconds')::bigint, 0) < 86400
+    OR COALESCE(cutover.drain_evidence->>'deploymentRevision', '')
+      <> COALESCE(cutover.drain_evidence->'provenance'->>'deploymentRevision', '')
+    OR cutover.drain_evidence->>'baselineDatabaseStatsResetAt' IS NULL
+    OR cutover.drain_evidence->>'databaseStatsResetAt' IS NULL
+    OR cutover.drain_evidence->>'baselineDatabaseStatsResetAt'
+      <> cutover.drain_evidence->>'databaseStatsResetAt'
+    OR cutover.drain_evidence->>'soakStartedAt' IS NULL
+    OR (cutover.drain_evidence->'provenance'->>'observedAt')::timestamptz
+      < (cutover.drain_evidence->>'soakStartedAt')::timestamptz
+        + make_interval(secs => (cutover.drain_evidence->>'requiredSoakSeconds')::integer)
+  THEN
+    RAISE EXCEPTION 'WorkOS retirement blocked: revision-bound drain soak is missing or incomplete';
   END IF;
 
   SELECT count(*) INTO pending_count

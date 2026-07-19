@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  exchangeLegacyWorkosBridge,
   exchangeCodeForSession,
   storeTokensInCognitoStorage,
 } from "@/lib/auth";
@@ -12,6 +13,7 @@ export const Route = createFileRoute("/auth/callback")({
     state: (search.state as string) || "",
     error: (search.error as string) || "",
     error_description: (search.error_description as string) || "",
+    workos_bridge: (search.workos_bridge as string) || "",
   }),
 });
 
@@ -21,6 +23,7 @@ export function AuthCallback() {
     state,
     error: oauthError,
     error_description,
+    workos_bridge,
   } = Route.useSearch();
   const [error, setError] = useState<string | null>(null);
   const exchanged = useRef(false);
@@ -31,7 +34,7 @@ export function AuthCallback() {
       return;
     }
 
-    if (!code) {
+    if (!code && !workos_bridge) {
       setError("No authorization code received.");
       return;
     }
@@ -40,7 +43,10 @@ export function AuthCallback() {
     if (exchanged.current) return;
     exchanged.current = true;
 
-    exchangeCodeForSession(code, state)
+    (workos_bridge
+      ? exchangeLegacyWorkosBridge(workos_bridge)
+      : exchangeCodeForSession(code, state)
+    )
       .then((session) => {
         storeTokensInCognitoStorage(session.tokens, session.clientId);
         const nextTarget = session.next;
@@ -56,7 +62,7 @@ export function AuthCallback() {
       .catch((err) => {
         setError(err instanceof Error ? err.message : "OAuth callback failed");
       });
-  }, [code, error_description, oauthError, state]);
+  }, [code, error_description, oauthError, state, workos_bridge]);
 
   if (error) {
     return (

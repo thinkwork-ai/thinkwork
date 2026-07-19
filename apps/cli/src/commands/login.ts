@@ -474,6 +474,7 @@ async function doCognitoLogin(opts: {
     const options = await fetchCliAuthOptions({
       apiBaseUrl,
       host: opts.authHost,
+      fallbackClientId: cognito.clientId,
     });
     authOption = await selectCliAuthOption(options, opts.provider);
   } catch (err) {

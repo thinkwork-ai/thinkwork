@@ -23,7 +23,11 @@ import { AppState, Platform } from "react-native";
 import * as WebBrowser from "expo-web-browser";
 import type { AuthUser } from "@/lib/auth";
 import * as auth from "@/lib/auth";
-import { setAuthToken, reconnectSubscriptions } from "@/lib/graphql/client";
+import {
+  setActiveTenantId,
+  setAuthToken,
+  reconnectSubscriptions,
+} from "@/lib/graphql/client";
 import {
   formatPlatformConfigMissing,
   getPlatformConfig,
@@ -91,7 +95,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<void>;
   confirmSignUp: (email: string, code: string) => Promise<void>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
   getToken: () => Promise<string | null>;
   /** Attempt to restore session using stored credentials (after biometric) */
   restoreWithCredentials: () => Promise<boolean>;
@@ -137,6 +141,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getPlatformConfig(),
   );
   const refreshingRef = useRef(false);
+
+  useEffect(() => {
+    setActiveTenantId(user?.tenantId ?? null);
+  }, [user?.tenantId]);
 
   useEffect(
     () =>
@@ -465,11 +473,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           request.authorizeUrl,
           redirectUri,
         );
-        console.log(
-          "[AuthProvider] Cognito OAuth result type:",
-          result.type,
-          "url" in result ? result.url : "no url",
-        );
+        console.log("[AuthProvider] Cognito OAuth result type:", result.type);
 
         if (result.type !== "success") return;
 
@@ -495,6 +499,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           request.clientId,
           request.codeVerifier,
         );
+        auth.validateOAuthTokens(tokens, {
+          clientId: request.clientId,
+          nonce: request.nonce,
+        });
         let oauthUser = auth.storeOAuthTokens(tokens, request.clientId);
         setAuthToken(tokens.id_token);
 
@@ -549,8 +557,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   // ------ Sign out ------
-  const handleSignOut = useCallback(() => {
-    auth.signOut();
+  const handleSignOut = useCallback(async () => {
+    await auth.signOut();
     setAuthToken(null);
     setUser(null);
     setHasStoredSession(false);

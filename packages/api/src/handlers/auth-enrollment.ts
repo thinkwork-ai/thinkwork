@@ -8,7 +8,7 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import {
   authIdentityEnrollments,
   authSubscriptionInvalidations,
@@ -18,6 +18,11 @@ import {
 } from "@thinkwork/database-pg/schema";
 
 import { authenticate, type AuthResult } from "../lib/cognito-auth.js";
+import {
+  admitCognitoTenant,
+  AuthAdmissionError,
+} from "../lib/auth-admission.js";
+import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { db } from "../lib/db.js";
 import { error, handleCors, json, unauthorized } from "../lib/response.js";
 
@@ -44,9 +49,34 @@ export interface IssuedEnrollmentGrant {
   routeKeys: string[];
 }
 
+export interface IdentityRecoveryGrantInput {
+  tenantId: string;
+  userId: string;
+  redirectUri: string;
+}
+
+export interface SessionMigrationGrantInput {
+  redirectUri: string;
+}
+
+export class IdentityRecoveryGrantError extends Error {
+  constructor(
+    readonly code:
+      | "active_membership_not_found"
+      | "quarantined_identity_not_found",
+  ) {
+    super(code);
+    this.name = "IdentityRecoveryGrantError";
+  }
+}
+
 type AuthEnrollmentTransaction = Parameters<
   Parameters<typeof db.transaction>[0]
 >[0];
+
+const MAX_RECIPIENT_CHALLENGE_ATTEMPTS = 5;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
  * Issue one opaque bearer/challenge pair across every requested client-family
@@ -64,7 +94,11 @@ export async function issueEnrollmentGrants(input: {
   }>;
   ttlMs?: number;
   now?: Date;
-  grantKind?: "membership" | "pending_owner";
+  grantKind?:
+    | "membership"
+    | "pending_owner"
+    | "identity_recovery"
+    | "session_migration";
   transaction?: AuthEnrollmentTransaction;
 }): Promise<IssuedEnrollmentGrant> {
   const now = input.now ?? new Date();
@@ -178,6 +212,124 @@ export function enrollmentDigest(
     .digest("hex");
 }
 
+/**
+ * Issue a recovery grant for an existing user without trusting an email
+ * address or accepting a Cognito subject from the operator. The replacement
+ * subject is bound only when the intended user authenticates through an
+ * admitted Cognito route and proves possession of the recipient challenge.
+ */
+export async function issueIdentityRecoveryGrant(
+  input: IdentityRecoveryGrantInput,
+): Promise<IssuedEnrollmentGrant> {
+  return db.transaction(async (tx) => {
+    const [membership] = await tx
+      .select({ id: tenantMembers.id })
+      .from(tenantMembers)
+      .where(
+        and(
+          eq(tenantMembers.tenant_id, input.tenantId),
+          eq(tenantMembers.principal_type, "user"),
+          eq(tenantMembers.principal_id, input.userId),
+          eq(tenantMembers.status, "active"),
+        ),
+      )
+      .for("update");
+    if (!membership) {
+      throw new IdentityRecoveryGrantError("active_membership_not_found");
+    }
+
+    const [quarantinedIdentity] = await tx
+      .select({ id: userAuthIdentities.id })
+      .from(userAuthIdentities)
+      .where(
+        and(
+          eq(userAuthIdentities.tenant_id, input.tenantId),
+          eq(userAuthIdentities.user_id, input.userId),
+          eq(userAuthIdentities.status, "quarantined"),
+        ),
+      )
+      .limit(1);
+    if (!quarantinedIdentity) {
+      throw new IdentityRecoveryGrantError("quarantined_identity_not_found");
+    }
+
+    return issueEnrollmentGrants({
+      tenantId: input.tenantId,
+      intendedUserId: input.userId,
+      membershipId: membership.id,
+      grantKind: "identity_recovery",
+      redirectUri: input.redirectUri,
+      transaction: tx,
+    });
+  });
+}
+
+/**
+ * Turn an admitted, still-live WorkOS rollback session into a one-use native
+ * proof grant. The grant is bound to the immutable user/membership admitted by
+ * that session; email is never consulted.
+ */
+export async function issueSessionMigrationGrant(
+  auth: AuthResult,
+  input: SessionMigrationGrantInput,
+  now = new Date(),
+): Promise<IssuedEnrollmentGrant> {
+  if (
+    auth.authType !== "cognito" ||
+    auth.route?.providerKind !== "legacy_workos" ||
+    auth.route.lifecycleState !== "coexistence"
+  ) {
+    throw new AuthAdmissionError(
+      "legacy_session_required",
+      "An admitted WorkOS rollback session is required for migration.",
+    );
+  }
+  const configuredDeadline =
+    process.env.AUTH_MIGRATION_RECOVERY_DEADLINE?.trim() ?? "";
+  const deadlineMillis = Date.parse(configuredDeadline);
+  if (!configuredDeadline || !Number.isFinite(deadlineMillis)) {
+    throw new AuthAdmissionError(
+      "migration_deadline_unconfigured",
+      "The identity migration deadline is not configured.",
+    );
+  }
+  if (now.getTime() >= deadlineMillis) {
+    throw new AuthAdmissionError(
+      "migration_deadline_elapsed",
+      "The identity migration recovery window has ended.",
+    );
+  }
+  const admitted = await admitCognitoTenant(auth, auth.tenantId ?? undefined);
+  return db.transaction(async (tx) => {
+    const [membership] = await tx
+      .select({ id: tenantMembers.id })
+      .from(tenantMembers)
+      .where(
+        and(
+          eq(tenantMembers.tenant_id, admitted.tenantId),
+          eq(tenantMembers.principal_type, "user"),
+          eq(tenantMembers.principal_id, admitted.userId),
+          eq(tenantMembers.status, "active"),
+        ),
+      )
+      .for("update");
+    if (!membership) {
+      throw new AuthAdmissionError(
+        "tenant_not_admitted",
+        "The migration session has no active membership.",
+      );
+    }
+    return issueEnrollmentGrants({
+      tenantId: admitted.tenantId,
+      intendedUserId: admitted.userId,
+      membershipId: membership.id,
+      grantKind: "session_migration",
+      redirectUri: input.redirectUri,
+      transaction: tx,
+    });
+  });
+}
+
 export async function consumeEnrollment(
   input: EnrollmentConsumeInput,
   auth: AuthResult,
@@ -201,21 +353,60 @@ export async function consumeEnrollment(
   );
 
   return db.transaction(async (tx) => {
-    const [enrollment] = await tx
+    const [candidate] = await tx
       .select()
       .from(authIdentityEnrollments)
-      .where(eq(authIdentityEnrollments.nonce_digest, nonceDigest))
+      .where(eq(authIdentityEnrollments.nonce_digest, nonceDigest));
+    if (!candidate) return "invalid_grant";
+    if (!candidate.intended_user_id) return "invalid_grant";
+    const intendedUserId = candidate.intended_user_id;
+    if (candidate.status === "consumed") return "already_consumed";
+    if (candidate.status !== "pending") return "expired";
+
+    // One grant can target several provider/client routes. Lock every pending
+    // sibling in a deterministic order so changing routes cannot multiply the
+    // recipient-challenge guess budget.
+    const grantEnrollments = await tx
+      .select()
+      .from(authIdentityEnrollments)
+      .where(
+        and(
+          eq(authIdentityEnrollments.tenant_id, candidate.tenant_id),
+          eq(
+            authIdentityEnrollments.recipient_grant_kind,
+            candidate.recipient_grant_kind,
+          ),
+          eq(
+            authIdentityEnrollments.recipient_grant_id,
+            candidate.recipient_grant_id,
+          ),
+          eq(authIdentityEnrollments.status, "pending"),
+        ),
+      )
+      .orderBy(authIdentityEnrollments.id)
       .for("update");
-    if (!enrollment) return "invalid_grant";
-    if (!enrollment.intended_user_id) return "invalid_grant";
-    if (enrollment.status === "consumed") return "already_consumed";
-    if (enrollment.status !== "pending" || enrollment.expires_at <= now) {
-      if (enrollment.status === "pending") {
-        await tx
-          .update(authIdentityEnrollments)
-          .set({ status: "expired", updated_at: now })
-          .where(eq(authIdentityEnrollments.id, enrollment.id));
-      }
+    const enrollment = grantEnrollments.find(
+      (grant) => grant.id === candidate.id,
+    );
+    if (!enrollment) return "expired";
+    if (enrollment.expires_at <= now) {
+      await tx
+        .update(authIdentityEnrollments)
+        .set({ status: "expired", updated_at: now })
+        .where(
+          and(
+            eq(authIdentityEnrollments.tenant_id, enrollment.tenant_id),
+            eq(
+              authIdentityEnrollments.recipient_grant_kind,
+              enrollment.recipient_grant_kind,
+            ),
+            eq(
+              authIdentityEnrollments.recipient_grant_id,
+              enrollment.recipient_grant_id,
+            ),
+            eq(authIdentityEnrollments.status, "pending"),
+          ),
+        );
       return "expired";
     }
     if (enrollment.auth_route_client_id !== route.routeClientId) {
@@ -228,11 +419,64 @@ export async function consumeEnrollment(
     if (
       !safeDigestEqual(enrollment.recipient_challenge_digest, challengeDigest)
     ) {
+      const failedAttempts =
+        Math.max(...grantEnrollments.map((grant) => grant.failed_attempts)) + 1;
+      const locked = failedAttempts >= MAX_RECIPIENT_CHALLENGE_ATTEMPTS;
+      await tx
+        .update(authIdentityEnrollments)
+        .set({
+          failed_attempts: failedAttempts,
+          ...(locked
+            ? { status: "revoked", locked_at: now, updated_at: now }
+            : { updated_at: now }),
+        })
+        .where(
+          and(
+            eq(authIdentityEnrollments.tenant_id, enrollment.tenant_id),
+            eq(
+              authIdentityEnrollments.recipient_grant_kind,
+              enrollment.recipient_grant_kind,
+            ),
+            eq(
+              authIdentityEnrollments.recipient_grant_id,
+              enrollment.recipient_grant_id,
+            ),
+            eq(authIdentityEnrollments.status, "pending"),
+          ),
+        );
       return "invalid_challenge";
     }
 
+    const [membership] = await tx
+      .select({ id: tenantMembers.id, status: tenantMembers.status })
+      .from(tenantMembers)
+      .where(
+        and(
+          eq(tenantMembers.id, enrollment.recipient_grant_id),
+          eq(tenantMembers.tenant_id, enrollment.tenant_id),
+          eq(tenantMembers.principal_type, "user"),
+          eq(tenantMembers.principal_id, intendedUserId),
+        ),
+      )
+      .for("update");
+    const preservesActiveMembership = [
+      "identity_recovery",
+      "session_migration",
+    ].includes(enrollment.recipient_grant_kind);
+    const expectedMembershipStatus = preservesActiveMembership
+      ? "active"
+      : "pending";
+    if (!membership || membership.status !== expectedMembershipStatus) {
+      return "invalid_grant";
+    }
+
     const [conflict] = await tx
-      .select({ userId: userAuthIdentities.user_id })
+      .select({
+        userId: userAuthIdentities.user_id,
+        tenantId: userAuthIdentities.tenant_id,
+        resourceId: userAuthIdentities.auth_provider_resource_id,
+        status: userAuthIdentities.status,
+      })
       .from(userAuthIdentities)
       .where(
         and(
@@ -241,14 +485,20 @@ export async function consumeEnrollment(
         ),
       )
       .limit(1);
-    if (conflict && conflict.userId !== enrollment.intended_user_id) {
+    if (
+      conflict &&
+      (conflict.userId !== intendedUserId ||
+        conflict.tenantId !== enrollment.tenant_id ||
+        conflict.resourceId !== route.connectionId ||
+        conflict.status !== "active")
+    ) {
       return "identity_conflict";
     }
 
     if (!conflict) {
       await tx.insert(userAuthIdentities).values({
         tenant_id: enrollment.tenant_id,
-        user_id: enrollment.intended_user_id,
+        user_id: intendedUserId,
         auth_provider_resource_id: route.connectionId,
         cognito_issuer: cognitoIssuer,
         cognito_sub: cognitoSub,
@@ -257,7 +507,12 @@ export async function consumeEnrollment(
         // application trust boundary. Email and domain claims are never used.
         provider_subject: cognitoSub,
         status: "active",
-        proof_kind: "recipient_challenge",
+        proof_kind:
+          enrollment.recipient_grant_kind === "identity_recovery"
+            ? "recipient_challenge_recovery"
+            : enrollment.recipient_grant_kind === "session_migration"
+              ? "workos_session_native_proof"
+              : "recipient_challenge",
         evidence: {
           appClientId: route.appClientId,
           connectionKey: route.connectionKey,
@@ -267,17 +522,20 @@ export async function consumeEnrollment(
       });
     }
 
-    await tx
-      .update(tenantMembers)
-      .set({ status: "active", updated_at: now })
-      .where(
-        and(
-          eq(tenantMembers.id, enrollment.recipient_grant_id),
-          eq(tenantMembers.tenant_id, enrollment.tenant_id),
-          eq(tenantMembers.principal_type, "user"),
-          eq(tenantMembers.principal_id, enrollment.intended_user_id),
-        ),
-      );
+    if (!preservesActiveMembership) {
+      await tx
+        .update(tenantMembers)
+        .set({ status: "active", updated_at: now })
+        .where(
+          and(
+            eq(tenantMembers.id, enrollment.recipient_grant_id),
+            eq(tenantMembers.tenant_id, enrollment.tenant_id),
+            eq(tenantMembers.principal_type, "user"),
+            eq(tenantMembers.principal_id, intendedUserId),
+            eq(tenantMembers.status, "pending"),
+          ),
+        );
+    }
     if (enrollment.recipient_grant_kind === "pending_owner") {
       await tx
         .update(tenants)
@@ -285,7 +543,7 @@ export async function consumeEnrollment(
           pending_owner_email: null,
           first_admin_claim_required: false,
           first_admin_claimed_at: now,
-          first_admin_claimed_user_id: enrollment.intended_user_id,
+          first_admin_claimed_user_id: intendedUserId,
           updated_at: now,
         })
         .where(eq(tenants.id, enrollment.tenant_id));
@@ -306,9 +564,30 @@ export async function consumeEnrollment(
         },
       })
       .where(eq(authIdentityEnrollments.id, enrollment.id));
+    // The bearer/challenge pair is a single grant even when it was projected
+    // onto multiple route-specific rows. Consuming one route atomically burns
+    // every sibling so the same proof cannot bind a second Cognito subject.
+    await tx
+      .update(authIdentityEnrollments)
+      .set({ status: "revoked", updated_at: now })
+      .where(
+        and(
+          eq(authIdentityEnrollments.tenant_id, enrollment.tenant_id),
+          eq(
+            authIdentityEnrollments.recipient_grant_kind,
+            enrollment.recipient_grant_kind,
+          ),
+          eq(
+            authIdentityEnrollments.recipient_grant_id,
+            enrollment.recipient_grant_id,
+          ),
+          eq(authIdentityEnrollments.status, "pending"),
+          ne(authIdentityEnrollments.id, enrollment.id),
+        ),
+      );
     await tx.insert(authSubscriptionInvalidations).values({
       tenant_id: enrollment.tenant_id,
-      user_id: enrollment.intended_user_id,
+      user_id: intendedUserId,
       resource_kind: "identity_enrollment",
       reason: "identity_enrollment_consumed",
     });
@@ -323,6 +602,75 @@ export async function handler(
   if (preflight) return preflight;
   if (event.requestContext.http.method !== "POST") {
     return error("Method not allowed", 405);
+  }
+  if (event.rawPath === "/api/auth/enrollment/recover") {
+    const bearer = extractBearerToken(event);
+    if (!bearer || !validateApiSecret(bearer)) return unauthorized();
+    let input: IdentityRecoveryGrantInput;
+    try {
+      const parsed = JSON.parse(
+        event.body ?? "{}",
+      ) as Partial<IdentityRecoveryGrantInput>;
+      if (
+        !parsed.tenantId ||
+        !UUID_PATTERN.test(parsed.tenantId) ||
+        !parsed.userId ||
+        !UUID_PATTERN.test(parsed.userId) ||
+        !parsed.redirectUri ||
+        !isAbsoluteHttpUrl(parsed.redirectUri)
+      ) {
+        return error("Invalid identity recovery request", 400);
+      }
+      input = parsed as IdentityRecoveryGrantInput;
+    } catch {
+      return error("Invalid identity recovery request", 400);
+    }
+    try {
+      const grant = await issueIdentityRecoveryGrant(input);
+      console.info("[auth-enrollment] identity recovery grant issued", {
+        tenantId: input.tenantId,
+        userId: input.userId,
+        routeCount: grant.routeKeys.length,
+        expiresAt: grant.expiresAt.toISOString(),
+      });
+      return json(grant, 201);
+    } catch (cause) {
+      if (cause instanceof IdentityRecoveryGrantError) {
+        return json({ error: cause.code }, 409);
+      }
+      throw cause;
+    }
+  }
+  if (event.rawPath === "/api/auth/enrollment/migrate") {
+    const auth = await authenticate(
+      event.headers as Record<string, string | undefined>,
+    );
+    if (!auth || auth.authType !== "cognito") {
+      return unauthorized("Authentication required");
+    }
+    let input: SessionMigrationGrantInput;
+    try {
+      const parsed = JSON.parse(
+        event.body ?? "{}",
+      ) as Partial<SessionMigrationGrantInput>;
+      if (!parsed.redirectUri || !isAbsoluteHttpUrl(parsed.redirectUri)) {
+        return error("Invalid session migration request", 400);
+      }
+      input = parsed as SessionMigrationGrantInput;
+    } catch {
+      return error("Invalid session migration request", 400);
+    }
+    try {
+      return json(await issueSessionMigrationGrant(auth, input), 201);
+    } catch (cause) {
+      if (cause instanceof AuthAdmissionError) {
+        return json({ error: cause.code }, 403);
+      }
+      throw cause;
+    }
+  }
+  if (event.rawPath !== "/api/auth/enrollment/consume") {
+    return error("Not found", 404);
   }
   const auth = await authenticate(
     event.headers as Record<string, string | undefined>,
@@ -356,4 +704,13 @@ function safeDigestEqual(left: string, right: string): boolean {
   const a = Buffer.from(left, "hex");
   const b = Buffer.from(right, "hex");
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
 }

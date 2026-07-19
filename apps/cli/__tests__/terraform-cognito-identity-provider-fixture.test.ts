@@ -35,12 +35,13 @@ describe("Cognito identity provider Terraform fixture", () => {
     const outputs = read("terraform/modules/foundation/cognito/outputs.tf");
 
     expect(vars).toMatch(/variable "microsoft_oauth_client_id"/);
+    expect(vars).toMatch(/variable "microsoft_oauth_tenant"/);
     expect(vars).toMatch(/variable "tenant_entra_connections"/);
     expect(main).toMatch(
       /resource "aws_cognito_identity_provider" "microsoft_organizations"/,
     );
     expect(main).toMatch(
-      /oidc_issuer\s*=\s*"https:\/\/login\.microsoftonline\.com\/organizations\/v2\.0"/,
+      /oidc_issuer\s*=\s*"https:\/\/login\.microsoftonline\.com\/\$\{lower\(var\.microsoft_oauth_tenant\)\}\/v2\.0"/,
     );
     expect(main).toMatch(/"custom:entra_tenant_id"\s*=\s*"tid"/);
     expect(main).toMatch(/"custom:entra_object_id"\s*=\s*"oid"/);
@@ -89,6 +90,7 @@ describe("Cognito identity provider Terraform fixture", () => {
     expect(vars).toMatch(/variable "oidc_identity_providers"/);
     expect(vars).toMatch(/variable "saml_identity_providers"/);
     expect(vars).toMatch(/variable "microsoft_oauth_client_id"/);
+    expect(vars).toMatch(/variable "microsoft_oauth_tenant"/);
     expect(vars).toMatch(/variable "tenant_entra_connections"/);
     expect(main).toMatch(
       /oidc_identity_providers\s*=\s*var\.oidc_identity_providers/,
@@ -98,6 +100,9 @@ describe("Cognito identity provider Terraform fixture", () => {
     );
     expect(main).toMatch(
       /microsoft_oauth_client_id\s*=\s*var\.microsoft_oauth_client_id/,
+    );
+    expect(main).toMatch(
+      /microsoft_oauth_tenant\s*=\s*var\.microsoft_oauth_tenant/,
     );
     expect(main).toMatch(
       /tenant_entra_connections\s*=\s*var\.tenant_entra_connections/,
@@ -119,5 +124,25 @@ describe("Cognito identity provider Terraform fixture", () => {
     expect(main).toMatch(/COGNITO_DENIED_APP_CLIENT_IDS/);
     expect(main).not.toMatch(/AdminLinkProviderForUser/);
     expect(main).not.toMatch(/AdminSetUserPassword/);
+  });
+
+  it("keeps the WorkOS custom challenge as a phase-gated rollback runtime", () => {
+    const vars = read("terraform/modules/foundation/cognito/variables.tf");
+    const main = read("terraform/modules/foundation/cognito/main.tf");
+    const apiVars = read("terraform/modules/app/lambda-api/variables.tf");
+    const handlers = read("terraform/modules/app/lambda-api/handlers.tf");
+    const build = read("scripts/build-lambdas.sh");
+
+    expect(vars).toMatch(/variable "auth_retirement_phase"/);
+    expect(vars).toMatch(/\["coexistence", "cutover", "retired"\]/);
+    expect(main).toMatch(
+      /create_custom_auth\s*=\s*local\.create && local\.workos_rollback_enabled/,
+    );
+    expect(main).toMatch(/resource "aws_lambda_function" "custom_auth"/);
+    expect(apiVars).toMatch(/variable "auth_retirement_phase"/);
+    expect(handlers).toMatch(/"workos-auth"/);
+    expect(handlers).toMatch(/GET \/api\/auth\/workos\/callback/);
+    expect(build).toMatch(/build_handler "cognito-custom-auth"/);
+    expect(build).toMatch(/build_handler "workos-auth"/);
   });
 });

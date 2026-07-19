@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildIdentityBackfillPlan,
+  cutoverInventoryStatus,
   listEveryWorkosUser,
   parseCognitoInventoryUser,
   type BackfillConnection,
@@ -223,11 +224,66 @@ describe("Cognito auth identity backfill", () => {
 
     expect(plan.workosDirectoryComplete).toBe(true);
     expect(plan.workosDispositions.map((entry) => entry.status).sort()).toEqual(
-      ["mapped", "quarantined", "unresolved"],
+      ["quarantined", "quarantined", "unresolved"],
     );
     expect(JSON.stringify(plan.workosDispositions)).not.toContain(
       "workos-unbound",
     );
+  });
+
+  it("never misclassifies a WorkOS custom-auth bridge profile as local", () => {
+    const plan = buildIdentityBackfillPlan({
+      databaseUsers: [dbUser("legacy-user", "legacy-sub")],
+      cognitoUsers: [cognitoUser("legacy-sub")],
+      connections,
+      cognitoIssuer: issuer,
+      workosDirectoryComplete: true,
+      workosDirectoryUsers: [{ id: "workos-user" }],
+      workosSessionBindings: [
+        { workosUserId: "workos-user", cognitoSub: "legacy-sub" },
+      ],
+    });
+
+    expect(plan.entries[0]).toMatchObject({
+      providerKind: "legacy_workos",
+      status: "quarantined",
+      reasonCode: "legacy_workos_requires_native_proof",
+    });
+    expect(plan.workosDispositions[0]).toMatchObject({
+      status: "quarantined",
+      reasonCode: "legacy_workos_requires_native_proof",
+    });
+  });
+
+  it("marks only a complete, fully mapped inventory ready for soak", () => {
+    const readyPlan = buildIdentityBackfillPlan({
+      databaseUsers: [dbUser("user-1", "sub-1")],
+      cognitoUsers: [
+        cognitoUser("sub-1", [
+          { providerName: "Google", userId: "google-sub-1" },
+        ]),
+      ],
+      connections,
+      cognitoIssuer: issuer,
+      workosDirectoryComplete: true,
+      workosDirectoryUsers: [{ id: "workos-user-1" }],
+      workosSessionBindings: [
+        { workosUserId: "workos-user-1", cognitoSub: "sub-1" },
+      ],
+    });
+    expect(cutoverInventoryStatus(readyPlan)).toBe("ready");
+    expect(
+      cutoverInventoryStatus({
+        ...readyPlan,
+        workosDispositions: [
+          {
+            userDigest: "digest",
+            status: "unresolved",
+            reasonCode: "missing",
+          },
+        ],
+      }),
+    ).toBe("inventory");
   });
 
   it("paginates the WorkOS directory with bearer auth and retains ids only", async () => {

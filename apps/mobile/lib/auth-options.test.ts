@@ -7,7 +7,10 @@ import {
 } from "./auth-options";
 
 vi.mock("./platform-config", () => ({
-  getPlatformConfig: () => ({ apiUrl: "https://api.example.com/" }),
+  getPlatformConfig: () => ({
+    apiUrl: "https://api.example.com/",
+    cognitoClientId: "deployment-client",
+  }),
 }));
 vi.mock("./environments/store", () => ({
   getActiveEnvironmentEntry: () => ({ host: "customer.example.com" }),
@@ -73,6 +76,24 @@ describe("mobile auth options", () => {
     ]);
   });
 
+  it("never fabricates native providers from a legacy WorkOS catalog", () => {
+    const options = parsePublicAuthOptions({
+      password: { enabled: true },
+      oauthOptions: [
+        {
+          key: "workos",
+          provider: "workos",
+          route: { type: "workosAuthorize" },
+        },
+      ],
+    });
+
+    expect(options).toEqual({
+      password: { enabled: true, clientId: "deployment-client" },
+      oauthOptions: [],
+    });
+  });
+
   it("distinguishes loading from loaded and failed states", () => {
     expect(
       deriveAuthOptionsDisplay({
@@ -82,7 +103,7 @@ describe("mobile auth options", () => {
       }),
     ).toMatchObject({
       showOAuthButtons: false,
-      showPasswordForm: true,
+      showPasswordForm: false,
       showRetry: false,
     });
 
@@ -93,12 +114,12 @@ describe("mobile auth options", () => {
         options: FALLBACK_AUTH_OPTIONS,
       }),
     ).toMatchObject({
-      showPasswordForm: true,
+      showPasswordForm: false,
       showRetry: true,
     });
   });
 
-  it("falls back to password options and marks fetch failures", async () => {
+  it("fails closed and marks fetch failures", async () => {
     const fetchImpl = vi.fn(async () => {
       throw new Error("offline");
     }) as unknown as typeof fetch;

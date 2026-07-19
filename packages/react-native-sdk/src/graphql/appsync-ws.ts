@@ -11,12 +11,16 @@ type Sink = {
 interface WsState {
   ws: WebSocket | null;
   ready: boolean;
-  pendingStarts: Array<() => void>;
   activeSubs: Map<string, Sink>;
   connectionTimeoutMs: number;
   kaTimer: ReturnType<typeof setTimeout> | null;
   connectionPromise: Promise<void> | null;
+  connectionGeneration: number;
+  connectionPromiseGeneration: number | null;
+  connectionReject: ((error: Error) => void) | null;
 }
+
+class ConnectionSupersededError extends Error {}
 
 /**
  * Builds an AppSync-compliant subscription transport.
@@ -27,11 +31,13 @@ export function createAppSyncSubscriptionTransport(config: ThinkworkConfig) {
   const state: WsState = {
     ws: null,
     ready: false,
-    pendingStarts: [],
     activeSubs: new Map(),
     connectionTimeoutMs: 300000,
     kaTimer: null,
     connectionPromise: null,
+    connectionGeneration: 0,
+    connectionPromiseGeneration: null,
+    connectionReject: null,
   };
 
   const log = config.logger;
@@ -88,57 +94,82 @@ export function createAppSyncSubscriptionTransport(config: ThinkworkConfig) {
     return body.token;
   }
 
-  function resetKaTimer() {
+  function resetKaTimer(socket: WebSocket, generation: number) {
     if (state.kaTimer) clearTimeout(state.kaTimer);
     state.kaTimer = setTimeout(() => {
-      state.ws?.close();
-      state.ws = null;
-      state.ready = false;
+      if (state.connectionGeneration === generation && state.ws === socket) {
+        socket.close();
+      }
     }, state.connectionTimeoutMs + 10000);
   }
 
   function ensureConnection(): Promise<void> {
     if (state.ready && state.ws?.readyState === WebSocket.OPEN)
       return Promise.resolve();
-    if (state.connectionPromise) return state.connectionPromise;
-    if (state.ws && state.ws.readyState === WebSocket.CONNECTING) {
-      return new Promise((resolve) => state.pendingStarts.push(resolve));
+    const generation = state.connectionGeneration;
+    if (
+      state.connectionPromise &&
+      state.connectionPromiseGeneration === generation
+    ) {
+      return state.connectionPromise;
     }
     if (state.ws) {
-      state.ws.close();
+      const staleSocket = state.ws;
       state.ws = null;
+      staleSocket.close();
     }
     state.ready = false;
     const opening = new Promise<void>((resolve, reject) => {
+      state.connectionReject = reject;
       void (async () => {
         const header = getAuthHeader(await requestTicket({ kind: "connect" }));
+        if (state.connectionGeneration !== generation) {
+          throw new ConnectionSupersededError();
+        }
         const headerB64 = btoa(JSON.stringify(header));
         const payloadB64 = btoa(JSON.stringify({}));
         const url = `${wsUrl}?header=${encodeURIComponent(headerB64)}&payload=${encodeURIComponent(payloadB64)}`;
+        let socket: WebSocket;
         try {
-          state.ws = new WebSocket(url, ["graphql-ws"]);
+          socket = new WebSocket(url, ["graphql-ws"]);
         } catch (err) {
           reject(err);
           return;
         }
-        state.pendingStarts.push(resolve);
-
-        state.ws.onopen = () => {
-          state.ws?.send(JSON.stringify({ type: "connection_init" }));
+        if (state.connectionGeneration !== generation) {
+          socket.close();
+          throw new ConnectionSupersededError();
+        }
+        state.ws = socket;
+        let acknowledged = false;
+        const isCurrent = () =>
+          state.connectionGeneration === generation && state.ws === socket;
+        const rejectBeforeAcknowledgement = (message: string) => {
+          if (!acknowledged) reject(new Error(message));
         };
 
-        state.ws.onmessage = (event) => {
+        socket.onopen = () => {
+          if (!isCurrent()) {
+            socket.close();
+            return;
+          }
+          socket.send(JSON.stringify({ type: "connection_init" }));
+        };
+
+        socket.onmessage = (event) => {
+          if (!isCurrent()) return;
           const msg = JSON.parse(event.data as string);
           switch (msg.type) {
             case "connection_ack":
               state.connectionTimeoutMs =
                 msg.payload?.connectionTimeoutMs || 300000;
+              acknowledged = true;
               state.ready = true;
-              resetKaTimer();
-              state.pendingStarts.splice(0).forEach((fn) => fn());
+              resetKaTimer(socket, generation);
+              resolve();
               break;
             case "ka":
-              resetKaTimer();
+              resetKaTimer(socket, generation);
               break;
             case "data":
               if (msg.id && state.activeSubs.has(msg.id)) {
@@ -174,29 +205,48 @@ export function createAppSyncSubscriptionTransport(config: ThinkworkConfig) {
             case "connection_error":
               log?.error("appsync ws connection_error", msg.payload);
               state.ready = false;
-              state.pendingStarts.splice(0).forEach((fn) => fn());
+              rejectBeforeAcknowledgement(
+                "Realtime connection authorization was rejected",
+              );
               break;
           }
         };
 
-        state.ws.onerror = (err) => {
+        socket.onerror = (err) => {
+          if (!isCurrent()) return;
           log?.error("appsync ws error", err);
+          rejectBeforeAcknowledgement(
+            "Realtime connection failed before acknowledgement",
+          );
           state.ready = false;
         };
 
-        state.ws.onclose = () => {
+        socket.onclose = () => {
+          if (!isCurrent()) return;
+          rejectBeforeAcknowledgement(
+            "Realtime connection closed before acknowledgement",
+          );
           state.ready = false;
           if (state.kaTimer) clearTimeout(state.kaTimer);
-          state.activeSubs.forEach((sink) => sink.complete());
-          state.activeSubs.clear();
+          state.kaTimer = null;
+          if (acknowledged) {
+            state.activeSubs.forEach((sink) => sink.complete());
+            state.activeSubs.clear();
+          }
           state.ws = null;
         };
       })().catch(reject);
     });
-    state.connectionPromise = opening.finally(() => {
-      state.connectionPromise = null;
+    const tracked = opening.finally(() => {
+      if (state.connectionPromise === tracked) {
+        state.connectionPromise = null;
+        state.connectionPromiseGeneration = null;
+        state.connectionReject = null;
+      }
     });
-    return state.connectionPromise;
+    state.connectionPromise = tracked;
+    state.connectionPromiseGeneration = generation;
+    return tracked;
   }
 
   function forward(request: {
@@ -208,37 +258,54 @@ export function createAppSyncSubscriptionTransport(config: ThinkworkConfig) {
         const subId = randomUUID();
         let stopped = false;
         state.activeSubs.set(subId, sink);
-        ensureConnection()
-          .then(async () => {
-            if (stopped) {
-              state.activeSubs.delete(subId);
-              return;
-            }
-            const registrationTicket = await requestTicket({
-              kind: "registration",
-              query: request.query,
-              variables: request.variables ?? {},
-            });
-            state.ws?.send(
-              JSON.stringify({
-                id: subId,
-                type: "start",
-                payload: {
-                  data: JSON.stringify({
-                    query: request.query,
-                    variables: request.variables ?? {},
-                  }),
-                  extensions: {
-                    authorization: getAuthHeader(registrationTicket),
+        const start = async () => {
+          while (!stopped && state.activeSubs.has(subId)) {
+            try {
+              await ensureConnection();
+              if (stopped || !state.activeSubs.has(subId)) return;
+              const generation = state.connectionGeneration;
+              const socket = state.ws;
+              const registrationTicket = await requestTicket({
+                kind: "registration",
+                query: request.query,
+                variables: request.variables ?? {},
+              });
+              if (stopped || !state.activeSubs.has(subId)) return;
+              if (
+                state.connectionGeneration !== generation ||
+                state.ws !== socket ||
+                !socket
+              ) {
+                continue;
+              }
+              socket.send(
+                JSON.stringify({
+                  id: subId,
+                  type: "start",
+                  payload: {
+                    data: JSON.stringify({
+                      query: request.query,
+                      variables: request.variables ?? {},
+                    }),
+                    extensions: {
+                      authorization: getAuthHeader(registrationTicket),
+                    },
                   },
-                },
-              }),
-            );
-          })
-          .catch((err) => {
+                }),
+              );
+              return;
+            } catch (error) {
+              if (error instanceof ConnectionSupersededError) continue;
+              throw error;
+            }
+          }
+        };
+        void start().catch((err) => {
+          if (!stopped && state.activeSubs.has(subId)) {
             state.activeSubs.delete(subId);
             sink.error(err);
-          });
+          }
+        });
         return {
           unsubscribe() {
             stopped = true;
@@ -253,12 +320,25 @@ export function createAppSyncSubscriptionTransport(config: ThinkworkConfig) {
   }
 
   function reconnect() {
-    if (state.ws) {
-      state.ws.close();
-      state.ws = null;
-      state.ready = false;
-      state.connectionPromise = null;
+    const socket = state.ws;
+    const wasReady = state.ready;
+    const rejectOpening = state.connectionReject;
+    state.connectionGeneration += 1;
+    state.ws = null;
+    state.ready = false;
+    state.connectionPromise = null;
+    state.connectionPromiseGeneration = null;
+    state.connectionReject = null;
+    if (state.kaTimer) {
+      clearTimeout(state.kaTimer);
+      state.kaTimer = null;
     }
+    rejectOpening?.(new ConnectionSupersededError());
+    if (wasReady) {
+      state.activeSubs.forEach((sink) => sink.complete());
+      state.activeSubs.clear();
+    }
+    socket?.close();
   }
 
   return { forward, reconnect };

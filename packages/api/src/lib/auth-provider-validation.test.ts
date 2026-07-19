@@ -26,21 +26,15 @@ function validPayload(): SafeAuthReconcilePayload {
         lifecycleState: "native",
         cognitoUserPoolId: "us-east-1_Example123",
         cognitoIdentityProviderName: "MicrosoftOrganizations",
-        issuerUrl: "https://login.microsoftonline.com/organizations/v2.0",
+        issuerUrl:
+          "https://login.microsoftonline.com/9d65869f-0798-433d-b4e6-8c20d113dfbc/v2.0",
         clientId: "microsoft-client-id",
         clientSecretRef:
           "arn:aws:secretsmanager:us-east-1:123456789012:secret:thinkwork/dev/auth/microsoft-organizations-AbCd",
         resourceArn:
           "arn:aws:cognito-idp:us-east-1:123456789012:identity-provider/us-east-1_Example123/MicrosoftOrganizations",
         authorizeScopes: "openid email profile",
-        tenantBindings: [
-          {
-            tenantId: "12345678-1234-4123-8123-123456789abc",
-            label: "Example Health",
-            hostnames: ["login.example.com"],
-            status: "enabled",
-          },
-        ],
+        tenantBindings: [],
       },
     ],
     routeClients: [
@@ -83,10 +77,63 @@ describe("auth provider safe metadata validation", () => {
       providerKind: "microsoft_organizations",
       lifecycleState: "native",
     });
-    expect(result.connections[0]?.tenantBindings[0]?.hostnames).toEqual([
-      "login.example.com",
-    ]);
+    expect(result.connections[0]?.tenantBindings).toEqual([]);
+    expect(result.connections[0]?.issuerUrl).toBe(
+      "https://login.microsoftonline.com/9d65869f-0798-433d-b4e6-8c20d113dfbc/v2.0",
+    );
   });
+
+  it("requires a tenant Entra connection to bind exactly one tenant and match its issuer", () => {
+    const payload = validPayload();
+    const directoryId = "9d65869f-0798-433d-b4e6-8c20d113dfbc";
+    payload.connections[0] = {
+      ...payload.connections[0]!,
+      connectionKey: `microsoft:tenant:${directoryId}`,
+      providerKind: "microsoft_tenant",
+      cognitoIdentityProviderName: "Entra_9d65869f0798433d_1a2b3c4d",
+      tenantBindings: [
+        {
+          tenantId: "12345678-1234-4123-8123-123456789abc",
+          label: "Example Health",
+          hostnames: ["login.example.com"],
+          status: "enabled",
+        },
+      ],
+    };
+    payload.routeClients[0] = {
+      ...payload.routeClients[0]!,
+      routeKey: `entra-${directoryId.replaceAll("-", "")}`,
+      providerNames: ["Entra_9d65869f0798433d_1a2b3c4d"],
+    };
+    const { manifestFingerprint: _old, ...input } = payload;
+    payload.manifestFingerprint = canonicalAuthManifestFingerprint(input);
+    expect(validateAuthProviderMetadata(payload).connections[0]).toMatchObject({
+      providerKind: "microsoft_tenant",
+      connectionKey: `microsoft:tenant:${directoryId}`,
+    });
+
+    payload.connections[0]!.tenantBindings = [];
+    const { manifestFingerprint: _old2, ...badInput } = payload;
+    payload.manifestFingerprint = canonicalAuthManifestFingerprint(badInput);
+    expectCode(
+      () => validateAuthProviderMetadata(payload),
+      "invalid_microsoft_scope",
+    );
+  });
+
+  it.each(["organizations", "common", "consumers"])(
+    "rejects the Microsoft %s issuer alias because Cognito requires an exact tenant issuer",
+    (alias) => {
+      const payload = validPayload();
+      payload.connections[0]!.issuerUrl = `https://login.microsoftonline.com/${alias}/v2.0`;
+      const { manifestFingerprint: _old, ...input } = payload;
+      payload.manifestFingerprint = canonicalAuthManifestFingerprint(input);
+      expectCode(
+        () => validateAuthProviderMetadata(payload),
+        "invalid_microsoft_issuer",
+      );
+    },
+  );
 
   it("rejects raw or unknown secret fields instead of silently dropping them", () => {
     const payload = validPayload() as unknown as Record<string, unknown>;

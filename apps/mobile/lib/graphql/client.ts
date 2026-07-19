@@ -12,10 +12,18 @@ import { getPlatformConfig } from "@/lib/platform-config";
 // Token management — updated by AuthProvider after sign-in
 // ---------------------------------------------------------------------------
 let cachedToken: string | null = null;
+let cachedTenantId: string | null = null;
 
 export function setAuthToken(token: string | null) {
   cachedToken = token;
   setSdkAuthToken(token);
+}
+
+/** Keep connect tickets bound to the tenant selected by `/api/auth/me`. */
+export function setActiveTenantId(tenantId: string | null) {
+  if (cachedTenantId === tenantId) return;
+  cachedTenantId = tenantId;
+  reconnectSubscriptions();
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +61,7 @@ async function requestSubscriptionTicket(input: {
   const requestedTenantId =
     typeof input.variables?.tenantId === "string"
       ? input.variables.tenantId
-      : undefined;
+      : (cachedTenantId ?? undefined);
   const response = await fetch(endpoint.toString(), {
     method: "POST",
     headers: { Authorization: cachedToken, "Content-Type": "application/json" },
@@ -87,19 +95,22 @@ type Sink = {
 let sharedWs: WebSocket | null = null;
 let wsReady = false;
 let connectionPromise: Promise<void> | null = null;
-const pendingStarts: Array<() => void> = [];
+let connectionGeneration = 0;
+let connectionPromiseGeneration: number | null = null;
+let connectionReject: ((error: Error) => void) | null = null;
 const activeSubs = new Map<string, Sink>();
 let connectionTimeoutMs = 300000;
 let kaTimer: ReturnType<typeof setTimeout> | null = null;
 
-function resetKaTimer() {
+class ConnectionSupersededError extends Error {}
+
+function resetKaTimer(socket: WebSocket, generation: number) {
   if (kaTimer) clearTimeout(kaTimer);
   // If no ka received within the timeout, reconnect
   kaTimer = setTimeout(() => {
-    // console.warn("[AppSync WS] Keep-alive timeout, closing connection");
-    sharedWs?.close();
-    sharedWs = null;
-    wsReady = false;
+    if (connectionGeneration === generation && sharedWs === socket) {
+      socket.close();
+    }
   }, connectionTimeoutMs + 10000);
 }
 
@@ -108,20 +119,21 @@ function ensureConnection(): Promise<void> {
     return Promise.resolve();
   }
 
-  if (connectionPromise) return connectionPromise;
-
-  if (sharedWs && sharedWs.readyState === WebSocket.CONNECTING) {
-    return new Promise((resolve) => pendingStarts.push(resolve));
+  const generation = connectionGeneration;
+  if (connectionPromise && connectionPromiseGeneration === generation) {
+    return connectionPromise;
   }
 
   // Close stale connection if any
   if (sharedWs) {
-    sharedWs.close();
+    const staleSocket = sharedWs;
     sharedWs = null;
+    staleSocket.close();
   }
   wsReady = false;
 
   const opening = new Promise<void>((resolve, reject) => {
+    connectionReject = reject;
     void (async () => {
       const config = getPlatformConfig();
       if (!config.graphqlWsUrl) {
@@ -131,26 +143,44 @@ function ensureConnection(): Promise<void> {
       const connectTicket = await requestSubscriptionTicket({
         kind: "connect",
       });
+      if (connectionGeneration !== generation) {
+        throw new ConnectionSupersededError();
+      }
       const authHeader = getAppSyncHeader(connectTicket);
       const headerB64 = btoa(JSON.stringify(authHeader));
       const payloadB64 = btoa(JSON.stringify({}));
       const url = `${config.graphqlWsUrl}?header=${encodeURIComponent(headerB64)}&payload=${encodeURIComponent(payloadB64)}`;
 
+      let socket: WebSocket;
       try {
-        sharedWs = new WebSocket(url, ["graphql-ws"]);
+        socket = new WebSocket(url, ["graphql-ws"]);
       } catch (err) {
         reject(err);
         return;
       }
-
-      pendingStarts.push(resolve);
-
-      sharedWs.onopen = () => {
-        // console.log("[AppSync WS] Connected, sending connection_init");
-        sharedWs?.send(JSON.stringify({ type: "connection_init" }));
+      if (connectionGeneration !== generation) {
+        socket.close();
+        throw new ConnectionSupersededError();
+      }
+      sharedWs = socket;
+      let acknowledged = false;
+      const isCurrent = () =>
+        connectionGeneration === generation && sharedWs === socket;
+      const rejectBeforeAcknowledgement = (message: string) => {
+        if (!acknowledged) reject(new Error(message));
       };
 
-      sharedWs.onmessage = (event) => {
+      socket.onopen = () => {
+        if (!isCurrent()) {
+          socket.close();
+          return;
+        }
+        // console.log("[AppSync WS] Connected, sending connection_init");
+        socket.send(JSON.stringify({ type: "connection_init" }));
+      };
+
+      socket.onmessage = (event) => {
+        if (!isCurrent()) return;
         const msg = JSON.parse(event.data as string);
 
         switch (msg.type) {
@@ -160,15 +190,14 @@ function ensureConnection(): Promise<void> {
               msg.payload?.connectionTimeoutMs,
             );
             connectionTimeoutMs = msg.payload?.connectionTimeoutMs || 300000;
+            acknowledged = true;
             wsReady = true;
-            resetKaTimer();
-            // Flush pending subscription starts
-            const fns = pendingStarts.splice(0);
-            fns.forEach((fn) => fn());
+            resetKaTimer(socket, generation);
+            resolve();
             break;
 
           case "ka":
-            resetKaTimer();
+            resetKaTimer(socket, generation);
             break;
 
           case "data":
@@ -226,32 +255,49 @@ function ensureConnection(): Promise<void> {
               JSON.stringify(msg.payload),
             );
             wsReady = false;
-            // Reject all pending
-            const rejects = pendingStarts.splice(0);
-            rejects.forEach((fn) => fn()); // resolve them anyway, they'll fail on send
+            rejectBeforeAcknowledgement(
+              "Realtime connection authorization was rejected",
+            );
             break;
         }
       };
 
-      sharedWs.onerror = (err) => {
+      socket.onerror = (err) => {
+        if (!isCurrent()) return;
         console.error("[AppSync WS] WebSocket error:", err);
         wsReady = false;
+        rejectBeforeAcknowledgement(
+          "Realtime connection failed before acknowledgement",
+        );
       };
 
-      sharedWs.onclose = () => {
+      socket.onclose = () => {
+        if (!isCurrent()) return;
+        rejectBeforeAcknowledgement(
+          "Realtime connection closed before acknowledgement",
+        );
         wsReady = false;
         if (kaTimer) clearTimeout(kaTimer);
-        // Notify all active subscribers
-        activeSubs.forEach((sink) => sink.complete());
-        activeSubs.clear();
+        kaTimer = null;
+        if (acknowledged) {
+          // Notify all active subscribers
+          activeSubs.forEach((sink) => sink.complete());
+          activeSubs.clear();
+        }
         sharedWs = null;
       };
     })().catch(reject);
   });
-  connectionPromise = opening.finally(() => {
-    connectionPromise = null;
+  const tracked = opening.finally(() => {
+    if (connectionPromise === tracked) {
+      connectionPromise = null;
+      connectionPromiseGeneration = null;
+      connectionReject = null;
+    }
   });
-  return connectionPromise;
+  connectionPromise = tracked;
+  connectionPromiseGeneration = generation;
+  return tracked;
 }
 
 function createAppSyncSubscription(request: {
@@ -265,43 +311,60 @@ function createAppSyncSubscription(request: {
 
       activeSubs.set(subId, sink);
 
-      ensureConnection()
-        .then(async () => {
-          if (stopped) {
-            activeSubs.delete(subId);
-            return;
-          }
-          const registrationTicket = await requestSubscriptionTicket({
-            kind: "registration",
-            query: request.query,
-            variables: request.variables || {},
-          });
-          const authHeader = getAppSyncHeader(registrationTicket);
-          const startMsg = {
-            id: subId,
-            type: "start",
-            payload: {
-              data: JSON.stringify({
-                query: request.query,
-                variables: request.variables || {},
-              }),
-              extensions: {
-                authorization: authHeader,
+      const start = async () => {
+        while (!stopped && activeSubs.has(subId)) {
+          try {
+            await ensureConnection();
+            if (stopped || !activeSubs.has(subId)) return;
+            const generation = connectionGeneration;
+            const socket = sharedWs;
+            const registrationTicket = await requestSubscriptionTicket({
+              kind: "registration",
+              query: request.query,
+              variables: request.variables || {},
+            });
+            if (stopped || !activeSubs.has(subId)) return;
+            if (
+              connectionGeneration !== generation ||
+              sharedWs !== socket ||
+              !socket
+            ) {
+              continue;
+            }
+            const authHeader = getAppSyncHeader(registrationTicket);
+            const startMsg = {
+              id: subId,
+              type: "start",
+              payload: {
+                data: JSON.stringify({
+                  query: request.query,
+                  variables: request.variables || {},
+                }),
+                extensions: {
+                  authorization: authHeader,
+                },
               },
-            },
-          };
-          console.log(
-            "[AppSync WS] Registering subscription:",
-            subId,
-            "vars:",
-            request.variables,
-          );
-          sharedWs?.send(JSON.stringify(startMsg));
-        })
-        .catch((err) => {
+            };
+            console.log(
+              "[AppSync WS] Registering subscription:",
+              subId,
+              "vars:",
+              request.variables,
+            );
+            socket.send(JSON.stringify(startMsg));
+            return;
+          } catch (error) {
+            if (error instanceof ConnectionSupersededError) continue;
+            throw error;
+          }
+        }
+      };
+      void start().catch((err) => {
+        if (!stopped && activeSubs.has(subId)) {
           activeSubs.delete(subId);
           sink.error(err);
-        });
+        }
+      });
 
       return {
         unsubscribe() {
@@ -374,12 +437,25 @@ export function getGraphqlClient(): Client {
  * Call this when the app returns to foreground after token refresh.
  */
 export function reconnectSubscriptions() {
-  if (sharedWs) {
-    sharedWs.close();
-    sharedWs = null;
-    wsReady = false;
-    connectionPromise = null;
+  const socket = sharedWs;
+  const wasReady = wsReady;
+  const rejectOpening = connectionReject;
+  connectionGeneration += 1;
+  sharedWs = null;
+  wsReady = false;
+  connectionPromise = null;
+  connectionPromiseGeneration = null;
+  connectionReject = null;
+  if (kaTimer) {
+    clearTimeout(kaTimer);
+    kaTimer = null;
   }
+  rejectOpening?.(new ConnectionSupersededError());
+  if (wasReady) {
+    activeSubs.forEach((sink) => sink.complete());
+    activeSubs.clear();
+  }
+  socket?.close();
 }
 
 export function resetGraphqlClientForPlatformConfigChange(): Client {

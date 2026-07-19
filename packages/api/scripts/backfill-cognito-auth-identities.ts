@@ -93,6 +93,16 @@ export interface IdentityBackfillPlan {
   inventoryFingerprint: string;
 }
 
+export function cutoverInventoryStatus(
+  plan: IdentityBackfillPlan,
+): "inventory" | "ready" {
+  return plan.workosDirectoryComplete &&
+    plan.findings.length === 0 &&
+    plan.workosDispositions.every((entry) => entry.status === "mapped")
+    ? "ready"
+    : "inventory";
+}
+
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -171,6 +181,9 @@ export function buildIdentityBackfillPlan(args: {
   const cognitoBySub = new Map(
     args.cognitoUsers.map((user) => [user.sub, user]),
   );
+  const workosBridgeSubjects = new Set(
+    (args.workosSessionBindings ?? []).map((binding) => binding.cognitoSub),
+  );
 
   for (const cognitoUser of args.cognitoUsers) {
     const matches = databaseBySub.get(cognitoUser.sub) ?? [];
@@ -211,6 +224,22 @@ export function buildIdentityBackfillPlan(args: {
     }
 
     if (cognitoUser.identities.length === 0) {
+      if (workosBridgeSubjects.has(cognitoUser.sub)) {
+        entries.push({
+          userId: databaseUser.id,
+          tenantId: databaseUser.tenantId,
+          authProviderResourceId: null,
+          cognitoIssuer: args.cognitoIssuer,
+          cognitoSub: cognitoUser.sub,
+          providerIssuer: args.cognitoIssuer,
+          providerSubject: cognitoUser.sub,
+          providerKind: "legacy_workos",
+          proofKind: "workos_bridge_inventory_only",
+          status: "quarantined",
+          reasonCode: "legacy_workos_requires_native_proof",
+        });
+        continue;
+      }
       const local = args.connections.find(
         (connection) => connection.providerKind === "local",
       );
@@ -496,7 +525,7 @@ async function main(): Promise<void> {
         .values({
           stage,
           inventory_fingerprint: plan.inventoryFingerprint,
-          status: "inventory",
+          status: cutoverInventoryStatus(plan),
           terminal_dispositions: {
             active: plan.entries.filter((entry) => entry.status === "active")
               .length,
@@ -522,6 +551,38 @@ async function main(): Promise<void> {
         .onConflictDoNothing();
 
       for (const entry of plan.entries) {
+        const [existingIdentity] = await tx
+          .select({
+            id: userAuthIdentities.id,
+            tenantId: userAuthIdentities.tenant_id,
+            userId: userAuthIdentities.user_id,
+            authProviderResourceId:
+              userAuthIdentities.auth_provider_resource_id,
+            providerIssuer: userAuthIdentities.provider_issuer,
+            providerSubject: userAuthIdentities.provider_subject,
+            status: userAuthIdentities.status,
+          })
+          .from(userAuthIdentities)
+          .where(
+            sql`${userAuthIdentities.cognito_issuer} = ${entry.cognitoIssuer} AND ${userAuthIdentities.cognito_sub} = ${entry.cognitoSub}`,
+          )
+          .limit(1);
+        if (existingIdentity) {
+          if (
+            existingIdentity.tenantId !== entry.tenantId ||
+            existingIdentity.userId !== entry.userId ||
+            existingIdentity.authProviderResourceId !==
+              entry.authProviderResourceId ||
+            existingIdentity.providerIssuer !== entry.providerIssuer ||
+            existingIdentity.providerSubject !== entry.providerSubject ||
+            existingIdentity.status !== entry.status
+          ) {
+            throw new Error(
+              `Existing identity ${existingIdentity.id} conflicts with the reviewed inventory plan`,
+            );
+          }
+          continue;
+        }
         const [identity] = await tx
           .insert(userAuthIdentities)
           .values({
@@ -542,9 +603,10 @@ async function main(): Promise<void> {
             activated_at: entry.status === "active" ? new Date() : null,
             quarantined_at: entry.status === "quarantined" ? new Date() : null,
           })
-          .onConflictDoNothing()
           .returning({ id: userAuthIdentities.id });
-        if (!identity) continue;
+        if (!identity) {
+          throw new Error("Identity backfill insert returned no identity id");
+        }
         await emitAuthControlEvent(tx, {
           tenantId: entry.tenantId,
           actorId: "cognito-auth-identity-backfill",

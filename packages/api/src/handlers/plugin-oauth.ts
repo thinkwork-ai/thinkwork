@@ -20,11 +20,15 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { pluginInstalls, users } from "@thinkwork/database-pg/schema";
 import { GraphQLError } from "graphql";
 import type { AuthResult } from "../lib/cognito-auth.js";
+import {
+  admitCognitoTenant,
+  AuthAdmissionError,
+} from "../lib/auth-admission.js";
 import { normalizeMcpOAuthReturnTo } from "../lib/mcp-oauth-client.js";
 import {
   completeActivation,
@@ -96,20 +100,29 @@ export async function pluginOAuthAuthorize(
     .limit(1);
   if (!install) return notFound("Plugin install not found");
 
-  // Resolve the canonical user row inside the install's tenant — by user
-  // id (apikey-asserted principal) or Cognito sub (JWT principal).
-  const [user] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(
-      and(
-        eq(users.tenant_id, install.tenant_id),
-        or(eq(users.id, principal), eq(users.cognito_sub, principal)),
-      ),
-    )
-    .limit(1);
-  if (!user) {
-    return error("Caller is not a member of this plugin's tenant", 403);
+  let userId: string;
+  if (auth.authType === "cognito") {
+    try {
+      userId = (await admitCognitoTenant(auth, install.tenant_id)).userId;
+    } catch (cause) {
+      if (cause instanceof AuthAdmissionError) {
+        return error("Caller is not a member of this plugin's tenant", 403);
+      }
+      throw cause;
+    }
+  } else {
+    // API-key callers assert a stable ThinkWork user ID, never a Cognito sub.
+    const [user] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(eq(users.tenant_id, install.tenant_id), eq(users.id, principal)),
+      )
+      .limit(1);
+    if (!user) {
+      return error("Caller is not a member of this plugin's tenant", 403);
+    }
+    userId = user.id;
   }
 
   const rawReturnTo = qs.returnTo || qs.redirectTo;
@@ -121,7 +134,7 @@ export async function pluginOAuthAuthorize(
   try {
     const { authorizeUrl } = await startActivation(
       {
-        userId: user.id,
+        userId,
         tenantId: install.tenant_id,
         pluginInstallId: install.id,
         returnTo,

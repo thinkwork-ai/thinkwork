@@ -2783,7 +2783,7 @@ Join hints:
 
 Enum values:
 
-- `component_type`: `mcp-server`, `skills`, `infrastructure`, `ui-surface`, `auth-provider`
+- `component_type`: `mcp-server`, `skills`, `infrastructure`, `ui-surface`
 - `state`: `pending`, `provisioned`, `failed`
 
 Join hints:

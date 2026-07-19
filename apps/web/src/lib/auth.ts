@@ -21,6 +21,7 @@ const TOKEN_REFRESH_SKEW_MS = 30_000;
 const AUTH_CLIENT_STORAGE_KEY = "thinkwork:auth-client-id";
 const OAUTH_FLOW_STORAGE_PREFIX = "thinkwork:oauth-flow:";
 const OAUTH_FLOW_TTL_MS = 10 * 60 * 1000;
+const REMOTE_SIGN_OUT_TIMEOUT_MS = 4_000;
 
 export function configureTokenStorage(storage: TokenStorage): void {
   if (tokenStorage === storage) return;
@@ -213,8 +214,45 @@ export function confirmForgotPassword(
 // Clears local tokens and ends the provider session through Cognito Hosted UI.
 export async function signOut(): Promise<void> {
   const clientId = getActiveClientId();
+  const idToken = getStoredToken("idToken");
+  const refreshToken = getStoredToken("refreshToken");
 
-  clearLocalAuthSession();
+  try {
+    if (idToken && refreshToken) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(
+        () => controller.abort(),
+        REMOTE_SIGN_OUT_TIMEOUT_MS,
+      );
+      try {
+        const response = await fetch(`${apiBaseUrl()}/api/auth/revoke`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({ refreshToken }),
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          console.warn(
+            `[auth] refresh-token revocation failed during sign-out (${response.status}).`,
+          );
+        }
+      } catch (error) {
+        console.warn(
+          "[auth] refresh-token revocation failed during sign-out:",
+          error,
+        );
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+  } finally {
+    // Local credentials must survive until the authenticated revoke request
+    // has been attempted, but remote failure must never trap a user locally.
+    clearLocalAuthSession();
+  }
 
   if (!clientId) {
     window.location.href = "/sign-in";
@@ -453,7 +491,23 @@ export function getAuthOptionSignInUrl(
   option: PublicOAuthOption,
   next = "/new",
 ): Promise<string> {
-  return createNativeAuthorizeUrl(option, next);
+  return createNativeAuthorizeUrl(option, next, { purpose: "sign_in" });
+}
+
+export interface IdentityMigrationGrant {
+  startToken: string;
+  recipientChallenge: string;
+}
+
+export function getAuthOptionIdentityMigrationUrl(
+  option: PublicOAuthOption,
+  grant: IdentityMigrationGrant,
+  next = "/new",
+): Promise<string> {
+  return createNativeAuthorizeUrl(option, next, {
+    purpose: "identity_migration",
+    enrollment: grant,
+  });
 }
 
 /**
@@ -480,11 +534,14 @@ interface PendingOAuthFlow {
   initiatingHost: string;
   next: string;
   expiresAt: number;
+  purpose?: "sign_in" | "identity_migration";
+  enrollment?: IdentityMigrationGrant;
 }
 
 async function createNativeAuthorizeUrl(
   option: PublicOAuthOption,
   next: string,
+  context: Pick<PendingOAuthFlow, "purpose" | "enrollment">,
 ): Promise<string> {
   const state = randomUrlSafeValue(32);
   const nonce = randomUrlSafeValue(32);
@@ -501,6 +558,7 @@ async function createNativeAuthorizeUrl(
     initiatingHost: window.location.host,
     next: safeReturnTo(next),
     expiresAt: Date.now() + OAUTH_FLOW_TTL_MS,
+    ...context,
   };
   sessionStorage.setItem(
     `${OAUTH_FLOW_STORAGE_PREFIX}${state}`,
@@ -591,6 +649,57 @@ export interface NativeOAuthSession {
   next: string;
 }
 
+export function getLegacyIdentityMigrationStartUrl(
+  authorizePath: string,
+  next = "/new",
+): string {
+  if (authorizePath !== "/api/auth/workos/authorize") {
+    throw new Error("Legacy identity migration is unavailable.");
+  }
+  const url = new URL(`${apiBaseUrl()}${authorizePath}`);
+  url.searchParams.set(
+    "redirect_uri",
+    `${window.location.origin}/auth/callback`,
+  );
+  url.searchParams.set("return_to", safeReturnTo(next));
+  url.searchParams.set("prompt", "select_account");
+  return url.toString();
+}
+
+export async function exchangeLegacyWorkosBridge(
+  bridgeCode: string,
+): Promise<NativeOAuthSession> {
+  if (!bridgeCode.trim()) throw new Error("Legacy migration proof is missing.");
+  const response = await fetch(`${apiBaseUrl()}/api/auth/workos/bridge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ workos_bridge: bridgeCode }),
+  });
+  const raw = (await response.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
+  if (
+    !response.ok ||
+    typeof raw.id_token !== "string" ||
+    typeof raw.access_token !== "string" ||
+    typeof raw.refresh_token !== "string"
+  ) {
+    throw new Error("Legacy identity migration could not be started.");
+  }
+  const clientId = readRuntimeEnv("VITE_COGNITO_CLIENT_ID");
+  if (!clientId) throw new Error("Auth client is not configured.");
+  return {
+    tokens: {
+      id_token: raw.id_token,
+      access_token: raw.access_token,
+      refresh_token: raw.refresh_token,
+    },
+    clientId,
+    next: "/new",
+  };
+}
+
 export async function exchangeCodeForSession(
   code: string,
   state: string,
@@ -634,6 +743,9 @@ export async function exchangeCodeForSession(
     refresh_token: raw.refresh_token,
   };
   validateNativeOAuthTokens(tokens, flow);
+  if (flow.purpose === "identity_migration") {
+    await consumeIdentityMigrationGrant(tokens.id_token, flow);
+  }
   return { tokens, clientId: flow.clientId, next: flow.next };
 }
 
@@ -660,11 +772,51 @@ function consumePendingOAuthFlow(state: string): PendingOAuthFlow {
     flow.redirectUri !== `${window.location.origin}/auth/callback` ||
     !flow.clientId ||
     !flow.codeVerifier ||
-    !flow.nonce
+    !flow.nonce ||
+    (flow.purpose !== undefined &&
+      flow.purpose !== "sign_in" &&
+      flow.purpose !== "identity_migration") ||
+    (flow.purpose === "identity_migration" &&
+      (!flow.enrollment?.startToken || !flow.enrollment.recipientChallenge))
   ) {
     throw new Error("OAuth state does not match this login attempt.");
   }
   return flow;
+}
+
+async function consumeIdentityMigrationGrant(
+  idToken: string,
+  flow: PendingOAuthFlow,
+): Promise<void> {
+  const enrollment = flow.enrollment;
+  if (!enrollment) {
+    throw new Error("The identity migration grant is missing.");
+  }
+  const response = await fetch(`${apiBaseUrl()}/api/auth/enrollment/consume`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify({
+      ...enrollment,
+      redirectUri: flow.redirectUri,
+    }),
+  });
+  let body: { outcome?: string } = {};
+  try {
+    body = (await response.json()) as { outcome?: string };
+  } catch {
+    // The status and generic error below remain safe when an edge proxy
+    // returns a non-JSON response.
+  }
+  if (!response.ok || body.outcome !== "consumed") {
+    throw new Error(
+      body.outcome
+        ? `Identity migration failed: ${body.outcome}`
+        : `Identity migration failed with status ${response.status}.`,
+    );
+  }
 }
 
 function validateNativeOAuthTokens(

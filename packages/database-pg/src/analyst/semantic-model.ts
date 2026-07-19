@@ -39,6 +39,8 @@ export const ANALYST_DENYLISTED_TABLES: ReadonlySet<string> = new Set([
   "auth_identity_proofs", // durable identity proof digests
   "auth_reconciliation_sets", // Cognito desired-state identifiers
   "auth_route_clients", // Cognito app-client and callback wiring
+  "auth_subscription_invalidations", // authorization revocation delivery state
+  "auth_subscription_tickets", // one-use realtime authorization tickets
   // THINK-234: platform billing/infra ledgers with no tenant-analytics value.
   // These carry no `tenant_id`, so they cannot be row-scoped; rather than
   // grant them tenant-wide they are dropped from the analyst surface entirely.

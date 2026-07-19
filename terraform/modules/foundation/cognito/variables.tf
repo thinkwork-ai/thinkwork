@@ -129,16 +129,27 @@ variable "google_oauth_client_secret" {
 }
 
 variable "microsoft_oauth_client_id" {
-  description = "Microsoft Entra application client ID for the direct organizations OIDC route"
+  description = "Microsoft Entra application client ID for the default tenant-specific OIDC route"
   type        = string
   default     = ""
 }
 
 variable "microsoft_oauth_client_secret" {
-  description = "Microsoft Entra application client secret for the direct organizations OIDC route"
+  description = "Microsoft Entra application client secret for the default tenant-specific OIDC route"
   type        = string
   sensitive   = true
   default     = ""
+}
+
+variable "microsoft_oauth_tenant" {
+  description = "Microsoft Entra directory GUID used to build the exact OIDC issuer for the default Microsoft route"
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.microsoft_oauth_tenant == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$", var.microsoft_oauth_tenant))
+    error_message = "microsoft_oauth_tenant must be an Entra directory GUID."
+  }
 }
 
 variable "tenant_entra_connections" {
@@ -204,6 +215,35 @@ variable "pre_signup_lambda_zip" {
   default     = ""
 }
 
+variable "auth_retirement_phase" {
+  description = "Native-auth migration phase. Fresh deployments default to retired; coexistence/cutover are explicit upgrade-only rollback states."
+  type        = string
+  default     = "retired"
+
+  validation {
+    condition     = contains(["coexistence", "cutover", "retired"], var.auth_retirement_phase)
+    error_message = "auth_retirement_phase must be coexistence, cutover, or retired."
+  }
+}
+
+variable "custom_auth_lambda_zip" {
+  description = "Local Cognito custom-auth rollback Lambda artifact used only before the retired phase."
+  type        = string
+  default     = ""
+}
+
+variable "custom_auth_lambda_s3_bucket" {
+  description = "S3 bucket containing the Cognito custom-auth rollback Lambda artifact."
+  type        = string
+  default     = ""
+}
+
+variable "custom_auth_lambda_s3_key" {
+  description = "S3 key for the Cognito custom-auth rollback Lambda artifact."
+  type        = string
+  default     = ""
+}
+
 variable "pre_token_generation_lambda_s3_bucket" {
   description = "S3 bucket containing the Cognito pre-token client-deny Lambda release artifact"
   type        = string
@@ -223,7 +263,7 @@ variable "denied_app_client_ids" {
 }
 
 variable "api_auth_secret" {
-  description = "Deprecated; retained temporarily for module input compatibility"
+  description = "Shared signing secret used by the pre-retirement custom-auth rollback Lambda"
   type        = string
   sensitive   = true
   default     = ""
@@ -239,6 +279,8 @@ variable "admin_callback_urls" {
   default = [
     "http://localhost:5174",
     "http://localhost:5174/auth/callback",
+    "http://127.0.0.1:5174",
+    "http://127.0.0.1:5174/auth/callback",
     "http://127.0.0.1:42010/callback",
     "http://localhost:42010/callback",
   ]
@@ -249,6 +291,7 @@ variable "admin_logout_urls" {
   type        = list(string)
   default = [
     "http://localhost:5174",
+    "http://127.0.0.1:5174",
   ]
 }
 

@@ -24,7 +24,8 @@ describe("parsePublicAuthOptions", () => {
     });
   });
 
-  it("drops WorkOS and malformed routes", async () => {
+  it("never fabricates native providers from a legacy WorkOS catalog", async () => {
+    vi.stubEnv("VITE_COGNITO_CLIENT_ID", "deployed-legacy-client");
     const { parsePublicAuthOptions } = await import("./auth-options");
     expect(
       parsePublicAuthOptions({
@@ -42,6 +43,37 @@ describe("parsePublicAuthOptions", () => {
             },
           },
         ],
+      }),
+    ).toEqual({
+      password: { enabled: true, clientId: "deployed-legacy-client" },
+      oauthOptions: [],
+    });
+  });
+
+  it("parses the bounded migration entry separately from normal sign-in options", async () => {
+    const { parsePublicAuthOptions } = await import("./auth-options");
+    expect(
+      parsePublicAuthOptions({
+        password: { enabled: false },
+        oauthOptions: [],
+        legacyMigration: {
+          authorizePath: "/api/auth/workos/authorize",
+        },
+      }),
+    ).toEqual({
+      password: { enabled: false },
+      oauthOptions: [],
+      legacyMigration: { authorizePath: "/api/auth/workos/authorize" },
+    });
+  });
+
+  it("drops malformed non-legacy routes", async () => {
+    vi.stubEnv("VITE_COGNITO_CLIENT_ID", "deployed-client");
+    const { parsePublicAuthOptions } = await import("./auth-options");
+    expect(
+      parsePublicAuthOptions({
+        password: { enabled: false },
+        oauthOptions: [{ provider: "unknown", route: {} }],
       }),
     ).toEqual({ password: { enabled: false }, oauthOptions: [] });
   });

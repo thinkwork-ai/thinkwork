@@ -25,6 +25,10 @@ import type {
 import { eq, and } from "drizzle-orm";
 import { authenticate } from "../lib/cognito-auth.js";
 import { resolveCallerFromAuth } from "../graphql/resolvers/core/resolve-auth-user.js";
+import {
+  AuthAdmissionError,
+  discoverCognitoTenantAdmissions,
+} from "../lib/auth-admission.js";
 import { handleCors, json, error, unauthorized } from "../lib/response.js";
 import { db } from "../lib/db.js";
 import { schema } from "@thinkwork/database-pg";
@@ -48,7 +52,43 @@ export async function handler(
     return unauthorized("Authentication required");
   }
 
-  const admitted = await resolveCallerFromAuth(auth);
+  const migration = {
+    migrationRequired:
+      auth.authType === "cognito" &&
+      auth.route?.providerKind === "legacy_workos" &&
+      auth.route.lifecycleState === "coexistence",
+    migrationRecoveryDeadline:
+      process.env.AUTH_MIGRATION_RECOVERY_DEADLINE?.trim() || null,
+  };
+
+  const requestedTenantId =
+    event.queryStringParameters?.tenantId?.trim() ||
+    event.headers["x-tenant-id"]?.trim() ||
+    event.headers["X-Tenant-Id"]?.trim();
+  let admitted: { userId: string | null; tenantId: string | null };
+  let availableTenants: Array<{ tenantId: string; role: string }> = [];
+  if (auth.authType === "cognito") {
+    try {
+      const discovery = await discoverCognitoTenantAdmissions(auth);
+      availableTenants = discovery.tenants;
+      const selected = requestedTenantId
+        ? discovery.tenants.find(
+            (tenant) => tenant.tenantId === requestedTenantId,
+          )
+        : discovery.tenants.length === 1
+          ? discovery.tenants[0]
+          : undefined;
+      admitted = {
+        userId: discovery.userId,
+        tenantId: selected?.tenantId ?? null,
+      };
+    } catch (cause) {
+      if (!(cause instanceof AuthAdmissionError)) throw cause;
+      admitted = { userId: null, tenantId: null };
+    }
+  } else {
+    admitted = await resolveCallerFromAuth(auth, requestedTenantId);
+  }
   // Resolve user row only by the identity admitted from the Cognito subject.
   const [userRow] = admitted.userId
     ? await db
@@ -61,6 +101,7 @@ export async function handler(
   if (!userRow) {
     return json(
       {
+        ...migration,
         email: auth.email,
         userId: null,
         tenantId: null,
@@ -75,11 +116,14 @@ export async function handler(
   const tenantId = admitted.tenantId;
   if (!tenantId) {
     return json({
+      ...migration,
       email: userRow.email,
       userId: userRow.id,
       tenantId: null,
       role: null,
       name: userRow.name ?? null,
+      tenantSelectionRequired: availableTenants.length > 1,
+      availableTenants,
     });
   }
 
@@ -101,6 +145,7 @@ export async function handler(
 
   if (!memberRow) {
     return json({
+      ...migration,
       email: userRow.email,
       userId: userRow.id,
       tenantId: null,
@@ -111,10 +156,13 @@ export async function handler(
   }
 
   return json({
+    ...migration,
     email: userRow.email,
     userId: userRow.id,
     tenantId,
     role: memberRow?.role ?? null,
     name: userRow.name ?? null,
+    tenantSelectionRequired: false,
+    availableTenants,
   });
 }

@@ -14,6 +14,10 @@ const migration = readFileSync(
   join(HERE, "..", "drizzle", "0261_native_auth_control_plane.sql"),
   "utf8",
 );
+const deployWorkflow = readFileSync(
+  join(HERE, "..", "..", "..", ".github", "workflows", "deploy.yml"),
+  "utf8",
+);
 
 describe("migration 0261 — native auth control plane", () => {
   it("exports provider-neutral auth tables independently of plugins", () => {
@@ -94,5 +98,41 @@ describe("migration 0261 — native auth control plane", () => {
     for (const marker of markers) {
       expect(migration).toMatch(new RegExp(`-- creates: ${marker}\\b`));
     }
+  });
+
+  it("can be reapplied by the deploy-time additive schema gate", () => {
+    expect(migration).toContain(
+      "DROP CONSTRAINT IF EXISTS auth_provider_resources_lifecycle_state_allowed",
+    );
+  });
+
+  it("materializes greenfield data and applies additive auth schema before app code", () => {
+    const dataPlan = deployWorkflow.indexOf("-out=tfplan-native-auth-data");
+    const authMigration = deployWorkflow.indexOf(
+      "0261_native_auth_control_plane.sql",
+      dataPlan,
+    );
+    const fullApply = deployWorkflow.lastIndexOf(
+      'terraform apply -auto-approve -refresh=false -lock-timeout=10m "${TF_TARGET_ARGS[@]}"',
+    );
+    expect(dataPlan).toBeGreaterThan(-1);
+    expect(authMigration).toBeGreaterThan(dataPlan);
+    expect(fullApply).toBeGreaterThan(authMigration);
+    expect(deployWorkflow).not.toContain(
+      "Skipping additive native-auth schema: no existing DB outputs",
+    );
+  });
+
+  it("passes and fail-checks the repository migration deadline on direct deploys", () => {
+    expect(deployWorkflow).toContain("vars.AUTH_MIGRATION_RECOVERY_DEADLINE");
+    expect(deployWorkflow).toContain(
+      '-var "auth_migration_recovery_deadline=$AUTH_MIGRATION_RECOVERY_DEADLINE"',
+    );
+    expect(deployWorkflow).toContain(
+      'if [ "$AUTH_RETIREMENT_PHASE" = "coexistence" ]',
+    );
+    expect(deployWorkflow).toContain(
+      'date --date="$AUTH_MIGRATION_RECOVERY_DEADLINE"',
+    );
   });
 });

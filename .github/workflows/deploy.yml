@@ -1353,6 +1353,10 @@ jobs:
           if [ -f "$LAMBDA_DIR/cognito-pre-signup.zip" ]; then
             PRE_SIGNUP_ZIP="$LAMBDA_DIR/cognito-pre-signup.zip"
           fi
+          COGNITO_CUSTOM_AUTH_ZIP=""
+          if [ -f "$LAMBDA_DIR/cognito-custom-auth.zip" ]; then
+            COGNITO_CUSTOM_AUTH_ZIP="$LAMBDA_DIR/cognito-custom-auth.zip"
+          fi
           export TF_VAR_db_password="${{ secrets.DB_PASSWORD }}"
           export TF_VAR_api_auth_secret="${{ secrets.API_AUTH_SECRET }}"
           export TF_VAR_google_oauth_client_secret="${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}"
@@ -1360,6 +1364,15 @@ jobs:
           # The deprecated graph memory path is disabled for all deploys.
           # Hindsight is the authoritative user and Space memory engine.
           MEMORY_ENGINE="hindsight"
+          AUTH_RETIREMENT_PHASE="${{ vars.AUTH_RETIREMENT_PHASE || 'retired' }}"
+          AUTH_MIGRATION_RECOVERY_DEADLINE="${{ vars.AUTH_MIGRATION_RECOVERY_DEADLINE || '' }}"
+          if [ "$AUTH_RETIREMENT_PHASE" = "coexistence" ]; then
+            if ! [[ "$AUTH_MIGRATION_RECOVERY_DEADLINE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$ ]] || \
+              ! date --date="$AUTH_MIGRATION_RECOVERY_DEADLINE" +%s >/dev/null 2>&1; then
+              echo "AUTH_MIGRATION_RECOVERY_DEADLINE must be an RFC3339 timestamp while AUTH_RETIREMENT_PHASE=coexistence" >&2
+              exit 1
+            fi
+          fi
 
           TF_VAR_ARGS=(
             -var "stage=${{ env.STAGE }}"
@@ -1368,6 +1381,8 @@ jobs:
             -var "database_engine=aurora-serverless"
             -var "enable_hindsight=true"
             -var "memory_engine=$MEMORY_ENGINE"
+            -var "auth_retirement_phase=$AUTH_RETIREMENT_PHASE"
+            -var "auth_migration_recovery_deadline=$AUTH_MIGRATION_RECOVERY_DEADLINE"
             -var "twenty_provisioned=$TWENTY_PROVISIONED"
             -var "twenty_runtime_enabled=$TWENTY_RUNTIME_ENABLED"
             -var "twenty_image_uri=$TWENTY_IMAGE_URI"
@@ -1400,6 +1415,7 @@ jobs:
             -var "google_oauth_client_id=${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}"
             -var "lambda_zips_dir=$LAMBDA_DIR"
             -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP"
+            -var "cognito_custom_auth_lambda_zip=$COGNITO_CUSTOM_AUTH_ZIP"
             -var "platform_operator_emails=$THINKWORK_PLATFORM_OPERATOR_EMAILS"
             -var "www_domain=${{ vars.WWW_DOMAIN }}"
             -var "cloudflare_zone_id=${{ vars.CLOUDFLARE_ZONE_ID }}"
@@ -1435,6 +1451,126 @@ jobs:
             -var "agentcore_multiplayer_proof_owner_allowlist=${{ vars.AGENTCORE_MULTIPLAYER_PROOF_OWNER_ALLOWLIST || '' }}"
           )
 
+          # Native-auth Lambdas query these tables immediately. Materialize the
+          # database tier first on greenfield, then finish every additive auth
+          # migration before the full Terraform plan can publish application
+          # code. Migration 0263 remains a separate signed-evidence operation.
+          source ../../../scripts/lib/terraform-output.sh
+          DB_ENDPOINT=$(tf_output_raw db_cluster_endpoint 2>/dev/null || echo "")
+          DB_SECRET_ARN=$(tf_output_raw db_secret_arn 2>/dev/null || echo "")
+          if [ -z "$DB_ENDPOINT" ] || [ -z "$DB_SECRET_ARN" ]; then
+            terraform plan -refresh=false -lock-timeout=10m \
+              -target=module.thinkwork.module.database \
+              -out=tfplan-native-auth-data "${TF_VAR_ARGS[@]}"
+            terraform apply -auto-approve -refresh=false -lock-timeout=10m tfplan-native-auth-data
+            DB_ENDPOINT=$(tf_output_raw db_cluster_endpoint)
+            DB_SECRET_ARN=$(tf_output_raw db_secret_arn)
+          fi
+          DB_PASS=$(aws secretsmanager get-secret-value \
+            --secret-id "$DB_SECRET_ARN" \
+            --query SecretString --output text | jq -r .password)
+          echo "::add-mask::$DB_PASS"
+          DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${DB_ENDPOINT}:5432/thinkwork?sslmode=require"
+          for migration in \
+            0261_native_auth_control_plane.sql \
+            0262_auth_subscription_tickets.sql \
+            0264_auth_enrollment_attempt_limits.sql \
+            0265_require_fully_valid_auth_publication.sql \
+            0266_auth_identity_recovery_grants.sql; do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+              -f "../../../packages/database-pg/drizzle/$migration"
+          done
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF to_regclass('public.auth_provider_resources') IS NULL
+              OR to_regclass('public.auth_route_clients') IS NULL
+              OR to_regclass('public.user_auth_identities') IS NULL
+              OR to_regclass('public.auth_subscription_tickets') IS NULL
+            THEN
+              RAISE EXCEPTION 'Cognito-native auth schema gate failed';
+            END IF;
+          END
+          $$;
+          SQL
+
+          resolve_existing_api_id() {
+            aws apigatewayv2 get-apis \
+              --query "Items[?Name=='thinkwork-${STAGE}-api'].ApiId | [0]" \
+              --output text
+          }
+
+          check_route_state() {
+            local route_key="$1"
+            local address="$2"
+            local expected_api_id="$3"
+            local state="$4"
+            local state_api_id
+            local state_route_key
+
+            state_api_id=$(awk -F= '$1 ~ /^[[:space:]]*api_id[[:space:]]*$/ { gsub(/[[:space:]"]/, "", $2); print $2; exit }' <<< "$state")
+            state_route_key=$(awk -F= '$1 ~ /^[[:space:]]*route_key[[:space:]]*$/ { gsub(/^[[:space:]"]+|[[:space:]"]+$/, "", $2); print $2; exit }' <<< "$state")
+            if [ "$state_api_id" = "$expected_api_id" ] && [ "$state_route_key" = "$route_key" ]; then
+              return 0
+            fi
+            if [ -z "$state_api_id" ] || [ -z "$state_route_key" ]; then
+              echo "::warning::Terraform state for ${address} is missing api_id or route_key; removing malformed state before import."
+              terraform state rm "$address"
+              return 1
+            fi
+
+            echo "::error::Terraform state for ${address} is ${state_api_id:-unknown}/${state_route_key:-unknown}, expected ${expected_api_id}/${route_key}."
+            echo "::error::Repair the stale API Gateway route state before retrying deploy."
+            exit 1
+          }
+
+          import_existing_api_route() {
+            local route_key="$1"
+            local address="$2"
+            local api_id
+            local state
+
+            api_id=$(resolve_existing_api_id)
+            if [ -z "$api_id" ] || [ "$api_id" = "None" ]; then
+              if state=$(terraform state show "$address" 2>/dev/null); then
+                echo "::error::Terraform state tracks ${route_key}, but no live thinkwork-${STAGE}-api API was found."
+                echo "::error::Repair the stale API Gateway route state before retrying deploy."
+                exit 1
+              fi
+              echo "No existing API Gateway API found for ${STAGE}; skipping ${route_key} import."
+              return 0
+            fi
+
+            if state=$(terraform state show "$address" 2>/dev/null); then
+              if check_route_state "$route_key" "$address" "$api_id" "$state"; then
+                echo "Terraform state already tracks ${route_key}; skipping import."
+                return 0
+              fi
+            fi
+
+            local route_id
+            route_id=$(aws apigatewayv2 get-routes \
+              --api-id "$api_id" \
+              --output json \
+              | jq -r --arg route_key "$route_key" '[.Items[]? | select(.RouteKey == $route_key) | .RouteId][0] // empty')
+            if [ -z "$route_id" ] || [ "$route_id" = "None" ]; then
+              echo "No existing API Gateway route ${route_key}; Terraform apply will create it."
+              return 0
+            fi
+
+            echo "Importing existing API Gateway route ${route_key} (${api_id}/${route_id})."
+            terraform import -input=false -lock-timeout=10m "${TF_VAR_ARGS[@]}" "$address" "${api_id}/${route_id}"
+            state=$(terraform state show "$address")
+            check_route_state "$route_key" "$address" "$api_id" "$state"
+          }
+
+          import_existing_api_route \
+            "POST /api/auth/workos/logout" \
+            'module.thinkwork.module.api.aws_apigatewayv2_route.handler["POST /api/auth/workos/logout"]'
+          import_existing_api_route \
+            "OPTIONS /api/auth/workos/logout" \
+            'module.thinkwork.module.api.aws_apigatewayv2_route.handler["OPTIONS /api/auth/workos/logout"]'
+
           # Source rather than inline: GitHub caps each evaluated `run`
           # expression at 21,000 characters.
           source ../../../scripts/deploy/adopt-agentcore-capability-resources.sh
@@ -1465,6 +1601,7 @@ jobs:
               -target=module.thinkwork.module.api.aws_iam_policy.api_ai
               -target=module.thinkwork.module.api.aws_iam_policy.api_observability
               -target=module.thinkwork.module.api.aws_lambda_function.handler
+              -target=module.thinkwork.module.cognito.aws_lambda_function.custom_auth
               -target=module.thinkwork.module.workflow_interpreter_stepfunctions.aws_iam_role.execution
               -target=module.thinkwork.module.workflow_interpreter_stepfunctions.aws_iam_role_policy.execution_logs
               -target=module.thinkwork.module.workflow_interpreter_stepfunctions.aws_iam_role_policy.execution_lambda_invoke

@@ -51,6 +51,10 @@ import {
 } from "../lib/release.js";
 import { applyMigrations, type PgConnection } from "../lib/db-migrations.js";
 import { ensureOwnerTenant } from "../lib/owner-tenant.js";
+import {
+  reconcileLocalNativeAuth,
+  type AuthRouteClientOutput,
+} from "../lib/auth-provider-reconciliation.js";
 import { runWorkspaceBootstrap } from "./bootstrap.js";
 import { runStageVerification } from "./verify.js";
 import { fetchRecentReleases } from "./release/helpers.js";
@@ -81,6 +85,7 @@ export interface DeployCommandOptions extends EnterpriseDeployOptions {
   controller?: boolean;
   controllerAction?: string;
   sessionId?: string;
+  finalizeAuthRetirement?: boolean;
 }
 
 export interface DeployCommandDependencies {
@@ -124,6 +129,8 @@ export interface ControllerDeployInput {
   // fails the execution before CodeBuild ever starts.
   terraformModuleSource: string;
   terraformModuleVersion: string;
+  authRetirementPhase?: "coexistence" | "cutover" | "retired";
+  finalizeAuthRetirement: boolean;
   // The runner only reads runner secrets (customerDomain gates, adminEmail,
   // cognitoEmailSourceArn, ...) from the secret named here; omitting it makes
   // the runner silently ignore the stage's configured runner secrets.
@@ -233,6 +240,10 @@ export function registerDeployCommand(
       "--skip-preflight",
       "Skip preflight account checks before terraform apply (not recommended)",
     )
+    .option(
+      "--finalize-auth-retirement",
+      "Apply the irreversible WorkOS data retirement migration after cutover/soak evidence is complete",
+    )
     .action(async (opts: DeployCommandOptions) => {
       try {
         await runDeployCommand(opts, deps);
@@ -249,6 +260,11 @@ export async function runDeployCommand(
   deps: DeployCommandDependencies = {},
 ): Promise<void> {
   if (opts.controller) {
+    if (opts.finalizeAuthRetirement) {
+      throw new Error(
+        "--finalize-auth-retirement is not supported by deploy --controller; use the scaffolded local deployment path.",
+      );
+    }
     const controllerDeploy = deps.controllerDeploy ?? runControllerDeploy;
     const result = await controllerDeploy(opts);
     printSuccess(
@@ -260,6 +276,11 @@ export async function runDeployCommand(
   const shouldUseEnterprise =
     deps.shouldUseEnterprise ?? shouldUseEnterpriseDeploy;
   if (shouldUseEnterprise(opts)) {
+    if (opts.finalizeAuthRetirement) {
+      throw new Error(
+        "--finalize-auth-retirement is not supported by enterprise deploy routing; use the scaffolded local deployment path.",
+      );
+    }
     const enterpriseDeploy = deps.enterpriseDeploy ?? runEnterpriseDeploy;
     const result = await enterpriseDeploy(opts);
     printEnterpriseDeploySummary(result);
@@ -354,6 +375,7 @@ export function buildControllerDeployInput(options: {
   manifestSha256: string;
   terraformModuleVersion?: string;
   sessionId: string;
+  authRetirementPhase?: "coexistence" | "cutover" | "retired";
 }): ControllerDeployInput {
   const evidenceBucket = `thinkwork-${options.stage}-${options.accountId}-deploy-evidence`;
   const evidencePrefix = `sessions/${options.sessionId}/${options.action}`;
@@ -390,6 +412,10 @@ export function buildControllerDeployInput(options: {
     releaseManifestSha256: options.manifestSha256,
     terraformModuleSource,
     terraformModuleVersion,
+    ...(options.authRetirementPhase
+      ? { authRetirementPhase: options.authRetirementPhase }
+      : {}),
+    finalizeAuthRetirement: false,
     runnerSecretArn: `/thinkwork/${options.stage}/deployment/runner-secrets`,
     release: {
       version: options.releaseVersion,
@@ -929,6 +955,7 @@ async function applySchemaMigrations(
   cwd: string,
   identity: { account: string; region: string },
   stage: string,
+  includeAuthRetirement: boolean,
 ): Promise<void> {
   const drizzleDir = findBundledDrizzle();
   if (!drizzleDir) {
@@ -946,6 +973,7 @@ async function applySchemaMigrations(
     stage,
     region: identity.region,
     connection,
+    includeAuthRetirement,
     log: (line) => console.log(`    ${line}`),
   });
   console.log(
@@ -1103,6 +1131,83 @@ function findBundledDrizzle(): string | null {
 
 const __dirnameForDeploy = dirname(fileURLToPath(import.meta.url));
 
+export type LocalDeployExecutionStep =
+  | { kind: "terraform"; tier: string }
+  | { kind: "schema"; retirement: boolean };
+
+export function buildLocalDeployExecutionSteps(
+  tiers: string[],
+  schemaSupported: boolean,
+  _finalizeAuthRetirement: boolean,
+): LocalDeployExecutionStep[] {
+  const steps: LocalDeployExecutionStep[] = [];
+  let additiveSchemaApplied = false;
+  for (let index = 0; index < tiers.length; index += 1) {
+    const tier = tiers[index]!;
+    if (schemaSupported && tier === "app" && !additiveSchemaApplied) {
+      steps.push({ kind: "schema", retirement: false });
+      additiveSchemaApplied = true;
+    }
+    steps.push({ kind: "terraform", tier });
+    const appStillPending = tiers.slice(index + 1).includes("app");
+    if (
+      schemaSupported &&
+      tier === "data" &&
+      !appStillPending &&
+      !additiveSchemaApplied
+    ) {
+      steps.push({ kind: "schema", retirement: false });
+      additiveSchemaApplied = true;
+    }
+  }
+  return steps;
+}
+
+export function assertLocalAuthRetirementSupported(options: {
+  requested: boolean;
+  scaffolded: boolean;
+  hasCaller: boolean;
+  tiers: string[];
+  retirementPhase?: string;
+}): void {
+  if (!options.requested) return;
+  if (!options.scaffolded || !options.hasCaller) {
+    throw new Error(
+      "--finalize-auth-retirement requires a scaffolded local deployment with a resolved AWS identity.",
+    );
+  }
+  if (!options.tiers.includes("app")) {
+    throw new Error(
+      "--finalize-auth-retirement requires component app or all so rollback runtime retirement is deployed before destructive schema cleanup.",
+    );
+  }
+  if (options.retirementPhase !== "retired") {
+    throw new Error(
+      "--finalize-auth-retirement requires the deployed terraform.tfvars auth_retirement_phase to be retired before destructive schema cleanup.",
+    );
+  }
+}
+
+function readTerraformOutputValues(cwd: string): Record<string, unknown> {
+  const result = spawnSync("terraform", ["output", "-json"], {
+    cwd,
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `Could not read Terraform outputs from ${cwd}: ${(result.stderr || "unknown error").trim().slice(0, 500)}`,
+    );
+  }
+  const document = JSON.parse(result.stdout) as Record<
+    string,
+    { value?: unknown }
+  >;
+  return Object.fromEntries(
+    Object.entries(document).map(([key, output]) => [key, output.value]),
+  );
+}
+
 export async function runLocalTerraformDeploy(
   opts: DeployCommandOptions,
 ): Promise<void> {
@@ -1162,6 +1267,13 @@ export async function runLocalTerraformDeploy(
     readTfvarsSignalsRaw(cwd0).region ||
     (identity && identity.region !== "unknown" ? identity.region : "us-east-1");
   const caller = identity ? { account: identity.account, region } : null;
+  assertLocalAuthRetirementSupported({
+    requested: opts.finalizeAuthRetirement === true,
+    scaffolded,
+    hasCaller: caller !== null,
+    tiers,
+    retirementPhase: readTfvarsSignalsRaw(cwd0).auth_retirement_phase,
+  });
 
   // ── Preflight (R6): report every detectable blocker before any resource is
   //    created. Warn-tier checks (SES) are reported but never block (AE3). ──
@@ -1220,12 +1332,7 @@ export async function runLocalTerraformDeploy(
     releaseVersionPin = release.version;
   }
 
-  for (let i = 0; i < tiers.length; i++) {
-    const tier = tiers[i];
-    printTierHeader(tier, i, tiers.length);
-
-    const cwd = resolveTierDir(terraformDir, stage, tier);
-
+  const prepareTerraformDirectory = async (cwd: string): Promise<void> => {
     // Init-scaffolded layouts get the per-account remote backend (R11).
     // The repo greenfield layout keeps its own hardcoded backend for dev CI.
     let backend: BackendTarget | undefined;
@@ -1244,6 +1351,25 @@ export async function runLocalTerraformDeploy(
 
     await ensureInit(cwd, backend);
     await ensureWorkspace(cwd, stage);
+  };
+
+  const schemaCwd = resolveTierDir(terraformDir, stage, "data");
+  const executionSteps = buildLocalDeployExecutionSteps(
+    tiers,
+    scaffolded && caller !== null,
+    opts.finalizeAuthRetirement === true,
+  );
+  for (const step of executionSteps) {
+    if (step.kind === "schema") {
+      await prepareTerraformDirectory(schemaCwd);
+      await applySchemaMigrations(schemaCwd, caller!, stage, step.retirement);
+      continue;
+    }
+
+    const tier = step.tier;
+    printTierHeader(tier, tiers.indexOf(tier), tiers.length);
+    const cwd = resolveTierDir(terraformDir, stage, tier);
+    await prepareTerraformDirectory(cwd);
 
     const { code, output } = await runTerraformTee(cwd, [
       "apply",
@@ -1265,10 +1391,42 @@ export async function runLocalTerraformDeploy(
     }
   }
 
-  // ── Schema (U10): apply journaled migrations before anything probes the
-  //    database — terraform provisions an EMPTY cluster. ──
-  if (scaffolded && caller) {
-    await applySchemaMigrations(cwd0, caller, stage);
+  if (tiers.includes("app")) {
+    if (!caller) {
+      throw new Error(
+        "Native auth reconciliation requires a resolved AWS identity after the app tier is deployed.",
+      );
+    }
+    const outputValues: Record<string, unknown> = {};
+    const outputDirectories = new Set<string>();
+    for (const tier of ["foundation", "app"]) {
+      const outputCwd = resolveTierDir(terraformDir, stage, tier);
+      if (outputDirectories.has(outputCwd)) continue;
+      outputDirectories.add(outputCwd);
+      await prepareTerraformDirectory(outputCwd);
+      Object.assign(outputValues, readTerraformOutputValues(outputCwd));
+    }
+    const tfvars = readTfvarsSignalsRaw(cwd0);
+    const result = await reconcileLocalNativeAuth({
+      stage,
+      accountId: caller.account,
+      region: caller.region,
+      userPoolId: String(outputValues.user_pool_id ?? ""),
+      apiEndpoint: String(outputValues.api_endpoint ?? ""),
+      apiAuthSecret: tfvars.api_auth_secret ?? "",
+      microsoftTenantId: tfvars.microsoft_oauth_tenant,
+      routeClients: (outputValues.auth_route_clients ?? {}) as Record<
+        string,
+        AuthRouteClientOutput
+      >,
+    });
+    printSuccess(
+      `Native auth metadata ${result.status} at revision ${result.revision}.`,
+    );
+    if (opts.finalizeAuthRetirement) {
+      await prepareTerraformDirectory(schemaCwd);
+      await applySchemaMigrations(schemaCwd, caller, stage, true);
+    }
   }
 
   // ── Owner tenant + user: create/read the Cognito user first, then bind its
