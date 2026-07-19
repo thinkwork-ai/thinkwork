@@ -52,10 +52,6 @@ function getActiveClientId(): string {
   );
 }
 
-export function getActiveAuthClientId(): string {
-  return getActiveClientId();
-}
-
 function getUserPool(): CognitoUserPool | null {
   const userPoolId = readRuntimeEnv("VITE_COGNITO_USER_POOL_ID");
   const clientId = getActiveClientId();
@@ -284,7 +280,14 @@ export function clearLocalAuthSession(): void {
   const pool = getUserPool();
   pool?.getCurrentUser()?.signOut();
 
-  if (prefix) {
+  const storedKeys = tokenStorage.keys?.();
+  if (storedKeys) {
+    for (const key of storedKeys) {
+      if (key.startsWith("CognitoIdentityServiceProvider.")) {
+        tokenStorage.removeItem(key);
+      }
+    }
+  } else if (prefix) {
     if (lastUser) {
       tokenStorage.removeItem(`${prefix}.${lastUser}.idToken`);
       tokenStorage.removeItem(`${prefix}.${lastUser}.accessToken`);
@@ -514,77 +517,6 @@ export function getAuthOptionIdentityMigrationUrl(
   });
 }
 
-export async function getAuthOptionProviderSwitchUrl(
-  option: PublicOAuthOption,
-  next = "/profile",
-): Promise<string> {
-  const currentClientId = getActiveClientId();
-  if (!currentClientId) {
-    throw new Error("An authenticated session is required to switch providers.");
-  }
-  if (currentClientId === option.route.clientId) {
-    throw new Error("This provider is already active.");
-  }
-  const idToken = getStoredIdToken();
-  const refreshToken = getStoredToken("refreshToken");
-  if (!idToken || !refreshToken) {
-    throw new Error("An authenticated session is required to switch providers.");
-  }
-  const redirectUri = `${window.location.origin}/auth/callback`;
-  const grantResponse = await fetch(
-    `${apiBaseUrl()}/api/auth/enrollment/switch`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({
-        targetClientId: option.route.clientId,
-        redirectUri,
-      }),
-    },
-  );
-  const grantBody = (await grantResponse.json().catch(() => ({}))) as Record<
-    string,
-    unknown
-  >;
-  if (
-    !grantResponse.ok ||
-    typeof grantBody.startToken !== "string" ||
-    typeof grantBody.recipientChallenge !== "string"
-  ) {
-    throw new Error(
-      typeof grantBody.error === "string"
-        ? `Provider switch could not be started: ${grantBody.error}`
-        : `Provider switch could not be started (${grantResponse.status}).`,
-    );
-  }
-  const authorizeUrl = await createNativeAuthorizeUrl(option, next, {
-    purpose: "provider_switch",
-    enrollment: {
-      startToken: grantBody.startToken,
-      recipientChallenge: grantBody.recipientChallenge,
-    },
-  });
-
-  const revokeResponse = await fetch(`${apiBaseUrl()}/api/auth/revoke`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify({ refreshToken }),
-  });
-  if (!revokeResponse.ok) {
-    throw new Error(
-      `The previous provider session could not be revoked (${revokeResponse.status}).`,
-    );
-  }
-  clearLocalAuthSession();
-  return authorizeUrl;
-}
-
 /**
  * Native email/password sign-in needs the user pool id + client id from the
  * runtime config. When either is missing (e.g. a partially configured local
@@ -609,7 +541,7 @@ interface PendingOAuthFlow {
   initiatingHost: string;
   next: string;
   expiresAt: number;
-  purpose?: "sign_in" | "identity_migration" | "provider_switch";
+  purpose?: "sign_in" | "identity_migration";
   enrollment?: IdentityMigrationGrant;
 }
 
@@ -818,11 +750,10 @@ export async function exchangeCodeForSession(
     refresh_token: raw.refresh_token,
   };
   validateNativeOAuthTokens(tokens, flow);
-  if (
-    flow.purpose === "identity_migration" ||
-    flow.purpose === "provider_switch"
-  ) {
+  if (flow.purpose === "identity_migration") {
     await consumeIdentityEnrollmentGrant(tokens.id_token, flow);
+  } else {
+    await automaticallyLinkNativeIdentity(tokens.id_token);
   }
   return { tokens, clientId: flow.clientId, next: flow.next };
 }
@@ -853,15 +784,40 @@ function consumePendingOAuthFlow(state: string): PendingOAuthFlow {
     !flow.nonce ||
     (flow.purpose !== undefined &&
       flow.purpose !== "sign_in" &&
-      flow.purpose !== "identity_migration" &&
-      flow.purpose !== "provider_switch") ||
-    ((flow.purpose === "identity_migration" ||
-      flow.purpose === "provider_switch") &&
+      flow.purpose !== "identity_migration") ||
+    (flow.purpose === "identity_migration" &&
       (!flow.enrollment?.startToken || !flow.enrollment.recipientChallenge))
   ) {
     throw new Error("OAuth state does not match this login attempt.");
   }
   return flow;
+}
+
+async function automaticallyLinkNativeIdentity(idToken: string): Promise<void> {
+  const response = await fetch(
+    `${apiBaseUrl()}/api/auth/enrollment/auto-link`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${idToken}`,
+      },
+    },
+  );
+  let body: { outcome?: string; error?: string } = {};
+  try {
+    body = (await response.json()) as { outcome?: string; error?: string };
+  } catch {
+    // Preserve a useful status-based error when an edge proxy returns HTML.
+  }
+  const validOutcomes = new Set(["linked", "already_linked", "not_linked"]);
+  if (!response.ok || !body.outcome || !validOutcomes.has(body.outcome)) {
+    throw new Error(
+      body.error
+        ? `Automatic identity linking failed: ${body.error}`
+        : `Automatic identity linking failed with status ${response.status}.`,
+    );
+  }
 }
 
 async function consumeIdentityEnrollmentGrant(
@@ -946,6 +902,13 @@ export function storeTokensInCognitoStorage(
   }
 
   if (!clientId) throw new Error("Auth client is not configured.");
+  // A provider change replaces the browser session. Retaining the previous
+  // app client's tokens can resurrect that provider after sign-out.
+  for (const key of tokenStorage.keys?.() ?? []) {
+    if (key.startsWith("CognitoIdentityServiceProvider.")) {
+      tokenStorage.removeItem(key);
+    }
+  }
   const prefix = `CognitoIdentityServiceProvider.${clientId}`;
 
   tokenStorage.setItem(`${prefix}.${username}.idToken`, tokens.id_token);

@@ -18,6 +18,12 @@ export class LocalStorageTokenStorage implements TokenStorage {
     this.storage.removeItem(key);
   }
 
+  keys(): string[] {
+    return Array.from({ length: this.storage.length }, (_, index) =>
+      this.storage.key(index),
+    ).filter((key): key is string => key !== null);
+  }
+
   clear(): void {
     this.storage.clear();
   }

@@ -59,11 +59,6 @@ export interface SessionMigrationGrantInput {
   redirectUri: string;
 }
 
-export interface ProviderSwitchGrantInput {
-  targetClientId: string;
-  redirectUri: string;
-}
-
 export class IdentityRecoveryGrantError extends Error {
   constructor(
     readonly code:
@@ -349,64 +344,152 @@ export async function issueSessionMigrationGrant(
   });
 }
 
+export type AutomaticIdentityLinkOutcome =
+  | "linked"
+  | "already_linked"
+  | "not_linked"
+  | "identity_conflict";
+
+const AUTOMATIC_LINK_PROVIDER_KINDS = new Set([
+  "google",
+  "microsoft_organizations",
+  "microsoft_tenant",
+]);
+
 /**
- * Issue a one-use grant for an already-admitted user to attach and activate a
- * different native Cognito provider. The authenticated identity is the proof;
- * email claims and caller-supplied user or tenant identifiers are never used.
+ * Bind a newly authenticated Google or Microsoft Cognito subject to the
+ * existing ThinkWork user with the same trusted, normalized provider email.
+ *
+ * The match is deliberately narrow: the Cognito JWT and route are verified by
+ * `authenticate`, Google email must be verified (Entra instead supplies its
+ * authenticated UPN), exactly one active user membership must permit that
+ * route, and an existing subject can never be rebound. This makes provider
+ * changes automatic without exposing an account-linking control in the UI.
  */
-export async function issueProviderSwitchGrant(
+export async function automaticallyLinkFederatedIdentity(
   auth: AuthResult,
-  input: ProviderSwitchGrantInput,
-): Promise<IssuedEnrollmentGrant> {
+  now = new Date(),
+): Promise<AutomaticIdentityLinkOutcome> {
   if (
     auth.authType !== "cognito" ||
+    !auth.principalId ||
+    !auth.cognitoIssuer ||
     !auth.route ||
-    auth.route.lifecycleState !== "native"
+    auth.route.lifecycleState !== "native" ||
+    !AUTOMATIC_LINK_PROVIDER_KINDS.has(auth.route.providerKind)
   ) {
-    throw new AuthAdmissionError(
-      "native_session_required",
-      "An admitted native Cognito session is required to switch providers.",
-    );
+    return "not_linked";
   }
-  if (auth.route.appClientId === input.targetClientId) {
-    throw new AuthAdmissionError(
-      "provider_already_active",
-      "The requested provider is already active.",
-    );
-  }
-  const admitted = await admitCognitoTenant(
-    auth,
-    auth.tenantId ?? undefined,
-  );
+
+  const route = auth.route;
+  const cognitoSub = auth.principalId;
+  const cognitoIssuer = auth.cognitoIssuer;
   return db.transaction(async (tx) => {
-    const [membership] = await tx
-      .select({ id: tenantMembers.id })
-      .from(tenantMembers)
+    const [existing] = await tx
+      .select({
+        userId: userAuthIdentities.user_id,
+        tenantId: userAuthIdentities.tenant_id,
+        resourceId: userAuthIdentities.auth_provider_resource_id,
+        status: userAuthIdentities.status,
+      })
+      .from(userAuthIdentities)
       .where(
         and(
-          eq(tenantMembers.tenant_id, admitted.tenantId),
-          eq(tenantMembers.principal_type, "user"),
-          eq(tenantMembers.principal_id, admitted.userId),
-          eq(tenantMembers.status, "active"),
+          eq(userAuthIdentities.cognito_issuer, cognitoIssuer),
+          eq(userAuthIdentities.cognito_sub, cognitoSub),
         ),
       )
       .for("update");
-    if (!membership) {
-      throw new AuthAdmissionError(
-        "tenant_not_admitted",
-        "The current session has no active membership.",
-      );
+    if (existing) {
+      return existing.status === "active" &&
+        existing.resourceId === route.connectionId
+        ? "already_linked"
+        : "identity_conflict";
     }
-    return issueEnrollmentGrants({
-      tenantId: admitted.tenantId,
-      intendedUserId: admitted.userId,
-      membershipId: membership.id,
-      grantKind: "identity_recovery",
-      redirectUri: input.redirectUri,
-      targetCognitoAppClientId: input.targetClientId,
-      ttlMs: 10 * 60_000,
-      transaction: tx,
+
+    const normalizedEmail = auth.email?.trim().toLowerCase() ?? "";
+    const hasTrustedProviderEmail =
+      auth.emailVerified || route.providerKind.startsWith("microsoft_");
+    if (!normalizedEmail || !hasTrustedProviderEmail) return "not_linked";
+
+    const candidates = await tx.execute<{
+      user_id: string;
+      tenant_id: string;
+    }>(sql`
+      SELECT u.id AS user_id, tm.tenant_id
+      FROM users u
+      JOIN tenant_members tm
+        ON tm.principal_type = 'user'
+       AND tm.principal_id = u.id
+       AND tm.status = 'active'
+      JOIN tenant_auth_policies tap
+        ON tap.tenant_id = tm.tenant_id
+       AND tap.status = 'active'
+      WHERE lower(btrim(u.email)) = ${normalizedEmail}
+        AND (
+          ${route.providerKind} = 'google'
+          OR (
+            ${route.providerKind} = 'microsoft_organizations'
+            AND NOT EXISTS (
+              SELECT 1
+              FROM tenant_auth_provider_references tenant_ref
+              JOIN auth_provider_resources tenant_provider
+                ON tenant_provider.id = tenant_ref.auth_provider_resource_id
+              WHERE tenant_ref.tenant_id = tm.tenant_id
+                AND tenant_ref.status = 'enabled'
+                AND tenant_provider.provider_kind = 'microsoft_tenant'
+                AND tenant_provider.lifecycle_state = 'native'
+                AND tenant_provider.validation_status = 'valid'
+            )
+          )
+          OR (
+            ${route.providerKind} = 'microsoft_tenant'
+            AND EXISTS (
+              SELECT 1
+              FROM tenant_auth_provider_references exact_ref
+              WHERE exact_ref.tenant_id = tm.tenant_id
+                AND exact_ref.auth_provider_resource_id = ${route.connectionId}
+                AND exact_ref.status = 'enabled'
+            )
+          )
+        )
+      ORDER BY u.id, tm.tenant_id
+      LIMIT 2
+      FOR UPDATE OF u, tm
+    `);
+    if (candidates.rows.length !== 1) return "not_linked";
+    const candidate = candidates.rows[0]!;
+
+    await tx.insert(userAuthIdentities).values({
+      tenant_id: candidate.tenant_id,
+      user_id: candidate.user_id,
+      auth_provider_resource_id: route.connectionId,
+      cognito_issuer: cognitoIssuer,
+      cognito_sub: cognitoSub,
+      provider_issuer: route.providerIssuer ?? cognitoIssuer,
+      provider_subject: cognitoSub,
+      status: "active",
+      proof_kind: "federated_login_email_match",
+      evidence: {
+        appClientId: route.appClientId,
+        connectionKey: route.connectionKey,
+        routeKey: route.routeKey,
+        emailClaimTrust: auth.emailVerified
+          ? "cognito_email_verified"
+          : "entra_authenticated_upn",
+        matchedEmailDigest: createHash("sha256")
+          .update(normalizedEmail)
+          .digest("hex"),
+      },
+      activated_at: now,
     });
+    await tx.insert(authSubscriptionInvalidations).values({
+      tenant_id: candidate.tenant_id,
+      user_id: candidate.user_id,
+      resource_kind: "identity_enrollment",
+      reason: "federated_identity_automatically_linked",
+    });
+    return "linked";
   });
 }
 
@@ -775,49 +858,22 @@ export async function handler(
       throw cause;
     }
   }
-  if (event.rawPath === "/api/auth/enrollment/switch") {
+  if (event.rawPath === "/api/auth/enrollment/auto-link") {
     const auth = await authenticate(
       event.headers as Record<string, string | undefined>,
     );
     if (!auth || auth.authType !== "cognito") {
       return unauthorized("Authentication required");
     }
-    let input: ProviderSwitchGrantInput;
-    try {
-      const parsed = JSON.parse(
-        event.body ?? "{}",
-      ) as Partial<ProviderSwitchGrantInput>;
-      if (
-        !parsed.targetClientId ||
-        parsed.targetClientId.length > 128 ||
-        !parsed.redirectUri ||
-        !isAbsoluteHttpUrl(parsed.redirectUri)
-      ) {
-        return error("Invalid provider switch request", 400);
-      }
-      input = parsed as ProviderSwitchGrantInput;
-    } catch {
-      return error("Invalid provider switch request", 400);
+    const outcome = await automaticallyLinkFederatedIdentity(auth);
+    if (outcome === "identity_conflict") {
+      return json({ error: outcome }, 409);
     }
-    try {
-      const grant = await issueProviderSwitchGrant(auth, input);
-      console.info("[auth-enrollment] provider switch grant issued", {
-        routeCount: grant.routeKeys.length,
-        expiresAt: grant.expiresAt.toISOString(),
-      });
-      return json(grant, 201);
-    } catch (cause) {
-      if (cause instanceof AuthAdmissionError) {
-        return json({ error: cause.code }, 403);
-      }
-      if (
-        cause instanceof Error &&
-        cause.message === "No admitted enrollment route is available"
-      ) {
-        return json({ error: "target_route_not_admitted" }, 409);
-      }
-      throw cause;
-    }
+    console.info("[auth-enrollment] automatic identity link resolved", {
+      outcome,
+      providerKind: auth.route?.providerKind,
+    });
+    return json({ outcome });
   }
   if (event.rawPath !== "/api/auth/enrollment/consume") {
     return error("Not found", 404);

@@ -462,8 +462,10 @@ resource "aws_cognito_identity_provider" "microsoft_organizations" {
   attribute_mapping = {
     # Entra v2 does not guarantee an `email` claim for every work/school
     # account. `preferred_username` is the supported sign-in hint and keeps
-    # Cognito's required email attribute populated without treating it as an
-    # authorization boundary.
+    # Cognito's required email attribute populated as a stable normalized
+    # correlation value. ThinkWork only consults it after
+    # Cognito validates this exact Entra route; ongoing admission uses the
+    # immutable Cognito issuer/subject binding created by that first login.
     email                    = "preferred_username"
     name                     = "name"
     username                 = "sub"

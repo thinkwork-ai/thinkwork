@@ -103,11 +103,6 @@ vi.mock("@/components/profile/AccountUsageSection", () => ({
     );
   },
 }));
-vi.mock("@/components/profile/SignInMethodsSection", () => ({
-  SignInMethodsSection: () => (
-    <section data-testid="sign-in-methods-section">Sign-in methods</section>
-  ),
-}));
 vi.mock("@/components/settings/UserModelsSection", () => ({
   UserModelsSection: (props: { readOnly?: boolean; userId: string }) => {
     userModelsMocks.props.push(props);
@@ -290,7 +285,7 @@ describe("SelfProfilePage", () => {
     expect(screen.getByText("eric@example.com")).toBeTruthy();
     expect(screen.getAllByText("Member").length).toBeGreaterThan(0);
     expect(screen.getByText("Unlimited")).toBeTruthy();
-    expect(screen.getByTestId("sign-in-methods-section")).toBeTruthy();
+    expect(screen.queryByTestId("sign-in-methods-section")).toBeNull();
     expect(screen.queryByText("Workspace files")).toBeNull();
     expect(screen.queryByText("Danger zone")).toBeNull();
     expect(screen.getByTestId("profile-scroll-pane").className).toContain(
