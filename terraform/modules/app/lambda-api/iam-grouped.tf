@@ -105,31 +105,6 @@ locals {
         ]
         Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/*/plugin-tokens/*"
       },
-      # Backend notification publishing is IAM-only. Scope the shared API
-      # execution role to the twelve NONE-resolver mutation fields; end-user
-      # identity-pool credentials have no AppSync grant.
-      {
-        Sid    = "PublishAppSyncNotifications"
-        Effect = "Allow"
-        Action = ["appsync:GraphQL"]
-        Resource = [
-          for field in [
-            "notifyAgentStatus",
-            "notifyNewMessage",
-            "notifyHeartbeatActivity",
-            "notifyThreadActivity",
-            "notifyThreadUpdate",
-            "notifyInboxItemUpdate",
-            "notifyThreadTurnUpdate",
-            "notifyThreadTurnStep",
-            "notifyOrgUpdate",
-            "notifyCostRecorded",
-            "notifyEvalRunUpdate",
-            "notifyWorkspaceAccessRevoked",
-            "invalidateSubscription",
-          ] : "arn:aws:appsync:${var.region}:${var.account_id}:apis/${var.appsync_api_id}/types/Mutation/fields/${field}"
-        ]
-      },
       # (was inline policy "s3-access" — the workspace bucket)
       {
         Effect = "Allow"
@@ -1063,6 +1038,33 @@ locals {
   )
 
   api_observability_statements = concat(local.api_observability_sqs_statements, [
+    # Backend notification publishing is IAM-only. Scope the shared API
+    # execution role to the NONE-resolver mutation fields; end-user identity-
+    # pool credentials have no AppSync grant. This statement lives in the
+    # observability envelope for size balance: adding subscription invalidation
+    # pushed the data-plane policy over IAM's 6,144-character hard cap.
+    {
+      Sid    = "PublishAppSyncNotifications"
+      Effect = "Allow"
+      Action = ["appsync:GraphQL"]
+      Resource = [
+        for field in [
+          "notifyAgentStatus",
+          "notifyNewMessage",
+          "notifyHeartbeatActivity",
+          "notifyThreadActivity",
+          "notifyThreadUpdate",
+          "notifyInboxItemUpdate",
+          "notifyThreadTurnUpdate",
+          "notifyThreadTurnStep",
+          "notifyOrgUpdate",
+          "notifyCostRecorded",
+          "notifyEvalRunUpdate",
+          "notifyWorkspaceAccessRevoked",
+          "invalidateSubscription",
+        ] : "arn:aws:appsync:${var.region}:${var.account_id}:apis/${var.appsync_api_id}/types/Mutation/fields/${field}"
+      ]
+    },
     # (was inline policy "cloudwatch-logs-read")
     {
       Effect = "Allow"
