@@ -5,6 +5,7 @@ import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
 import { AccountUsageSection } from "@/components/profile/AccountUsageSection";
+import { SignInMethodsSection } from "@/components/profile/SignInMethodsSection";
 import {
   ProfileSection,
   titleCase,
@@ -67,6 +68,7 @@ export function SelfProfilePage() {
           description={user.email}
           badge={<Badge variant="secondary">{titleCase(resolvedRole)}</Badge>}
         />
+        <SignInMethodsSection />
         <AccountUsageSection tenantId={resolvedTenantId} userId={user.id} />
         <ProfileSection
           userId={user.id}

@@ -117,6 +117,101 @@ describe("getAuthOptionSignInUrl", () => {
   });
 });
 
+describe("getAuthOptionProviderSwitchUrl", () => {
+  it("binds the selected provider to the admitted session and revokes the previous route", async () => {
+    stubLocation("https://app.example");
+    const auth = await import("./auth");
+    const currentIdToken = makeIdToken({
+      sub: "microsoft-cognito-sub",
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    auth.storeTokensInCognitoStorage(
+      {
+        id_token: currentIdToken,
+        access_token: "microsoft-access-token",
+        refresh_token: "microsoft-refresh-token",
+      },
+      "microsoft-client",
+    );
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            startToken: "switch-start-token",
+            recipientChallenge: "87654321",
+            routeKeys: ["google-web"],
+            expiresAt: "2026-07-19T12:00:00.000Z",
+          },
+          { status: 201 },
+        ),
+      )
+      .mockResolvedValueOnce(Response.json({ revoked: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const url = new URL(
+      await auth.getAuthOptionProviderSwitchUrl(
+        {
+          key: "google",
+          label: "Continue with Google",
+          icon: "google",
+          provider: "google",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "google-client",
+            identityProvider: "Google",
+            prompt: "select_account",
+          },
+        },
+        "/profile",
+      ),
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(new URL(String(fetchMock.mock.calls[0][0])).pathname).toBe(
+      "/api/auth/enrollment/switch",
+    );
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      method: "POST",
+      headers: expect.objectContaining({
+        Authorization: `Bearer ${currentIdToken}`,
+      }),
+      body: JSON.stringify({
+        targetClientId: "google-client",
+        redirectUri: "https://app.example/auth/callback",
+      }),
+    });
+    expect(new URL(String(fetchMock.mock.calls[1][0])).pathname).toBe(
+      "/api/auth/revoke",
+    );
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      body: JSON.stringify({ refreshToken: "microsoft-refresh-token" }),
+    });
+    expect(url.searchParams.get("client_id")).toBe("google-client");
+    expect(url.searchParams.get("identity_provider")).toBe("Google");
+    const state = url.searchParams.get("state");
+    const stored = JSON.parse(
+      window.sessionStorage.getItem(`thinkwork:oauth-flow:${state}`) ?? "{}",
+    );
+    expect(stored).toEqual(
+      expect.objectContaining({
+        purpose: "provider_switch",
+        next: "/profile",
+        enrollment: {
+          startToken: "switch-start-token",
+          recipientChallenge: "87654321",
+        },
+      }),
+    );
+    expect(
+      window.localStorage.getItem(
+        "CognitoIdentityServiceProvider.microsoft-client.microsoft-cognito-sub.refreshToken",
+      ),
+    ).toBeNull();
+  });
+});
+
 describe("native Cognito callback exchange", () => {
   it("uses the selected route client and one-time PKCE state", async () => {
     stubLocation("https://app.example");
@@ -240,6 +335,91 @@ describe("native Cognito callback exchange", () => {
       startToken: "migration-start-token",
       recipientChallenge: "12345678",
       redirectUri: "https://app.example/auth/callback",
+    });
+  });
+
+  it("binds a switched provider before returning its replacement session", async () => {
+    stubLocation("https://app.example");
+    const auth = await import("./auth");
+    auth.storeTokensInCognitoStorage(
+      {
+        id_token: makeIdToken({
+          sub: "microsoft-cognito-sub",
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
+        access_token: "microsoft-access-token",
+        refresh_token: "microsoft-refresh-token",
+      },
+      "microsoft-client",
+    );
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({
+          startToken: "switch-start-token",
+          recipientChallenge: "87654321",
+          routeKeys: ["google-web"],
+          expiresAt: "2026-07-19T12:00:00.000Z",
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ revoked: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    const authorizeUrl = new URL(
+      await auth.getAuthOptionProviderSwitchUrl({
+        key: "google",
+        label: "Google",
+        icon: "google",
+        provider: "google",
+        providerSpecific: true,
+        route: {
+          type: "cognitoHostedUi",
+          clientId: "google-client",
+          identityProvider: "Google",
+        },
+      }),
+    );
+    const state = authorizeUrl.searchParams.get("state")!;
+    const nonce = authorizeUrl.searchParams.get("nonce")!;
+    const issuer =
+      "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TestPool";
+    const googleIdToken = makeIdToken({
+      token_use: "id",
+      aud: "google-client",
+      nonce,
+      iss: issuer,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    });
+    fetchMock
+      .mockResolvedValueOnce(
+        Response.json({
+          id_token: googleIdToken,
+          access_token: makeIdToken({
+            token_use: "access",
+            client_id: "google-client",
+            iss: issuer,
+            exp: Math.floor(Date.now() / 1000) + 3600,
+          }),
+          refresh_token: "google-refresh-token",
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ outcome: "consumed" }));
+
+    const result = await auth.exchangeCodeForSession("google-code", state);
+
+    expect(result.clientId).toBe("google-client");
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(new URL(String(fetchMock.mock.calls[3][0])).pathname).toBe(
+      "/api/auth/enrollment/consume",
+    );
+    expect(fetchMock.mock.calls[3][1]).toMatchObject({
+      headers: expect.objectContaining({
+        Authorization: `Bearer ${googleIdToken}`,
+      }),
+      body: JSON.stringify({
+        startToken: "switch-start-token",
+        recipientChallenge: "87654321",
+        redirectUri: "https://app.example/auth/callback",
+      }),
     });
   });
 });

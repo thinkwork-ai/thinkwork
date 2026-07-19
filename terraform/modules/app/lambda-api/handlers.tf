@@ -1801,6 +1801,8 @@ locals {
       "OPTIONS /api/auth/enrollment/recover"                                    = "auth-enrollment"
       "POST /api/auth/enrollment/migrate"                                       = "auth-enrollment"
       "OPTIONS /api/auth/enrollment/migrate"                                    = "auth-enrollment"
+      "POST /api/auth/enrollment/switch"                                        = "auth-enrollment"
+      "OPTIONS /api/auth/enrollment/switch"                                     = "auth-enrollment"
       "ANY /api/extensions/{extensionId}"                                       = "extension-proxy"
       "ANY /api/extensions/{extensionId}/{proxy+}"                              = "extension-proxy"
 
