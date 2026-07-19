@@ -27,6 +27,7 @@ import {
   type HarnessMessage,
   type HarnessModelConfiguration,
   type HarnessSystemContentBlock,
+  type HarnessTool,
 } from "@aws-sdk/client-bedrock-agentcore";
 import {
   parseHarnessInvokeEvent,
@@ -40,7 +41,6 @@ import {
 import { handleDocumentEmission } from "../lib/artifacts/document-emission.js";
 import { processFinalize } from "../lib/chat-finalize/process-finalize.js";
 import { requireHarnessManagedProfile } from "../lib/harness/managed-profile.js";
-import type { HarnessInvocationTool } from "../lib/harness/managed-profile.js";
 import {
   abandonFreshHarnessTurn,
   prepareFreshHarnessTurn,
@@ -244,7 +244,7 @@ async function* invokeHarnessWithBearer(input: {
   messages: HarnessInvokeMessage[];
   modelId?: string;
   allowedTools?: string[];
-  tools?: HarnessInvocationTool[];
+  tools?: HarnessTool[];
   systemPrompt?: Array<{ text: string }>;
   maxIterations?: number;
 }): AsyncIterable<HarnessStreamEvent> {

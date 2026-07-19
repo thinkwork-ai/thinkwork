@@ -47,6 +47,7 @@ import {
 } from "./goal-mode.js";
 import type { HarnessSkillDraftRegistration } from "../skill-creator/harness-submit-draft.js";
 import type { HarnessInvocationTool } from "./managed-profile.js";
+import type { HarnessTool } from "@aws-sdk/client-bedrock-agentcore";
 
 // ---------------------------------------------------------------------------
 // Deps
@@ -263,7 +264,7 @@ export interface HarnessRunnerDeps {
     /** Optional per-turn narrowing of the Harness's configured tool ceiling. */
     allowedTools?: string[];
     /** Caller-fulfilled tools must be repeated on InvokeHarness. */
-    tools?: HarnessInvocationTool[];
+    tools?: HarnessTool[];
     systemPrompt?: Array<{ text: string }>;
     maxIterations?: number;
   }):
@@ -971,6 +972,25 @@ const LEGACY_BROWSER_DISABLED_ALLOWED_TOOLS = [
 ] as const;
 const DOCUMENT_COMPOSITION_MAX_ITERATIONS = 2;
 const GOAL_DOCUMENT_COMPOSITION_MAX_ITERATIONS = 1;
+
+/**
+ * The immutable profile stores the full control-plane Browser config for
+ * attestation. InvokeHarness' native Browser override uses AWS's documented
+ * invocation shape (type + canonical name only); replaying the empty
+ * control-plane config makes the internal dispatcher return `Unknown tool`.
+ */
+function invocationToolsForTurn(
+  tools: HarnessInvocationTool[],
+  browserEnabled: boolean,
+): HarnessTool[] {
+  return tools
+    .filter((tool) => browserEnabled || tool.type !== "agentcore_browser")
+    .map((tool) =>
+      tool.type === "agentcore_browser"
+        ? { type: tool.type, name: tool.name }
+        : tool,
+    );
+}
 
 interface DocumentPlateContract {
   slug: string;
@@ -1998,10 +2018,9 @@ export async function runHarnessTurn(
               // inline functions (including goal_complete). Reuse the exact
               // control-plane-attested tool array and remove only Browser
               // when the participant's effective capability is disabled.
-              tools: harness.invocationTools.filter(
-                (tool) =>
-                  payload.browser_automation_enabled === true ||
-                  tool.type !== "agentcore_browser",
+              tools: invocationToolsForTurn(
+                harness.invocationTools,
+                payload.browser_automation_enabled === true,
               ),
             }
           : {}),

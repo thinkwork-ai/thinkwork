@@ -14,6 +14,7 @@ import {
 } from "./runner.js";
 import type { FinalizePayload } from "../chat-finalize/types.js";
 import type { HarnessInvocationTool } from "./managed-profile.js";
+import type { HarnessTool } from "@aws-sdk/client-bedrock-agentcore";
 
 function stream(
   events: HarnessStreamEvent[],
@@ -346,7 +347,7 @@ interface TestDeps extends HarnessRunnerDeps {
     messages: unknown;
     modelId?: string;
     allowedTools?: string[];
-    tools?: HarnessInvocationTool[];
+    tools?: HarnessTool[];
     systemPrompt?: Array<{ text: string }>;
     maxIterations?: number;
   }>;
@@ -372,7 +373,7 @@ function makeDeps(
     messages: unknown;
     modelId?: string;
     allowedTools?: string[];
-    tools?: HarnessInvocationTool[];
+    tools?: HarnessTool[];
     systemPrompt?: Array<{ text: string }>;
     maxIterations?: number;
   }> = [];
@@ -1475,7 +1476,13 @@ describe("runHarnessTurn — happy path", () => {
 
     expect(result.status).toBe("completed");
     expect(deps.invocations).toHaveLength(1);
-    expect(deps.invocations[0].tools).toEqual(MANAGED_HARNESS_TOOLS);
+    expect(deps.invocations[0].tools).toEqual(
+      MANAGED_HARNESS_TOOLS.map((tool) =>
+        tool.type === "agentcore_browser"
+          ? { type: "agentcore_browser", name: "browser" }
+          : tool,
+      ),
+    );
     expect(JSON.stringify(deps.invocations[0].messages)).toContain(
       "browser_automation=enabled",
     );
