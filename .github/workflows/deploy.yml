@@ -1493,7 +1493,7 @@ jobs:
 
           # Source rather than inline: GitHub caps each evaluated `run`
           # expression at 21,000 characters.
-          source scripts/deploy/adopt-agentcore-capability-resources.sh
+          source ../../../scripts/deploy/adopt-agentcore-capability-resources.sh
 
           TF_TARGET_ARGS=()
           if [ "${{ github.event_name }}" != "workflow_dispatch" ] && [ "${{ needs.detect-changes.outputs.terraform }}" != "true" ]; then
