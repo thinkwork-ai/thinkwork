@@ -46,6 +46,14 @@ locals {
   tenant_skill_prefix = var.tenant_slug != "" ? (
     "tenants/${var.tenant_slug}/"
   ) : "tenants/"
+  # These scripts are the executable Harness contract. Include their content
+  # in the trigger so a normal deploy reconciles prompt, tool, and lifecycle
+  # changes even when no symbolic contract-version string was bumped.
+  reconciler_hash = sha256(join("", [
+    filesha256("${path.module}/scripts/reconcile_harness.sh"),
+    filesha256("${path.module}/scripts/harness-lifecycle.mjs"),
+    filesha256("${path.module}/scripts/harness-tool-contract.mjs"),
+  ]))
   configuration_hash = nonsensitive(sha256(jsonencode({
     tenant_slug      = var.tenant_slug
     profile          = var.trust_profile
@@ -67,6 +75,7 @@ locals {
     artifact_facade  = "caller-fulfilled-emit-document-v1"
     goal_mode        = "thinkwork-managed-fresh-turn-goal-complete-v1"
     skill_creator    = "governed-review-draft-v1"
+    reconciler       = local.reconciler_hash
   })))
 }
 
