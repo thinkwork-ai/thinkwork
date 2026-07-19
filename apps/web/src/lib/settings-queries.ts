@@ -2556,6 +2556,172 @@ export const SettingsMergeCanonicalEntitiesMutation = graphql(`
   }
 `);
 
+// ─── Ontology Living Map (THINK-320 U6) ───────────────────────────────────
+// The map canvas itself self-fetches inside @thinkwork/graph's OntologyGraph;
+// this typed copy of the schema-graph feed backs the review rail and shares
+// the same server payload.
+
+export const SettingsOntologySchemaGraphQuery = graphql(`
+  query SettingsOntologySchemaGraph($tenantId: ID!) {
+    ontologySchemaGraph(tenantId: $tenantId) {
+      tenantId
+      types {
+        slug
+        name
+        instanceCount
+        lifecycleStatus
+      }
+      relationships {
+        slug
+        name
+        sourceTypeSlugs
+        targetTypeSlugs
+      }
+      candidates {
+        itemId
+        changeSetId
+        itemType
+        slug
+        proposedValue
+        editedValue
+        evidenceCount
+        origin
+        status
+      }
+    }
+  }
+`);
+
+// Change sets with items + evidence quotes: the candidate evidence panel and
+// the approved-type founding-evidence view (R5/R6) both read from this.
+export const SettingsOntologyChangeSetsQuery = graphql(`
+  query SettingsOntologyChangeSets($tenantId: ID!) {
+    ontologyChangeSets(tenantId: $tenantId) {
+      id
+      title
+      summary
+      status
+      proposedBy
+      createdAt
+      updatedAt
+      items {
+        id
+        changeSetId
+        itemType
+        action
+        status
+        targetSlug
+        title
+        description
+        proposedValue
+        editedValue
+        confidence
+        updatedAt
+        evidenceExamples {
+          id
+          sourceKind
+          sourceRef
+          sourceLabel
+          quote
+          observedAt
+        }
+      }
+    }
+  }
+`);
+
+export const SettingsCreateOntologyChangeSetMutation = graphql(`
+  mutation SettingsCreateOntologyChangeSet(
+    $input: CreateOntologyChangeSetInput!
+  ) {
+    createOntologyChangeSet(input: $input) {
+      changeSet {
+        id
+        status
+        updatedAt
+        items {
+          id
+          targetSlug
+          status
+          updatedAt
+        }
+      }
+      mergedItemIds
+      conflicts {
+        slug
+        itemType
+        reason
+      }
+    }
+  }
+`);
+
+export const SettingsUpdateOntologyChangeSetMutation = graphql(`
+  mutation SettingsUpdateOntologyChangeSet(
+    $input: UpdateOntologyChangeSetInput!
+  ) {
+    updateOntologyChangeSet(input: $input) {
+      id
+      status
+      updatedAt
+      items {
+        id
+        status
+        editedValue
+        updatedAt
+      }
+    }
+  }
+`);
+
+export const SettingsApproveOntologyChangeSetMutation = graphql(`
+  mutation SettingsApproveOntologyChangeSet(
+    $input: ApproveOntologyChangeSetInput!
+  ) {
+    approveOntologyChangeSet(input: $input) {
+      id
+      status
+      updatedAt
+      items {
+        id
+        status
+        updatedAt
+      }
+    }
+  }
+`);
+
+export const SettingsRejectOntologyChangeSetMutation = graphql(`
+  mutation SettingsRejectOntologyChangeSet(
+    $input: RejectOntologyChangeSetInput!
+  ) {
+    rejectOntologyChangeSet(input: $input) {
+      id
+      status
+      updatedAt
+    }
+  }
+`);
+
+// Item-level reject (R13): rejects one candidate and writes its rejection
+// fingerprint without closing the owning change set or minting a version.
+export const SettingsRejectOntologyChangeSetItemMutation = graphql(`
+  mutation SettingsRejectOntologyChangeSetItem(
+    $input: RejectOntologyChangeSetItemInput!
+  ) {
+    rejectOntologyChangeSetItem(input: $input) {
+      id
+      status
+      updatedAt
+      items {
+        id
+        status
+        updatedAt
+      }
+    }
+  }
+`);
+
 // ─── Connections (per-user integrations surface) ──────────────────────────
 // Slack per-user identity links render alongside the OAuth connections on the
 // Connections tab — the same GraphQL surface mobile's Credential Locker uses.

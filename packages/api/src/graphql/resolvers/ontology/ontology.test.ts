@@ -14,6 +14,7 @@ const {
   mockUpdateOntologyChangeSet,
   mockApproveOntologyChangeSet,
   mockRejectOntologyChangeSet,
+  mockRejectOntologyChangeSetItem,
   mockUpdateOntologyEntityType,
   mockUpdateOntologyRelationshipType,
 } = vi.hoisted(() => ({
@@ -29,6 +30,7 @@ const {
   mockUpdateOntologyChangeSet: vi.fn(),
   mockApproveOntologyChangeSet: vi.fn(),
   mockRejectOntologyChangeSet: vi.fn(),
+  mockRejectOntologyChangeSetItem: vi.fn(),
   mockUpdateOntologyEntityType: vi.fn(),
   mockUpdateOntologyRelationshipType: vi.fn(),
 }));
@@ -55,6 +57,7 @@ vi.mock("../../../lib/ontology/repository.js", () => ({
   updateOntologyChangeSet: mockUpdateOntologyChangeSet,
   approveOntologyChangeSet: mockApproveOntologyChangeSet,
   rejectOntologyChangeSet: mockRejectOntologyChangeSet,
+  rejectOntologyChangeSetItem: mockRejectOntologyChangeSetItem,
   updateOntologyEntityType: mockUpdateOntologyEntityType,
   updateOntologyRelationshipType: mockUpdateOntologyRelationshipType,
 }));
@@ -75,6 +78,7 @@ import { ontologyReprocessJob } from "./ontologyReprocessJob.query.js";
 import { ontologySchemaGraph } from "./ontologySchemaGraph.query.js";
 import { ontologySuggestionScanJob } from "./ontologySuggestionScanJob.query.js";
 import { rejectOntologyChangeSetMutation } from "./rejectOntologyChangeSet.mutation.js";
+import { rejectOntologyChangeSetItemMutation } from "./rejectOntologyChangeSetItem.mutation.js";
 import { startOntologySuggestionScanMutation } from "./startOntologySuggestionScan.mutation.js";
 import { updateOntologyChangeSetMutation } from "./updateOntologyChangeSet.mutation.js";
 import { updateOntologyEntityTypeMutation } from "./updateOntologyEntityType.mutation.js";
@@ -96,6 +100,7 @@ describe("ontology GraphQL resolvers", () => {
     mockUpdateOntologyChangeSet.mockReset();
     mockApproveOntologyChangeSet.mockReset();
     mockRejectOntologyChangeSet.mockReset();
+    mockRejectOntologyChangeSetItem.mockReset();
     mockUpdateOntologyEntityType.mockReset();
     mockUpdateOntologyRelationshipType.mockReset();
 
@@ -427,6 +432,46 @@ describe("ontology GraphQL resolvers", () => {
       reason: "Too broad",
       actorUserId: "user-1",
     });
+  });
+
+  it("rejects a single change-set item after an admin gate (U6)", async () => {
+    mockRejectOntologyChangeSetItem.mockResolvedValue({
+      id: "change-set-1",
+      status: "PENDING_REVIEW",
+    });
+
+    await rejectOntologyChangeSetItemMutation(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          itemId: "item-1",
+          reason: "Not a real concept",
+        },
+      },
+      ctx,
+    );
+
+    expect(mockRequireTenantAdmin).toHaveBeenCalledWith(ctx, "tenant-1");
+    expect(mockRejectOntologyChangeSetItem).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      itemId: "item-1",
+      reason: "Not a real concept",
+      actorUserId: "user-1",
+    });
+  });
+
+  it("propagates the admin-gate failure for item-level reject", async () => {
+    mockRequireTenantAdmin.mockRejectedValue(new GraphQLError("Forbidden"));
+
+    await expect(
+      rejectOntologyChangeSetItemMutation(
+        null,
+        { input: { tenantId: "tenant-1", itemId: "item-1" } },
+        ctx,
+      ),
+    ).rejects.toThrow("Forbidden");
+    expect(mockRejectOntologyChangeSetItem).not.toHaveBeenCalled();
   });
 
   it("updates entity definitions through an admin-gated mutation", async () => {

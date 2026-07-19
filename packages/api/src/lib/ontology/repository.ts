@@ -1596,6 +1596,101 @@ export async function rejectOntologyChangeSet(args: {
   });
 }
 
+/**
+ * Item-level reject from the Living Map evidence panel (THINK-320 U6,
+ * R13): marks a single still-reviewable item rejected and writes its
+ * rejection fingerprint so scans never re-propose the candidate. The
+ * owning change set stays open (no status change) and no ontology version
+ * is minted. Settled items (approved/applied) raise a conflict.
+ */
+export async function rejectOntologyChangeSetItem(args: {
+  tenantId: string;
+  itemId: string;
+  actorUserId: string | null;
+  reason?: string | null;
+  db?: DbLike;
+}) {
+  const db = args.db ?? defaultDb;
+  const now = new Date();
+
+  const [item] = await db
+    .select()
+    .from(ontologyChangeSetItems)
+    .where(
+      and(
+        eq(ontologyChangeSetItems.id, args.itemId),
+        eq(ontologyChangeSetItems.tenant_id, args.tenantId),
+      ),
+    )
+    .limit(1);
+  if (!item) throw new Error("Ontology change-set item not found");
+  if (item.status === "approved" || item.status === "applied") {
+    throw new OntologyChangeSetConflictError(
+      `Ontology change-set item ${item.id} is settled (${item.status}) and can no longer be rejected`,
+      item.id,
+      (item.updated_at instanceof Date
+        ? item.updated_at
+        : new Date(item.updated_at)
+      ).toISOString(),
+    );
+  }
+
+  const [changeSet] = await db
+    .select()
+    .from(ontologyChangeSets)
+    .where(
+      and(
+        eq(ontologyChangeSets.id, item.change_set_id),
+        eq(ontologyChangeSets.tenant_id, args.tenantId),
+      ),
+    )
+    .limit(1);
+  if (!changeSet) throw new Error("Ontology change set not found");
+  if (
+    TERMINAL_CHANGE_SET_STATUSES.has(
+      changeSet.status as OntologyChangeSetStatus,
+    )
+  ) {
+    throw new Error("Ontology change set is already terminal");
+  }
+
+  await db
+    .update(ontologyChangeSetItems)
+    .set({ status: "rejected", updated_at: now })
+    .where(
+      and(
+        eq(ontologyChangeSetItems.id, item.id),
+        eq(ontologyChangeSetItems.tenant_id, args.tenantId),
+      ),
+    );
+
+  // R13: fingerprint the rejected candidate so scans never re-propose it.
+  await insertOntologyCandidateRejections({
+    db,
+    tenantId: args.tenantId,
+    actorUserId: args.actorUserId,
+    items: [item],
+    now,
+  });
+
+  await recordOntologyActivity({
+    db,
+    tenantId: args.tenantId,
+    actorUserId: args.actorUserId,
+    action: "ontology_change_set_item_rejected",
+    changeSetId: changeSet.id,
+    entityType: "ontology_change_set_item",
+    entityId: item.id,
+    metadata: { reason: args.reason ?? null },
+  });
+
+  return loadOntologyChangeSet({
+    tenantId: args.tenantId,
+    changeSetId: changeSet.id,
+    db,
+  });
+}
+
 export async function startOntologySuggestionScan(args: {
   tenantId: string;
   trigger?: string | null;

@@ -18,6 +18,7 @@ import {
   partitionOntologyApprovalItems,
   planOntologyChangeSetItemWrites,
   rejectOntologyChangeSet,
+  rejectOntologyChangeSetItem,
   updateOntologyChangeSet,
 } from "./repository.js";
 
@@ -927,6 +928,102 @@ describe("rejectOntologyChangeSet fingerprints (R13)", () => {
       expect.objectContaining({ fingerprint: "entity_type:work_order" }),
       expect.objectContaining({ fingerprint: "relationship_type:assigned_to" }),
     ]);
+  });
+});
+
+describe("rejectOntologyChangeSetItem (U6, R13)", () => {
+  it("rejects one item, writes its fingerprint, and leaves the change set and versions untouched", async () => {
+    const db = new FakeOntologyDb(
+      new Map<unknown, unknown[][]>([
+        [
+          ontologyChangeSetItems,
+          [
+            // the target item load, then the reload for toOntologyChangeSet
+            [itemRow({ id: "item-a", target_slug: "work_order" })],
+            [itemRow({ id: "item-a", status: "rejected" })],
+          ],
+        ],
+        [
+          ontologyChangeSets,
+          [
+            [changeSetRow({ status: "pending_review" })],
+            [changeSetRow({ status: "pending_review" })],
+          ],
+        ],
+        [ontologyEvidenceExamples, [[]]],
+      ]),
+    );
+
+    await rejectOntologyChangeSetItem({
+      tenantId: "tenant-1",
+      itemId: "item-a",
+      actorUserId: "admin-1",
+      db: db as any,
+    });
+
+    // The single item flipped to rejected.
+    const itemPatch = db.updates.find(
+      (entry) => entry.table === ontologyChangeSetItems,
+    );
+    expect(itemPatch?.patch).toMatchObject({ status: "rejected" });
+
+    // R13: the rejection fingerprint was written.
+    const rejectionInsert = db.inserts.find(
+      (entry) => entry.table === ontologyCandidateRejections,
+    );
+    expect(rejectionInsert).toBeDefined();
+    expect(rejectionInsert!.values).toEqual([
+      expect.objectContaining({ fingerprint: "entity_type:work_order" }),
+    ]);
+
+    // The owning change set stays open and no version was minted.
+    expect(db.updates.some((entry) => entry.table === ontologyChangeSets)).toBe(
+      false,
+    );
+    expect(db.inserts.some((entry) => entry.table === ontologyVersions)).toBe(
+      false,
+    );
+  });
+
+  it("raises a conflict for settled items without writing", async () => {
+    const db = new FakeOntologyDb(
+      new Map<unknown, unknown[][]>([
+        [
+          ontologyChangeSetItems,
+          [[itemRow({ id: "item-a", status: "approved" })]],
+        ],
+      ]),
+    );
+
+    await expect(
+      rejectOntologyChangeSetItem({
+        tenantId: "tenant-1",
+        itemId: "item-a",
+        actorUserId: "admin-1",
+        db: db as any,
+      }),
+    ).rejects.toBeInstanceOf(OntologyChangeSetConflictError);
+    expect(db.updates).toHaveLength(0);
+    expect(db.inserts).toHaveLength(0);
+  });
+
+  it("refuses items whose change set is already terminal", async () => {
+    const db = new FakeOntologyDb(
+      new Map<unknown, unknown[][]>([
+        [ontologyChangeSetItems, [[itemRow({ id: "item-a" })]]],
+        [ontologyChangeSets, [[changeSetRow({ status: "approved" })]]],
+      ]),
+    );
+
+    await expect(
+      rejectOntologyChangeSetItem({
+        tenantId: "tenant-1",
+        itemId: "item-a",
+        actorUserId: "admin-1",
+        db: db as any,
+      }),
+    ).rejects.toThrow("already terminal");
+    expect(db.updates).toHaveLength(0);
   });
 });
 

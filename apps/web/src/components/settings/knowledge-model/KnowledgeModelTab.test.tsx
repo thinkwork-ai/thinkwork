@@ -22,6 +22,10 @@ vi.mock("./ResolutionQueue", () => ({
   ResolutionQueue: () => <div>Resolution queue content</div>,
 }));
 
+vi.mock("./OntologyMapView", () => ({
+  OntologyMapView: () => <div>Living map content</div>,
+}));
+
 afterEach(cleanup);
 
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
@@ -50,9 +54,36 @@ describe("KnowledgeModelTab", () => {
 
   it("swaps title and description from the per-view map", () => {
     expect(tabSource).toContain("VIEW_TITLES");
+    expect(tabSource).toContain('title: "Living Map"');
     expect(tabSource).toContain('title: "Definitions"');
     expect(tabSource).toContain('title: "Identity"');
     expect(tabSource).toContain('title: "Resolution Queue"');
+  });
+
+  it("lands on the Living Map by default (KTD-8)", () => {
+    render(<KnowledgeModelTab />);
+
+    expect(screen.getByText("Living map content")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Ontology view: Living Map" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Definitions content")).toBeNull();
+  });
+
+  it("keeps the Definitions tables reachable from the map default", async () => {
+    render(<KnowledgeModelTab />);
+
+    const trigger = screen.getByRole("button", {
+      name: "Ontology view: Living Map",
+    });
+    fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" });
+    fireEvent.click(
+      await screen.findByRole("menuitemradio", { name: "Definitions" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Definitions content")).toBeTruthy();
+    });
   });
 
   it("titles the Definitions view without ontology jargon", () => {
@@ -66,9 +97,9 @@ describe("KnowledgeModelTab", () => {
   it("switches views from the title menu", async () => {
     render(<KnowledgeModelTab />);
 
-    expect(screen.getByText("Definitions content")).toBeTruthy();
+    expect(screen.getByText("Living map content")).toBeTruthy();
     const trigger = screen.getByRole("button", {
-      name: "Ontology view: Definitions",
+      name: "Ontology view: Living Map",
     });
 
     fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" });
