@@ -213,6 +213,43 @@ export const SOURCES_WITH_MESSAGES = [
   "webhook",
 ];
 
+const DEFAULT_RUNTIME_AUTOMATION_SOURCES = new Set([
+  "automation",
+  "trigger",
+  "on_demand",
+  "timer",
+  "heartbeat_timer",
+  "agent_loop",
+  "workflow_step",
+]);
+
+/**
+ * Background work does not have a Composer turn carrying a thread runtime pin.
+ * For the default agent it therefore follows the tenant's selected runtime.
+ * Interactive/resume wakeups retain their existing agent/template routing so
+ * an already-pinned chat thread is never reinterpreted after a settings change.
+ */
+export function resolveWakeupRuntimeType(args: {
+  source: string;
+  agentRuntime: unknown;
+  templateRuntime: unknown;
+  runtimeConfig: unknown;
+}): AgentRuntimeType {
+  const fallback = normalizeAgentRuntimeType(
+    args.agentRuntime ?? args.templateRuntime,
+  );
+  if (!DEFAULT_RUNTIME_AUTOMATION_SOURCES.has(args.source)) return fallback;
+
+  const runtimeConfig =
+    args.runtimeConfig &&
+    typeof args.runtimeConfig === "object" &&
+    !Array.isArray(args.runtimeConfig)
+      ? (args.runtimeConfig as Record<string, unknown>)
+      : {};
+  const selected = runtimeConfig.defaultThreadRuntime;
+  return selected == null ? fallback : normalizeAgentRuntimeType(selected);
+}
+
 function tenantCatalogSkillS3Key(tenantSlug: string, skillId: string): string {
   return `tenants/${tenantSlug}/skill-catalog/${skillId}`;
 }
@@ -903,9 +940,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
   const payload = wakeup.payload as Record<string, unknown> | null;
   const agentLoopPayload = normalizeAgentLoopWakeupPayload(payload);
-  const runtimeType = normalizeAgentRuntimeType(
-    agent.runtime ?? agent.template_runtime,
-  );
+  const runtimeType = resolveWakeupRuntimeType({
+    source: wakeup.source,
+    agentRuntime: agent.runtime,
+    templateRuntime: agent.template_runtime,
+    runtimeConfig: agent.runtime_config,
+  });
   const configuredAgentModel = agent.model ?? agent.template_model ?? null;
   let agentModel = configuredAgentModel;
   const requestedParentModel =
