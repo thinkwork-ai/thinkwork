@@ -229,6 +229,7 @@ function basePayload(): Record<string, unknown> {
 interface TestDeps extends HarnessRunnerDeps {
   finalizePayloads: FinalizePayload[];
   invocations: Array<{
+    runtimeSessionId: string;
     messages: unknown;
     allowedTools?: string[];
     tools?: Array<Record<string, unknown>>;
@@ -248,6 +249,7 @@ function makeDeps(
 ): TestDeps {
   const finalizePayloads: FinalizePayload[] = [];
   const invocations: Array<{
+    runtimeSessionId: string;
     messages: unknown;
     allowedTools?: string[];
     tools?: Array<Record<string, unknown>>;
@@ -294,6 +296,7 @@ function makeDeps(
     abandonFreshTurn: vi.fn(async () => {}),
     invokeHarness: vi.fn(async (input) => {
       invocations.push({
+        runtimeSessionId: input.runtimeSessionId,
         messages: input.messages,
         allowedTools: input.allowedTools,
         tools: input.tools,
@@ -1296,6 +1299,226 @@ describe("runHarnessTurn — governed AgentCore Skill Creator", () => {
 });
 
 describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
+  it("bounds document discovery and composes from retained evidence at the cutoff", async () => {
+    const deps = makeDeps([
+      stream(
+        textEvents(
+          "Gathered the evidence required for the QBR.",
+          "max_iterations_exceeded",
+        ),
+      ),
+      stream(
+        textEvents(
+          JSON.stringify({
+            genre: "qbr",
+            title: "Bounded QBR",
+            abstract: "A bounded Goal-mode report.",
+            digest_markdown:
+              "## Summary\n\nEvidence retained.\n\n## Verdict\n\nReady.",
+            status: "draft",
+          }),
+        ),
+      ),
+    ]);
+
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        message: "Create an HTML artifact using the QBR plate.",
+        goal_mode: {
+          enabled: true,
+          action: "start",
+          objective: "Create the QBR",
+          resolved_budget: { token_budget: 100_000 },
+        },
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("completed");
+    expect(deps.invocations).toHaveLength(2);
+    expect(deps.invocations[0]?.maxIterations).toBe(3);
+    expect(deps.invocations[1]?.maxIterations).toBe(1);
+    expect(
+      deps.invocations.map((invocation) => invocation.runtimeSessionId),
+    ).toEqual(["tw-harness-turn-turn-1", "tw-harness-turn-turn-1"]);
+    expect(deps.invocations[1]?.allowedTools).toEqual([
+      "__thinkwork_document_envelope__",
+    ]);
+    expect(JSON.stringify(deps.invocations[1]?.messages)).toContain(
+      "evidence you gathered in this turn",
+    );
+    expect(deps.emissions).toHaveLength(1);
+    expect(deps.finalizePayloads[0].response?.content).toBe(
+      "Done — Bounded QBR is ready.",
+    );
+    expect(
+      deps.finalizePayloads[0].response?.diagnostics?.harness,
+    ).toMatchObject({
+      document_composition_transition: "max_iterations_exceeded",
+      goal_document_phase_limits: {
+        discovery_max_iterations: 3,
+        composition_max_iterations: 1,
+        discovery_invocations: 1,
+        composition_invocations: 1,
+      },
+    });
+  });
+
+  it("moves a premature caller tool directly into the bounded composition phase", async () => {
+    const deps = makeDeps([
+      stream(toolUseEvents("emit_document", "premature-doc", EMIT_INPUT)),
+      stream(
+        textEvents(
+          JSON.stringify({
+            genre: "qbr",
+            title: "Corrected bounded QBR",
+            abstract: "Composed after bounded discovery.",
+            digest_markdown:
+              "## Summary\n\nEvidence retained.\n\n## Verdict\n\nReady.",
+            status: "draft",
+          }),
+        ),
+      ),
+    ]);
+
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        message: "Create an HTML artifact using the QBR plate.",
+        goal_mode: {
+          enabled: true,
+          action: "start",
+          objective: "Create the QBR",
+          resolved_budget: { token_budget: 100_000 },
+        },
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("completed");
+    expect(deps.invocations).toHaveLength(2);
+    expect(deps.invocations[0]?.maxIterations).toBe(3);
+    expect(deps.invocations[1]?.maxIterations).toBe(1);
+    expect(JSON.stringify(deps.invocations[1]?.messages)).toContain(
+      "Discovery is now closed",
+    );
+    expect(JSON.stringify(deps.invocations[1]?.messages)).toContain(
+      "exactly one JSON document envelope",
+    );
+    expect(
+      deps.finalizePayloads[0].response?.diagnostics?.harness,
+    ).toMatchObject({
+      document_composition_transition: "caller_tool_continuation",
+      goal_document_phase_limits: {
+        discovery_invocations: 1,
+        composition_invocations: 1,
+      },
+    });
+  });
+
+  it("does not grant a corrective second Goal composition invocation", async () => {
+    const deps = makeDeps([
+      stream(textEvents("Evidence gathered.", "max_iterations_exceeded")),
+      stream(textEvents("not a valid document envelope")),
+    ]);
+
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        message: "Create an HTML artifact using the QBR plate.",
+        goal_mode: {
+          enabled: true,
+          action: "start",
+          objective: "Create the QBR",
+          resolved_budget: { token_budget: 100_000 },
+        },
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(deps.invocations).toHaveLength(2);
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "one-invocation phase budget",
+    );
+  });
+
+  it("does not retry a Goal composition after document validation rejects it", async () => {
+    const deps = makeDeps(
+      [
+        stream(textEvents("Evidence gathered.", "max_iterations_exceeded")),
+        stream(
+          textEvents(
+            JSON.stringify({
+              genre: "qbr",
+              title: "Rejected bounded QBR",
+              abstract: "Rejected by the document compiler.",
+              digest_markdown:
+                "## Summary\n\nEvidence retained.\n\n## Verdict\n\nReady.",
+              status: "draft",
+            }),
+          ),
+        ),
+      ],
+      {
+        emitResults: [
+          {
+            statusCode: 200,
+            body: { ok: false, code: "COMPILE_REJECTED", diagnostics: [] },
+          },
+        ],
+      },
+    );
+
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        message: "Create an HTML artifact using the QBR plate.",
+        goal_mode: {
+          enabled: true,
+          action: "start",
+          objective: "Create the QBR",
+          resolved_budget: { token_budget: 100_000 },
+        },
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(deps.invocations).toHaveLength(2);
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      "one-invocation phase budget",
+    );
+  });
+
+  it("keeps a composition max-iteration stop as an explicit failure", async () => {
+    const deps = makeDeps([
+      stream(textEvents("Evidence gathered.", "max_iterations_exceeded")),
+      stream(textEvents("partial envelope", "max_iterations_exceeded")),
+    ]);
+
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        message: "Create an HTML artifact using the QBR plate.",
+        goal_mode: {
+          enabled: true,
+          action: "start",
+          objective: "Create the QBR",
+          resolved_budget: { token_budget: 100_000 },
+        },
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("failed");
+    expect(deps.invocations).toHaveLength(2);
+    expect(deps.finalizePayloads[0].error_message).toContain(
+      'stopReason "max_iterations_exceeded"',
+    );
+  });
+
   it("completes through the explicit goal_complete contract", async () => {
     const deps = makeDeps([
       stream(
@@ -1395,6 +1618,11 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
     expect(JSON.stringify(deps.invocations[0].messages)).toContain(
       "agentcore:turn-1",
     );
+    expect(
+      deps.finalizePayloads[0].response?.diagnostics?.harness,
+    ).toMatchObject({
+      goal_document_phase_limits: null,
+    });
   });
 
   it("resumes from canonical persisted progress and accumulates usage", async () => {
