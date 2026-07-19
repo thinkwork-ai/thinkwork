@@ -472,6 +472,7 @@ export async function consumeEnrollment(
 
     const [conflict] = await tx
       .select({
+        id: userAuthIdentities.id,
         userId: userAuthIdentities.user_id,
         tenantId: userAuthIdentities.tenant_id,
         resourceId: userAuthIdentities.auth_provider_resource_id,
@@ -485,8 +486,14 @@ export async function consumeEnrollment(
         ),
       )
       .limit(1);
+    const promotesQuarantinedRecovery =
+      enrollment.recipient_grant_kind === "identity_recovery" &&
+      conflict?.userId === intendedUserId &&
+      conflict.tenantId === enrollment.tenant_id &&
+      conflict.status === "quarantined";
     if (
       conflict &&
+      !promotesQuarantinedRecovery &&
       (conflict.userId !== intendedUserId ||
         conflict.tenantId !== enrollment.tenant_id ||
         conflict.resourceId !== route.connectionId ||
@@ -520,6 +527,25 @@ export async function consumeEnrollment(
         },
         activated_at: now,
       });
+    } else if (promotesQuarantinedRecovery) {
+      await tx
+        .update(userAuthIdentities)
+        .set({
+          auth_provider_resource_id: route.connectionId,
+          provider_issuer: route.providerIssuer ?? cognitoIssuer,
+          provider_subject: cognitoSub,
+          status: "active",
+          proof_kind: "recipient_challenge_recovery",
+          evidence: {
+            appClientId: route.appClientId,
+            connectionKey: route.connectionKey,
+            routeKey: route.routeKey,
+          },
+          activated_at: now,
+          quarantined_at: null,
+          updated_at: now,
+        })
+        .where(eq(userAuthIdentities.id, conflict.id));
     }
 
     if (!preservesActiveMembership) {

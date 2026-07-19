@@ -62,7 +62,14 @@ vi.mock("@thinkwork/database-pg/schema", () => {
       "auth_provider_resource_id",
       "cognito_issuer",
       "cognito_sub",
+      "provider_issuer",
+      "provider_subject",
       "status",
+      "proof_kind",
+      "evidence",
+      "activated_at",
+      "quarantined_at",
+      "updated_at",
     ]),
   };
 });
@@ -591,6 +598,51 @@ describe("identity enrollment", () => {
           "active",
       ),
     ).toBe(false);
+  });
+
+  it("promotes the intended user's quarantined identity after exact recovery proof", async () => {
+    const grant = enrollment({ recipient_grant_kind: "identity_recovery" });
+    selectQueue.push(
+      [grant],
+      [grant],
+      [{ id: "member-1", status: "active" }],
+      [
+        {
+          id: "quarantined-identity-1",
+          userId: "user-1",
+          tenantId: "tenant-1",
+          resourceId: null,
+          status: "quarantined",
+        },
+      ],
+    );
+
+    await expect(
+      consumeEnrollment(
+        {
+          startToken: "start-token",
+          recipientChallenge: "654321",
+          redirectUri: "https://app.example.com/auth/callback",
+        },
+        auth,
+        new Date("2026-07-18T00:00:00Z"),
+      ),
+    ).resolves.toBe("consumed");
+
+    expect(inserts).toHaveLength(1);
+    expect(updates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          values: expect.objectContaining({
+            auth_provider_resource_id: "connection-1",
+            provider_subject: "cognito-sub-1",
+            status: "active",
+            proof_kind: "recipient_challenge_recovery",
+            quarantined_at: null,
+          }),
+        }),
+      ]),
+    );
   });
 
   it("binds a native identity from a legacy-session migration without changing membership", async () => {
