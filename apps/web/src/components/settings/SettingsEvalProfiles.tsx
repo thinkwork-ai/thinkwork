@@ -16,6 +16,11 @@ import {
   DialogTitle,
   Input,
   Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
@@ -39,6 +44,7 @@ export type EvalProfileRow = {
   id: string;
   name: string;
   model: string;
+  runtimeType: "pi" | "agentcore";
   judgeModel: string | null;
   trials: number;
   isDefault: boolean;
@@ -64,6 +70,10 @@ export function shortModelLabel(model: string | null | undefined): string {
 export function clampTrials(value: number): number {
   if (!Number.isFinite(value)) return 1;
   return Math.min(9, Math.max(1, Math.round(value)));
+}
+
+export function runtimeLabel(runtimeType: "pi" | "agentcore"): string {
+  return runtimeType === "agentcore" ? "AgentCore Harness" : "Pi";
 }
 
 export function SettingsEvalProfiles() {
@@ -124,6 +134,15 @@ export function SettingsEvalProfiles() {
             </Badge>
           )}
         </span>
+      ),
+    },
+    {
+      accessorKey: "runtimeType",
+      header: "Runtime",
+      cell: ({ row }) => (
+        <Badge variant="outline" className="whitespace-nowrap">
+          {runtimeLabel(row.original.runtimeType)}
+        </Badge>
       ),
     },
     {
@@ -232,7 +251,7 @@ export function SettingsEvalProfiles() {
     <SettingsPane className="max-w-none">
       <SettingsPageTitle
         title="Eval Profiles"
-        description="A profile is the agent-under-test configuration — model, judge pin, and trial count. Runs pin a snapshot at dispatch; the default profile backs skill gates and scheduled runs."
+        description="A profile is the agent-under-test configuration — runtime, model, judge pin, and trial count. Runs pin a snapshot at dispatch; the default profile backs skill gates and scheduled runs."
       />
       {profilesResult.fetching ? (
         <LoadingShimmer />
@@ -318,6 +337,9 @@ function ProfileFormDialog({
 }) {
   const [name, setName] = useState(profile?.name ?? "");
   const [model, setModel] = useState(profile?.model ?? "");
+  const [runtimeType, setRuntimeType] = useState<"pi" | "agentcore">(
+    profile?.runtimeType ?? "pi",
+  );
   const [judgeModel, setJudgeModel] = useState(profile?.judgeModel ?? "");
   const [trials, setTrials] = useState(profile?.trials ?? 1);
   const [submitting, setSubmitting] = useState(false);
@@ -333,6 +355,7 @@ function ProfileFormDialog({
             input: {
               name: name.trim(),
               model,
+              runtimeType,
               ...(judgeModel
                 ? { judgeModel }
                 : // Explicit null is indistinguishable from omitted for
@@ -348,6 +371,7 @@ function ProfileFormDialog({
             input: {
               name: name.trim(),
               model,
+              runtimeType,
               ...(judgeModel ? { judgeModel } : {}),
               trials: clampTrials(trials),
             },
@@ -383,6 +407,26 @@ function ProfileFormDialog({
               onChange={(event) => setName(event.target.value)}
               placeholder="e.g. Kimi baseline"
             />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="eval-profile-runtime">Runtime</Label>
+            <p className="text-xs text-muted-foreground">
+              Pins the execution harness for every run under this profile.
+            </p>
+            <Select
+              value={runtimeType}
+              onValueChange={(value) =>
+                setRuntimeType(value as "pi" | "agentcore")
+              }
+            >
+              <SelectTrigger id="eval-profile-runtime" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="agentcore">AgentCore Harness</SelectItem>
+                <SelectItem value="pi">Pi</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Model (agent under test)</Label>

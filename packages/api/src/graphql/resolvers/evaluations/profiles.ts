@@ -30,6 +30,7 @@ import {
   setDefaultEvalProfile as setDefaultProfileInLib,
   updateEvalProfile as updateProfileInLib,
   type EvalProfileRow,
+  assertEvalRuntimeType,
 } from "../../../lib/evals/eval-profiles.js";
 
 function toGraphQLError(err: unknown): unknown {
@@ -47,6 +48,7 @@ function renderProfile(row: EvalProfileRow) {
     tenantId: row.tenant_id,
     name: row.name,
     model: row.model,
+    runtimeType: row.runtime_type,
     judgeModel: row.judge_model,
     trials: row.trials,
     isDefault: row.is_default,
@@ -130,6 +132,7 @@ const createEvalProfile = async (
     input: {
       name: string;
       model: string;
+      runtimeType?: string | null;
       judgeModel?: string | null;
       trials?: number | null;
     };
@@ -143,6 +146,10 @@ const createEvalProfile = async (
       tenantId: args.tenantId,
       name: args.input.name,
       model,
+      runtimeType:
+        args.input.runtimeType != null
+          ? assertEvalRuntimeType(args.input.runtimeType)
+          : undefined,
       judgeModel: normalizeJudgeModel(args.input.judgeModel),
       trials: args.input.trials ?? null,
     });
@@ -159,6 +166,7 @@ const updateEvalProfile = async (
     input: {
       name?: string | null;
       model?: string | null;
+      runtimeType?: string | null;
       judgeModel?: string | null;
       clearJudgeModel?: boolean | null;
       trials?: number | null;
@@ -175,6 +183,10 @@ const updateEvalProfile = async (
     const row = await updateProfileInLib(args.id, {
       name: args.input.name ?? null,
       model,
+      runtimeType:
+        args.input.runtimeType != null
+          ? assertEvalRuntimeType(args.input.runtimeType)
+          : null,
       judgeModel: normalizeJudgeModel(args.input.judgeModel),
       clearJudgeModel: args.input.clearJudgeModel ?? null,
       trials: args.input.trials ?? null,

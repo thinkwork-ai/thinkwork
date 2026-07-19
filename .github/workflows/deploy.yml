@@ -825,7 +825,8 @@ jobs:
             -v ON_ERROR_STOP=1 \
             --single-transaction \
             -f ../../../packages/database-pg/drizzle/0264_harness_tool_execution_ledger.sql \
-            -f ../../../packages/database-pg/drizzle/0265_eval_runs_requester_identity.sql
+            -f ../../../packages/database-pg/drizzle/0265_eval_runs_requester_identity.sql \
+            -f ../../../packages/database-pg/drizzle/0266_eval_profiles_runtime_type.sql
 
       # THNK-71 U3 — rename persisted Data Integrations plugin state before
       # the GraphQL Lambda serves the Company ETL catalog key. Idempotent and

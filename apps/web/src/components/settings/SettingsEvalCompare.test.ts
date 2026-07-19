@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   comparabilityFlags,
   parseProfileSnapshot,
+  pinnedRunConfigLabel,
 } from "./SettingsEvalCompare";
 
 function detail(overrides: Record<string, unknown> = {}) {
@@ -11,6 +12,7 @@ function detail(overrides: Record<string, unknown> = {}) {
     scoringVersion: 3,
     status: "completed",
     profileSnapshot: JSON.stringify({
+      runtimeType: "pi",
       judgeModel: null,
       workspaceFingerprint: ["skill-a"],
     }),
@@ -28,16 +30,19 @@ describe("parseProfileSnapshot", () => {
         }),
       ),
     ).toEqual({
+      runtimeType: null,
       judgeModel: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
       workspaceFingerprint: ["a", "b"],
       tierCounts: null,
     });
     expect(parseProfileSnapshot(null)).toEqual({
+      runtimeType: null,
       judgeModel: null,
       workspaceFingerprint: null,
       tierCounts: null,
     });
     expect(parseProfileSnapshot("not json")).toEqual({
+      runtimeType: null,
       judgeModel: null,
       workspaceFingerprint: null,
       tierCounts: null,
@@ -97,9 +102,38 @@ describe("comparabilityFlags (KTD6 gate)", () => {
     ).toBe(true);
   });
 
+  it("flags Pi and AgentCore Harness runs as non-comparable", () => {
+    const agentcore = detail({
+      profileSnapshot: JSON.stringify({
+        runtimeType: "agentcore",
+        judgeModel: null,
+        workspaceFingerprint: ["skill-a"],
+      }),
+    });
+    expect(
+      comparabilityFlags([detail(), agentcore]).some((flag) =>
+        flag.includes("Execution runtimes differ"),
+      ),
+    ).toBe(true);
+  });
+
   it("fewer than two runs never flags — the empty/single states carry guidance instead", () => {
     expect(comparabilityFlags([detail()])).toEqual([]);
     expect(comparabilityFlags([])).toEqual([]);
+  });
+});
+
+describe("pinned run labels", () => {
+  it("renders the immutable run runtime and model rather than the editable profile", () => {
+    expect(
+      pinnedRunConfigLabel({
+        runtimeType: "agentcore",
+        model: "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+      }),
+    ).toContain("AgentCore Harness");
+    expect(
+      pinnedRunConfigLabel({ runtimeType: "pi", model: "claude-haiku-4-5" }),
+    ).toContain("Pi");
   });
 });
 

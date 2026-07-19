@@ -438,6 +438,7 @@ async function dispatchDatasetRun(
         message: "Reply with exactly: OK",
         model: profileSnapshot.model,
         requesterUserId: run.requester_user_id,
+        runtimeType: profileSnapshot.runtimeType,
       });
       if (ping.composedSystemPrompt) {
         profileSnapshot = {

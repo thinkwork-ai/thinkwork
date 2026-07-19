@@ -64,6 +64,7 @@ import {
   piExtensionSources,
   piExtensionVersions,
 } from "@thinkwork/database-pg/schema";
+import { defaultThreadRuntimeFromConfig } from "./harness/thread-runtime-policy.js";
 import { buildSkillEnvOverrides } from "./oauth-token.js";
 import {
   readSkillAssignmentStates,
@@ -331,6 +332,8 @@ export interface AgentRuntimeConfig {
   guardrailId: string | null;
   guardrailConfig: GuardrailPayload | undefined;
   runtimeType: AgentRuntimeType;
+  /** Runtime selected for new threads on the tenant platform agent. */
+  defaultThreadRuntime?: "pi" | "agentcore";
   skillsConfig: SkillConfig[];
   trustedSkillIds: string[];
   webSearchConfig?: WebSearchConfig;
@@ -469,6 +472,7 @@ export async function resolveAgentRuntimeConfig(
       capability_folder_dispatch: agents.capability_folder_dispatch,
       template_id: agents.template_id,
       runtime: agents.runtime,
+      runtime_config: agents.runtime_config,
       model: agents.model,
       guardrail_id: agents.guardrail_id,
       budget_monthly_cents: agents.budget_monthly_cents,
@@ -940,6 +944,7 @@ export async function resolveAgentRuntimeConfig(
     guardrailId,
     guardrailConfig,
     runtimeType,
+    defaultThreadRuntime: defaultThreadRuntimeFromConfig(agent.runtime_config),
     skillsConfig,
     trustedSkillIds: skillsConfig.map((skill) => skill.skillId),
     webSearchConfig,

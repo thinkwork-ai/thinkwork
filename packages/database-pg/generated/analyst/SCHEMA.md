@@ -1551,6 +1551,7 @@ Join hints:
 | tenant_id | uuid | not null |
 | name | text | not null |
 | model | text | not null |
+| runtime_type | text | not null |
 | judge_model | text |  |
 | trials | integer | not null |
 | is_default | boolean | not null |

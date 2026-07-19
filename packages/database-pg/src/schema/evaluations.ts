@@ -174,6 +174,9 @@ export const evalProfiles = pgTable(
     // model: Bedrock model id of the agent under test. Validated against
     // the tenant model catalog at write time.
     model: text("model").notNull(),
+    // Runtime under test. Profiles pin this alongside the model so a run
+    // cannot silently switch between Pi and the AgentCore Harness.
+    runtime_type: text("runtime_type").notNull().default("pi"),
     // judge_model: pinned LLM-judge model for llm-rubric scoring. Null =
     // the deployed default (EVAL_JUDGE_MODEL_ID). Threaded into scoring-
     // engine creation per run (KTD11) — the pin is enforced, not recorded.

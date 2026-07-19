@@ -43,7 +43,9 @@ vi.mock("../../../lib/model-catalog/tenant-catalog.js", () => ({
 
 vi.mock("../../../lib/evals/eval-profiles.js", async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import("../../../lib/evals/eval-profiles.js")>();
+    await importOriginal<
+      typeof import("../../../lib/evals/eval-profiles.js")
+    >();
   return {
     ...actual,
     listEvalProfiles: mockLib.listEvalProfiles,
@@ -63,6 +65,7 @@ const profileRow = (overrides: Record<string, unknown> = {}) => ({
   tenant_id: "tenant-1",
   name: "Default",
   model: "moonshotai.kimi-k2.5",
+  runtime_type: "pi",
   judge_model: null,
   trials: 1,
   is_default: true,
@@ -125,7 +128,10 @@ describe("createEvalProfile mutation", () => {
     await expect(
       evalProfileMutations.createEvalProfile(
         null,
-        { tenantId: "tenant-1", input: { name: "X", model: "m" } },
+        {
+          tenantId: "tenant-1",
+          input: { name: "X", model: "m", runtimeType: "pi" },
+        },
         ctxWithTenant,
       ),
     ).rejects.toThrow("denied");
@@ -138,7 +144,10 @@ describe("createEvalProfile mutation", () => {
     await expect(
       evalProfileMutations.createEvalProfile(
         null,
-        { tenantId: "tenant-1", input: { name: "X", model: "nope" } },
+        {
+          tenantId: "tenant-1",
+          input: { name: "X", model: "nope", runtimeType: "pi" },
+        },
         ctxWithTenant,
       ),
     ).rejects.toThrow(/not enabled in the tenant model catalog/);
@@ -153,13 +162,22 @@ describe("createEvalProfile mutation", () => {
       null,
       {
         tenantId: "tenant-1",
-        input: { name: "Candidate", model: "moonshotai.kimi-k2.5", trials: 3 },
+        input: {
+          name: "Candidate",
+          model: "moonshotai.kimi-k2.5",
+          runtimeType: "agentcore",
+          trials: 3,
+        },
       },
       ctxWithTenant,
     );
     expect(result).toMatchObject({ name: "Candidate", isDefault: false });
     expect(mockLib.createEvalProfile).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: "tenant-1", trials: 3 }),
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        runtimeType: "agentcore",
+        trials: 3,
+      }),
     );
   });
 });
