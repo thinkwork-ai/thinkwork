@@ -46,6 +46,7 @@ import {
   type HarnessGoalMode,
 } from "./goal-mode.js";
 import type { HarnessSkillDraftRegistration } from "../skill-creator/harness-submit-draft.js";
+import type { HarnessInvocationTool } from "./managed-profile.js";
 
 // ---------------------------------------------------------------------------
 // Deps
@@ -66,6 +67,12 @@ export interface EnsuredHarness {
   gatewayTargetName: string;
   identityWorkloadName: string;
   identityCredentialProviderName: string;
+  /**
+   * Exact non-secret tool configuration read back from the immutable Harness
+   * control plane and attested in the tenant managed profile. InvokeHarness'
+   * `tools` member is a full invocation override, not an additive patch.
+   */
+  invocationTools?: HarnessInvocationTool[];
 }
 
 /**
@@ -246,7 +253,7 @@ export interface HarnessRunnerDeps {
     /** Optional per-turn narrowing of the Harness's configured tool ceiling. */
     allowedTools?: string[];
     /** Caller-fulfilled tools must be repeated on InvokeHarness. */
-    tools?: Array<Record<string, unknown>>;
+    tools?: HarnessInvocationTool[];
     systemPrompt?: Array<{ text: string }>;
     maxIterations?: number;
   }):
@@ -890,6 +897,12 @@ const CONTINUE_STOP_REASONS = new Set([
 const MAX_TOOL_ROUNDS = 16;
 const DOCUMENT_DISCOVERY_MAX_ITERATIONS = 8;
 const GOAL_DOCUMENT_DISCOVERY_MAX_ITERATIONS = 3;
+const LEGACY_BROWSER_DISABLED_ALLOWED_TOOLS = [
+  "@thinkwork_gateway/*",
+  "emit_document",
+  "goal_complete",
+  "submit_skill_draft",
+] as const;
 const DOCUMENT_COMPOSITION_MAX_ITERATIONS = 2;
 const GOAL_DOCUMENT_COMPOSITION_MAX_ITERATIONS = 1;
 
@@ -1556,6 +1569,7 @@ export async function runHarnessTurn(
       `authorized_workspace_skills=${authorizedWorkspaceSkillIds.join(",") || "none"}`,
       `message_pinned_skills=${messagePinnedSkillIds.join(",") || "none"}`,
       `message_attachments=${messageAttachments.length > 0 ? JSON.stringify(messageAttachments) : "none"}`,
+      `browser_automation=${payload.browser_automation_enabled === true ? "enabled" : "disabled"}`,
       `skill_creator_mode=${skillCreatorTurn ? "enabled" : "disabled"}`,
       goalExecution
         ? `goal_mode=${JSON.stringify({
@@ -1911,21 +1925,29 @@ export async function runHarnessTurn(
         // never changes ThinkWork's model semantics. `requested_model` is a
         // separate audit field and is intentionally not the execution source.
         ...(turn.modelId ? { modelId: turn.modelId } : {}),
-        ...(!documentCompositionPhase &&
-        payload.browser_automation_enabled === true
+        ...(!documentCompositionPhase && harness.invocationTools
           ? {
-              // Native Harness tools are invocation-scoped. AWS requires the
-              // Browser declaration on every InvokeHarness request even when
-              // the Harness configuration and allowlist already name it.
-              tools: [
-                {
-                  type: "agentcore_browser",
-                  // Keep the ThinkWork capability slug `browser_automation`,
-                  // but expose AWS's canonical native Harness tool name. The
-                  // service examples and managed tool contract use `browser`.
-                  name: "browser",
-                },
-              ],
+              // InvokeHarness treats `tools` as the complete invocation tool
+              // set. Passing Browser alone hides the configured Gateway and
+              // inline functions (including goal_complete). Reuse the exact
+              // control-plane-attested tool array and remove only Browser
+              // when the participant's effective capability is disabled.
+              tools: harness.invocationTools.filter(
+                (tool) =>
+                  payload.browser_automation_enabled === true ||
+                  tool.type !== "agentcore_browser",
+              ),
+            }
+          : {}),
+        ...(!documentCompositionPhase &&
+        !harness.invocationTools &&
+        payload.browser_automation_enabled !== true
+          ? {
+              // During the one-release profile migration, the old stable
+              // endpoint remains usable before SSM publishes the attested
+              // full override. Narrow its existing allowlist so Browser stays
+              // unavailable for participants whose capability is disabled.
+              allowedTools: [...LEGACY_BROWSER_DISABLED_ALLOWED_TOOLS],
             }
           : {}),
         ...(documentEmissionRequired && !documentCompositionPhase

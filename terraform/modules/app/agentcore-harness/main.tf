@@ -23,7 +23,10 @@ locals {
   normalized_tenant  = replace(var.tenant_slug, "-", "_")
   normalized_profile = replace(var.trust_profile, "-", "_")
   harness_name       = "Thinkwork_${local.normalized_stage}_${local.normalized_tenant}_${local.normalized_profile}"
-  endpoint_name      = "ThinkworkProof"
+  # InvokeHarness accepts an endpoint name, not an immutable version. Give
+  # every immutable Harness version its own endpoint so the old SSM profile
+  # remains valid until the new endpoint snapshot is durably published.
+  endpoint_prefix = "ThinkworkProofV"
   gateway_target_tool_names = [
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___owner_probe",
     "Thinkwork${replace(title(replace(var.stage, "-", " ")), " ", "")}OwnerProof___mixed_disclosure",
@@ -57,7 +60,8 @@ locals {
     tool_policy      = "gateway-and-cedar-authoritative"
     connector_facade = "intent-ranked-direct-v1"
     sandbox_facade   = "bounded-internal-python-v1"
-    browser          = "agentcore-browser-v1"
+    browser          = "agentcore-browser-v3-canonical-name-and-participant-context"
+    invocation_tools = "control-plane-attested-full-override-v1"
     builtin_web      = "tenant-policy-secret-bound-v1"
     platform_tools   = "brain-email-workspace-skills-message-attachments-user-questions-v6"
     artifact_facade  = "caller-fulfilled-emit-document-v1"
@@ -241,7 +245,7 @@ resource "aws_iam_role_policy" "harness_execution" {
 }
 
 ################################################################################
-# One stable tenant/profile Harness and named version-pinned endpoint.
+# One stable tenant/profile Harness with immutable-version endpoint names.
 ################################################################################
 
 moved {
@@ -256,17 +260,17 @@ resource "terraform_data" "managed_multiplayer_harness_identity" {
   count = var.managed_runtime_enabled ? 1 : 0
 
   input = {
-    region        = var.region
-    harness_name  = local.harness_name
-    endpoint_name = local.endpoint_name
+    region          = var.region
+    harness_name    = local.harness_name
+    endpoint_prefix = local.endpoint_prefix
   }
   provisioner "local-exec" {
     when    = destroy
     command = "bash ${path.module}/scripts/delete_harness.sh"
     environment = {
-      AWS_REGION    = self.input.region
-      HARNESS_NAME  = self.input.harness_name
-      ENDPOINT_NAME = self.input.endpoint_name
+      AWS_REGION      = self.input.region
+      HARNESS_NAME    = self.input.harness_name
+      ENDPOINT_PREFIX = self.input.endpoint_prefix
     }
   }
 
@@ -284,7 +288,7 @@ resource "terraform_data" "managed_multiplayer_harness_configuration" {
     environment = {
       AWS_REGION                    = var.region
       HARNESS_NAME                  = local.harness_name
-      ENDPOINT_NAME                 = local.endpoint_name
+      ENDPOINT_PREFIX               = local.endpoint_prefix
       EXECUTION_ROLE_ARN            = aws_iam_role.harness_execution[0].arn
       DISCOVERY_URL                 = var.discovery_url
       HARNESS_AUDIENCE              = var.harness_audience
@@ -308,8 +312,10 @@ data "external" "harness_state" {
   program    = ["bash", "${path.module}/scripts/read_harness.sh"]
 
   query = {
-    region        = var.region
-    harness_name  = local.harness_name
-    endpoint_name = local.endpoint_name
+    region             = var.region
+    harness_name       = local.harness_name
+    endpoint_prefix    = local.endpoint_prefix
+    gateway_arn        = var.gateway_arn
+    oauth_provider_arn = var.oauth_credential_provider_arn
   }
 }

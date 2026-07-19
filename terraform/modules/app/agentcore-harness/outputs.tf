@@ -19,8 +19,8 @@ output "managed_harness_arn" {
 }
 
 output "managed_endpoint_name" {
-  description = "Named Harness endpoint qualifier. Empty when disabled."
-  value       = var.managed_runtime_enabled ? local.endpoint_name : ""
+  description = "Immutable-version Harness endpoint qualifier. Empty when disabled."
+  value       = var.managed_runtime_enabled ? data.external.harness_state[0].result.endpoint_name : ""
 }
 
 output "managed_endpoint_arn" {
@@ -53,6 +53,20 @@ output "managed_status" {
 }
 
 output "managed_configuration_fingerprint" {
-  description = "Non-secret fingerprint of the stable tenant/profile Harness ceiling."
-  value       = var.managed_runtime_enabled ? local.configuration_hash : ""
+  description = "Non-secret fingerprint binding desired configuration to the immutable endpoint tool snapshot."
+  value = var.managed_runtime_enabled ? sha256(jsonencode({
+    desired_configuration = local.configuration_hash
+    harness_version       = data.external.harness_state[0].result.harness_version
+    invocation_tools      = jsondecode(data.external.harness_state[0].result.invocation_tools_json)
+  })) : ""
+}
+
+output "managed_invocation_tools_json" {
+  description = "Exact non-secret live Harness tool configuration serialized for the managed data-plane profile."
+  value       = var.managed_runtime_enabled ? data.external.harness_state[0].result.invocation_tools_json : "[]"
+}
+
+output "managed_invocation_tools_fingerprint" {
+  description = "JavaScript-canonical SHA-256 digest of the immutable endpoint invocation-tool snapshot."
+  value       = var.managed_runtime_enabled ? data.external.harness_state[0].result.invocation_tools_fingerprint : ""
 }
