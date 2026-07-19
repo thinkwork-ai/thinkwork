@@ -11,7 +11,7 @@ import {
   Trash2,
   Wrench,
 } from "lucide-react";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
 import {
   Badge,
   Button,
@@ -35,6 +35,7 @@ import { useTenant } from "@/context/TenantContext";
 import {
   SettingsTenantAgentQuery,
   SettingsTenantSandboxStatusQuery,
+  SettingsUpdateTenantAgentMutation,
 } from "@/lib/settings-queries";
 import {
   deleteBuiltinTool,
@@ -162,6 +163,48 @@ function hasBlockedTool(value: unknown, toolName: string | null): boolean {
   return value.map((item) => String(item).toLowerCase()).includes(toolName);
 }
 
+function parseJsonValue<T>(value: unknown, fallback: T): T {
+  if (typeof value !== "string") return (value as T | null) ?? fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function policyToolAliases(row: Pick<Row, "slug" | "agentAccess">): string[] {
+  if (row.slug === "browser_automation") {
+    return ["browser_automation", "browser"];
+  }
+  return row.agentAccess.toolName ? [row.agentAccess.toolName] : [];
+}
+
+function policyAgentConfigInput(
+  row: Pick<Row, "slug">,
+  enabled: boolean,
+  agent: AgentToolConfig,
+): Record<string, string> {
+  const current = parseJsonValue<Record<string, unknown>>(
+    agentConfigFor(row.slug, agent),
+    {},
+  );
+  const value = JSON.stringify({ ...current, enabled });
+  switch (row.slug) {
+    case "code-sandbox":
+      return { sandbox: value };
+    case "agent-email-send":
+      return { sendEmail: value };
+    case "context-engine":
+      return { contextEngine: value };
+    case "json-render-ui":
+      return { jsonRenderUi: value };
+    case "browser_automation":
+      return { browser: value };
+    default:
+      return {};
+  }
+}
+
 function toolNameFor(slug: string): string | null {
   switch (slug) {
     case "code-sandbox":
@@ -286,7 +329,7 @@ export function SettingsTools() {
     variables: { id: tenantId ?? "" },
     pause: !tenantId,
   });
-  const [{ data: agentData }] = useQuery({
+  const [{ data: agentData }, refetchAgent] = useQuery({
     query: SettingsTenantAgentQuery,
     variables: { tenantId: tenantId ?? "" },
     pause: !tenantId,
@@ -542,8 +585,13 @@ export function SettingsTools() {
       {activeRow?.kind === "policy-gated" ? (
         <PolicyGatedInfoDialog
           row={activeRow}
-          agentName={agent?.agentName ?? "Agent"}
+          agent={agent}
+          tenantId={tenantId}
           onClose={() => setActiveRow(null)}
+          onChanged={() => {
+            refetchAgent({ requestPolicy: "network-only" });
+            setActiveRow(null);
+          }}
         />
       ) : activeRow ? (
         <ConfigureBuiltinToolDialog
@@ -809,17 +857,56 @@ function ConfigureBuiltinToolDialog({
 
 function PolicyGatedInfoDialog({
   row,
-  agentName,
+  agent,
+  tenantId,
   onClose,
+  onChanged,
 }: {
   row: Row;
-  agentName: string;
+  agent: AgentToolConfig | null;
+  tenantId: string | null;
   onClose: () => void;
+  onChanged: () => void;
 }) {
   const sandbox = row.sandbox;
   const isSandbox = row.slug === "code-sandbox";
   const isEmail = row.slug === "agent-email-send";
   const isContextEngine = row.slug === "context-engine";
+  const [savingAccess, setSavingAccess] = useState(false);
+  const [, updateTenantAgent] = useMutation(SettingsUpdateTenantAgentMutation);
+
+  const setAgentAccess = async (enabled: boolean) => {
+    if (!tenantId || !agent) return;
+    const blockedTools = parseJsonValue<unknown[]>(agent.blockedTools, [])
+      .map((item) => String(item))
+      .filter(Boolean);
+    const aliases = new Set(policyToolAliases(row));
+    const nextBlockedTools = enabled
+      ? blockedTools.filter((tool) => !aliases.has(tool.toLowerCase()))
+      : Array.from(new Set([...blockedTools, ...aliases]));
+
+    setSavingAccess(true);
+    try {
+      const result = await updateTenantAgent({
+        tenantId,
+        input: {
+          blockedTools: JSON.stringify(nextBlockedTools),
+          ...policyAgentConfigInput(row, enabled, agent),
+        },
+      });
+      if (result.error) throw result.error;
+      toast.success(`${row.name} ${enabled ? "enabled" : "blocked"}`);
+      onChanged();
+    } catch (accessError) {
+      toast.error(
+        accessError instanceof Error
+          ? accessError.message
+          : "Could not update agent access",
+      );
+    } finally {
+      setSavingAccess(false);
+    }
+  };
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -912,10 +999,17 @@ function PolicyGatedInfoDialog({
                   {row.agentAccess.toolName}
                 </Badge>
               ) : null}
+              <Switch
+                aria-label={`${row.name} agent access`}
+                checked={row.agentAccess.enabled}
+                disabled={!tenantId || !agent || savingAccess}
+                onCheckedChange={setAgentAccess}
+              />
             </div>
             <p className="text-xs text-muted-foreground">
               {row.agentAccess.detail} This is the effective configuration for{" "}
-              {agentName}, the tenant platform agent used by chat.
+              {agent?.agentName ?? "Agent"}, the tenant platform agent used by
+              chat.
             </p>
           </div>
 

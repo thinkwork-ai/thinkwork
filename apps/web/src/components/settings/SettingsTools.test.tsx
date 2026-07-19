@@ -24,5 +24,8 @@ describe("SettingsTools built-in tools catalog", () => {
     expect(source).toContain("upsertBuiltinTool");
     expect(source).toContain("testBuiltinTool");
     expect(source).toContain("deleteBuiltinTool");
+    expect(source).toContain("SettingsUpdateTenantAgentMutation");
+    expect(source).toContain("policyToolAliases");
+    expect(source).toContain("agent access`}");
   });
 });
