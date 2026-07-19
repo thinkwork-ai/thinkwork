@@ -536,6 +536,10 @@ locals {
           # harness-runner: chat-agent-invoke Event-invokes this for chat
           # turns routed to the AWS AgentCore runtime (THINK-311 trial).
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-harness-runner",
+          # harness-runner queues the same canonical post-turn memory pipeline
+          # as Pi after a completed AgentCore turn. The retain ledger makes the
+          # Event invoke idempotent on the thread-turn source key.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-memory-retain",
           # harness-runner RequestResponse-invokes this dedicated signer. The
           # signer re-derives the actor/tenant/thread tuple from the running
           # turn and alone holds KMS Sign; the shared runner role never does.

@@ -41,6 +41,7 @@ import {
   agentWakeupRequests,
   messages,
   pendingUserQuestions,
+  threadTurns,
   threads,
 } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
@@ -209,6 +210,7 @@ export const answerUserQuestion = async (
     ? (recoveryRow.answered_by ?? caller.userId ?? null)
     : (caller.userId ?? null);
   const requestedModelId = await resolveQuestionResumeModelId(question);
+  const runtimeType = await resolveQuestionResumeRuntimeType(question);
   const wakeupPayload = {
     // TOP-LEVEL threadId — promoteNextDeferredWakeup() matches on
     // payload->>'threadId'; do not nest or rename this key.
@@ -219,6 +221,9 @@ export const answerUserQuestion = async (
     answeredVia: "card",
     answeredBy: effectiveAnsweredBy,
     delegationContext: question.delegation_context ?? null,
+    // Continue on the exact runtime that asked the question. Re-resolving
+    // against mutable agent/template defaults can cross runtimes mid-thread.
+    ...(runtimeType ? { runtimeType } : {}),
     ...(requestedModelId
       ? {
           requestedModelId,
@@ -343,4 +348,27 @@ async function resolveQuestionResumeModelId(question: {
     .limit(1);
 
   return requestedModelIdFromMetadata(sourceMessage?.metadata);
+}
+
+async function resolveQuestionResumeRuntimeType(question: {
+  tenant_id: string;
+  thread_id: string;
+  thread_turn_id: string | null;
+}): Promise<"pi" | "agentcore" | null> {
+  if (!question.thread_turn_id) return null;
+  const [sourceTurn] = await db
+    .select({ runtimeType: threadTurns.runtime_type })
+    .from(threadTurns)
+    .where(
+      and(
+        eq(threadTurns.id, question.thread_turn_id),
+        eq(threadTurns.tenant_id, question.tenant_id),
+        eq(threadTurns.thread_id, question.thread_id),
+      ),
+    )
+    .limit(1);
+  return sourceTurn?.runtimeType === "pi" ||
+    sourceTurn?.runtimeType === "agentcore"
+    ? sourceTurn.runtimeType
+    : null;
 }

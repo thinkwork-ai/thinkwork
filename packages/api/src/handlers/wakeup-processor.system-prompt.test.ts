@@ -62,6 +62,18 @@ describe("wakeup processor system prompt capture", () => {
     ).toBe("pi");
   });
 
+  it("pins a question resume to the runtime that asked the question", () => {
+    expect(
+      resolveWakeupRuntimeType({
+        source: "question_answer",
+        agentRuntime: "pi",
+        templateRuntime: "pi",
+        runtimeConfig: { defaultThreadRuntime: "pi" },
+        pinnedRuntimeType: "agentcore",
+      }),
+    ).toBe("agentcore");
+  });
+
   it("preserves legacy automation routing when no selected default exists", () => {
     expect(
       resolveWakeupRuntimeType({

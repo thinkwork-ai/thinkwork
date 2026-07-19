@@ -51,6 +51,7 @@ import { collectGovernedConnectorEvidence } from "../lib/harness/gateway-evidenc
 import { enforceGovernedActionGrounding } from "../lib/harness/governed-action-grounding.js";
 import { loadCanonicalQuestionAnswerTurn } from "../lib/harness/canonical-question-answer-turn.js";
 import { submitHarnessSkillDraft } from "../lib/skill-creator/harness-submit-draft.js";
+import { dispatchHarnessMemoryRetain } from "../lib/harness/memory-retain.js";
 
 const region =
   process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
@@ -473,6 +474,20 @@ export async function handler(event: unknown): Promise<{ ok: boolean }> {
   // escapes (payload missing ids, finalize failure) lands in the DLQ and
   // the stall monitor reconciles the turn (KTD-9 backstop).
   const result = await runHarnessTurn(payload, createRealDeps());
+  if (result.status === "completed") {
+    const retain = await dispatchHarnessMemoryRetain({
+      payload,
+      functionName: deriveFunctionName("memory-retain"),
+      lambdaClient: lambda,
+    });
+    if (retain.dispatched) {
+      console.log("[harness-runner] memory_retain_dispatched");
+    } else if (retain.error) {
+      console.warn(
+        `[harness-runner] memory_retain_failed: ${retain.reason ?? "unknown"}`,
+      );
+    }
+  }
   console.log(
     `[harness-runner] turn ${payload.thread_turn_id}: ${result.status}`,
   );
