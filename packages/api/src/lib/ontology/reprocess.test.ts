@@ -277,6 +277,8 @@ describe("ontology reprocess", () => {
   it("rejecting a change set enqueues nothing — no reprocess job, no re-ingest run", async () => {
     const db = new FakeJobDb([
       [changeSetRow()],
+      // Items of the rejected set (fingerprint sweep, THINK-320 U2) — none.
+      [],
       [changeSetRow({ status: "rejected" })],
       [],
       [],

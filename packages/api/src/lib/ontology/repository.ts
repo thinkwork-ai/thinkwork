@@ -3,6 +3,7 @@ import { parseIdentityRules } from "../entity-identity/normalizers.js";
 import {
   activityLog,
   kgEntities,
+  ontologyCandidateRejections,
   ontologyChangeSetItems,
   ontologyChangeSets,
   ontologyEntityTypes,
@@ -44,7 +45,35 @@ export type OntologyChangeSetItemStatus =
   | "pending_review"
   | "approved"
   | "rejected"
-  | "applied";
+  | "applied"
+  | "deferred";
+
+export type OntologyExcludedItemDisposition = "deferred" | "rejected";
+
+export type OntologyChangeItemKind =
+  | "entity_type"
+  | "relationship_type"
+  | "facet_template"
+  | "external_mapping";
+
+/**
+ * Concurrency/settlement conflict on a change-set item (THINK-320 R16):
+ * either the item changed since the client loaded it (stale
+ * expectedUpdatedAt) or it is already settled (approved/applied). Nothing
+ * was written when this is thrown.
+ */
+export class OntologyChangeSetConflictError extends Error {
+  readonly code = "ONTOLOGY_CHANGE_SET_CONFLICT";
+
+  constructor(
+    message: string,
+    readonly itemId?: string,
+    readonly currentUpdatedAt?: string,
+  ) {
+    super(message);
+    this.name = "OntologyChangeSetConflictError";
+  }
+}
 
 export type OntologyLifecycleStatus =
   | "proposed"
@@ -81,6 +110,12 @@ export interface UpdateOntologyChangeSetItemInput {
   id: string;
   status?: OntologyChangeSetItemStatus | null;
   editedValue?: unknown;
+  /**
+   * Optimistic concurrency guard (THINK-320 R16): the item's updated_at as
+   * loaded by the client. Mismatch raises OntologyChangeSetConflictError
+   * before anything is written; omit to skip the check.
+   */
+  expectedUpdatedAt?: string | null;
 }
 
 export interface UpdateOntologyChangeSetInput {
@@ -663,6 +698,522 @@ export async function loadOntologyChangeSet(args: {
   return toOntologyChangeSet(row, items, evidence);
 }
 
+const OPEN_CHANGE_SET_STATUSES: OntologyChangeSetStatus[] = [
+  "draft",
+  "pending_review",
+];
+
+/** Item statuses a new proposal may merge into (R14): still-reviewable. */
+const MERGEABLE_ITEM_STATUSES = ["pending_review", "deferred"];
+
+const normalizeOntologySlug = (slug: string) =>
+  slug.trim().toLowerCase().replace(/\s+/g, "_");
+
+/**
+ * Deterministic rejection fingerprint (THINK-320 R13/KTD-6): normalized
+ * `kind:slug`. Written to ontology.candidate_rejections and consulted by
+ * the suggestion pipeline so rejected candidates are never re-proposed.
+ */
+export function ontologyCandidateFingerprint(kind: string, slug: string) {
+  return `${kind.trim().toLowerCase()}:${normalizeOntologySlug(slug)}`;
+}
+
+export interface OntologyChangeSetItemEvidenceInput {
+  sourceKind: string;
+  sourceRef?: string | null;
+  sourceLabel?: string | null;
+  quote: string;
+  metadata?: Record<string, unknown> | null;
+  observedAt?: string | null;
+}
+
+export interface CreateOntologyChangeSetItemInput {
+  itemType: OntologyChangeItemKind;
+  action?: "create" | "update" | "deprecate" | "reject" | null;
+  slug: string;
+  title?: string | null;
+  description?: string | null;
+  proposedValue?: Record<string, unknown> | null;
+  confidence?: number | null;
+  evidence?: OntologyChangeSetItemEvidenceInput[] | null;
+}
+
+export interface OntologyChangeSetSlugConflict {
+  slug: string;
+  itemType: OntologyChangeItemKind;
+  reason: "approved_definition";
+}
+
+/**
+ * Pure R14 slug-collision planner (THINK-320 U2). Splits submitted items
+ * into inserts (fresh slugs), merges (slug matches a still-reviewable
+ * pending item — evidence unions, proposal updates in place), and
+ * conflicts (slug already approved — never a silent duplicate). Duplicate
+ * slugs inside one submission collapse into a single staged item.
+ */
+export function planOntologyChangeSetItemWrites(args: {
+  items: CreateOntologyChangeSetItemInput[];
+  pendingItems: Array<{
+    id: string;
+    change_set_id: string;
+    item_type: string;
+    target_slug: string | null;
+    proposed_value: unknown;
+  }>;
+  approvedFingerprints: Set<string>;
+}) {
+  const pendingByFingerprint = new Map<
+    string,
+    (typeof args.pendingItems)[number]
+  >();
+  for (const pending of args.pendingItems) {
+    const proposed = (pending.proposed_value ?? {}) as Record<string, unknown>;
+    const rawSlug =
+      pending.target_slug ??
+      (typeof proposed.slug === "string" ? proposed.slug : null);
+    if (!rawSlug) continue;
+    const fingerprint = ontologyCandidateFingerprint(
+      pending.item_type,
+      rawSlug,
+    );
+    if (!pendingByFingerprint.has(fingerprint)) {
+      pendingByFingerprint.set(fingerprint, pending);
+    }
+  }
+
+  const inserts: Array<
+    CreateOntologyChangeSetItemInput & {
+      slug: string;
+      evidence: OntologyChangeSetItemEvidenceInput[];
+    }
+  > = [];
+  const insertByFingerprint = new Map<string, (typeof inserts)[number]>();
+  const merges: Array<{
+    itemId: string;
+    changeSetId: string;
+    proposedValue: Record<string, unknown>;
+    evidence: OntologyChangeSetItemEvidenceInput[];
+  }> = [];
+  const mergeByFingerprint = new Map<string, (typeof merges)[number]>();
+  const conflicts: OntologyChangeSetSlugConflict[] = [];
+
+  for (const item of args.items) {
+    const slug = normalizeOntologySlug(item.slug);
+    const fingerprint = ontologyCandidateFingerprint(item.itemType, item.slug);
+    const proposedValue = (item.proposedValue ?? {}) as Record<string, unknown>;
+    const evidence = item.evidence ?? [];
+
+    if (args.approvedFingerprints.has(fingerprint)) {
+      conflicts.push({
+        slug,
+        itemType: item.itemType,
+        reason: "approved_definition",
+      });
+      continue;
+    }
+
+    const pending = pendingByFingerprint.get(fingerprint);
+    if (pending) {
+      const existingMerge = mergeByFingerprint.get(fingerprint);
+      if (existingMerge) {
+        existingMerge.proposedValue = proposedValue;
+        existingMerge.evidence.push(...evidence);
+      } else {
+        const merge = {
+          itemId: pending.id,
+          changeSetId: pending.change_set_id,
+          proposedValue,
+          evidence: [...evidence],
+        };
+        merges.push(merge);
+        mergeByFingerprint.set(fingerprint, merge);
+      }
+      continue;
+    }
+
+    const existingInsert = insertByFingerprint.get(fingerprint);
+    if (existingInsert) {
+      existingInsert.proposedValue = proposedValue;
+      existingInsert.evidence.push(...evidence);
+      continue;
+    }
+    const insert = { ...item, slug, evidence: [...evidence] };
+    inserts.push(insert);
+    insertByFingerprint.set(fingerprint, insert);
+  }
+
+  return { inserts, merges, conflicts };
+}
+
+/**
+ * Pure R15 approval partitioner with the AE7 dependency check. Items that
+ * are rejected, deferred, or explicitly excluded are never approved; a
+ * relationship item being approved whose referenced source/target type
+ * slug belongs to a type item in the same set that is NOT being approved
+ * (and is not already an approved definition) blocks the approval with an
+ * error naming the excluded type.
+ */
+export function partitionOntologyApprovalItems(args: {
+  items: Array<{
+    id: string;
+    item_type: string;
+    status: string;
+    target_slug: string | null;
+    proposed_value: unknown;
+    edited_value: unknown;
+  }>;
+  excludedItemIds?: string[] | null;
+  approvedDefinitionTypeSlugs?: Set<string>;
+}) {
+  const excluded = new Set(args.excludedItemIds ?? []);
+  const itemIds = new Set(args.items.map((item) => item.id));
+  for (const id of excluded) {
+    if (!itemIds.has(id)) {
+      throw new Error(`Excluded item ${id} is not part of this change set`);
+    }
+  }
+
+  const slugOf = (item: (typeof args.items)[number]) => {
+    const proposed = (item.proposed_value ?? {}) as Record<string, unknown>;
+    const raw =
+      item.target_slug ??
+      (typeof proposed.slug === "string" ? proposed.slug : null);
+    return raw ? normalizeOntologySlug(raw) : null;
+  };
+
+  const isApproving = (item: (typeof args.items)[number]) =>
+    item.status !== "rejected" &&
+    item.status !== "deferred" &&
+    !excluded.has(item.id);
+
+  const approving = args.items.filter(isApproving);
+  const approvingTypeSlugs = new Set(
+    approving
+      .filter((item) => item.item_type === "entity_type")
+      .map(slugOf)
+      .filter((slug): slug is string => slug !== null),
+  );
+  const nonApprovingTypeSlugs = new Set(
+    args.items
+      .filter((item) => item.item_type === "entity_type" && !isApproving(item))
+      .map(slugOf)
+      .filter((slug): slug is string => slug !== null),
+  );
+
+  for (const relationship of approving) {
+    if (relationship.item_type !== "relationship_type") continue;
+    const effective = (relationship.edited_value ??
+      relationship.proposed_value ??
+      {}) as Record<string, unknown>;
+    const referenced = [
+      ...((effective.sourceTypeSlugs as string[] | undefined) ?? []),
+      ...((effective.targetTypeSlugs as string[] | undefined) ?? []),
+    ].map(normalizeOntologySlug);
+    for (const ref of referenced) {
+      if (approvingTypeSlugs.has(ref)) continue;
+      if (args.approvedDefinitionTypeSlugs?.has(ref)) continue;
+      if (nonApprovingTypeSlugs.has(ref)) {
+        throw new Error(
+          `Cannot approve relationship "${slugOf(relationship) ?? relationship.id}": its referenced type "${ref}" is excluded from this approval`,
+        );
+      }
+    }
+  }
+
+  return {
+    approveIds: approving.map((item) => item.id),
+    excludeIds: args.items
+      .filter((item) => excluded.has(item.id))
+      .map((item) => item.id),
+  };
+}
+
+/**
+ * Pure R16 edit guard: settled items (approved/applied) reject edits, and
+ * a client-supplied expectedUpdatedAt that no longer matches the stored
+ * timestamp raises a conflict instead of silently overwriting.
+ */
+export function guardOntologyChangeSetItemEdit(args: {
+  row: { id: string; status: string; updated_at: Date | string };
+  expectedUpdatedAt?: string | null;
+}) {
+  const current =
+    args.row.updated_at instanceof Date
+      ? args.row.updated_at
+      : new Date(args.row.updated_at);
+  if (args.row.status === "approved" || args.row.status === "applied") {
+    throw new OntologyChangeSetConflictError(
+      `Ontology change-set item ${args.row.id} is settled (${args.row.status}) and no longer accepts edits`,
+      args.row.id,
+      current.toISOString(),
+    );
+  }
+  if (args.expectedUpdatedAt) {
+    const expected = new Date(args.expectedUpdatedAt);
+    if (expected.getTime() !== current.getTime()) {
+      throw new OntologyChangeSetConflictError(
+        `Ontology change-set item ${args.row.id} changed since it was loaded — reload before editing`,
+        args.row.id,
+        current.toISOString(),
+      );
+    }
+  }
+}
+
+async function insertOntologyCandidateRejections(args: {
+  db: DbLike;
+  tenantId: string;
+  actorUserId: string | null;
+  items: Array<{
+    item_type: string;
+    target_slug: string | null;
+    proposed_value: unknown;
+  }>;
+  now: Date;
+}) {
+  const values = args.items.flatMap((item) => {
+    const proposed = (item.proposed_value ?? {}) as Record<string, unknown>;
+    const rawSlug =
+      item.target_slug ??
+      (typeof proposed.slug === "string" ? proposed.slug : null);
+    if (!rawSlug) return [];
+    return [
+      {
+        tenant_id: args.tenantId,
+        kind: item.item_type,
+        slug: normalizeOntologySlug(rawSlug),
+        fingerprint: ontologyCandidateFingerprint(item.item_type, rawSlug),
+        rejected_by: args.actorUserId,
+        rejected_at: args.now,
+      },
+    ];
+  });
+  if (values.length === 0) return;
+  await args.db
+    .insert(ontologyCandidateRejections)
+    .values(values)
+    .onConflictDoNothing();
+}
+
+/**
+ * Manual authoring entry point (THINK-320 U2, KTD-5 / R7 / R8 / R14).
+ * Creates or appends to the caller's open manual draft (one open
+ * proposed_by='user' change set per admin), running the R14 slug-collision
+ * check per item: colliding pending slugs merge into the existing item
+ * (evidence unioned, proposal updated), colliding approved slugs come back
+ * as conflicts with no row written. Never touches ontology versions —
+ * approval stays a distinct action (AE1).
+ */
+export async function createOntologyChangeSet(args: {
+  tenantId: string;
+  actorUserId: string | null;
+  title?: string | null;
+  summary?: string | null;
+  items: CreateOntologyChangeSetItemInput[];
+  db?: DbLike;
+}) {
+  const db = args.db ?? defaultDb;
+  return db.transaction(async (txRaw) => {
+    const tx = txRaw as unknown as DbLike;
+    const openSets = await tx
+      .select()
+      .from(ontologyChangeSets)
+      .where(
+        and(
+          eq(ontologyChangeSets.tenant_id, args.tenantId),
+          inArray(ontologyChangeSets.status, OPEN_CHANGE_SET_STATUSES),
+        ),
+      )
+      .orderBy(desc(ontologyChangeSets.created_at));
+    const openSetIds = openSets.map((row) => row.id);
+
+    const pendingItems =
+      openSetIds.length > 0
+        ? await tx
+            .select()
+            .from(ontologyChangeSetItems)
+            .where(
+              and(
+                eq(ontologyChangeSetItems.tenant_id, args.tenantId),
+                inArray(ontologyChangeSetItems.change_set_id, openSetIds),
+                inArray(ontologyChangeSetItems.status, MERGEABLE_ITEM_STATUSES),
+              ),
+            )
+        : [];
+
+    const [entitySlugRows, relationshipSlugRows, facetSlugRows] =
+      await Promise.all([
+        tx
+          .select({ slug: ontologyEntityTypes.slug })
+          .from(ontologyEntityTypes)
+          .where(
+            and(
+              eq(ontologyEntityTypes.tenant_id, args.tenantId),
+              eq(ontologyEntityTypes.lifecycle_status, "approved"),
+            ),
+          ),
+        tx
+          .select({ slug: ontologyRelationshipTypes.slug })
+          .from(ontologyRelationshipTypes)
+          .where(
+            and(
+              eq(ontologyRelationshipTypes.tenant_id, args.tenantId),
+              eq(ontologyRelationshipTypes.lifecycle_status, "approved"),
+            ),
+          ),
+        tx
+          .select({ slug: ontologyFacetTemplates.slug })
+          .from(ontologyFacetTemplates)
+          .where(
+            and(
+              eq(ontologyFacetTemplates.tenant_id, args.tenantId),
+              eq(ontologyFacetTemplates.lifecycle_status, "approved"),
+            ),
+          ),
+      ]);
+    const approvedFingerprints = new Set<string>([
+      ...entitySlugRows.map((row) =>
+        ontologyCandidateFingerprint("entity_type", row.slug),
+      ),
+      ...relationshipSlugRows.map((row) =>
+        ontologyCandidateFingerprint("relationship_type", row.slug),
+      ),
+      ...facetSlugRows.map((row) =>
+        ontologyCandidateFingerprint("facet_template", row.slug),
+      ),
+    ]);
+
+    const plan = planOntologyChangeSetItemWrites({
+      items: args.items,
+      pendingItems,
+      approvedFingerprints,
+    });
+    const now = new Date();
+
+    let draft =
+      openSets.find(
+        (row) =>
+          row.proposed_by === "user" &&
+          (args.actorUserId
+            ? row.proposed_by_user_id === args.actorUserId
+            : row.proposed_by_user_id === null),
+      ) ?? null;
+    if (!draft && plan.inserts.length > 0) {
+      const [inserted] = await tx
+        .insert(ontologyChangeSets)
+        .values({
+          tenant_id: args.tenantId,
+          title: args.title?.trim() || "Manual ontology draft",
+          summary: args.summary ?? null,
+          status: "draft",
+          proposed_by: "user",
+          proposed_by_user_id: args.actorUserId,
+          expected_impact: {},
+        })
+        .returning();
+      draft = inserted;
+    }
+
+    const insertEvidence = async (
+      changeSetId: string,
+      itemId: string,
+      evidence: OntologyChangeSetItemEvidenceInput[],
+    ) => {
+      if (evidence.length === 0) return;
+      await tx.insert(ontologyEvidenceExamples).values(
+        evidence.map((entry) => ({
+          tenant_id: args.tenantId,
+          change_set_id: changeSetId,
+          item_id: itemId,
+          source_kind: entry.sourceKind,
+          source_ref: entry.sourceRef ?? null,
+          source_label: entry.sourceLabel ?? null,
+          quote: entry.quote,
+          metadata: entry.metadata ?? {},
+          observed_at: entry.observedAt ? new Date(entry.observedAt) : null,
+        })),
+      );
+    };
+
+    const mergedItemIds: string[] = [];
+    for (const merge of plan.merges) {
+      await tx
+        .update(ontologyChangeSetItems)
+        .set({
+          proposed_value: merge.proposedValue,
+          status: "pending_review",
+          updated_at: now,
+        })
+        .where(
+          and(
+            eq(ontologyChangeSetItems.id, merge.itemId),
+            eq(ontologyChangeSetItems.tenant_id, args.tenantId),
+          ),
+        );
+      await insertEvidence(merge.changeSetId, merge.itemId, merge.evidence);
+      mergedItemIds.push(merge.itemId);
+    }
+
+    if (draft && plan.inserts.length > 0) {
+      let position = pendingItems
+        .filter((item) => item.change_set_id === draft.id)
+        .reduce((max, item) => Math.max(max, (item.position ?? 0) + 1), 0);
+      for (const insert of plan.inserts) {
+        const [itemRow] = await tx
+          .insert(ontologyChangeSetItems)
+          .values({
+            tenant_id: args.tenantId,
+            change_set_id: draft.id,
+            item_type: insert.itemType,
+            action: insert.action ?? "create",
+            status: "pending_review",
+            target_kind: insert.itemType,
+            target_slug: insert.slug,
+            title:
+              insert.title?.trim() || `Add ${insert.slug.replace(/_/g, " ")}`,
+            description: insert.description ?? null,
+            proposed_value: {
+              ...(insert.proposedValue ?? {}),
+              slug: insert.slug,
+            },
+            confidence:
+              insert.confidence === null || insert.confidence === undefined
+                ? null
+                : String(insert.confidence),
+            position,
+          })
+          .returning();
+        position += 1;
+        await insertEvidence(draft.id, itemRow.id, insert.evidence);
+      }
+    }
+
+    if (draft) {
+      await recordOntologyActivity({
+        db: tx,
+        tenantId: args.tenantId,
+        actorUserId: args.actorUserId,
+        action: "ontology_change_set_items_authored",
+        changeSetId: draft.id,
+        metadata: {
+          insertedCount: plan.inserts.length,
+          mergedCount: mergedItemIds.length,
+          conflictCount: plan.conflicts.length,
+        },
+      });
+    }
+
+    const changeSet = draft
+      ? await loadOntologyChangeSet({
+          tenantId: args.tenantId,
+          changeSetId: draft.id,
+          db: tx,
+        })
+      : null;
+    return { changeSet, mergedItemIds, conflicts: plan.conflicts };
+  });
+}
+
 export async function updateOntologyChangeSet(args: {
   input: UpdateOntologyChangeSetInput;
   actorUserId: string | null;
@@ -701,24 +1252,48 @@ export async function updateOntologyChangeSet(args: {
     changeSetPatch.status = args.input.status;
   }
 
-  await db
-    .update(ontologyChangeSets)
-    .set(changeSetPatch)
-    .where(eq(ontologyChangeSets.id, current.id));
-
-  for (const item of args.input.items ?? []) {
-    const itemPatch: Record<string, unknown> = { updated_at: now };
-    if (item.status !== undefined && item.status !== null) {
+  // R16: validate every item edit (existence, settlement, optimistic
+  // concurrency) BEFORE any write so a conflict leaves nothing behind.
+  const itemInputs = args.input.items ?? [];
+  if (itemInputs.length > 0) {
+    const itemRows = await db
+      .select()
+      .from(ontologyChangeSetItems)
+      .where(
+        and(
+          eq(ontologyChangeSetItems.change_set_id, current.id),
+          eq(ontologyChangeSetItems.tenant_id, args.input.tenantId),
+        ),
+      );
+    const rowById = new Map(itemRows.map((row) => [row.id, row]));
+    for (const item of itemInputs) {
+      const row = rowById.get(item.id);
+      if (!row) throw new Error("Ontology change-set item not found");
       if (item.status === "applied") {
         throw new Error(
           "Change-set line items cannot be marked applied manually",
         );
       }
+      guardOntologyChangeSetItemEdit({
+        row,
+        expectedUpdatedAt: item.expectedUpdatedAt,
+      });
+    }
+  }
+
+  await db
+    .update(ontologyChangeSets)
+    .set(changeSetPatch)
+    .where(eq(ontologyChangeSets.id, current.id));
+
+  for (const item of itemInputs) {
+    const itemPatch: Record<string, unknown> = { updated_at: now };
+    if (item.status !== undefined && item.status !== null) {
       itemPatch.status = item.status;
     }
     if (item.editedValue !== undefined)
       itemPatch.edited_value = item.editedValue;
-    const [updatedItem] = await db
+    await db
       .update(ontologyChangeSetItems)
       .set(itemPatch)
       .where(
@@ -727,9 +1302,7 @@ export async function updateOntologyChangeSet(args: {
           eq(ontologyChangeSetItems.change_set_id, current.id),
           eq(ontologyChangeSetItems.tenant_id, args.input.tenantId),
         ),
-      )
-      .returning({ id: ontologyChangeSetItems.id });
-    if (!updatedItem) throw new Error("Ontology change-set item not found");
+      );
   }
 
   await recordOntologyActivity({
@@ -755,6 +1328,13 @@ export async function approveOntologyChangeSet(args: {
   tenantId: string;
   changeSetId: string;
   actorUserId: string | null;
+  /**
+   * Per-item approval (THINK-320 R15/KTD-7): items to exclude from this
+   * approval. Excluded items become `deferred` (re-reviewable) or
+   * `rejected` (fingerprinted per R13) per excludedDisposition.
+   */
+  excludedItemIds?: string[] | null;
+  excludedDisposition?: OntologyExcludedItemDisposition | null;
   db?: DbLike;
 }) {
   const db = args.db ?? defaultDb;
@@ -787,9 +1367,23 @@ export async function approveOntologyChangeSet(args: {
           eq(ontologyChangeSetItems.tenant_id, args.tenantId),
         ),
       );
-    const approvedItemIds = items
-      .filter((item) => item.status !== "rejected")
-      .map((item) => item.id);
+    const approvedTypeRows = await tx
+      .select({ slug: ontologyEntityTypes.slug })
+      .from(ontologyEntityTypes)
+      .where(
+        and(
+          eq(ontologyEntityTypes.tenant_id, args.tenantId),
+          eq(ontologyEntityTypes.lifecycle_status, "approved"),
+        ),
+      );
+    const { approveIds: approvedItemIds, excludeIds } =
+      partitionOntologyApprovalItems({
+        items,
+        excludedItemIds: args.excludedItemIds ?? [],
+        approvedDefinitionTypeSlugs: new Set(
+          approvedTypeRows.map((row) => row.slug),
+        ),
+      });
 
     const [latestVersion] = await tx
       .select()
@@ -833,6 +1427,28 @@ export async function approveOntologyChangeSet(args: {
         );
     }
 
+    const excludedDisposition = args.excludedDisposition ?? "deferred";
+    if (excludeIds.length > 0) {
+      await tx
+        .update(ontologyChangeSetItems)
+        .set({ status: excludedDisposition, updated_at: now })
+        .where(
+          and(
+            eq(ontologyChangeSetItems.tenant_id, args.tenantId),
+            inArray(ontologyChangeSetItems.id, excludeIds),
+          ),
+        );
+      if (excludedDisposition === "rejected") {
+        await insertOntologyCandidateRejections({
+          db: tx as unknown as DbLike,
+          tenantId: args.tenantId,
+          actorUserId: args.actorUserId,
+          items: items.filter((item) => excludeIds.includes(item.id)),
+          now,
+        });
+      }
+    }
+
     await tx
       .update(ontologyChangeSetItems)
       .set({ updated_at: now })
@@ -871,6 +1487,8 @@ export async function approveOntologyChangeSet(args: {
       metadata: {
         ontologyVersionId: version.id,
         approvedItemCount: approvedItemIds.length,
+        excludedItemCount: excludeIds.length,
+        excludedDisposition: excludeIds.length > 0 ? excludedDisposition : null,
         reprocessJobId: reprocess.job.id,
         reprocessJobInserted: reprocess.inserted,
       },
@@ -923,6 +1541,17 @@ export async function rejectOntologyChangeSet(args: {
     throw new Error("Ontology change set is already terminal");
   }
 
+  const items = await db
+    .select()
+    .from(ontologyChangeSetItems)
+    .where(
+      and(
+        eq(ontologyChangeSetItems.change_set_id, current.id),
+        eq(ontologyChangeSetItems.tenant_id, args.tenantId),
+      ),
+    )
+    .orderBy(asc(ontologyChangeSetItems.position));
+
   await db
     .update(ontologyChangeSets)
     .set({
@@ -941,6 +1570,15 @@ export async function rejectOntologyChangeSet(args: {
         eq(ontologyChangeSetItems.tenant_id, args.tenantId),
       ),
     );
+
+  // R13: fingerprint every rejected candidate so scans never re-propose it.
+  await insertOntologyCandidateRejections({
+    db,
+    tenantId: args.tenantId,
+    actorUserId: args.actorUserId,
+    items,
+    now,
+  });
 
   await recordOntologyActivity({
     db,

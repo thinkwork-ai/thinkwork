@@ -937,6 +937,12 @@ export type ApproveManagedApplicationDeploymentInput = {
 
 export type ApproveOntologyChangeSetInput = {
   changeSetId: Scalars["ID"]["input"];
+  excludedDisposition?: InputMaybe<OntologyExcludedItemDisposition>;
+  /**
+   * Per-item approval (THINK-320 R15): items to leave out of this approval.
+   * Excluded items get the excludedDisposition status instead of approved.
+   */
+  excludedItemIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
   tenantId: Scalars["ID"]["input"];
 };
 
@@ -1899,6 +1905,45 @@ export type CreateKnowledgeBaseInput = {
   embeddingModel?: InputMaybe<Scalars["String"]["input"]>;
   name: Scalars["String"]["input"];
   tenantId: Scalars["ID"]["input"];
+};
+
+/**
+ * Manual authoring entry point (THINK-320 U2, KTD-5): creates or appends to
+ * the caller's open manual draft change set. Each item runs the R14
+ * slug-collision check server-side — colliding pending slugs merge into the
+ * existing item, colliding approved slugs come back as conflicts.
+ */
+export type CreateOntologyChangeSetInput = {
+  items: Array<CreateOntologyChangeSetItemInput>;
+  summary?: InputMaybe<Scalars["String"]["input"]>;
+  tenantId: Scalars["ID"]["input"];
+  title?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type CreateOntologyChangeSetItemInput = {
+  action?: InputMaybe<OntologyChangeAction>;
+  confidence?: InputMaybe<Scalars["Float"]["input"]>;
+  description?: InputMaybe<Scalars["String"]["input"]>;
+  evidence?: InputMaybe<Array<OntologyChangeSetItemEvidenceInput>>;
+  itemType: OntologyChangeItemType;
+  proposedValue: Scalars["AWSJSON"]["input"];
+  slug: Scalars["String"]["input"];
+  title?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type CreateOntologyChangeSetPayload = {
+  __typename?: "CreateOntologyChangeSetPayload";
+  /**
+   * Null when every submitted item merged into other pending items or
+   * conflicted with approved definitions (no draft was created or touched).
+   */
+  changeSet?: Maybe<OntologyChangeSet>;
+  conflicts: Array<OntologyChangeSetSlugConflict>;
+  /**
+   * Items whose slug matched an existing pending item — evidence was
+   * unioned onto that item and its proposal updated in place.
+   */
+  mergedItemIds: Array<Scalars["ID"]["output"]>;
 };
 
 export type CreateQuickActionInput = {
@@ -4469,6 +4514,7 @@ export type Mutation = {
   createExternalCapabilityClient: CapabilityRuntimeMutationResult;
   createInboxItem: InboxItem;
   createKnowledgeBase: KnowledgeBase;
+  createOntologyChangeSet: CreateOntologyChangeSetPayload;
   createQuickAction: UserQuickAction;
   createRecipe: Recipe;
   createRoutine: Routine;
@@ -5171,6 +5217,10 @@ export type MutationCreateInboxItemArgs = {
 
 export type MutationCreateKnowledgeBaseArgs = {
   input: CreateKnowledgeBaseInput;
+};
+
+export type MutationCreateOntologyChangeSetArgs = {
+  input: CreateOntologyChangeSetInput;
 };
 
 export type MutationCreateQuickActionArgs = {
@@ -6533,9 +6583,35 @@ export type OntologyChangeSetItem = {
   updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
+export type OntologyChangeSetItemEvidenceInput = {
+  metadata?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  observedAt?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
+  quote: Scalars["String"]["input"];
+  sourceKind: Scalars["String"]["input"];
+  sourceLabel?: InputMaybe<Scalars["String"]["input"]>;
+  sourceRef?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+/**
+ * R14 collision that could not be staged: the slug already exists as an
+ * approved definition, so no duplicate row was created.
+ */
+export type OntologyChangeSetSlugConflict = {
+  __typename?: "OntologyChangeSetSlugConflict";
+  itemType: OntologyChangeItemType;
+  reason: Scalars["String"]["output"];
+  slug: Scalars["String"]["output"];
+};
+
+/**
+ * Shared status vocabulary for change sets and their items. DEFERRED is
+ * item-only (an item excluded from an approval that stays re-reviewable,
+ * THINK-320 R15) — passing it as a change-set status is rejected.
+ */
 export enum OntologyChangeSetStatus {
   Applied = "APPLIED",
   Approved = "APPROVED",
+  Deferred = "DEFERRED",
   Draft = "DRAFT",
   PendingReview = "PENDING_REVIEW",
   Rejected = "REJECTED",
@@ -6596,6 +6672,16 @@ export type OntologyEvidenceExample = {
   sourceRef?: Maybe<Scalars["String"]["output"]>;
   tenantId: Scalars["ID"]["output"];
 };
+
+/**
+ * What happens to items excluded from a per-item approval (THINK-320 R15):
+ * DEFERRED keeps them re-reviewable; REJECTED fingerprints them so scans
+ * never re-propose the candidate (R13).
+ */
+export enum OntologyExcludedItemDisposition {
+  Deferred = "DEFERRED",
+  Rejected = "REJECTED",
+}
 
 export type OntologyExternalMapping = {
   __typename?: "OntologyExternalMapping";
@@ -11254,6 +11340,12 @@ export type UpdateOntologyChangeSetInput = {
 
 export type UpdateOntologyChangeSetItemInput = {
   editedValue?: InputMaybe<Scalars["AWSJSON"]["input"]>;
+  /**
+   * Optimistic concurrency guard (THINK-320 R16): the item's updatedAt as
+   * loaded by the client. If the item changed since, the mutation fails with
+   * a conflict instead of overwriting; omit to skip the check.
+   */
+  expectedUpdatedAt?: InputMaybe<Scalars["AWSDateTime"]["input"]>;
   id: Scalars["ID"]["input"];
   status?: InputMaybe<OntologyChangeSetStatus>;
 };

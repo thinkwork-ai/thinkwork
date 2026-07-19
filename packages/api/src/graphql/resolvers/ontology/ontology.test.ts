@@ -10,6 +10,7 @@ const {
   mockLoadOntologySuggestionScanJob,
   mockLoadOntologyReprocessJob,
   mockStartOntologySuggestionScan,
+  mockCreateOntologyChangeSet,
   mockUpdateOntologyChangeSet,
   mockApproveOntologyChangeSet,
   mockRejectOntologyChangeSet,
@@ -24,6 +25,7 @@ const {
   mockLoadOntologySuggestionScanJob: vi.fn(),
   mockLoadOntologyReprocessJob: vi.fn(),
   mockStartOntologySuggestionScan: vi.fn(),
+  mockCreateOntologyChangeSet: vi.fn(),
   mockUpdateOntologyChangeSet: vi.fn(),
   mockApproveOntologyChangeSet: vi.fn(),
   mockRejectOntologyChangeSet: vi.fn(),
@@ -49,6 +51,7 @@ vi.mock("../../../lib/ontology/repository.js", () => ({
   listOntologyChangeSets: mockListOntologyChangeSets,
   loadOntologySuggestionScanJob: mockLoadOntologySuggestionScanJob,
   loadOntologyReprocessJob: mockLoadOntologyReprocessJob,
+  createOntologyChangeSet: mockCreateOntologyChangeSet,
   updateOntologyChangeSet: mockUpdateOntologyChangeSet,
   approveOntologyChangeSet: mockApproveOntologyChangeSet,
   rejectOntologyChangeSet: mockRejectOntologyChangeSet,
@@ -61,6 +64,7 @@ vi.mock("../../../lib/ontology/suggestions.js", () => ({
 }));
 
 import { approveOntologyChangeSetMutation } from "./approveOntologyChangeSet.mutation.js";
+import { createOntologyChangeSetMutation } from "./createOntologyChangeSet.mutation.js";
 import {
   changeSetStatusFromGraphQL,
   itemStatusFromGraphQL,
@@ -88,6 +92,7 @@ describe("ontology GraphQL resolvers", () => {
     mockLoadOntologySuggestionScanJob.mockReset();
     mockLoadOntologyReprocessJob.mockReset();
     mockStartOntologySuggestionScan.mockReset();
+    mockCreateOntologyChangeSet.mockReset();
     mockUpdateOntologyChangeSet.mockReset();
     mockApproveOntologyChangeSet.mockReset();
     mockRejectOntologyChangeSet.mockReset();
@@ -282,8 +287,104 @@ describe("ontology GraphQL resolvers", () => {
     expect(mockApproveOntologyChangeSet).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       changeSetId: "change-set-1",
+      excludedItemIds: undefined,
+      excludedDisposition: null,
       actorUserId: "user-1",
     });
+  });
+
+  it("passes per-item exclusions and a normalized disposition to approval (R15)", async () => {
+    mockApproveOntologyChangeSet.mockResolvedValue({
+      id: "change-set-1",
+      status: "APPROVED",
+    });
+
+    await approveOntologyChangeSetMutation(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          changeSetId: "change-set-1",
+          excludedItemIds: ["item-b"],
+          excludedDisposition: "REJECTED",
+        },
+      },
+      ctx,
+    );
+
+    expect(mockApproveOntologyChangeSet).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      changeSetId: "change-set-1",
+      excludedItemIds: ["item-b"],
+      excludedDisposition: "rejected",
+      actorUserId: "user-1",
+    });
+  });
+
+  it("stages manual authoring through createOntologyChangeSet with normalized item kinds (KTD-5)", async () => {
+    mockCreateOntologyChangeSet.mockResolvedValue({
+      changeSet: { id: "draft-1", status: "DRAFT" },
+      mergedItemIds: ["item-merged"],
+      conflicts: [
+        {
+          slug: "order",
+          itemType: "entity_type",
+          reason: "approved_definition",
+        },
+      ],
+    });
+
+    const result = await createOntologyChangeSetMutation(
+      null,
+      {
+        input: {
+          tenantId: "tenant-1",
+          items: [
+            {
+              itemType: "ENTITY_TYPE",
+              slug: "shipment",
+              proposedValue: '{"slug":"shipment","name":"Shipment"}',
+            },
+          ],
+        },
+      },
+      ctx,
+    );
+
+    expect(mockCreateOntologyChangeSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        actorUserId: "user-1",
+        items: [
+          expect.objectContaining({
+            itemType: "entity_type",
+            action: "create",
+            slug: "shipment",
+            // AWSJSON string payloads are parsed before hitting the repository.
+            proposedValue: { slug: "shipment", name: "Shipment" },
+          }),
+        ],
+      }),
+    );
+    // Conflicts round-trip back to the GraphQL enum casing.
+    expect(result.conflicts).toEqual([
+      { slug: "order", itemType: "ENTITY_TYPE", reason: "approved_definition" },
+    ]);
+    expect(result.mergedItemIds).toEqual(["item-merged"]);
+  });
+
+  it("does not stage manual authoring for non-admin callers", async () => {
+    mockRequireTenantAdmin.mockRejectedValue(new Error("forbidden"));
+
+    await expect(
+      createOntologyChangeSetMutation(
+        null,
+        { input: { tenantId: "tenant-1", items: [] } },
+        ctx,
+      ),
+    ).rejects.toThrow("forbidden");
+
+    expect(mockCreateOntologyChangeSet).not.toHaveBeenCalled();
   });
 
   it("does not mutate ontology change sets for non-admin callers", async () => {
