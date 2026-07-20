@@ -7,6 +7,7 @@ import re
 import secrets
 import subprocess
 import tarfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -70,6 +71,40 @@ NATIVE_AUTH_CUSTOM_ATTRIBUTES = [
     },
 ]
 AGENTCORE_CONTROL_SDK_VERSION = "3.1089.0"
+TERRAFORM_PLAN_APPROVAL_CONTRACT = "thinkwork.terraform.saved-plan-approval.v1"
+TERRAFORM_PLAN_DESCRIPTOR_NAME = "terraform-plan-approval.json"
+TERRAFORM_SAVED_PLAN_NAME = "terraform-plan.bin"
+TEI_V380_RECOVERY_CONTRACT = "thinkwork.incident.tei-v380-proof-plane-recovery.v1"
+TEI_V380_RECOVERY_INCIDENT_ID = "tei-v380-proof-plane-partial-apply"
+TEI_V380_REJECTED_PLAN_SHA256 = "ba7b0ffa099f725b4f32e394446ee43693fe3dd4b7a9eb639d47eb833d40db84"
+TEI_V380_STATE_LINEAGE = "61f4093e-41da-ac29-852a-267bc853e24f"
+TEI_V380_STATE_SERIAL = 819
+TEI_V380_STATE_SHA256 = "cc99973e7b80e1a0c6e1097d889e006e5e2610e236ed730a02ca5f3457b99d7f"
+TEI_V380_STATE_BUCKET = "tei-thinkwork-terraform-state"
+TEI_V380_STATE_KEY = "env:/tei-e2e/thinkwork/tei-e2e/terraform.tfstate"
+TEI_V380_LOCK_TABLE = "tei-thinkwork-terraform-locks"
+TEI_V380_LOCK_KEY = f"{TEI_V380_STATE_BUCKET}/{TEI_V380_STATE_KEY}"
+TEI_V380_LOCK_ID = "04b3e9a1-3de6-c668-87e7-43d94280605e"
+TEI_V380_STATE_DIGEST = "7fe214eeaae491f5c1d8d792bddbbb19"
+TEI_V380_SECRET_ARN = (
+    "arn:aws:secretsmanager:us-east-1:637423202447:secret:"
+    "thinkwork/tei-e2e/agentcore-identity/twenty-crm-oauth-client-7OeAlG"
+)
+TEI_V380_SECRET_NAME = "thinkwork/tei-e2e/agentcore-identity/twenty-crm-oauth-client"
+TEI_V380_SECRET_ADDRESS = (
+    "module.thinkwork.module.agentcore_proof_identity."
+    "aws_secretsmanager_secret.twenty_oauth_client[0]"
+)
+TEI_V380_KMS_KEY_ID = "8798ab48-cd60-477d-a96e-c2d56bae7b40"
+TEI_V380_KMS_KEY_ARN = "arn:aws:kms:us-east-1:637423202447:key/8798ab48-cd60-477d-a96e-c2d56bae7b40"
+TEI_V380_KMS_KEY_ADDRESS = 'module.thinkwork.module.api.aws_kms_key.agentcore_turn_assertion["v1"]'
+TEI_V380_KMS_ALIAS = "alias/thinkwork-tei-e2e-agentcore-turn-assertion-v1"
+TEI_V380_KMS_ALIAS_ADDRESS = (
+    'module.thinkwork.module.api.aws_kms_alias.agentcore_turn_assertion["v1"]'
+)
+TEI_V380_OWNER_ALLOWLIST = (
+    "0ea2f626-8b40-43ca-b7f1-3601b2a6bef8,f498f488-70a1-709b-24d7-f895f2164301"
+)
 
 
 def run(args, **kwargs):
@@ -86,6 +121,10 @@ def sha256_file(path):
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def sha256_bytes(value):
+    return hashlib.sha256(value).hexdigest()
 
 
 def read_json_env(name, default):
@@ -778,6 +817,225 @@ def terraform_plan_summary(plan_json):
     }
 
 
+def terraform_plan_delete_addresses(plan_json):
+    return [
+        change.get("address")
+        for change in plan_json.get("resource_changes", [])
+        if "delete" in (change.get("change", {}).get("actions") or [])
+    ]
+
+
+def deployment_config_for_approval(payload):
+    """Return the immutable deployment intent shared by plan and apply phases.
+
+    Controller/session routing fields necessarily change between executions.
+    Everything that can influence the generated Terraform configuration stays
+    in this projection, including release pins and preserved configuration.
+    """
+    reviewed = json.loads(json.dumps(payload))
+    for key in [
+        "action",
+        "phase",
+        "sessionId",
+        "session",
+        "evidence",
+        "approvedPlan",
+    ]:
+        reviewed.pop(key, None)
+    operation = reviewed.get("operation")
+    if isinstance(operation, dict):
+        for key in ["action", "plan", "apply", "approvedPlan"]:
+            operation.pop(key, None)
+    return reviewed
+
+
+def deployment_config_sha256(payload):
+    return sha256_bytes(stable_json_bytes(deployment_config_for_approval(payload)))
+
+
+def controller_input_sha256(payload):
+    return sha256_bytes(stable_json_bytes(payload))
+
+
+def raw_controller_input_sha256(payload):
+    raw = os.environ.get("THINKWORK_DEPLOYMENT_INPUT")
+    if raw:
+        return sha256_bytes(raw.encode("utf-8"))
+    return controller_input_sha256(payload)
+
+
+def requested_plan_action(payload, action):
+    if action in {"deploy", "update", "destroy"}:
+        return action
+    operation = payload.get("operation")
+    if isinstance(operation, dict):
+        candidate = operation.get("targetAction") or operation.get("requestedAction")
+        if candidate in {"deploy", "update", "destroy"}:
+            return candidate
+    if action == "plan":
+        return "update"
+    return action
+
+
+def validate_terraform_execution_phase(payload, action):
+    """Select the explicit saved-plan protocol or the compatible legacy path.
+
+    The incident recovery always uses separate ``plan`` and ``apply``
+    executions. Existing callers still send ``deploy``/``update``/``destroy``
+    while their API and CLI approval surfaces are migrated, so those actions
+    retain their established combined behavior instead of becoming an
+    accidental platform-wide outage.
+    """
+    operation_value = payload.get("operation")
+    operation_is_structured = isinstance(operation_value, dict)
+    operation = operation_value
+    if not operation_is_structured:
+        operation = {}
+    requested_apply = operation.get("apply")
+    requested_plan = operation.get("plan")
+
+    if action == "apply":
+        if requested_apply is not True or requested_plan is not False:
+            raise RuntimeError(
+                "Saved-plan apply requires operation.apply=true and operation.plan=false"
+            )
+        approved = payload.get("approvedPlan")
+        if not isinstance(approved, dict):
+            raise RuntimeError("Saved-plan apply requires approvedPlan")
+        return "apply"
+
+    if action in {"deploy", "update", "destroy"}:
+        return "legacy"
+
+    if action == "plan":
+        if not operation_is_structured:
+            # Managed-application jobs predate the structured foundation
+            # operation object and already use action=plan as a strict
+            # plan-only phase. Preserve that safe contract.
+            return "plan"
+        if requested_apply is not False:
+            raise RuntimeError(
+                "Terraform planning never implies approval: operation.apply must be false; "
+                "apply the accepted saved plan in a separate action=apply execution"
+            )
+        if requested_plan is not True:
+            raise RuntimeError("Terraform plan phase requires operation.plan=true")
+        return "plan"
+
+    return "none"
+
+
+def terraform_state_identity():
+    raw = output(["terraform", "state", "pull"], cwd=TF)
+    state = json.loads(raw or "{}")
+    lineage = state.get("lineage")
+    serial = state.get("serial")
+    if not isinstance(lineage, str) or not lineage:
+        raise RuntimeError("Terraform state has no lineage; refusing saved-plan operation")
+    if not isinstance(serial, int) or serial < 0:
+        raise RuntimeError("Terraform state has no valid serial; refusing saved-plan operation")
+    return {
+        "lineage": lineage,
+        "serial": serial,
+        "sha256": sha256_bytes(raw.encode("utf-8")),
+        "terraformVersion": state.get("terraform_version"),
+    }
+
+
+def _validated_evidence_s3_uri(uri, label):
+    parsed = urllib.parse.urlparse(require_string(uri, label))
+    expected_bucket = os.environ.get("THINKWORK_EVIDENCE_BUCKET")
+    if parsed.scheme != "s3" or not parsed.netloc or not parsed.path.lstrip("/"):
+        raise RuntimeError(f"{label} must be an s3:// evidence URI")
+    if expected_bucket and parsed.netloc != expected_bucket:
+        raise RuntimeError(f"{label} must use the configured deployment evidence bucket")
+    return uri
+
+
+def _download_approved_artifact(uri, destination, expected_sha256, label):
+    _validated_evidence_s3_uri(uri, label)
+    expected = require_string(expected_sha256, f"{label}.sha256").lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", expected):
+        raise RuntimeError(f"{label}.sha256 must be a lowercase SHA-256 digest")
+    run(["aws", "s3", "cp", uri, str(destination)])
+    actual = sha256_file(destination)
+    if actual != expected:
+        raise RuntimeError(f"{label} digest mismatch: expected {expected}, got {actual}")
+    return actual
+
+
+def load_approved_plan_descriptor(payload):
+    approved = payload.get("approvedPlan")
+    if not isinstance(approved, dict):
+        raise RuntimeError("Saved-plan apply requires approvedPlan")
+    descriptor_ref = approved.get("descriptor")
+    if not isinstance(descriptor_ref, dict):
+        raise RuntimeError("approvedPlan.descriptor is required")
+    descriptor_path = WORK / TERRAFORM_PLAN_DESCRIPTOR_NAME
+    _download_approved_artifact(
+        descriptor_ref.get("s3Uri"),
+        descriptor_path,
+        descriptor_ref.get("sha256"),
+        "approvedPlan.descriptor",
+    )
+    descriptor = json.loads(descriptor_path.read_text(encoding="utf-8"))
+    if descriptor.get("contract") != TERRAFORM_PLAN_APPROVAL_CONTRACT:
+        raise RuntimeError("Approved plan descriptor contract is unsupported")
+    return descriptor, descriptor_ref
+
+
+def validate_and_materialize_approved_plan(payload, state_identity):
+    descriptor, descriptor_ref = load_approved_plan_descriptor(payload)
+    if descriptor.get("deploymentConfigSha256") != deployment_config_sha256(payload):
+        raise RuntimeError("Approved plan deployment configuration does not match apply input")
+    if descriptor.get("release") != release_selection(payload):
+        raise RuntimeError("Approved plan release pin does not match apply input")
+    if descriptor.get("state") != state_identity:
+        raise RuntimeError("Terraform state changed after plan approval; refusing apply")
+
+    tfvars_sha256 = sha256_file(TF / "terraform.auto.tfvars.json")
+    if descriptor.get("terraformVariablesSha256") != tfvars_sha256:
+        raise RuntimeError("Approved plan Terraform variables do not match apply execution")
+
+    saved_plan = descriptor.get("savedPlan")
+    plan_json = descriptor.get("jsonPlan")
+    if not isinstance(saved_plan, dict) or not isinstance(plan_json, dict):
+        raise RuntimeError("Approved plan descriptor is missing saved plan artifacts")
+    destination = TF / "tfplan"
+    _download_approved_artifact(
+        saved_plan.get("s3Uri"),
+        destination,
+        saved_plan.get("sha256"),
+        "approvedPlan.savedPlan",
+    )
+    rendered = WORK / "approved-terraform-plan.json"
+    with rendered.open("w", encoding="utf-8") as handle:
+        run(["terraform", "show", "-json", "tfplan"], cwd=TF, stdout=handle)
+    if sha256_file(rendered) != plan_json.get("sha256"):
+        raise RuntimeError("Approved saved plan no longer renders to the accepted JSON plan")
+    rendered_plan = json.loads(rendered.read_text(encoding="utf-8"))
+    if payload.get("incidentRecovery") is not None:
+        delete_addresses = terraform_plan_delete_addresses(rendered_plan)
+        if delete_addresses:
+            raise RuntimeError(
+                "TEI v380 recovery approved plan contains delete actions; refusing apply"
+            )
+
+    return {
+        "descriptor": {
+            "fileName": TERRAFORM_PLAN_DESCRIPTOR_NAME,
+            "sha256": descriptor_ref.get("sha256"),
+            "s3Uri": descriptor_ref.get("s3Uri"),
+        },
+        "savedPlan": saved_plan,
+        "jsonPlan": plan_json,
+        "summary": descriptor.get("summary"),
+        "plannedAction": descriptor.get("plannedAction"),
+        "sourceSessionId": descriptor.get("sessionId"),
+        "state": state_identity,
+    }
+
+
 def managed_app_terraform_target_args(payload):
     app_key = payload.get("appKey")
     if app_key == "n8n":
@@ -790,6 +1048,35 @@ def managed_app_terraform_target_args(payload):
             "-target=cloudflare_record.n8n",
         ]
     return []
+
+
+def execute_terraform_plan_phase(
+    payload,
+    state_identity,
+    planned_action,
+    terraform_phase,
+    target_args,
+):
+    """Create plan evidence and apply only for the compatible legacy phase."""
+    plan_args = ["terraform", "plan"]
+    if planned_action == "destroy":
+        plan_args.append("-destroy")
+    plan_args.extend([*target_args, "-out=tfplan", "-no-color"])
+    plan = subprocess.run(plan_args, cwd=TF, text=True)
+    if plan.returncode != 0:
+        return plan
+    TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence(
+        payload,
+        state_identity,
+        planned_action,
+    )
+    if terraform_phase != "legacy":
+        return plan
+    return subprocess.run(
+        ["terraform", "apply", "-auto-approve", "-no-color", "tfplan"],
+        cwd=TF,
+        text=True,
+    )
 
 
 def truthy(value):
@@ -1059,21 +1346,54 @@ def cloudfront_alias_items(value):
     return []
 
 
-def write_terraform_plan_evidence(payload=None):
+def write_terraform_plan_evidence(payload=None, state_identity=None, planned_action="update"):
+    payload = payload or {}
+    state_identity = state_identity or terraform_state_identity()
     plan_path = Path("terraform-plan.json")
     with plan_path.open("w", encoding="utf-8") as handle:
         run(["terraform", "show", "-json", "tfplan"], cwd=TF, stdout=handle)
     plan_json = json.loads(plan_path.read_text(encoding="utf-8"))
-    validate_managed_app_plan_scope(payload or {}, plan_json)
-    validate_environment_plan_scope(payload or {}, plan_json)
+    validate_managed_app_plan_scope(payload, plan_json)
+    validate_environment_plan_scope(payload, plan_json)
     artifact = {
         "fileName": plan_path.name,
         "sha256": sha256_file(plan_path),
         "s3Uri": upload_evidence_artifact(plan_path),
     }
+    saved_plan_path = TF / "tfplan"
+    saved_plan = {
+        "fileName": TERRAFORM_SAVED_PLAN_NAME,
+        "sha256": sha256_file(saved_plan_path),
+        "s3Uri": upload_evidence_artifact(saved_plan_path, TERRAFORM_SAVED_PLAN_NAME),
+    }
+    descriptor = {
+        "schemaVersion": 1,
+        "contract": TERRAFORM_PLAN_APPROVAL_CONTRACT,
+        "createdAt": datetime.now(UTC).isoformat(),
+        "status": "awaiting-approval",
+        "sessionId": payload.get("sessionId") or os.environ.get("THINKWORK_DEPLOYMENT_SESSION_ID"),
+        "plannedAction": planned_action,
+        "controllerInputSha256": controller_input_sha256(payload),
+        "rawControllerInputSha256": raw_controller_input_sha256(payload),
+        "deploymentConfigSha256": deployment_config_sha256(payload),
+        "terraformVariablesSha256": sha256_file(TF / "terraform.auto.tfvars.json"),
+        "release": release_selection(payload),
+        "state": state_identity,
+        "jsonPlan": artifact,
+        "savedPlan": saved_plan,
+        "summary": terraform_plan_summary(plan_json),
+    }
+    descriptor_artifact = write_json_evidence_artifact(
+        TERRAFORM_PLAN_DESCRIPTOR_NAME,
+        descriptor,
+    )
     return {
         "artifact": artifact,
-        "summary": terraform_plan_summary(plan_json),
+        "savedPlan": saved_plan,
+        "approvalDescriptor": descriptor_artifact,
+        "summary": descriptor["summary"],
+        "state": state_identity,
+        "status": "awaiting-approval",
     }
 
 
@@ -1138,6 +1458,661 @@ def current_terraform_state(stage):
         except Exception:
             continue
     return {}
+
+
+def _terraform_state_object_keys(stage):
+    return [
+        f"env:/{stage}/thinkwork/{stage}/terraform.tfstate",
+        f"thinkwork/{stage}/terraform.tfstate",
+    ]
+
+
+def terraform_state_object_snapshot(stage):
+    bucket = require_string(
+        os.environ.get("THINKWORK_TERRAFORM_STATE_BUCKET"),
+        "THINKWORK_TERRAFORM_STATE_BUCKET",
+    )
+    for key in _terraform_state_object_keys(stage):
+        try:
+            head = json.loads(
+                output(
+                    [
+                        "aws",
+                        "s3api",
+                        "head-object",
+                        "--bucket",
+                        bucket,
+                        "--key",
+                        key,
+                        "--output",
+                        "json",
+                    ]
+                )
+            )
+            body = subprocess.check_output(
+                ["aws", "s3", "cp", f"s3://{bucket}/{key}", "-"],
+            )
+        except (subprocess.CalledProcessError, json.JSONDecodeError):
+            continue
+        state = json.loads(body)
+        return {
+            "bucket": bucket,
+            "key": key,
+            "etag": str(head.get("ETag") or "").strip('"'),
+            "size": int(head.get("ContentLength") or len(body)),
+            "lastModified": head.get("LastModified"),
+            "serverSideEncryption": head.get("ServerSideEncryption"),
+            "versionId": head.get("VersionId"),
+            "sha256": sha256_bytes(body),
+            "lineage": state.get("lineage"),
+            "serial": state.get("serial"),
+            "terraformVersion": state.get("terraform_version"),
+        }
+    raise RuntimeError(f"Terraform state object for stage {stage} was not found")
+
+
+def _incident_operation(payload):
+    operation = payload.get("operation")
+    if not isinstance(operation, dict) or operation.get("kind") != "incident_recovery":
+        raise RuntimeError("Incident recovery requires operation.kind=incident_recovery")
+    return operation
+
+
+def _require_exact_incident_payload_aliases(payload, aliases, expected, label):
+    present = {name: payload.get(name) for name in aliases if name in payload}
+    if not present or any(value != expected for value in present.values()):
+        raise RuntimeError(f"TEI v380 recovery {label} does not match exact incident scope")
+
+
+def tei_v380_recovery_scope():
+    return {
+        "contract": TEI_V380_RECOVERY_CONTRACT,
+        "incidentId": TEI_V380_RECOVERY_INCIDENT_ID,
+        "rejectedPlanSha256": TEI_V380_REJECTED_PLAN_SHA256,
+        "stage": "tei-e2e",
+        "accountId": "637423202447",
+        "region": "us-east-1",
+        "state": {
+            "bucket": TEI_V380_STATE_BUCKET,
+            "key": TEI_V380_STATE_KEY,
+            "lineage": TEI_V380_STATE_LINEAGE,
+            "serial": TEI_V380_STATE_SERIAL,
+            "sha256": TEI_V380_STATE_SHA256,
+        },
+        "lock": {
+            "table": TEI_V380_LOCK_TABLE,
+            "key": TEI_V380_LOCK_KEY,
+            "id": TEI_V380_LOCK_ID,
+            "operation": "OperationTypeApply",
+            "terraformVersion": "1.8.5",
+            "digest": TEI_V380_STATE_DIGEST,
+        },
+        "secret": {
+            "address": TEI_V380_SECRET_ADDRESS,
+            "arn": TEI_V380_SECRET_ARN,
+            "name": TEI_V380_SECRET_NAME,
+        },
+        "kmsKey": {
+            "address": TEI_V380_KMS_KEY_ADDRESS,
+            "id": TEI_V380_KMS_KEY_ID,
+            "arn": TEI_V380_KMS_KEY_ARN,
+            "aliasAddress": TEI_V380_KMS_ALIAS_ADDRESS,
+            "alias": TEI_V380_KMS_ALIAS,
+        },
+    }
+
+
+def validate_tei_v380_recovery_contract(payload):
+    operation = _incident_operation(payload)
+    expected = tei_v380_recovery_scope()
+    actual = {
+        key: operation.get(key)
+        for key in [
+            "contract",
+            "incidentId",
+            "rejectedPlanSha256",
+            "stage",
+            "accountId",
+            "region",
+            "state",
+            "lock",
+            "secret",
+            "kmsKey",
+        ]
+    }
+    if actual != expected:
+        raise RuntimeError("TEI v380 recovery contract does not match the exact incident scope")
+    expected_operation_keys = {"kind", *expected.keys()}
+    if set(operation) != expected_operation_keys:
+        raise RuntimeError("TEI v380 recovery operation contains unexpected fields")
+    _require_exact_incident_payload_aliases(
+        payload, ("environmentName", "stage"), "tei-e2e", "stage"
+    )
+    _require_exact_incident_payload_aliases(
+        payload, ("awsAccountId", "accountId"), "637423202447", "account"
+    )
+    _require_exact_incident_payload_aliases(payload, ("awsRegion", "region"), "us-east-1", "region")
+    return expected
+
+
+def assert_incident_recovery_operation_is_exclusive():
+    current_execution = os.environ.get("THINKWORK_DEPLOYMENT_EXECUTION_ARN")
+    state_machine_arn = require_string(
+        os.environ.get("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN"),
+        "THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN",
+    )
+    executions = json.loads(
+        output(
+            [
+                "aws",
+                "stepfunctions",
+                "list-executions",
+                "--state-machine-arn",
+                state_machine_arn,
+                "--status-filter",
+                "RUNNING",
+                "--output",
+                "json",
+            ]
+        )
+        or "{}"
+    ).get("executions", [])
+    if current_execution:
+        other_executions = [
+            item.get("executionArn")
+            for item in executions
+            if item.get("executionArn") != current_execution
+        ]
+    else:
+        # Established control planes do not receive Execution.Id until this
+        # release updates their state-machine definition. Permit exactly the
+        # sole running controller execution during that bounded transition.
+        # Zero executions would mean the recovery was launched outside the
+        # managed controller; more than one is ambiguous and unsafe.
+        if len(executions) != 1:
+            raise RuntimeError(
+                "Incident recovery without execution identity requires exactly one "
+                "running deployment execution"
+            )
+        current_execution = executions[0].get("executionArn")
+        other_executions = []
+    if other_executions:
+        raise RuntimeError("Another deployment execution is running; recovery refused")
+
+    project = require_string(
+        os.environ.get("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME"),
+        "THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME",
+    )
+    current_build = os.environ.get("CODEBUILD_BUILD_ID")
+    if not current_build:
+        raise RuntimeError("Incident recovery must run inside the deployment CodeBuild")
+    build_ids = json.loads(
+        output(
+            [
+                "aws",
+                "codebuild",
+                "list-builds-for-project",
+                "--project-name",
+                project,
+                "--sort-order",
+                "DESCENDING",
+                "--output",
+                "json",
+            ]
+        )
+        or "{}"
+    ).get("ids", [])[:100]
+    if build_ids:
+        builds = json.loads(
+            output(
+                [
+                    "aws",
+                    "codebuild",
+                    "batch-get-builds",
+                    "--ids",
+                    *build_ids,
+                    "--output",
+                    "json",
+                ]
+            )
+            or "{}"
+        ).get("builds", [])
+        other_builds = [
+            item.get("id")
+            for item in builds
+            if item.get("buildStatus") == "IN_PROGRESS" and item.get("id") != current_build
+        ]
+        if other_builds:
+            raise RuntimeError("Another deployment CodeBuild is running; recovery refused")
+    return {
+        "currentExecutionArn": current_execution,
+        "currentBuildId": current_build,
+        "otherRunningExecutions": 0,
+        "otherRunningBuilds": 0,
+    }
+
+
+def _redacted_secret_description(description):
+    return {
+        "arn": description.get("ARN"),
+        "name": description.get("Name"),
+        "deletedDate": description.get("DeletedDate"),
+        "kmsKeyId": description.get("KmsKeyId"),
+        "rotationEnabled": bool(description.get("RotationEnabled", False)),
+    }
+
+
+def _redacted_kms_description(description):
+    metadata = description.get("KeyMetadata") or {}
+    return {
+        "keyId": metadata.get("KeyId"),
+        "arn": metadata.get("Arn"),
+        "keyState": metadata.get("KeyState"),
+        "deletionDate": metadata.get("DeletionDate"),
+        "enabled": metadata.get("Enabled"),
+        "keyManager": metadata.get("KeyManager"),
+        "origin": metadata.get("Origin"),
+    }
+
+
+def _wait_for_json_description(fetch, accept, description, attempts=20, delay_seconds=1):
+    """Bound eventual-consistency waits without ever reading secret values."""
+    latest = None
+    for attempt in range(attempts):
+        latest = fetch()
+        if accept(latest):
+            return latest
+        if attempt + 1 < attempts:
+            time.sleep(delay_seconds)
+    raise RuntimeError(f"Timed out waiting for {description}")
+
+
+def _dynamodb_string(item, name):
+    value = (item.get(name) or {}).get("S")
+    return value if isinstance(value, str) else None
+
+
+def tei_v380_lock_snapshot():
+    def get_item(lock_key):
+        raw = output(
+            [
+                "aws",
+                "dynamodb",
+                "get-item",
+                "--table-name",
+                TEI_V380_LOCK_TABLE,
+                "--key",
+                json.dumps({"LockID": {"S": lock_key}}, separators=(",", ":")),
+                "--consistent-read",
+                "--output",
+                "json",
+            ]
+        )
+        return json.loads(raw or "{}").get("Item") or {}
+
+    lock_item = get_item(TEI_V380_LOCK_KEY)
+    digest_item = get_item(f"{TEI_V380_LOCK_KEY}-md5")
+    info_raw = _dynamodb_string(lock_item, "Info")
+    info = json.loads(info_raw) if info_raw else None
+    if info is not None and not isinstance(info, dict):
+        raise RuntimeError("TEI v380 Terraform lock Info is malformed")
+    return {
+        "table": TEI_V380_LOCK_TABLE,
+        "key": TEI_V380_LOCK_KEY,
+        "present": bool(lock_item),
+        "info": {
+            "id": (info or {}).get("ID"),
+            "operation": (info or {}).get("Operation"),
+            "version": (info or {}).get("Version"),
+            "created": (info or {}).get("Created"),
+            "path": (info or {}).get("Path"),
+        }
+        if info
+        else None,
+        "digestKey": f"{TEI_V380_LOCK_KEY}-md5",
+        "digest": _dynamodb_string(digest_item, "Digest"),
+    }
+
+
+def force_unlock_tei_v380_state():
+    """Use Terraform's backend-aware unlock path; never delete DynamoDB rows directly."""
+    before = tei_v380_lock_snapshot()
+    expected_info = {
+        "id": TEI_V380_LOCK_ID,
+        "operation": "OperationTypeApply",
+        "version": "1.8.5",
+        "path": TEI_V380_LOCK_KEY,
+    }
+    actual_info = before.get("info") or {}
+    if before.get("digest") != TEI_V380_STATE_DIGEST:
+        raise RuntimeError("TEI v380 Terraform state digest changed; unlock refused")
+    if before.get("present") is not True:
+        return {
+            "method": "terraform-force-unlock",
+            "lockId": TEI_V380_LOCK_ID,
+            "before": before,
+            "after": before,
+            "alreadyUnlocked": True,
+            "directDynamoDbMutation": False,
+        }
+    if any(actual_info.get(key) != value for key, value in expected_info.items()):
+        raise RuntimeError("TEI v380 stale Terraform lock identity does not match")
+
+    unlock_dir = WORK / "tei-v380-force-unlock"
+    unlock_dir.mkdir(parents=True, exist_ok=True)
+    (unlock_dir / "main.tf").write_text(
+        'terraform {\n  required_version = ">= 1.8.5"\n  backend "s3" {}\n}\n',
+        encoding="utf-8",
+    )
+    (unlock_dir / "backend.hcl").write_text(
+        "\n".join(
+            [
+                f"bucket = {hcl_string(TEI_V380_STATE_BUCKET)}",
+                f"key = {hcl_string(TEI_V380_STATE_KEY)}",
+                'region = "us-east-1"',
+                f"dynamodb_table = {hcl_string(TEI_V380_LOCK_TABLE)}",
+                "encrypt = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    run(
+        [
+            "terraform",
+            "init",
+            "-reconfigure",
+            "-backend-config=backend.hcl",
+            "-input=false",
+            "-no-color",
+        ],
+        cwd=unlock_dir,
+    )
+    run(
+        ["terraform", "force-unlock", "-force", TEI_V380_LOCK_ID],
+        cwd=unlock_dir,
+    )
+    after = tei_v380_lock_snapshot()
+    if after.get("present") is not False:
+        raise RuntimeError("TEI v380 stale Terraform lock remains after force-unlock")
+    if after.get("digest") != before.get("digest"):
+        raise RuntimeError("Terraform state digest changed during force-unlock")
+    return {
+        "method": "terraform-force-unlock",
+        "lockId": TEI_V380_LOCK_ID,
+        "before": before,
+        "after": after,
+        "alreadyUnlocked": False,
+        "directDynamoDbMutation": False,
+    }
+
+
+def recover_tei_v380_incident(payload):
+    validate_tei_v380_recovery_contract(payload)
+    exclusivity = assert_incident_recovery_operation_is_exclusive()
+    caller_account = output(
+        ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"]
+    )
+    if caller_account != "637423202447":
+        raise RuntimeError("TEI v380 recovery caller is in the wrong AWS account")
+
+    before_state = terraform_state_object_snapshot("tei-e2e")
+    for key, expected in [
+        ("bucket", TEI_V380_STATE_BUCKET),
+        ("key", TEI_V380_STATE_KEY),
+        ("lineage", TEI_V380_STATE_LINEAGE),
+        ("serial", TEI_V380_STATE_SERIAL),
+        ("sha256", TEI_V380_STATE_SHA256),
+    ]:
+        if before_state.get(key) != expected:
+            raise RuntimeError(f"TEI v380 recovery state {key} changed; recovery refused")
+
+    progress = {
+        "schemaVersion": 1,
+        "contract": TEI_V380_RECOVERY_CONTRACT,
+        "incidentId": TEI_V380_RECOVERY_INCIDENT_ID,
+        "rejectedPlanSha256": TEI_V380_REJECTED_PLAN_SHA256,
+        "status": "preflight-passed",
+        "startedAt": datetime.now(UTC).isoformat(),
+        "exclusiveOperation": exclusivity,
+        "stateBefore": before_state,
+        "terraformStateMutation": False,
+        "secretValueRead": False,
+    }
+    write_json_evidence_artifact("incident-recovery-progress.json", progress)
+
+    secret_before_raw = json.loads(
+        output(
+            [
+                "aws",
+                "secretsmanager",
+                "describe-secret",
+                "--secret-id",
+                TEI_V380_SECRET_ARN,
+                "--output",
+                "json",
+            ]
+        )
+    )
+    if (
+        secret_before_raw.get("ARN") != TEI_V380_SECRET_ARN
+        or secret_before_raw.get("Name") != TEI_V380_SECRET_NAME
+    ):
+        raise RuntimeError("TEI v380 recovery secret identity does not match")
+    if secret_before_raw.get("DeletedDate"):
+        run(
+            [
+                "aws",
+                "secretsmanager",
+                "restore-secret",
+                "--secret-id",
+                TEI_V380_SECRET_ARN,
+            ],
+            stdout=subprocess.DEVNULL,
+        )
+
+    def describe_secret():
+        return json.loads(
+            output(
+                [
+                    "aws",
+                    "secretsmanager",
+                    "describe-secret",
+                    "--secret-id",
+                    TEI_V380_SECRET_ARN,
+                    "--output",
+                    "json",
+                ]
+            )
+        )
+
+    secret_after_raw = _wait_for_json_description(
+        describe_secret,
+        lambda value: not value.get("DeletedDate"),
+        "restored TEI Twenty OAuth client secret",
+    )
+    if (
+        secret_after_raw.get("ARN") != TEI_V380_SECRET_ARN
+        or secret_after_raw.get("Name") != TEI_V380_SECRET_NAME
+    ):
+        raise RuntimeError("Restored TEI v380 recovery secret identity does not match")
+    progress["secret"] = {
+        "address": TEI_V380_SECRET_ADDRESS,
+        "before": _redacted_secret_description(secret_before_raw),
+        "after": _redacted_secret_description(secret_after_raw),
+        "status": "restored",
+    }
+    progress["status"] = "secret-restored"
+    write_json_evidence_artifact("incident-recovery-progress.json", progress)
+
+    kms_before_raw = json.loads(
+        output(
+            [
+                "aws",
+                "kms",
+                "describe-key",
+                "--key-id",
+                TEI_V380_KMS_KEY_ID,
+                "--output",
+                "json",
+            ]
+        )
+    )
+    kms_before = _redacted_kms_description(kms_before_raw)
+    if (
+        kms_before.get("keyId") != TEI_V380_KMS_KEY_ID
+        or kms_before.get("arn") != TEI_V380_KMS_KEY_ARN
+    ):
+        raise RuntimeError("TEI v380 recovery KMS key identity does not match")
+    if kms_before.get("keyState") == "PendingDeletion":
+        run(
+            ["aws", "kms", "cancel-key-deletion", "--key-id", TEI_V380_KMS_KEY_ID],
+            stdout=subprocess.DEVNULL,
+        )
+
+    def describe_kms_key():
+        return json.loads(
+            output(
+                [
+                    "aws",
+                    "kms",
+                    "describe-key",
+                    "--key-id",
+                    TEI_V380_KMS_KEY_ID,
+                    "--output",
+                    "json",
+                ]
+            )
+        )
+
+    kms_mid_raw = _wait_for_json_description(
+        describe_kms_key,
+        lambda value: _redacted_kms_description(value).get("keyState") in {"Disabled", "Enabled"},
+        "cancelled TEI turn-assertion KMS deletion",
+    )
+    if _redacted_kms_description(kms_mid_raw).get("keyState") == "Disabled":
+        run(
+            ["aws", "kms", "enable-key", "--key-id", TEI_V380_KMS_KEY_ID],
+            stdout=subprocess.DEVNULL,
+        )
+    kms_after_raw = _wait_for_json_description(
+        describe_kms_key,
+        lambda value: (
+            _redacted_kms_description(value).get("keyState") == "Enabled"
+            and _redacted_kms_description(value).get("enabled") is True
+        ),
+        "enabled TEI turn-assertion KMS key",
+    )
+    kms_after = _redacted_kms_description(kms_after_raw)
+    if (
+        kms_after.get("keyId") != TEI_V380_KMS_KEY_ID
+        or kms_after.get("arn") != TEI_V380_KMS_KEY_ARN
+    ):
+        raise RuntimeError("Recovered TEI v380 KMS key identity does not match")
+    progress["kmsKey"] = {
+        "address": TEI_V380_KMS_KEY_ADDRESS,
+        "aliasAddress": TEI_V380_KMS_ALIAS_ADDRESS,
+        "alias": TEI_V380_KMS_ALIAS,
+        "before": kms_before,
+        "after": kms_after,
+        "status": "enabled",
+    }
+    progress["status"] = "resources-recovered"
+    write_json_evidence_artifact("incident-recovery-progress.json", progress)
+
+    progress["terraformLock"] = force_unlock_tei_v380_state()
+    progress["status"] = "resources-recovered-and-state-unlocked"
+    write_json_evidence_artifact("incident-recovery-progress.json", progress)
+
+    after_state = terraform_state_object_snapshot("tei-e2e")
+    if after_state != before_state:
+        raise RuntimeError("Terraform state object changed during incident recovery")
+    progress.update(
+        {
+            "status": "succeeded",
+            "completedAt": datetime.now(UTC).isoformat(),
+            "stateAfter": after_state,
+            "terraformStateMutation": False,
+            "secretValueRead": False,
+            "nextStep": "proof-enabled-plan-with-imports",
+        }
+    )
+    artifact = write_json_evidence_artifact("incident-recovery.json", progress)
+    return {"proof": progress, "artifact": artifact}
+
+
+def tei_v380_recovery_import_blocks(payload, vars_json, current_state):
+    recovery = payload.get("incidentRecovery")
+    if recovery is None:
+        return ""
+    if not isinstance(recovery, dict):
+        raise RuntimeError("incidentRecovery must be an object")
+    evidence_ref = recovery.get("evidence")
+    actual_scope = {key: recovery.get(key) for key in tei_v380_recovery_scope()}
+    if actual_scope != tei_v380_recovery_scope():
+        raise RuntimeError("Incident recovery import scope does not match TEI v380 incident")
+    if not isinstance(evidence_ref, dict):
+        raise RuntimeError("incidentRecovery.evidence is required")
+
+    evidence_path = WORK / "accepted-incident-recovery.json"
+    _download_approved_artifact(
+        evidence_ref.get("s3Uri"),
+        evidence_path,
+        evidence_ref.get("sha256"),
+        "incidentRecovery.evidence",
+    )
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    if (
+        evidence.get("contract") != TEI_V380_RECOVERY_CONTRACT
+        or evidence.get("incidentId") != TEI_V380_RECOVERY_INCIDENT_ID
+        or evidence.get("rejectedPlanSha256") != TEI_V380_REJECTED_PLAN_SHA256
+        or evidence.get("status") != "succeeded"
+        or evidence.get("terraformStateMutation") is not False
+        or evidence.get("secretValueRead") is not False
+        or evidence.get("stateBefore") != evidence.get("stateAfter")
+    ):
+        raise RuntimeError("Incident recovery evidence is incomplete or unsafe")
+    evidence_state = evidence.get("stateAfter") or {}
+    if (
+        evidence_state.get("lineage") != TEI_V380_STATE_LINEAGE
+        or evidence_state.get("serial") != TEI_V380_STATE_SERIAL
+        or evidence_state.get("sha256") != TEI_V380_STATE_SHA256
+    ):
+        raise RuntimeError("Incident recovery evidence state identity does not match")
+    if (
+        current_state.get("lineage") != TEI_V380_STATE_LINEAGE
+        or current_state.get("serial") != TEI_V380_STATE_SERIAL
+        or current_state.get("sha256") != TEI_V380_STATE_SHA256
+    ):
+        raise RuntimeError("Current Terraform state moved after incident recovery")
+
+    if vars_json.get("enable_agentcore_multiplayer_proof") is not True:
+        raise RuntimeError("Incident recovery import requires AgentCore proof enabled")
+    if vars_json.get("agentcore_multiplayer_proof_tenant_slug") != "tei":
+        raise RuntimeError("Incident recovery import requires the exact TEI tenant slug")
+    if vars_json.get("agentcore_multiplayer_proof_owner_allowlist") != TEI_V380_OWNER_ALLOWLIST:
+        raise RuntimeError("Incident recovery import requires the exact owner allowlist")
+    if vars_json.get("finalize_auth_retirement") is not False:
+        raise RuntimeError("Incident recovery import cannot finalize auth retirement")
+    if vars_json.get("auth_retirement_phase") != "coexistence":
+        raise RuntimeError("Incident recovery import requires auth coexistence")
+    if vars_json.get("microsoft_oauth_tenant") != "organizations":
+        raise RuntimeError("Incident recovery import requires Microsoft organizations tenant")
+
+    return f"""
+# TEI v380 incident recovery imports. These addresses and IDs are bound to the
+# independently accepted recovery evidence above. They recover ownership of
+# the original secret and KMS key without reading or replacing either value.
+import {{
+  to = {TEI_V380_SECRET_ADDRESS}
+  id = {hcl_string(TEI_V380_SECRET_ARN)}
+}}
+
+import {{
+  to = {TEI_V380_KMS_KEY_ADDRESS}
+  id = {hcl_string(TEI_V380_KMS_KEY_ID)}
+}}
+"""
 
 
 def current_terraform_outputs(stage):
@@ -3549,6 +4524,11 @@ def write_runner_files(payload, runner_secrets):
     vars_json.update(
         managed_app_terraform_overrides(payload, stage, account_id, current_outputs, current_state)
     )
+    incident_import_blocks = tei_v380_recovery_import_blocks(
+        payload,
+        vars_json,
+        current_state,
+    )
 
     TF.mkdir(parents=True, exist_ok=True)
     (TF / "backend.hcl").write_text(
@@ -3620,6 +4600,8 @@ removed {{
     destroy = false
   }}
 }}
+
+{incident_import_blocks}
 
 variable "stage" {{
   type = string
@@ -5660,7 +6642,16 @@ def main():
     action = os.environ.get("THINKWORK_DEPLOYMENT_ACTION") or payload.get("action") or "deploy"
     if action == "teardown":
         action = "destroy"
-    if action not in {"deploy", "update", "destroy", "plan", "status", "web"}:
+    if action not in {
+        "deploy",
+        "update",
+        "destroy",
+        "plan",
+        "apply",
+        "recover",
+        "status",
+        "web",
+    }:
         raise RuntimeError(f"Unsupported deployment action: {action}")
     os.environ["THINKWORK_DEPLOYMENT_ACTION"] = action
     configure_managed_app_evidence_prefix(payload)
@@ -5680,13 +6671,31 @@ def main():
         )
         return 0
 
+    if action == "recover":
+        CONTROLLER_EVIDENCE = {
+            "incidentRecovery": recover_tei_v380_incident(payload),
+        }
+        write_evidence(
+            "succeeded",
+            {
+                "stage": "tei-e2e",
+                "account_id": "637423202447",
+                "region": "us-east-1",
+            },
+            0,
+        )
+        return 0
+
+    terraform_phase = validate_terraform_execution_phase(payload, action)
+    planned_action = requested_plan_action(payload, action)
+    execution_effect_action = planned_action if terraform_phase == "apply" else action
     runner_secrets = secret_payload(payload)
     web_only = is_web_only_operation(payload, action)
     identity_operation = identity_provider_operation(payload)
     static_files = {}
-    release_request = release_sync_request(action, payload, identity_operation)
+    release_request = release_sync_request(execution_effect_action, payload, identity_operation)
     control_runtime_operation = requires_agentcore_control_runtime(
-        action, payload, identity_operation
+        execution_effect_action, payload, identity_operation
     )
     if release_request is not None:
         static_files = sync_release_artifacts(**release_request)
@@ -5740,11 +6749,6 @@ def main():
             payload, vars_json
         )
 
-    if action in {"deploy", "update"} and not is_managed_app_operation(payload):
-        CONTROLLER_EVIDENCE["cognitoSchema"] = ensure_native_auth_custom_attributes(
-            current_terraform_outputs(vars_json["stage"])
-        )
-
     configure_cloudflare_provider_auth(vars_json["stage"])
     configure_terraform_provider_mirror()
     run(["terraform", "init", "-backend-config=backend.hcl", "-no-color"], cwd=TF)
@@ -5758,44 +6762,50 @@ def main():
         )
         if selected.returncode != 0:
             run(["terraform", "workspace", "new", workspace, "-no-color"], cwd=TF)
+    state_identity = terraform_state_identity()
     target_args = managed_app_terraform_target_args(payload)
-    pre_app_schema = prepare_additive_schema_before_app(payload, vars_json)
-    if pre_app_schema is not None and pre_app_schema.returncode != 0:
+    pre_app_schema = (
+        prepare_additive_schema_before_app(payload, vars_json)
+        if terraform_phase in {"plan", "legacy"}
+        else None
+    )
+    applied_plan = None
+    if terraform_phase == "apply":
+        applied_plan = validate_and_materialize_approved_plan(payload, state_identity)
+        planned_action = applied_plan.get("plannedAction")
+        if planned_action not in {"deploy", "update", "destroy"}:
+            raise RuntimeError("Approved plan has an invalid plannedAction")
+        TERRAFORM_EVIDENCE["approvedPlan"] = applied_plan
+        if planned_action in {"deploy", "update"} and not is_managed_app_operation(payload):
+            CONTROLLER_EVIDENCE["cognitoSchema"] = ensure_native_auth_custom_attributes(
+                current_terraform_outputs(vars_json["stage"])
+            )
+        result = subprocess.run(
+            ["terraform", "apply", "-no-color", "tfplan"],
+            cwd=TF,
+            text=True,
+        )
+    elif pre_app_schema is not None and pre_app_schema.returncode != 0:
         result = pre_app_schema
-    elif action == "destroy":
-        plan = subprocess.run(
-            ["terraform", "plan", "-destroy", *target_args, "-out=tfplan", "-no-color"],
-            cwd=TF,
-            text=True,
-        )
-        if plan.returncode == 0:
-            TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence(payload)
-            result = subprocess.run(
-                ["terraform", "apply", "-auto-approve", "-no-color", "tfplan"],
-                cwd=TF,
-                text=True,
-            )
-        else:
-            result = plan
     else:
-        plan = subprocess.run(
-            ["terraform", "plan", *target_args, "-out=tfplan", "-no-color"],
-            cwd=TF,
-            text=True,
+        result = execute_terraform_plan_phase(
+            payload,
+            state_identity,
+            planned_action,
+            terraform_phase,
+            target_args,
         )
-        if plan.returncode == 0:
-            TERRAFORM_EVIDENCE["plan"] = write_terraform_plan_evidence(payload)
-        if action == "plan" or plan.returncode != 0:
-            result = plan
-        else:
-            result = subprocess.run(
-                ["terraform", "apply", "-auto-approve", "-no-color", "tfplan"],
-                cwd=TF,
-                text=True,
-            )
 
     outputs_path = TF / "outputs.json"
-    if result.returncode == 0 and action in {"deploy", "update"}:
+    if (
+        result.returncode == 0
+        and terraform_phase in {"apply", "legacy"}
+        and planned_action
+        in {
+            "deploy",
+            "update",
+        }
+    ):
         if identity_operation is not None:
             finalized = finalize_disabled_identity_provider(payload, vars_json)
             if finalized is not None:

@@ -30,6 +30,43 @@ Full deploy/update plans fail closed when they would delete customer-domain
 resources or remove web CloudFront aliases unless
 `allowCustomerDomainRemoval=true` is set for an intentional reviewed retirement.
 
+## Saved-plan approval
+
+High-risk foundation changes can use a two-execution controller protocol. An
+`action=plan` execution must set `operation.plan=true`,
+`operation.apply=false`, and a `targetAction`. It uploads the opaque saved plan,
+the rendered JSON plan, and a content-addressed approval descriptor. A later
+`action=apply` execution must set `operation.plan=false`,
+`operation.apply=true`, and reference that exact descriptor. The runner refuses
+the apply if the release pin, deployment configuration, Terraform variables,
+state lineage/serial/content, saved-plan digest, or rendered JSON digest differs.
+It applies the accepted plan directly and never replans.
+
+Existing deployment and managed-application callers retain their established
+behavior while their product approval surfaces migrate to this protocol. The
+separate saved-plan path is mandatory for incident recovery and other explicitly
+guarded operations.
+
+## TEI `.380` proof-plane recovery
+
+The runner contains a one-time, exact-scope recovery contract for the interrupted
+TEI `.380` apply. It is bound to the observed account, region, state object,
+lineage, serial, state hash, stale lock ID/digest, rejected plan hash, original
+Twenty OAuth secret, and original turn-assertion KMS key. The managed `recover`
+action:
+
+1. proves it is the sole deployment execution and build;
+2. restores the original secret without reading its value;
+3. cancels deletion and re-enables the original KMS key;
+4. invokes Terraform's backend-aware `force-unlock` for only the bound stale
+   lock (never a direct DynamoDB delete); and
+5. proves the state object and digest are unchanged while writing redacted
+   evidence.
+
+The subsequent proof-enabled plan accepts that evidence and declaratively
+imports the recovered secret and KMS key. It must use the saved-plan approval
+protocol and pass a zero-delete review before any apply.
+
 ## Node.js 22 control-runtime transition
 
 The AgentCore control SDK requires Node.js 20 or newer, and the ThinkWork

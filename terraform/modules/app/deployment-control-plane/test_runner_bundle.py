@@ -3810,6 +3810,673 @@ def test_write_controller_release_selection_to_ssm_skips_empty_git_module_versio
     assert "/thinkwork/dev/deployment/terraform-module-version" not in written_names
 
 
+def _approval_payload(action: str, *, plan: bool, apply: bool) -> dict:
+    return {
+        "contract": "thinkwork.deployment.controller.v1",
+        "action": action,
+        "phase": action,
+        "sessionId": f"session-{action}",
+        "environmentName": "tei-e2e",
+        "awsAccountId": "637423202447",
+        "awsRegion": "us-east-1",
+        "release": {
+            "version": "v0.1.0-canary.381",
+            "manifestUrl": "https://example.test/thinkwork-release.json",
+            "manifestSha256": "a" * 64,
+        },
+        "agentcorePiSourceImageUri": (
+            "637423202447.dkr.ecr.us-east-1.amazonaws.com/"
+            "thinkwork-tei-e2e-agentcore:pinned@sha256:abc"
+        ),
+        "preservedConfig": {
+            "enableAgentCoreHarness": True,
+            "agentCoreHarnessTenantSlug": "tei",
+        },
+        "operation": {
+            "kind": "foundation",
+            "action": action,
+            "targetAction": "update",
+            "plan": plan,
+            "apply": apply,
+            "destroy": False,
+        },
+    }
+
+
+def test_plan_phase_never_implies_apply() -> None:
+    runner = load_runner()
+    payload = _approval_payload("plan", plan=True, apply=False)
+
+    assert runner.validate_terraform_execution_phase(payload, "plan") == "plan"
+
+
+def test_existing_managed_application_plan_remains_plan_only() -> None:
+    runner = load_runner()
+    payload = {
+        "action": "plan",
+        "phase": "plan",
+        "appKey": "twenty",
+        "operation": "ENABLE",
+    }
+
+    assert runner.validate_terraform_execution_phase(payload, "plan") == "plan"
+
+
+def test_explicit_plan_execution_never_invokes_terraform_apply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        runner.subprocess,
+        "run",
+        lambda args, **_kwargs: calls.append(args) or SimpleNamespace(returncode=0),
+    )
+    monkeypatch.setattr(
+        runner,
+        "write_terraform_plan_evidence",
+        lambda *_args, **_kwargs: {"status": "awaiting-approval"},
+    )
+
+    result = runner.execute_terraform_plan_phase(
+        _approval_payload("plan", plan=True, apply=False),
+        {"lineage": "lineage", "serial": 1},
+        "update",
+        "plan",
+        [],
+    )
+
+    assert result.returncode == 0
+    assert calls == [["terraform", "plan", "-out=tfplan", "-no-color"]]
+    assert runner.TERRAFORM_EVIDENCE["plan"]["status"] == "awaiting-approval"
+
+
+def test_legacy_execution_still_applies_its_successful_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        runner.subprocess,
+        "run",
+        lambda args, **_kwargs: calls.append(args) or SimpleNamespace(returncode=0),
+    )
+    monkeypatch.setattr(
+        runner,
+        "write_terraform_plan_evidence",
+        lambda *_args, **_kwargs: {"status": "awaiting-approval"},
+    )
+
+    runner.execute_terraform_plan_phase(
+        _approval_payload("update", plan=True, apply=True),
+        {"lineage": "lineage", "serial": 1},
+        "update",
+        "legacy",
+        [],
+    )
+
+    assert calls == [
+        ["terraform", "plan", "-out=tfplan", "-no-color"],
+        ["terraform", "apply", "-auto-approve", "-no-color", "tfplan"],
+    ]
+
+
+@pytest.mark.parametrize("action", ["deploy", "update", "destroy"])
+def test_legacy_combined_terraform_actions_remain_compatible(action: str) -> None:
+    runner = load_runner()
+    payload = _approval_payload(action, plan=True, apply=True)
+
+    assert runner.validate_terraform_execution_phase(payload, action) == "legacy"
+
+
+def test_apply_phase_requires_separate_approved_plan() -> None:
+    runner = load_runner()
+    payload = _approval_payload("apply", plan=False, apply=True)
+
+    with pytest.raises(RuntimeError, match="requires approvedPlan"):
+        runner.validate_terraform_execution_phase(payload, "apply")
+
+    payload["approvedPlan"] = {
+        "descriptor": {"s3Uri": "s3://evidence/descriptor.json", "sha256": "a" * 64}
+    }
+    assert runner.validate_terraform_execution_phase(payload, "apply") == "apply"
+
+
+def test_plan_and_apply_share_only_immutable_deployment_config_digest() -> None:
+    runner = load_runner()
+    planned = _approval_payload("plan", plan=True, apply=False)
+    applied = _approval_payload("apply", plan=False, apply=True)
+    applied["approvedPlan"] = {
+        "descriptor": {"s3Uri": "s3://evidence/descriptor.json", "sha256": "a" * 64}
+    }
+
+    assert runner.controller_input_sha256(planned) != runner.controller_input_sha256(applied)
+    assert runner.deployment_config_sha256(planned) == runner.deployment_config_sha256(applied)
+
+    applied["preservedConfig"]["agentCoreHarnessTenantSlug"] = "wrong"
+    assert runner.deployment_config_sha256(planned) != runner.deployment_config_sha256(applied)
+
+
+def test_saved_plan_apply_revalidates_config_release_state_vars_and_rendered_plan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    work = tmp_path / "work"
+    tf = work / "terraform"
+    tf.mkdir(parents=True)
+    monkeypatch.setattr(runner, "WORK", work)
+    monkeypatch.setattr(runner, "TF", tf)
+    payload = _approval_payload("apply", plan=False, apply=True)
+    payload["approvedPlan"] = {
+        "descriptor": {"s3Uri": "s3://evidence/descriptor.json", "sha256": "d" * 64}
+    }
+    state = {
+        "lineage": "lineage",
+        "serial": 7,
+        "sha256": "s" * 64,
+        "terraformVersion": "1.8.5",
+    }
+    tfvars = b'{"stage":"tei-e2e"}\n'
+    (tf / "terraform.auto.tfvars.json").write_bytes(tfvars)
+    saved_plan_bytes = b"opaque-saved-plan"
+    rendered_plan = b'{"format_version":"1.2","resource_changes":[]}\n'
+    descriptor = {
+        "contract": runner.TERRAFORM_PLAN_APPROVAL_CONTRACT,
+        "deploymentConfigSha256": runner.deployment_config_sha256(payload),
+        "release": runner.release_selection(payload),
+        "state": state,
+        "terraformVariablesSha256": digest(tfvars),
+        "savedPlan": {
+            "s3Uri": "s3://evidence/plan.bin",
+            "sha256": digest(saved_plan_bytes),
+        },
+        "jsonPlan": {
+            "s3Uri": "s3://evidence/plan.json",
+            "sha256": digest(rendered_plan),
+        },
+        "summary": {"resourceChangeCount": 0},
+        "plannedAction": "update",
+        "sessionId": "plan-session",
+    }
+    monkeypatch.setattr(
+        runner,
+        "load_approved_plan_descriptor",
+        lambda _payload: (descriptor, payload["approvedPlan"]["descriptor"]),
+    )
+
+    def fake_download(uri, destination, expected_sha, _label):
+        assert uri == "s3://evidence/plan.bin"
+        destination.write_bytes(saved_plan_bytes)
+        assert digest(saved_plan_bytes) == expected_sha
+        return expected_sha
+
+    def fake_run(args, **kwargs):
+        assert args == ["terraform", "show", "-json", "tfplan"]
+        kwargs["stdout"].write(rendered_plan.decode())
+
+    monkeypatch.setattr(runner, "_download_approved_artifact", fake_download)
+    monkeypatch.setattr(runner, "run", fake_run)
+
+    approved = runner.validate_and_materialize_approved_plan(payload, state)
+    assert approved["plannedAction"] == "update"
+    assert approved["sourceSessionId"] == "plan-session"
+    assert (tf / "tfplan").read_bytes() == saved_plan_bytes
+
+    descriptor["state"] = {**state, "serial": 8}
+    with pytest.raises(RuntimeError, match="state changed after plan approval"):
+        runner.validate_and_materialize_approved_plan(payload, state)
+
+
+def test_saved_plan_artifacts_must_use_configured_evidence_bucket(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    monkeypatch.setenv("THINKWORK_EVIDENCE_BUCKET", "expected-evidence")
+
+    assert (
+        runner._validated_evidence_s3_uri(
+            "s3://expected-evidence/sessions/plan.json", "approved plan"
+        )
+        == "s3://expected-evidence/sessions/plan.json"
+    )
+    with pytest.raises(RuntimeError, match="configured deployment evidence bucket"):
+        runner._validated_evidence_s3_uri("s3://attacker-controlled/plan.json", "approved plan")
+
+
+def test_tei_v380_saved_plan_apply_refuses_any_delete_action(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    work = tmp_path / "work"
+    tf = work / "terraform"
+    tf.mkdir(parents=True)
+    monkeypatch.setattr(runner, "WORK", work)
+    monkeypatch.setattr(runner, "TF", tf)
+    payload = _approval_payload("apply", plan=False, apply=True)
+    payload["incidentRecovery"] = {"contract": runner.TEI_V380_RECOVERY_CONTRACT}
+    payload["approvedPlan"] = {
+        "descriptor": {"s3Uri": "s3://evidence/descriptor.json", "sha256": "d" * 64}
+    }
+    state = {
+        "lineage": "lineage",
+        "serial": 7,
+        "sha256": "e" * 64,
+        "terraformVersion": "1.8.5",
+    }
+    tfvars = b'{"stage":"tei-e2e"}\n'
+    (tf / "terraform.auto.tfvars.json").write_bytes(tfvars)
+    saved_plan = b"opaque-saved-plan"
+    rendered_plan = json.dumps(
+        {
+            "format_version": "1.2",
+            "resource_changes": [
+                {
+                    "address": "module.thinkwork.proof_resource",
+                    "change": {"actions": ["delete"]},
+                }
+            ],
+        }
+    ).encode()
+    descriptor = {
+        "contract": runner.TERRAFORM_PLAN_APPROVAL_CONTRACT,
+        "deploymentConfigSha256": runner.deployment_config_sha256(payload),
+        "release": runner.release_selection(payload),
+        "state": state,
+        "terraformVariablesSha256": digest(tfvars),
+        "savedPlan": {
+            "s3Uri": "s3://evidence/plan.bin",
+            "sha256": digest(saved_plan),
+        },
+        "jsonPlan": {"sha256": digest(rendered_plan)},
+        "plannedAction": "update",
+    }
+    monkeypatch.setattr(
+        runner,
+        "load_approved_plan_descriptor",
+        lambda _payload: (descriptor, payload["approvedPlan"]["descriptor"]),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_download_approved_artifact",
+        lambda _uri, destination, _sha, _label: destination.write_bytes(saved_plan),
+    )
+    monkeypatch.setattr(
+        runner,
+        "run",
+        lambda _args, **kwargs: kwargs["stdout"].write(rendered_plan.decode()),
+    )
+
+    with pytest.raises(RuntimeError, match="contains delete actions"):
+        runner.validate_and_materialize_approved_plan(payload, state)
+
+
+def _tei_v380_recovery_payload(runner) -> dict:
+    return {
+        "action": "recover",
+        "environmentName": "tei-e2e",
+        "stage": "tei-e2e",
+        "awsAccountId": "637423202447",
+        "accountId": "637423202447",
+        "awsRegion": "us-east-1",
+        "region": "us-east-1",
+        "operation": {
+            "kind": "incident_recovery",
+            **runner.tei_v380_recovery_scope(),
+        },
+    }
+
+
+def _tei_v380_state(runner) -> dict:
+    return {
+        "bucket": runner.TEI_V380_STATE_BUCKET,
+        "key": runner.TEI_V380_STATE_KEY,
+        "etag": "state-etag",
+        "size": 123,
+        "lastModified": "2026-07-20T13:31:15Z",
+        "serverSideEncryption": "AES256",
+        "versionId": None,
+        "sha256": runner.TEI_V380_STATE_SHA256,
+        "lineage": runner.TEI_V380_STATE_LINEAGE,
+        "serial": runner.TEI_V380_STATE_SERIAL,
+        "terraformVersion": "1.8.5",
+    }
+
+
+def test_tei_v380_recovery_contract_is_exact_and_rejects_alias_drift() -> None:
+    runner = load_runner()
+    payload = _tei_v380_recovery_payload(runner)
+
+    assert runner.validate_tei_v380_recovery_contract(payload) == (runner.tei_v380_recovery_scope())
+
+    payload["stage"] = "dev"
+    with pytest.raises(RuntimeError, match="stage does not match exact incident scope"):
+        runner.validate_tei_v380_recovery_contract(payload)
+
+    payload = _tei_v380_recovery_payload(runner)
+    payload["operation"]["unexpected"] = True
+    with pytest.raises(RuntimeError, match="unexpected fields"):
+        runner.validate_tei_v380_recovery_contract(payload)
+
+
+def test_incident_recovery_exclusivity_ignores_only_current_operation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    execution_arn = "arn:aws:states:us-east-1:637423202447:execution:deploy:current"
+    build_id = "runner:current"
+    monkeypatch.setenv("THINKWORK_DEPLOYMENT_EXECUTION_ARN", execution_arn)
+    monkeypatch.setenv("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN", "arn:state-machine")
+    monkeypatch.setenv("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME", "runner")
+    monkeypatch.setenv("CODEBUILD_BUILD_ID", build_id)
+
+    include_other = False
+
+    def fake_output(args, **_kwargs):
+        if args[1:3] == ["stepfunctions", "list-executions"]:
+            executions = [{"executionArn": execution_arn}]
+            if include_other:
+                executions.append({"executionArn": "arn:other"})
+            return json.dumps({"executions": executions})
+        if args[1:3] == ["codebuild", "list-builds-for-project"]:
+            return json.dumps({"ids": [build_id]})
+        if args[1:3] == ["codebuild", "batch-get-builds"]:
+            return json.dumps({"builds": [{"id": build_id, "buildStatus": "IN_PROGRESS"}]})
+        raise AssertionError(args)
+
+    monkeypatch.setattr(runner, "output", fake_output)
+    assert runner.assert_incident_recovery_operation_is_exclusive() == {
+        "currentExecutionArn": execution_arn,
+        "currentBuildId": build_id,
+        "otherRunningExecutions": 0,
+        "otherRunningBuilds": 0,
+    }
+
+    include_other = True
+    with pytest.raises(RuntimeError, match="Another deployment execution"):
+        runner.assert_incident_recovery_operation_is_exclusive()
+
+
+def test_incident_recovery_exclusivity_supports_one_managed_transition_execution(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    execution_arn = "arn:aws:states:us-east-1:637423202447:execution:deploy:transition"
+    build_id = "runner:transition"
+    monkeypatch.delenv("THINKWORK_DEPLOYMENT_EXECUTION_ARN", raising=False)
+    monkeypatch.setenv("THINKWORK_DEPLOYMENT_STATE_MACHINE_ARN", "arn:state-machine")
+    monkeypatch.setenv("THINKWORK_DEPLOYMENT_RUNNER_PROJECT_NAME", "runner")
+    monkeypatch.setenv("CODEBUILD_BUILD_ID", build_id)
+
+    def fake_output(args, **_kwargs):
+        if args[1:3] == ["stepfunctions", "list-executions"]:
+            return json.dumps({"executions": [{"executionArn": execution_arn}]})
+        if args[1:3] == ["codebuild", "list-builds-for-project"]:
+            return json.dumps({"ids": [build_id]})
+        if args[1:3] == ["codebuild", "batch-get-builds"]:
+            return json.dumps({"builds": [{"id": build_id, "buildStatus": "IN_PROGRESS"}]})
+        raise AssertionError(args)
+
+    monkeypatch.setattr(runner, "output", fake_output)
+    assert (
+        runner.assert_incident_recovery_operation_is_exclusive()["currentExecutionArn"]
+        == execution_arn
+    )
+
+
+def test_tei_v380_recovery_restores_only_exact_resources_without_secret_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    payload = _tei_v380_recovery_payload(runner)
+    state = _tei_v380_state(runner)
+    calls: list[list[str]] = []
+    evidence: list[tuple[str, dict]] = []
+    secret_describes = 0
+    kms_describes = 0
+
+    monkeypatch.setattr(
+        runner,
+        "assert_incident_recovery_operation_is_exclusive",
+        lambda: {
+            "currentExecutionArn": "arn:current",
+            "currentBuildId": "build:current",
+            "otherRunningExecutions": 0,
+            "otherRunningBuilds": 0,
+        },
+    )
+    monkeypatch.setattr(runner, "terraform_state_object_snapshot", lambda _stage: state)
+    monkeypatch.setattr(
+        runner,
+        "force_unlock_tei_v380_state",
+        lambda: {
+            "method": "terraform-force-unlock",
+            "lockId": runner.TEI_V380_LOCK_ID,
+            "directDynamoDbMutation": False,
+        },
+    )
+    monkeypatch.setattr(runner.time, "sleep", lambda _seconds: None)
+
+    def fake_output(args, **_kwargs):
+        nonlocal secret_describes, kms_describes
+        calls.append(args)
+        if args[1:3] == ["sts", "get-caller-identity"]:
+            return "637423202447"
+        if args[1:3] == ["secretsmanager", "describe-secret"]:
+            secret_describes += 1
+            return json.dumps(
+                {
+                    "ARN": runner.TEI_V380_SECRET_ARN,
+                    "Name": runner.TEI_V380_SECRET_NAME,
+                    **({"DeletedDate": "2026-07-20T13:30:54Z"} if secret_describes == 1 else {}),
+                }
+            )
+        if args[1:3] == ["kms", "describe-key"]:
+            kms_describes += 1
+            states = [
+                ("PendingDeletion", False),
+                ("Disabled", False),
+                ("Enabled", True),
+            ]
+            key_state, enabled = states[min(kms_describes - 1, len(states) - 1)]
+            return json.dumps(
+                {
+                    "KeyMetadata": {
+                        "KeyId": runner.TEI_V380_KMS_KEY_ID,
+                        "Arn": runner.TEI_V380_KMS_KEY_ARN,
+                        "KeyState": key_state,
+                        "Enabled": enabled,
+                        "KeyManager": "CUSTOMER",
+                        "Origin": "AWS_KMS",
+                    }
+                }
+            )
+        raise AssertionError(args)
+
+    def fake_run(args, **_kwargs):
+        calls.append(args)
+        return None
+
+    def fake_evidence(name, body):
+        evidence.append((name, json.loads(json.dumps(body))))
+        return {"fileName": name, "sha256": "a" * 64, "s3Uri": f"s3://evidence/{name}"}
+
+    monkeypatch.setattr(runner, "output", fake_output)
+    monkeypatch.setattr(runner, "run", fake_run)
+    monkeypatch.setattr(runner, "write_json_evidence_artifact", fake_evidence)
+
+    recovered = runner.recover_tei_v380_incident(payload)
+
+    assert recovered["proof"]["status"] == "succeeded"
+    assert recovered["proof"]["secretValueRead"] is False
+    assert recovered["proof"]["terraformStateMutation"] is False
+    assert recovered["proof"]["terraformLock"]["directDynamoDbMutation"] is False
+    assert [
+        "aws",
+        "secretsmanager",
+        "restore-secret",
+        "--secret-id",
+        runner.TEI_V380_SECRET_ARN,
+    ] in calls
+    assert ["aws", "kms", "cancel-key-deletion", "--key-id", runner.TEI_V380_KMS_KEY_ID] in calls
+    assert ["aws", "kms", "enable-key", "--key-id", runner.TEI_V380_KMS_KEY_ID] in calls
+    assert not any("get-secret-value" in call for call in calls)
+    assert evidence[-1][0] == "incident-recovery.json"
+    assert all("SecretString" not in json.dumps(body) for _, body in evidence)
+
+
+def test_tei_v380_recovery_refuses_changed_state_before_mutation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    payload = _tei_v380_recovery_payload(runner)
+    changed_state = {**_tei_v380_state(runner), "serial": runner.TEI_V380_STATE_SERIAL + 1}
+    mutation_calls: list[list[str]] = []
+
+    monkeypatch.setattr(runner, "assert_incident_recovery_operation_is_exclusive", lambda: {})
+    monkeypatch.setattr(runner, "terraform_state_object_snapshot", lambda _stage: changed_state)
+    monkeypatch.setattr(
+        runner,
+        "output",
+        lambda args, **_kwargs: (
+            "637423202447"
+            if args[1:3] == ["sts", "get-caller-identity"]
+            else (_ for _ in ()).throw(AssertionError(args))
+        ),
+    )
+    monkeypatch.setattr(runner, "run", lambda args, **_kwargs: mutation_calls.append(args))
+
+    with pytest.raises(RuntimeError, match="state serial changed"):
+        runner.recover_tei_v380_incident(payload)
+    assert mutation_calls == []
+
+
+def test_tei_v380_force_unlock_uses_terraform_and_preserves_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(runner, "WORK", tmp_path)
+    calls: list[tuple[list[str], dict]] = []
+    snapshots = iter(
+        [
+            {
+                "table": runner.TEI_V380_LOCK_TABLE,
+                "key": runner.TEI_V380_LOCK_KEY,
+                "present": True,
+                "info": {
+                    "id": runner.TEI_V380_LOCK_ID,
+                    "operation": "OperationTypeApply",
+                    "version": "1.8.5",
+                    "created": "2026-07-20T13:30:42Z",
+                    "path": runner.TEI_V380_LOCK_KEY,
+                },
+                "digestKey": f"{runner.TEI_V380_LOCK_KEY}-md5",
+                "digest": runner.TEI_V380_STATE_DIGEST,
+            },
+            {
+                "table": runner.TEI_V380_LOCK_TABLE,
+                "key": runner.TEI_V380_LOCK_KEY,
+                "present": False,
+                "info": None,
+                "digestKey": f"{runner.TEI_V380_LOCK_KEY}-md5",
+                "digest": runner.TEI_V380_STATE_DIGEST,
+            },
+        ]
+    )
+    monkeypatch.setattr(runner, "tei_v380_lock_snapshot", lambda: next(snapshots))
+    monkeypatch.setattr(runner, "run", lambda args, **kwargs: calls.append((args, kwargs)))
+
+    proof = runner.force_unlock_tei_v380_state()
+
+    assert proof["method"] == "terraform-force-unlock"
+    assert proof["directDynamoDbMutation"] is False
+    assert calls[0][0][:3] == ["terraform", "init", "-reconfigure"]
+    assert calls[1][0] == [
+        "terraform",
+        "force-unlock",
+        "-force",
+        runner.TEI_V380_LOCK_ID,
+    ]
+    assert not any("dynamodb" in arg for call, _kwargs in calls for arg in call)
+    backend = (tmp_path / "tei-v380-force-unlock/backend.hcl").read_text()
+    assert runner.TEI_V380_STATE_BUCKET in backend
+    assert runner.TEI_V380_LOCK_TABLE in backend
+
+
+def test_tei_v380_force_unlock_is_retry_safe_after_exact_unlock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    calls: list[list[str]] = []
+    unlocked = {
+        "table": runner.TEI_V380_LOCK_TABLE,
+        "key": runner.TEI_V380_LOCK_KEY,
+        "present": False,
+        "info": None,
+        "digestKey": f"{runner.TEI_V380_LOCK_KEY}-md5",
+        "digest": runner.TEI_V380_STATE_DIGEST,
+    }
+    monkeypatch.setattr(runner, "tei_v380_lock_snapshot", lambda: unlocked)
+    monkeypatch.setattr(runner, "run", lambda args, **_kwargs: calls.append(args))
+
+    proof = runner.force_unlock_tei_v380_state()
+
+    assert proof["alreadyUnlocked"] is True
+    assert proof["before"] == proof["after"]
+    assert calls == []
+
+
+def test_tei_v380_recovery_imports_require_exact_evidence_and_current_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(runner, "WORK", tmp_path)
+    state = _tei_v380_state(runner)
+    scope = runner.tei_v380_recovery_scope()
+    evidence = {
+        "contract": runner.TEI_V380_RECOVERY_CONTRACT,
+        "incidentId": runner.TEI_V380_RECOVERY_INCIDENT_ID,
+        "rejectedPlanSha256": runner.TEI_V380_REJECTED_PLAN_SHA256,
+        "status": "succeeded",
+        "terraformStateMutation": False,
+        "secretValueRead": False,
+        "stateBefore": state,
+        "stateAfter": state,
+    }
+    payload = {
+        "incidentRecovery": {
+            **scope,
+            "evidence": {"s3Uri": "s3://evidence/recovery.json", "sha256": "a" * 64},
+        }
+    }
+    vars_json = {
+        "enable_agentcore_multiplayer_proof": True,
+        "agentcore_multiplayer_proof_tenant_slug": "tei",
+        "agentcore_multiplayer_proof_owner_allowlist": runner.TEI_V380_OWNER_ALLOWLIST,
+        "finalize_auth_retirement": False,
+        "auth_retirement_phase": "coexistence",
+        "microsoft_oauth_tenant": "organizations",
+    }
+
+    def fake_download(_uri, destination, _sha, _label):
+        destination.write_text(json.dumps(evidence), encoding="utf-8")
+        return "a" * 64
+
+    monkeypatch.setattr(runner, "_download_approved_artifact", fake_download)
+    blocks = runner.tei_v380_recovery_import_blocks(payload, vars_json, state)
+    assert f"to = {runner.TEI_V380_SECRET_ADDRESS}" in blocks
+    assert f"id = {runner.hcl_string(runner.TEI_V380_SECRET_ARN)}" in blocks
+    assert f"to = {runner.TEI_V380_KMS_KEY_ADDRESS}" in blocks
+    assert runner.TEI_V380_KMS_ALIAS_ADDRESS not in blocks
+
+    moved_state = {**state, "sha256": "f" * 64}
+    with pytest.raises(RuntimeError, match="state moved"):
+        runner.tei_v380_recovery_import_blocks(payload, vars_json, moved_state)
+
+    payload["incidentRecovery"]["stage"] = "dev"
+    with pytest.raises(RuntimeError, match="scope does not match"):
+        runner.tei_v380_recovery_import_blocks(payload, vars_json, state)
+
+
 def test_terraform_plan_summary_counts_resource_actions() -> None:
     runner = load_runner()
 
