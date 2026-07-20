@@ -550,6 +550,10 @@ locals {
           # ontology-reprocess: approveOntologyChangeSet Event-invokes this
           # after inserting a durable reprocess job row.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-ontology-reprocess",
+          # identity-match (THINK-321 U7): startIdentityMatchJob Event-invokes
+          # this after inserting a durable match job row; identity-match also
+          # self-invokes for the continuation chain (same shared role).
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-identity-match",
           # okf-materialize / okf-efs-refresh: the OKF distribution chain
           # (THINK-200). wiki-compile Event-invokes okf-materialize after a
           # successful compile; okf-materialize Event-invokes okf-efs-refresh
@@ -976,6 +980,13 @@ locals {
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.ontology_scan_dlq[0].arn
+      },
+      # THINK-321 U7 identity-match async-failure DLQ.
+      {
+        Sid      = "IdentityMatchDlqSend"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.identity_match_dlq[0].arn
       },
       # (was inline policy "thinkwork-${stage}-ontology-reprocess-dlq-send")
       {

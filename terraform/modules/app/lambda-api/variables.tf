@@ -624,6 +624,12 @@ variable "ontology_scan_sweep_enabled" {
   default     = false
 }
 
+variable "identity_drift_match_enabled" {
+  description = "Enable the recurring per-tenant identity drift match sweep (THINK-321 U7/KTD-7 — R10). Ships disabled; enabled per stage once bootstrap matching has been proven there."
+  type        = bool
+  default     = false
+}
+
 variable "wiki_source" {
   description = "Wiki pipeline source dispatch (plan 2026-06-09-004 U10). 'planner' (default) runs the original LLM compile path; 'graph' runs the deterministic graph→wiki materializer over the knowledge-graph mirror and makes successful observation-ingest runs the compile trigger. Variable-ized (not hardcoded) per the wiki-compile env precedent so unrelated deploys don't reset the flag; the Lambda reads it verbatim from env and treats any value other than 'graph' as 'planner'."
   type        = string

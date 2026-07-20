@@ -3122,6 +3122,35 @@ export type HeartbeatActivityEvent = {
   tenantId: Scalars["ID"]["output"];
 };
 
+/**
+ * Bootstrap/drift identity match job (THINK-321 U7, KTD-7). Mirrors the
+ * ontology suggestion-scan job: dedupe-key insert-or-load, async Event invoke,
+ * invoke failure marked on the row. Metrics report scanned / autoLinked /
+ * casesFiled / casesExpired so the open-case budget interaction is visible.
+ */
+export type IdentityMatchJob = {
+  __typename?: "IdentityMatchJob";
+  createdAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  dedupeKey?: Maybe<Scalars["String"]["output"]>;
+  error?: Maybe<Scalars["String"]["output"]>;
+  finishedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  id: Scalars["ID"]["output"];
+  metrics: Scalars["AWSJSON"]["output"];
+  result: Scalars["AWSJSON"]["output"];
+  sourceSystems: Array<Scalars["String"]["output"]>;
+  startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  status: IdentityMatchJobStatus;
+  tenantId: Scalars["ID"]["output"];
+  trigger: Scalars["String"]["output"];
+};
+
+export enum IdentityMatchJobStatus {
+  Failed = "FAILED",
+  Pending = "PENDING",
+  Running = "RUNNING",
+  Succeeded = "SUCCEEDED",
+}
+
 export type ImportPiExtensionFromGitHubInput = {
   manifestPath?: InputMaybe<Scalars["String"]["input"]>;
   ref: Scalars["String"]["input"];
@@ -4807,6 +4836,13 @@ export type Mutation = {
    */
   registerAnalystDataSource: AnalystDataSourceResult;
   /**
+   * Register a source system as an identity source (THINK-321 U7, KTD-5):
+   * validates the connector row and identity rules for every target entity
+   * type, writes identity.source_system_connectors, and re-projects the
+   * workspace routing map. Operator/service gated.
+   */
+  registerIdentitySource: RegisterIdentitySourceResult;
+  /**
    * Register a database on an INTERNAL (environment-owned) RDS cluster as an
    * analyst connector with ZERO credential entry (THINK-239). Requires tenant
    * owner/admin. Auto-provisions a hardened read-only role on the cluster+database
@@ -4981,6 +5017,13 @@ export type Mutation = {
   startCustomerOnboarding: StartCustomerOnboardingPayload;
   startDeploymentReleaseUpdate: ReleaseUpdateJob;
   startEvalRun: EvalRun;
+  /**
+   * Start (or dedupe onto) a bootstrap/drift identity match job (THINK-321
+   * U7, KTD-7). The job row is durable; the identity-match Lambda is
+   * Event-invoked and the caller polls identityMatchJob. Operator/service
+   * gated.
+   */
+  startIdentityMatchJob: IdentityMatchJob;
   startKnowledgeGraphObservationsIngest: KnowledgeGraphIngestRun;
   startManagedApplicationPlan: ManagedApplicationDeploymentJob;
   startOntologySuggestionScan: OntologySuggestionScanJob;
@@ -5868,6 +5911,10 @@ export type MutationRegisterAnalystDataSourceArgs = {
   input: RegisterAnalystDataSourceInput;
 };
 
+export type MutationRegisterIdentitySourceArgs = {
+  input: RegisterIdentitySourceInput;
+};
+
 export type MutationRegisterInternalAnalystDataSourceArgs = {
   input: RegisterInternalAnalystDataSourceInput;
 };
@@ -6265,6 +6312,10 @@ export type MutationStartDeploymentReleaseUpdateArgs = {
 export type MutationStartEvalRunArgs = {
   input: StartEvalRunInput;
   tenantId: Scalars["ID"]["input"];
+};
+
+export type MutationStartIdentityMatchJobArgs = {
+  input: StartIdentityMatchJobInput;
 };
 
 export type MutationStartKnowledgeGraphObservationsIngestArgs = {
@@ -7590,6 +7641,8 @@ export type Query = {
   evalTimeSeries: Array<EvalTimeSeriesPoint>;
   externalCapabilityClients: Array<ExternalCapabilityClient>;
   flaggedTurnSkillCandidates: SkillAttributionCandidates;
+  /** Poll one identity match job (THINK-321 U7). Operator/service gated. */
+  identityMatchJob?: Maybe<IdentityMatchJob>;
   inboxItem?: Maybe<InboxItem>;
   inboxItems: Array<InboxItem>;
   /** Launchable plugin apps available to the current tenant/user. */
@@ -8254,6 +8307,11 @@ export type QueryFlaggedTurnSkillCandidatesArgs = {
   tenantId: Scalars["ID"]["input"];
   threadId: Scalars["ID"]["input"];
   turnId: Scalars["ID"]["input"];
+};
+
+export type QueryIdentityMatchJobArgs = {
+  jobId: Scalars["ID"]["input"];
+  tenantId: Scalars["ID"]["input"];
 };
 
 export type QueryInboxItemArgs = {
@@ -9140,6 +9198,28 @@ export type RegisterAnalystDataSourceInput = {
   slug: Scalars["String"]["input"];
   /** TLS posture (default VERIFY_FULL). */
   tls?: InputMaybe<AnalystDataSourceTls>;
+};
+
+export type RegisterIdentitySourceInput = {
+  connectorSlug: Scalars["String"]["input"];
+  entityTypeSlugs: Array<Scalars["String"]["input"]>;
+  sourceSystem: Scalars["String"]["input"];
+  tenantId: Scalars["ID"]["input"];
+};
+
+/**
+ * Identity-source registration result (THINK-321 U7, KTD-5). The
+ * source_system → connector link is written and the workspace routing map is
+ * re-projected; entityTypeSlugs echoes the validated target types.
+ */
+export type RegisterIdentitySourceResult = {
+  __typename?: "RegisterIdentitySourceResult";
+  connectorSlug: Scalars["String"]["output"];
+  entityTypeSlugs: Array<Scalars["String"]["output"]>;
+  routingMapAgents: Scalars["Int"]["output"];
+  routingMapWritten: Scalars["Int"]["output"];
+  sourceSystem: Scalars["String"]["output"];
+  tenantId: Scalars["ID"]["output"];
 };
 
 /**
@@ -10483,6 +10563,14 @@ export type StartEvalRunInput = {
   model?: InputMaybe<Scalars["String"]["input"]>;
   profileId?: InputMaybe<Scalars["ID"]["input"]>;
   testCaseIds?: InputMaybe<Array<Scalars["ID"]["input"]>>;
+};
+
+export type StartIdentityMatchJobInput = {
+  dedupeKey?: InputMaybe<Scalars["String"]["input"]>;
+  /** Subset of registered source systems to scan; omitted = all registered. */
+  sourceSystems?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  tenantId: Scalars["ID"]["input"];
+  trigger?: InputMaybe<Scalars["String"]["input"]>;
 };
 
 export type StartKnowledgeGraphObservationsIngestInput = {

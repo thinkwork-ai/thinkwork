@@ -202,7 +202,70 @@ type DeclineEntityMappingResult {
   coalesced: Boolean
 }
 
+"""
+Identity-source registration result (THINK-321 U7, KTD-5). The
+source_system → connector link is written and the workspace routing map is
+re-projected; entityTypeSlugs echoes the validated target types.
+"""
+type RegisterIdentitySourceResult {
+  tenantId: ID!
+  sourceSystem: String!
+  connectorSlug: String!
+  entityTypeSlugs: [String!]!
+  routingMapAgents: Int!
+  routingMapWritten: Int!
+}
+
+input RegisterIdentitySourceInput {
+  tenantId: ID!
+  sourceSystem: String!
+  connectorSlug: String!
+  entityTypeSlugs: [String!]!
+}
+
+enum IdentityMatchJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+"""
+Bootstrap/drift identity match job (THINK-321 U7, KTD-7). Mirrors the
+ontology suggestion-scan job: dedupe-key insert-or-load, async Event invoke,
+invoke failure marked on the row. Metrics report scanned / autoLinked /
+casesFiled / casesExpired so the open-case budget interaction is visible.
+"""
+type IdentityMatchJob {
+  id: ID!
+  tenantId: ID!
+  status: IdentityMatchJobStatus!
+  trigger: String!
+  dedupeKey: String
+  sourceSystems: [String!]!
+  result: AWSJSON!
+  metrics: AWSJSON!
+  error: String
+  createdAt: AWSDateTime
+  startedAt: AWSDateTime
+  finishedAt: AWSDateTime
+}
+
+input StartIdentityMatchJobInput {
+  tenantId: ID!
+  trigger: String
+  dedupeKey: String
+  """
+  Subset of registered source systems to scan; omitted = all registered.
+  """
+  sourceSystems: [String!]
+}
+
 extend type Query {
+  """
+  Poll one identity match job (THINK-321 U7). Operator/service gated.
+  """
+  identityMatchJob(tenantId: ID!, jobId: ID!): IdentityMatchJob
   canonicalEntities(
     tenantId: ID
     entityTypeSlug: String
@@ -239,6 +302,22 @@ extend type Query {
 }
 
 extend type Mutation {
+  """
+  Register a source system as an identity source (THINK-321 U7, KTD-5):
+  validates the connector row and identity rules for every target entity
+  type, writes identity.source_system_connectors, and re-projects the
+  workspace routing map. Operator/service gated.
+  """
+  registerIdentitySource(
+    input: RegisterIdentitySourceInput!
+  ): RegisterIdentitySourceResult!
+  """
+  Start (or dedupe onto) a bootstrap/drift identity match job (THINK-321
+  U7, KTD-7). The job row is durable; the identity-match Lambda is
+  Event-invoked and the caller polls identityMatchJob. Operator/service
+  gated.
+  """
+  startIdentityMatchJob(input: StartIdentityMatchJobInput!): IdentityMatchJob!
   """
   Apply Link / Create / Defer / Reject to an open resolution case.
   `canonicalEntityId` is required for link; `displayName` optionally names a

@@ -79,7 +79,11 @@ export function createFakeIdentityDb(): FakeIdentityDb {
             reject?: (reason: unknown) => unknown,
           ) => Promise.resolve(undefined).then(resolve, reject),
         };
-        return { ...tail, onConflictDoNothing: () => tail };
+        return {
+          ...tail,
+          onConflictDoNothing: () => tail,
+          onConflictDoUpdate: () => tail,
+        };
       },
     }),
     update: (table: unknown) => ({

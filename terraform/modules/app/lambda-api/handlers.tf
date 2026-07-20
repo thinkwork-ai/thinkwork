@@ -446,6 +446,9 @@ locals {
       CAPABILITY_BROKER_API_ID        = var.capability_broker_api_id
       CAPABILITY_BROKER_VPCE_DNS      = var.capability_broker_vpce_dns
       CAPABILITY_BROKER_SESSION_TABLE = var.capability_broker_session_table
+      # THINK-321 U7 — startIdentityMatchJob Event-invokes this after
+      # inserting the durable match-job row. Name only (4KB env ceiling).
+      IDENTITY_MATCH_FUNCTION_NAME = "thinkwork-${var.stage}-api-identity-match"
     }
     # Compounding Memory compile Lambda. Any Converse-compatible Bedrock
     # model works; the planner + section-writer cap themselves at ~500
@@ -886,6 +889,10 @@ resource "aws_lambda_function" "handler" {
     "knowledge-graph-observations-ingest",
     "ontology-scan",
     "ontology-reprocess",
+    # THINK-321 U7: bootstrap/drift identity matching job. Event-invoked by
+    # startIdentityMatchJob; the drift EventBridge Scheduler rule targets it
+    # directly (identity_drift_match_enabled, ships DISABLED).
+    "identity-match",
     "wiki-lint",
     "wiki-export",
     "okf-materialize",
@@ -1106,8 +1113,8 @@ resource "aws_lambda_function" "handler" {
   # harness-runner holds the Lambda open for the full Harness turn (the
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "harness-runner" ? 900 : each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
-  memory_size = each.key == "harness-runner" ? 512 : each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
+  timeout     = each.key == "harness-runner" ? 900 : each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  memory_size = each.key == "harness-runner" ? 512 : each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
@@ -1285,6 +1292,33 @@ resource "aws_lambda_function_event_invoke_config" "ontology_scan" {
   destination_config {
     on_failure {
       destination = aws_sqs_queue.ontology_scan_dlq[0].arn
+    }
+  }
+}
+
+# Identity match jobs (THINK-321 U7) are durable-job driven like ontology
+# scans. Disable AWS async retries so duplicate match invocations do not
+# double-write mappings/cases; identity.match_jobs is the retry/
+# observability surface.
+resource "aws_sqs_queue" "identity_match_dlq" {
+  count                     = local.deploy_lambda_handlers ? 1 : 0
+  name                      = "thinkwork-${var.stage}-identity-match-dlq"
+  message_retention_seconds = 1209600 # 14 days
+
+  tags = {
+    Name = "thinkwork-${var.stage}-identity-match-dlq"
+  }
+}
+
+resource "aws_lambda_function_event_invoke_config" "identity_match" {
+  count                        = local.deploy_lambda_handlers ? 1 : 0
+  function_name                = aws_lambda_function.handler["identity-match"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.identity_match_dlq[0].arn
     }
   }
 }
@@ -2809,6 +2843,38 @@ resource "aws_scheduler_schedule" "ontology_scan_sweep" {
     # Periodic idempotent worker: the next daily tick IS the retry (mirrors
     # the knowledge_graph_observations_ingest precedent — scheduler retries
     # only stack invocations onto a self-correcting cadence).
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+}
+
+# Identity drift match sweep (THINK-321 U7 / KTD-7 — R10). Enumerates
+# tenants with registered identity sources and starts a per-tenant match
+# job; tenants with a pending/running job are skipped in the handler and
+# the job dedupe key drops same-bucket duplicate starts. Ships DISABLED —
+# enabled per stage via identity_drift_match_enabled once bootstrap has
+# been proven on the stage.
+resource "aws_scheduler_schedule" "identity_drift_match" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-identity-drift-match"
+  group_name          = "default"
+  schedule_expression = "rate(1 days)"
+  state               = var.identity_drift_match_enabled ? "ENABLED" : "DISABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["identity-match"].arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ drift = true, trigger = "scheduled" })
+
+    # Periodic idempotent worker: the next daily tick IS the retry (the
+    # ontology-scan sweep precedent — scheduler retries only stack
+    # invocations onto a self-correcting cadence).
     retry_policy {
       maximum_retry_attempts = 0
     }

@@ -1390,6 +1390,12 @@ variable "ontology_scan_sweep_enabled" {
   default     = false
 }
 
+variable "identity_drift_match_enabled" {
+  description = "Enable the recurring per-tenant identity drift match sweep (THINK-321 U7/KTD-7). Ships disabled."
+  type        = bool
+  default     = false
+}
+
 variable "wiki_source" {
   description = "Wiki compile pipeline source: 'planner' or 'graph' (THINK-133 U8/KTD-4)."
   type        = string
