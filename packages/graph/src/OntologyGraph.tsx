@@ -86,6 +86,13 @@ export interface OntologyGraphLink {
   itemId: string | null;
   changeSetId: string | null;
   evidenceCount: number;
+  /**
+   * Quadratic-bezier curvature (react-force-graph model: control point sits
+   * perpendicular to the segment midpoint at curvature*length). 0 = straight.
+   * Assigned by `assignOntologyLinkCurvatures` so parallel/bidirectional
+   * links between the same node pair fan out instead of overprinting.
+   */
+  curvature: number;
 }
 
 export interface OntologyGraphData {
@@ -161,6 +168,102 @@ function isRenderableCandidate(candidate: any): boolean {
 }
 
 /**
+ * Curvature fan for k parallel links sharing an unordered node pair: one
+ * link stays straight, two split into +/-0.2, more spread evenly across
+ * [-0.3, +0.3]. Values are "absolute side" magnitudes in the pair's
+ * canonical orientation (lexicographically smaller endpoint first).
+ */
+function curvatureSpread(count: number): number[] {
+  if (count <= 1) return [0];
+  if (count === 2) return [0.2, -0.2];
+  return Array.from(
+    { length: count },
+    (_, index) => -0.3 + (0.6 * index) / (count - 1),
+  );
+}
+
+/**
+ * Assign symmetric curvature to every link, grouping by UNORDERED node
+ * pair so bidirectional and parallel relationships (approved AND ghost
+ * candidates alike) arc apart instead of overlapping on the same chord.
+ *
+ * Deterministic regardless of input order: links within a pair are sorted
+ * by id before values are dealt. The side value is computed in the pair's
+ * canonical orientation and sign-flipped for links that run the other way
+ * — react-force-graph's control-point offset is perpendicular to the
+ * source→target direction, so the flip keeps A→B and B→A on opposite
+ * absolute sides consistently.
+ *
+ * Mutates link objects in place (R17-safe: never replaces them).
+ */
+export function assignOntologyLinkCurvatures(links: OntologyGraphLink[]): void {
+  const byPair = new Map<string, OntologyGraphLink[]>();
+  for (const link of links) {
+    const sourceId = endpointId(link.source as any);
+    const targetId = endpointId(link.target as any);
+    const key =
+      sourceId < targetId
+        ? `${sourceId}\u0000${targetId}`
+        : `${targetId}\u0000${sourceId}`;
+    const group = byPair.get(key);
+    if (group) group.push(link);
+    else byPair.set(key, [link]);
+  }
+
+  for (const group of byPair.values()) {
+    const sorted = [...group].sort((a, b) => a.id.localeCompare(b.id));
+    const sides = curvatureSpread(sorted.length);
+    sorted.forEach((link, index) => {
+      const sourceId = endpointId(link.source as any);
+      const targetId = endpointId(link.target as any);
+      const runsCanonical = sourceId <= targetId;
+      // `|| 0` normalizes the -0 a sign flip of a straight middle lane
+      // would otherwise produce.
+      link.curvature = (runsCanonical ? sides[index]! : -sides[index]!) || 0;
+    });
+  }
+}
+
+/** Quadratic bezier coordinate at t (control-point form). */
+function quadAt(a: number, c: number, b: number, t: number): number {
+  const omt = 1 - t;
+  return omt * omt * a + 2 * omt * t * c + t * t * b;
+}
+
+/** Blossom of the quadratic — control coordinate of the [u,v] sub-curve. */
+function quadBlossom(
+  a: number,
+  c: number,
+  b: number,
+  u: number,
+  v: number,
+): number {
+  return (1 - u) * (1 - v) * a + (u + v - 2 * u * v) * c + u * v * b;
+}
+
+/**
+ * Midpoint (t = 0.5) of a link's quadratic bezier under react-force-graph's
+ * curvature model: control point perpendicular to the segment midpoint at
+ * curvature * length. This is where the inline label sits — ON the arc,
+ * offset from the chord midpoint along the curve normal by curvature/2 of
+ * the segment length. Curvature 0 degenerates to the chord midpoint.
+ */
+export function ontologyLinkLabelMidpoint(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  curvature: number,
+): { x: number; y: number } {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const cpx = (start.x + end.x) / 2 + dy * curvature;
+  const cpy = (start.y + end.y) / 2 - dx * curvature;
+  return {
+    x: quadAt(start.x, cpx, end.x, 0.5),
+    y: quadAt(start.y, cpy, end.y, 0.5),
+  };
+}
+
+/**
  * Project the ontologySchemaGraph payload into force-graph nodes/links.
  * Ghost candidates beyond `cap` are dropped here (R18) and reported via
  * `overflow`. A relationship candidate becomes ghost edges when every
@@ -212,6 +315,7 @@ export function buildOntologyGraphData(
           itemId: null,
           changeSetId: null,
           evidenceCount: 0,
+          curvature: 0,
         });
       }
     }
@@ -257,6 +361,7 @@ export function buildOntologyGraphData(
             itemId: candidate.itemId,
             changeSetId: candidate.changeSetId,
             evidenceCount: candidate.evidenceCount ?? 0,
+            curvature: 0,
           });
         }
         continue;
@@ -282,6 +387,8 @@ export function buildOntologyGraphData(
       nodeIdBySlug.set(node.slug, node.id);
     }
   }
+
+  assignOntologyLinkCurvatures(links);
 
   return { nodes, links, overflow };
 }
@@ -325,6 +432,10 @@ export function mergeOntologyGraphData(
     // Keep the (possibly sim-hydrated) source/target objects untouched.
     existing.label = link.label;
     existing.evidenceCount = link.evidenceCount;
+    // Curvature was recomputed over the FULL fresh link set (arrivals may
+    // create or dissolve parallel pairs) — copy the value onto the
+    // surviving object rather than swapping it (R17).
+    existing.curvature = link.curvature;
     return existing;
   });
   target.links.splice(0, target.links.length, ...mergedLinks);
@@ -610,7 +721,11 @@ export const OntologyGraph = forwardRef<
 
   // Link painter: approved relationships draw solid with an inline label
   // (neo4j style); candidate relationships draw the same geometry dashed
-  // in pending-amber (R2).
+  // in pending-amber (R2). Every link renders as the quadratic bezier of
+  // its assigned `curvature` (react-force-graph's control-point model, so
+  // native link machinery agrees with our geometry) — curvature 0
+  // degenerates exactly to the straight chord, and parallel/bidirectional
+  // links arc apart so labels and arrowheads never collide.
   const linkCanvasObject = useCallback(
     (link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const start = link.source;
@@ -620,16 +735,36 @@ export const OntologyGraph = forwardRef<
       const dy = end.y - start.y;
       const dist = Math.hypot(dx, dy);
       if (!dist) return;
-      const ux = dx / dist;
-      const uy = dy / dist;
       const sourceTrim = nodeRadius(start) + 1.5;
       const targetTrim = nodeRadius(end) + 1.5;
       if (dist <= sourceTrim + targetTrim) return;
-      const sx = start.x + ux * sourceTrim;
-      const sy = start.y + uy * sourceTrim;
-      const tx = end.x - ux * targetTrim;
-      const ty = end.y - uy * targetTrim;
       const lineLen = dist - sourceTrim - targetTrim;
+
+      // Quadratic control point (force-graph model): perpendicular to the
+      // segment midpoint at curvature * length.
+      const curvature = link.curvature ?? 0;
+      const cpx = (start.x + end.x) / 2 + dy * curvature;
+      const cpy = (start.y + end.y) / 2 - dx * curvature;
+      // Trim endpoints out of the node discs in bezier parameter space
+      // (chord-length approximation — exact for straight links).
+      const t0 = sourceTrim / dist;
+      const t1 = 1 - targetTrim / dist;
+
+      const strokeSegment = (u: number, v: number) => {
+        if (v <= u) return;
+        ctx.beginPath();
+        ctx.moveTo(
+          quadAt(start.x, cpx, end.x, u),
+          quadAt(start.y, cpy, end.y, u),
+        );
+        ctx.quadraticCurveTo(
+          quadBlossom(start.x, cpx, end.x, u, v),
+          quadBlossom(start.y, cpy, end.y, u, v),
+          quadAt(start.x, cpx, end.x, v),
+          quadAt(start.y, cpy, end.y, v),
+        );
+        ctx.stroke();
+      };
 
       const ghost = link.kind === "candidate";
       const filtering = !!matchedIdsRef.current;
@@ -650,23 +785,20 @@ export const OntologyGraph = forwardRef<
         const textWidth =
           ctx.measureText?.(label)?.width ?? label.length * fontSize * 0.6;
         const gap = textWidth + 10 / globalScale;
-        const mx = (sx + tx) / 2;
-        const my = (sy + ty) / 2;
         if (lineLen > gap + 14 / globalScale) {
-          const half = gap / 2;
-          ctx.beginPath();
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(mx - ux * half, my - uy * half);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(mx + ux * half, my + uy * half);
-          ctx.lineTo(tx, ty);
-          ctx.stroke();
+          // Break the stroke around t=0.5 and sit the label ON the arc:
+          // the bezier midpoint is the chord midpoint pushed along the
+          // curve normal by curvature/2 of the segment length.
+          const halfT = gap / 2 / dist;
+          strokeSegment(t0, 0.5 - halfT);
+          strokeSegment(0.5 + halfT, t1);
+          const mid = ontologyLinkLabelMidpoint(start, end, curvature);
+          // Tangent at t=0.5 of a quadratic is parallel to the chord.
           let angle = Math.atan2(dy, dx);
           if (angle > Math.PI / 2) angle -= Math.PI;
           else if (angle < -Math.PI / 2) angle += Math.PI;
           ctx.save();
-          ctx.translate(mx, my);
+          ctx.translate(mid.x, mid.y);
           ctx.rotate(angle);
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
@@ -678,23 +810,30 @@ export const OntologyGraph = forwardRef<
         }
       }
       if (!labeled) {
-        ctx.beginPath();
-        ctx.moveTo(sx, sy);
-        ctx.lineTo(tx, ty);
-        ctx.stroke();
+        strokeSegment(t0, t1);
       }
 
+      // Arrowhead rides the curve tangent at the target-disc rim, so
+      // arrows on parallel links land at distinct points/angles.
       ctx.setLineDash?.([]);
+      const tipX = quadAt(start.x, cpx, end.x, t1);
+      const tipY = quadAt(start.y, cpy, end.y, t1);
+      // B'(t1) = 2(1-t1)(cp - start) + 2*t1*(end - cp)
+      const tanXRaw = 2 * (1 - t1) * (cpx - start.x) + 2 * t1 * (end.x - cpx);
+      const tanYRaw = 2 * (1 - t1) * (cpy - start.y) + 2 * t1 * (end.y - cpy);
+      const tanLen = Math.hypot(tanXRaw, tanYRaw) || 1;
+      const ux = tanXRaw / tanLen;
+      const uy = tanYRaw / tanLen;
       const ah = 4;
       ctx.beginPath();
-      ctx.moveTo(tx, ty);
+      ctx.moveTo(tipX, tipY);
       ctx.lineTo(
-        tx - ux * ah - uy * (ah * 0.5),
-        ty - uy * ah + ux * (ah * 0.5),
+        tipX - ux * ah - uy * (ah * 0.5),
+        tipY - uy * ah + ux * (ah * 0.5),
       );
       ctx.lineTo(
-        tx - ux * ah + uy * (ah * 0.5),
-        ty - uy * ah - ux * (ah * 0.5),
+        tipX - ux * ah + uy * (ah * 0.5),
+        tipY - uy * ah - ux * (ah * 0.5),
       );
       ctx.closePath();
       ctx.fill();
@@ -839,6 +978,7 @@ export const OntologyGraph = forwardRef<
         autoPauseRedraw={false}
         enablePointerInteraction={false}
         linkLabel={(link: any) => link.label || "related to"}
+        linkCurvature={(link: any) => link.curvature ?? 0}
         linkCanvasObjectMode={() => "replace" as const}
         linkCanvasObject={linkCanvasObject}
         cooldownTicks={framed ? 120 : 0}

@@ -11,8 +11,10 @@ import {
   OntologyGraph,
   buildOntologyGraphData,
   mergeOntologyGraphData,
+  ontologyLinkLabelMidpoint,
   ONTOLOGY_GHOST_CANDIDATE_CAP,
   type OntologyGraphData,
+  type OntologyGraphLink,
   type OntologyGraphHandle,
 } from "./OntologyGraph.js";
 
@@ -173,6 +175,7 @@ function makeCtx(record: {
     restore() {},
     translate() {},
     rotate() {},
+    quadraticCurveTo() {},
     setLineDash(segments: number[]) {
       record.dashes.push(segments);
     },
@@ -318,6 +321,159 @@ describe("buildOntologyGraphData", () => {
       30,
     );
     expect(data.overflow).toBe(15);
+  });
+});
+
+/**
+ * The visual side a link occupies, expressed in its pair's canonical
+ * orientation (lexicographically smaller endpoint first). react-force-graph
+ * offsets the control point perpendicular to the SOURCE→TARGET direction,
+ * so a link running against canonical order flips sign — two links on
+ * opposite absolute sides always have opposite canonical sides.
+ */
+function canonicalSide(link: OntologyGraphLink): number {
+  const source = String(link.source);
+  const target = String(link.target);
+  return (source <= target ? link.curvature : -link.curvature) || 0;
+}
+
+describe("link curvature assignment", () => {
+  const bidirectionalGraph = {
+    ...baseGraph,
+    candidates: [],
+    relationships: [
+      {
+        slug: "involves_person",
+        name: "Involves person",
+        sourceTypeSlugs: ["customer"],
+        targetTypeSlugs: ["person"],
+      },
+      {
+        slug: "has_customer",
+        name: "Has customer",
+        sourceTypeSlugs: ["person"],
+        targetTypeSlugs: ["customer"],
+      },
+    ],
+  };
+
+  it("keeps a single link between a pair perfectly straight", () => {
+    const data = buildOntologyGraphData(baseGraph);
+    // Approved customer->commitment and ghost commitment->person are each
+    // the only link on their pair.
+    expect(data.links).toHaveLength(2);
+    for (const link of data.links) expect(link.curvature).toBe(0);
+  });
+
+  it("arcs a bidirectional pair to opposite sides with +/-0.2 (stable under shuffled input)", () => {
+    const data = buildOntologyGraphData(bidirectionalGraph);
+    const involves = data.links.find(
+      (link) => link.slug === "involves_person",
+    )!;
+    const has = data.links.find((link) => link.slug === "has_customer")!;
+
+    const sides = [canonicalSide(involves), canonicalSide(has)].sort();
+    expect(sides).toEqual([-0.2, 0.2]);
+    // Opposite absolute sides — the arcs never overlap.
+    expect(canonicalSide(involves)).toBe(-canonicalSide(has));
+
+    // Assignment is keyed on sorted link ids, not payload order: the same
+    // pair shuffled produces identical per-link curvature.
+    const shuffled = buildOntologyGraphData({
+      ...bidirectionalGraph,
+      relationships: [...bidirectionalGraph.relationships].reverse(),
+    });
+    for (const link of data.links) {
+      expect(
+        shuffled.links.find((other) => other.id === link.id)?.curvature,
+      ).toBe(link.curvature);
+    }
+  });
+
+  it("spreads three parallel links across distinct arcs in [-0.3, 0.3]", () => {
+    const graph = {
+      ...baseGraph,
+      candidates: [],
+      relationships: ["assigned_to", "owned_by", "reviewed_by"].map((slug) => ({
+        slug,
+        name: slug,
+        sourceTypeSlugs: ["customer"],
+        targetTypeSlugs: ["commitment"],
+      })),
+    };
+    const data = buildOntologyGraphData(graph);
+
+    expect(data.links).toHaveLength(3);
+    const sides = data.links.map(canonicalSide).sort((a, b) => a - b);
+    expect(sides).toEqual([-0.3, 0, 0.3]);
+    expect(new Set(data.links.map((link) => link.curvature)).size).toBe(3);
+  });
+
+  it("separates a ghost candidate edge running parallel to an approved edge", () => {
+    const graph = {
+      ...baseGraph,
+      candidates: [
+        {
+          ...baseGraph.candidates[1],
+          proposedValue: {
+            slug: "commitment_of",
+            name: "Commitment of",
+            sourceTypeSlugs: ["customer"],
+            targetTypeSlugs: ["commitment"],
+          },
+        },
+      ],
+    };
+    const data = buildOntologyGraphData(graph);
+
+    const approved = data.links.find((link) => link.kind === "relationship")!;
+    const ghost = data.links.find((link) => link.kind === "candidate")!;
+    expect(canonicalSide(approved)).not.toBe(0);
+    expect(canonicalSide(ghost)).not.toBe(0);
+    expect(canonicalSide(approved)).toBe(-canonicalSide(ghost));
+  });
+
+  it("survives an in-place merge with link identity and curvature intact (R17)", () => {
+    const target: OntologyGraphData = { nodes: [], links: [] };
+    mergeOntologyGraphData(target, bidirectionalGraph);
+    const involves = target.links.find(
+      (link) => link.slug === "involves_person",
+    )!;
+    const curvatureBefore = involves.curvature;
+    expect(curvatureBefore).not.toBe(0);
+    // Simulate the engine hydrating endpoint strings into node objects.
+    (involves as any).source = target.nodes.find(
+      (node) => node.id === "type:customer",
+    );
+    (involves as any).target = target.nodes.find(
+      (node) => node.id === "type:person",
+    );
+
+    mergeOntologyGraphData(target, {
+      ...bidirectionalGraph,
+      candidates: [entityCandidate(7)],
+    });
+
+    const survivor = target.links.find(
+      (link) => link.slug === "involves_person",
+    )!;
+    expect(survivor).toBe(involves); // same object — sim never restarts
+    expect(survivor.curvature).toBe(curvatureBefore);
+  });
+
+  it("ontologyLinkLabelMidpoint returns the quadratic bezier midpoint", () => {
+    // Control point sits perpendicular at curvature*length; B(0.5) is the
+    // chord midpoint pushed half that far along the normal.
+    expect(
+      ontologyLinkLabelMidpoint({ x: 0, y: 0 }, { x: 10, y: 0 }, 0.2),
+    ).toEqual({ x: 5, y: -1 });
+    expect(
+      ontologyLinkLabelMidpoint({ x: 0, y: 0 }, { x: 10, y: 0 }, -0.2),
+    ).toEqual({ x: 5, y: 1 });
+    // Straight link degenerates to the chord midpoint.
+    expect(
+      ontologyLinkLabelMidpoint({ x: 2, y: 2 }, { x: 6, y: 10 }, 0),
+    ).toEqual({ x: 4, y: 6 });
   });
 });
 
