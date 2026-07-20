@@ -17,7 +17,6 @@ import { DesktopApplicationHeader } from "@/components/DesktopApplicationHeader"
 import { SpacesSidebar } from "@/components/SpacesSidebar";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { NoTenantAssigned } from "@/components/NoTenantAssigned";
-import { NativeIdentityMigrationPrompt } from "@/components/auth/NativeIdentityMigrationPrompt";
 import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
 import { isDesktopBuild } from "@/lib/desktop-runtime";
@@ -89,7 +88,6 @@ function ShellLayout() {
         } as CSSProperties
       }
     >
-      <NativeIdentityMigrationPrompt />
       <SidebarResizeHandle
         width={sidebarWidth}
         onWidthChange={setSidebarWidth}
