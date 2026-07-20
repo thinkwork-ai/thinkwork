@@ -5,7 +5,7 @@ phases:
     commands:
       - |
         if ! command -v terraform >/dev/null 2>&1; then
-          curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.8.5/terraform_1.8.5_linux_amd64.zip
+          curl -fsSLo /tmp/terraform.zip https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip
           unzip -oq /tmp/terraform.zip -d /usr/local/bin
         fi
         if ! command -v psql >/dev/null 2>&1; then
