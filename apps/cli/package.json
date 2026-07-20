@@ -1,6 +1,6 @@
 {
   "name": "thinkwork-cli",
-  "version": "0.13.0",
+  "version": "0.13.2",
   "description": "Thinkwork CLI — deploy, manage, and interact with your Thinkwork stack",
   "license": "Apache-2.0",
   "type": "module",
@@ -11,7 +11,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/cli.ts --format esm --dts --clean && node scripts/bundle-terraform.js",
+    "build": "tsup && node scripts/bundle-terraform.js",
     "dev": "tsx src/cli.ts",
     "codegen": "graphql-codegen --config codegen.ts",
     "typecheck": "tsc --noEmit",
