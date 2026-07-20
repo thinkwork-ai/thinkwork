@@ -26,6 +26,12 @@ import { registerIdentitySource } from "./registerIdentitySource.mutation.js";
 import { resolveEntities } from "./resolveEntities.query.js";
 import { resolveEntityResolutionCase } from "./resolveEntityResolutionCase.mutation.js";
 import { startIdentityMatchJob } from "./startIdentityMatchJob.mutation.js";
+import {
+  authorEntitySourceMapping,
+  canonicalEntitySplitPreview,
+  revokeEntitySourceMapping,
+  splitCanonicalEntity,
+} from "./stewardship.mutation.js";
 
 export const entityIdentityQueries = {
   canonicalEntities,
@@ -33,6 +39,8 @@ export const entityIdentityQueries = {
   entityResolutionCases,
   entityResolutionCase,
   canonicalEntityMergePreview,
+  // THINK-321 U8 split preview (tenant-admin gated, echo contract).
+  canonicalEntitySplitPreview,
   // THINK-321 U5 agent routing read (turn-bound for service callers).
   resolveEntities,
   // THINK-321 U7 bootstrap/drift match job polling.
@@ -50,4 +58,9 @@ export const entityIdentityMutations = {
   // THINK-321 U7 identity-source registration + match jobs.
   registerIdentitySource,
   startIdentityMatchJob,
+  // THINK-321 U8 operator stewardship (tenant-admin gated ONLY — never the
+  // turn-bound service path; agent write-asymmetry is deliberate).
+  authorEntitySourceMapping,
+  revokeEntitySourceMapping,
+  splitCanonicalEntity,
 };

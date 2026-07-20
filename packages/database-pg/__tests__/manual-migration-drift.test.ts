@@ -34,6 +34,31 @@ function dryRunReport(): string {
   return result.stdout;
 }
 
+function authRetirementReport(finalized: boolean): string {
+  const result = spawnSync(
+    "bash",
+    [
+      REPORTER,
+      "--dry-run",
+      "0174_workos_auth_bridges.sql",
+      "0175_workos_auth_sessions.sql",
+      "0263_drop_workos_auth_runtime.sql",
+    ],
+    {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        AUTH_RETIREMENT_PHASE: "retired",
+        AUTH_RETIREMENT_FINALIZED: finalized ? "true" : "false",
+      },
+    },
+  );
+
+  expect(result.status).toBe(0);
+  return result.stdout;
+}
+
 describe("manual migration drift reporter", () => {
   const report = dryRunReport();
 
@@ -62,5 +87,24 @@ describe("manual migration drift reporter", () => {
 
     expect(workflow).not.toContain("0089_remove_maniflow_eval_seeds.sql");
     expect(workflow).not.toContain("0096_true_redteam_eval_seed_cleanup.sql");
+  });
+
+  it("defers irreversible auth cleanup until its migration ledger entry exists", () => {
+    const deferred = authRetirementReport(false);
+    expect(deferred).toContain("0263_drop_workos_auth_runtime.sql");
+    expect(deferred).toContain(
+      "DEFERRED (AUTH_RETIREMENT_FINALIZED=false)",
+    );
+    expect(deferred).toContain(
+      "creates: public.workos_auth_bridges -> ACTIVE",
+    );
+
+    const finalized = authRetirementReport(true);
+    expect(finalized).toContain(
+      "creates: public.workos_auth_bridges -> SUPERSEDED by 0263_drop_workos_auth_runtime.sql",
+    );
+    expect(finalized).toContain(
+      "drops: public.workos_auth_bridges -> ACTIVE",
+    );
   });
 });

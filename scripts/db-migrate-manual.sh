@@ -26,7 +26,7 @@
 # Usage:
 #   DATABASE_URL=postgres://... bash scripts/db-migrate-manual.sh
 #   bash scripts/db-migrate-manual.sh --dry-run     # list files + markers, no psql
-#   AUTH_RETIREMENT_PHASE=coexistence bash scripts/db-migrate-manual.sh
+#   AUTH_RETIREMENT_FINALIZED=false bash scripts/db-migrate-manual.sh --dry-run
 #   bash scripts/db-migrate-manual.sh --help
 #
 # Exit codes:
@@ -97,6 +97,37 @@ if [[ "$DRY_RUN" -eq 0 && -z "${DATABASE_URL:-}" ]]; then
   echo "DATABASE_URL not set — pass --dry-run to inspect without probing the DB" >&2
   exit 2
 fi
+
+# `auth_retirement_phase=retired` removes the legacy runtime, but deliberately
+# does not prove that the later irreversible data cleanup ran. Only the
+# migration ledger written after a successful `--finalize-auth-retirement`
+# apply is durable evidence that phase-gated drop markers should be enforced.
+# Ignore environment overrides during live checks so callers cannot bypass the
+# ledger; dry runs may set the value explicitly to exercise both terminal
+# states without a database.
+if [[ "$DRY_RUN" -eq 0 ]]; then
+  AUTH_RETIREMENT_FINALIZED=true
+  while IFS= read -r retirement_file; do
+    retirement_hash=$(python3 -c \
+      'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' \
+      "$retirement_file")
+    ledger_exists=$(psql "$DATABASE_URL" -tAc \
+      "SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL")
+    if [[ "$ledger_exists" != "t" ]]; then
+      AUTH_RETIREMENT_FINALIZED=false
+      break
+    fi
+    ledger_applied=$(psql "$DATABASE_URL" -tAc \
+      "SELECT EXISTS (SELECT 1 FROM drizzle.__drizzle_migrations WHERE hash = '$retirement_hash')")
+    if [[ "$ledger_applied" != "t" ]]; then
+      AUTH_RETIREMENT_FINALIZED=false
+      break
+    fi
+  done < <(grep -l '^-- deployment-phase: auth-retired$' "$DRIZZLE_DIR"/*.sql || true)
+else
+  AUTH_RETIREMENT_FINALIZED="${AUTH_RETIREMENT_FINALIZED:-false}"
+fi
+export AUTH_RETIREMENT_FINALIZED
 
 # Build the set of journal-registered files. drizzle-kit writes entries with
 # `tag` = basename without `.sql`, so we just append `.sql` to match on disk.
@@ -472,16 +503,14 @@ for f in "${WALK_FILES[@]}"; do
     continue
   fi
 
-  # Phase-gated retirement migrations are deliberately unapplied while their
-  # rollback boundary remains active. Treating their declared drops as drift
-  # would make every coexistence deployment fail even though migration apply
-  # correctly deferred the destructive step. Once the environment advances
-  # to `retired`, the file is probed normally and any leftover resource fails
-  # the gate.
+  # Phase-gated retirement migrations are deliberately unapplied until the
+  # explicit finalization command succeeds and records their hashes. Merely
+  # advancing infrastructure to `retired` is not evidence that the guarded,
+  # irreversible cleanup ran.
   if grep -q '^-- deployment-phase: auth-retired$' "$f" \
-    && [[ "${AUTH_RETIREMENT_PHASE:-retired}" != "retired" ]]; then
+    && [[ "$AUTH_RETIREMENT_FINALIZED" != "true" ]]; then
     echo "  $base"
-    echo "    DEFERRED (AUTH_RETIREMENT_PHASE=${AUTH_RETIREMENT_PHASE:-retired})"
+    echo "    DEFERRED (AUTH_RETIREMENT_FINALIZED=$AUTH_RETIREMENT_FINALIZED)"
     continue
   fi
 

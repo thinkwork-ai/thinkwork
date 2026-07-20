@@ -1,14 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { useQuery } from "urql";
 import { Badge, DataTable, Input } from "@thinkwork/ui";
 import { KnowledgeBasesListQuery } from "@/lib/kb-queries";
 import { useTenant } from "@/context/TenantContext";
-import {
-  SettingsTablePane,
-  settingsLinkActionClassName,
-} from "@/components/settings/SettingsContent";
+import { SettingsTablePane } from "@/components/settings/SettingsContent";
 import { KnowledgeBaseFormDialog } from "@/components/settings/KnowledgeBaseFormDialog";
 
 type KbRow = {
@@ -34,15 +31,36 @@ function statusVariant(
   return "outline";
 }
 
+/**
+ * New-source gesture lifted to the page-header owner (SettingsMemoryHome),
+ * following the OntologyMapHeaderController pattern: the tab publishes the
+ * open-dialog handler; the header renders it as a Plus TooltipIconButton.
+ * Cleared on unmount so other Memory tabs never show a stale action.
+ */
+export interface KnowledgeBasesHeaderController {
+  openNewSource: () => void;
+}
+
 export function SettingsKnowledgeBases({
   embedded,
+  onHeaderControllerChange,
 }: {
   embedded?: boolean;
+  /** Publish the header action (new-source Plus icon) upward. */
+  onHeaderControllerChange?: (
+    controller: KnowledgeBasesHeaderController | null,
+  ) => void;
 } = {}) {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+
+  useEffect(() => {
+    if (!onHeaderControllerChange) return;
+    onHeaderControllerChange({ openNewSource: () => setCreateOpen(true) });
+    return () => onHeaderControllerChange(null);
+  }, [onHeaderControllerChange]);
   const [result, refetch] = useQuery({
     query: KnowledgeBasesListQuery,
     variables: { tenantId: tenantId ?? "" },
@@ -121,15 +139,6 @@ export function SettingsKnowledgeBases({
             onChange={(e) => setSearch(e.target.value)}
             className="w-56"
           />
-        }
-        actions={
-          <button
-            type="button"
-            className={settingsLinkActionClassName}
-            onClick={() => setCreateOpen(true)}
-          >
-            + New source
-          </button>
         }
       >
         <DataTable

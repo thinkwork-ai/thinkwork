@@ -95,12 +95,32 @@ export const ROUTING_MAP_STANDING_INSTRUCTION = `## How to use this map
   connector or query one on a hunch.
 - "${NO_CONNECTOR_LINE}" means the declared system currently has no
   connector link: report the mapping as unroutable instead of inventing a
-  connector.`;
+  connector.
+- A "(parent rollup)" entry routes through the PARENT entity's mapping,
+  never a direct mapping on this entity: fetch this record's parent
+  natural key from its owning system via the connector, resolve the
+  parent with \`resolve_entities\`, answer via the parent's mapping, and
+  STATE the rollup in the answer. Never propose or confirm a direct
+  mapping for a rollup facet.`;
 
 export interface RoutingMapSystemEntry {
   facet: string;
   sourceSystem: string;
   note?: string;
+  /** Parent-rollup marker (THINK-321 U6, R17/AE8): this facet routes
+   *  through the PARENT entity's mapping, never a direct child mapping. */
+  rollup?: "parent";
+}
+
+/** A system_map entry declares a parent rollup either via the structured
+ *  `rollup: "parent"` field or a note mentioning "parent rollup". */
+export function entryDeclaresParentRollup(
+  entry: RoutingMapSystemEntry,
+): boolean {
+  return (
+    entry.rollup === "parent" ||
+    (!!entry.note && /parent[\s-]?roll[\s-]?up/i.test(entry.note))
+  );
 }
 
 export interface RoutingMapEntityType {
@@ -124,7 +144,13 @@ function coerceSystemMapEntries(raw: unknown): RoutingMapSystemEntry[] {
       typeof record.sourceSystem === "string" ? record.sourceSystem.trim() : "";
     if (!facet || !sourceSystem) continue;
     const note = typeof record.note === "string" ? record.note.trim() : "";
-    entries.push({ facet, sourceSystem, ...(note ? { note } : {}) });
+    const rollup = record.rollup === "parent" ? ("parent" as const) : undefined;
+    entries.push({
+      facet,
+      sourceSystem,
+      ...(note ? { note } : {}),
+      ...(rollup ? { rollup } : {}),
+    });
   }
   return entries;
 }
@@ -181,11 +207,30 @@ export function renderRoutingMapMarkdown(input: {
       const connectorCell = connectorSlug
         ? `\`${connectorSlug}\``
         : NO_CONNECTOR_LINE;
+      const noteCell =
+        entryDeclaresParentRollup(entry) && entry.rollup === "parent"
+          ? [entry.note, "(parent rollup)"].filter(Boolean).join(" ")
+          : (entry.note ?? "");
       lines.push(
-        `| ${escapeCell(entry.facet)} | ${escapeCell(entry.sourceSystem)} | ${connectorCell} | ${escapeCell(entry.note ?? "")} |`,
+        `| ${escapeCell(entry.facet)} | ${escapeCell(entry.sourceSystem)} | ${connectorCell} | ${escapeCell(noteCell)} |`,
       );
     }
     lines.push("");
+    // Parent-rollup rule (THINK-321 U6, R17/AE8): the agent performs the
+    // walk — no server-side hierarchy exists, so the prose is the contract.
+    const rollupEntries = sortedEntries.filter(entryDeclaresParentRollup);
+    for (const entry of rollupEntries) {
+      lines.push(
+        `**Parent rollup:** \`${entry.facet}\` for ` +
+          `${escapeCell(entityType.name)} routes through the PARENT ` +
+          `entity's mapping in ${escapeCell(entry.sourceSystem)}. Do not ` +
+          "propose or confirm a direct mapping for this facet. Fetch this " +
+          "record's parent natural key from its owning system via the " +
+          "connector, resolve the parent with `resolve_entities`, answer " +
+          "via the parent's mapping, and state the rollup in the answer.",
+        "",
+      );
+    }
   }
 
   return lines.join("\n");

@@ -28,6 +28,14 @@ describe("managed multiplayer Harness topology", () => {
       "terraform/modules/app/agentcore-harness/scripts/harness-lifecycle.mjs",
     );
     assert.match(lifecycle, /`\$\{endpointPrefix\}\$\{version\}`/);
+    assert.match(
+      terraform,
+      /LEGACY_ENDPOINT_NAME\s+= "ThinkworkProof"/,
+    );
+    assert.match(
+      lifecycle,
+      /selectHarnessEndpointsForRetention\(endpoints, \{[\s\S]*?activeEndpointName: endpointName,[\s\S]*?CreateHarnessEndpointCommand/,
+    );
     assert.doesNotMatch(lifecycle, /UpdateHarnessEndpointCommand/);
     assert.match(rootModule, /agentcore_harness_endpoint_retention/);
     assert.match(rootModule, /aws_ssm_parameter\.agentcore_harness_profile/);

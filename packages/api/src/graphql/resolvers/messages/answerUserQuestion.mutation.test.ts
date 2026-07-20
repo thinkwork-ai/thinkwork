@@ -68,8 +68,11 @@ const mocks = vi.hoisted(() => ({
   resolveCallerFromAuth: vi.fn(),
   shouldDeferWakeup: vi.fn(),
   consumePendingQuestions: vi.fn(),
+  recordCandidateSelectionsFromAnswers: vi.fn(),
   notifyThreadUpdate: vi.fn(),
   visiblePredicate: vi.fn(() => ({ __visiblePredicate: true })),
+  /** Interleaved call-order log for the consent-before-wakeup assertion. */
+  callOrder: [] as string[],
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -113,6 +116,7 @@ vi.mock("@thinkwork/database-pg", () => ({
         returning: async () => {
           expect(table).toBe(mocks.tables.agentWakeupRequests);
           if (mocks.insertError) throw mocks.insertError;
+          mocks.callOrder.push("wakeupInsert");
           mocks.insertedWakeups.push(values);
           return mocks.insertReturning;
         },
@@ -150,6 +154,11 @@ vi.mock("../../../lib/wakeup-defer.js", () => ({
 
 vi.mock("../../../lib/user-questions/consume.js", () => ({
   consumePendingQuestions: mocks.consumePendingQuestions,
+}));
+
+vi.mock("../../../lib/entity-identity/candidate-consent.js", () => ({
+  recordCandidateSelectionsFromAnswers:
+    mocks.recordCandidateSelectionsFromAnswers,
 }));
 
 vi.mock("../../notify.js", () => ({
@@ -212,6 +221,11 @@ beforeEach(() => {
   mocks.consumePendingQuestions.mockImplementation(async (_db, input) => [
     answeredRow(input.answers as Record<string, unknown>),
   ]);
+  mocks.callOrder.length = 0;
+  mocks.recordCandidateSelectionsFromAnswers.mockImplementation(async () => {
+    mocks.callOrder.push("recordSelections");
+    return { recorded: 0, refused: 0 };
+  });
   mocks.notifyThreadUpdate.mockResolvedValue(undefined);
 });
 
@@ -496,6 +510,82 @@ describe("answerUserQuestion — recovery re-entry after enqueue failure", () =>
       status: "ANSWERED",
       answeredVia: "CARD",
     });
+  });
+});
+
+describe("answerUserQuestion — mapping-candidate consent recording (THINK-321 U6, KTD-2)", () => {
+  const CANDIDATE_QUESTIONS = [
+    {
+      question: "Which Twenty company is Acme Fuel?",
+      header: "CRM match",
+      candidateSetId: "set-1",
+      options: [
+        { label: "Acme Fuel Co", description: "", candidateId: "cand-1" },
+        { label: "None of these", description: "", candidateId: "none" },
+      ],
+    },
+  ];
+
+  it("records the selection from the answered batch BEFORE the resume wakeup is enqueued (AE3 durable-write half)", async () => {
+    mocks.questionRow = pendingQuestionRow({ questions: CANDIDATE_QUESTIONS });
+    await answerUserQuestion(
+      {},
+      {
+        questionId: QUESTION_ID,
+        answers: JSON.stringify({ "CRM match": "Acme Fuel Co" }),
+      },
+      ctx,
+    );
+
+    expect(mocks.recordCandidateSelectionsFromAnswers).toHaveBeenCalledTimes(1);
+    const [, args] = mocks.recordCandidateSelectionsFromAnswers.mock
+      .calls[0] as [unknown, Record<string, unknown>];
+    expect(args).toEqual({
+      tenantId: TENANT_ID,
+      threadId: THREAD_ID,
+      questions: CANDIDATE_QUESTIONS,
+      answers: { "CRM match": "Acme Fuel Co" },
+    });
+    // Server-side, before the agent's resumed turn can exist: the recording
+    // strictly precedes the wakeup insert.
+    expect(mocks.callOrder).toEqual(["recordSelections", "wakeupInsert"]);
+  });
+
+  it("passes the persisted row's answers on recovery re-entry (no re-parse drift)", async () => {
+    mocks.questionRow = pendingQuestionRow({
+      questions: CANDIDATE_QUESTIONS,
+      status: "answered",
+      answers: { "CRM match": "None of these" },
+      answered_via: "card",
+      answered_by: USER_ID,
+    });
+    mocks.existingWakeupRows = [];
+
+    await answerUserQuestion(
+      {},
+      { questionId: QUESTION_ID, answers: "{}" },
+      ctx,
+    );
+    const [, args] = mocks.recordCandidateSelectionsFromAnswers.mock
+      .calls[0] as [unknown, Record<string, unknown>];
+    // The committed row's answers — not this retry's empty payload.
+    expect(args.answers).toEqual({ "CRM match": "None of these" });
+    expect(mocks.callOrder).toEqual(["recordSelections", "wakeupInsert"]);
+  });
+
+  it("non-candidate batches still route through the helper (which no-ops) and stay unaffected", async () => {
+    const result = await answerUserQuestion(
+      {},
+      { questionId: QUESTION_ID, answers: JSON.stringify({ env: "Dev" }) },
+      ctx,
+    );
+    expect(result).toMatchObject({ id: QUESTION_ID, status: "ANSWERED" });
+    // The helper received the plain batch; extraction finds no
+    // candidateSetId so nothing is recorded (covered by its own tests).
+    const [, args] = mocks.recordCandidateSelectionsFromAnswers.mock
+      .calls[0] as [unknown, Record<string, unknown>];
+    expect(args.questions).toEqual(pendingQuestionRow().questions as unknown[]);
+    expect(mocks.insertedWakeups).toHaveLength(1);
   });
 });
 

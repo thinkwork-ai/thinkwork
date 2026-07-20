@@ -140,6 +140,10 @@ export function toGraphqlCanonicalEntity(
       externalId: mapping.external_id,
       visibility: mapping.visibility,
       createdBy: mapping.created_by,
+      // Provenance display (U8/R11): user-confirmed links render their
+      // confirming user and source turn prominently in stewardship.
+      createdByUserId: mapping.created_by_user_id,
+      createdThreadRef: mapping.created_thread_ref,
       createdAt: toIso(mapping.created_at),
     })),
   };

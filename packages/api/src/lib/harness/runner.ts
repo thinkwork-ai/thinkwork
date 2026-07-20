@@ -988,6 +988,27 @@ const LEGACY_BROWSER_DISABLED_ALLOWED_TOOLS = [
 const DOCUMENT_COMPOSITION_MAX_ITERATIONS = 2;
 const GOAL_DOCUMENT_COMPOSITION_MAX_ITERATIONS = 1;
 
+/**
+ * AgentCore currently drops configured inline functions when an invocation
+ * narrows them by exact `allowedTools` name. Repeat only the attested
+ * caller-fulfilled completion contract on the corrective invocation. This
+ * deliberately excludes Browser and Gateway, whose configured definitions
+ * must not be replayed at invocation time.
+ */
+function goalCompletionCorrectionTools(
+  tools: HarnessInvocationTool[],
+): HarnessTool[] {
+  const goalComplete = tools.find(
+    (tool) => tool.type === "inline_function" && tool.name === "goal_complete",
+  );
+  if (!goalComplete) {
+    throw new Error(
+      "Attested Harness invocation profile omitted the goal_complete inline function.",
+    );
+  }
+  return [goalComplete];
+}
+
 interface DocumentPlateContract {
   slug: string;
   displayName: string;
@@ -1321,6 +1342,9 @@ export async function runHarnessTurn(
   const now = deps.now ?? Date.now;
   const startedAt = now();
   const turn = extractTurn(payload);
+  const explicitBrowserRequested = EXPLICIT_BROWSER_REQUEST_RE.test(
+    turn.userMessage,
+  );
   const selectedDocumentPlate = selectRequestedDocumentPlate(
     turn.userMessage,
     payload.document_plates,
@@ -2012,21 +2036,37 @@ export async function runHarnessTurn(
         payload.invocation_source === "agent_loop" &&
         missingAgentLoopCompletionCorrections > 0
           ? {
-              // The immutable Harness already owns the attested tool
-              // definitions. Narrow by configured name only; replaying a
-              // `tools` override against the same endpoint caused the live
-              // native Browser dispatcher to return `Unknown tool: browser`.
-              allowedTools: ["goal_complete"],
+              // Exact allowedTools filtering drops inline functions in the
+              // live Harness. Repeat only the attested caller-fulfilled
+              // completion contract; never replay Browser or Gateway.
+              ...(harness.invocationTools
+                ? {
+                    tools: goalCompletionCorrectionTools(
+                      harness.invocationTools,
+                    ),
+                  }
+                : { allowedTools: ["goal_complete"] }),
             }
           : !documentCompositionPhase &&
-              payload.browser_automation_enabled !== true
+              payload.browser_automation_enabled === true &&
+              explicitBrowserRequested
             ? {
-                // Browser authorization is participant-specific. Keep the
-                // control-plane tools intact and narrow only the effective
-                // per-turn allowlist when this participant lacks Browser.
-                allowedTools: [...LEGACY_BROWSER_DISABLED_ALLOWED_TOOLS],
+                // An explicit interactive Browser request must not drift to
+                // cheaper read-only Gateway substitutes such as web_extract.
+                // `allowedTools` narrows model selection without replaying the
+                // configured Browser declaration (which the live Harness
+                // dispatcher rejects as an invocation-time duplicate).
+                allowedTools: ["browser"],
               }
-            : {}),
+            : !documentCompositionPhase &&
+                payload.browser_automation_enabled !== true
+              ? {
+                  // Browser authorization is participant-specific. Keep the
+                  // control-plane tools intact and narrow only the effective
+                  // per-turn allowlist when this participant lacks Browser.
+                  allowedTools: [...LEGACY_BROWSER_DISABLED_ALLOWED_TOOLS],
+                }
+              : {}),
         ...(documentEmissionRequired && !documentCompositionPhase
           ? {
               // Use the Harness's configured Gateway allowlist. Live testing
@@ -2299,7 +2339,7 @@ export async function runHarnessTurn(
         }
         if (
           payload.browser_automation_enabled === true &&
-          EXPLICIT_BROWSER_REQUEST_RE.test(turn.userMessage) &&
+          explicitBrowserRequested &&
           !hasManagedBrowserEvidence(toolInvocations)
         ) {
           return await finalizeWith("failed", {

@@ -1,7 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "urql";
-import { Plus, X } from "lucide-react";
-import { Button, Sheet, SheetContent } from "@thinkwork/ui";
+import {
+  Activity,
+  BadgeCheck,
+  Compass,
+  FileText,
+  Search,
+  X,
+} from "lucide-react";
+import {
+  type ColumnDef,
+  type ColumnFiltersState,
+  getCoreRowModel,
+  getFilteredRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import {
+  Button,
+  DataTableTokenFilter,
+  dataTableTokenFilterFns,
+  Input,
+  Sheet,
+  SheetContent,
+  type DataTableTokenFilterColumn,
+} from "@thinkwork/ui";
 import {
   OntologyGraph,
   type OntologyGraphHandle,
@@ -30,8 +52,101 @@ import {
 } from "./OntologyTripleForm";
 
 type SheetEntry =
+  | { kind: "queue" }
   | { kind: "focus"; focus: OntologyFocus }
   | { kind: "form"; editItem: OntologyEditableItem | null };
+
+// Collapsible search matching the Memory/Wiki graph toolbars: a search-icon
+// button that expands into an input. Drives the live `searchQuery` the
+// canvas dims against (R3 — non-matching nodes dim in place, never removed).
+function OntologyToolbarSearch({
+  searchQuery,
+  onSearchQueryChange,
+}: {
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const isOpen = expanded || searchQuery.length > 0;
+
+  useEffect(() => {
+    if (expanded) inputRef.current?.focus();
+  }, [expanded]);
+
+  const clearSearch = () => {
+    onSearchQueryChange("");
+    setExpanded(false);
+  };
+
+  if (!isOpen) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-sm"
+        className="h-8 w-8 rounded-md"
+        aria-label="Search the ontology map"
+        onClick={() => setExpanded(true)}
+      >
+        <Search className="h-4 w-4" aria-hidden="true" />
+      </Button>
+    );
+  }
+
+  return (
+    <div className="relative flex h-8 w-[min(20rem,calc(100vw-2rem))] items-center">
+      <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" />
+      <Input
+        ref={inputRef}
+        type="search"
+        aria-label="Search the ontology map"
+        placeholder="Search types..."
+        className="h-8 rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+        value={searchQuery}
+        onBlur={() => {
+          if (!searchQuery) setExpanded(false);
+        }}
+        onChange={(e) => onSearchQueryChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            clearSearch();
+          }
+        }}
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="absolute right-1 h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
+        aria-label="Clear search"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={clearSearch}
+      >
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
+      </Button>
+    </div>
+  );
+}
+
+/** "suggestion_engine" → "Suggestion engine" (candidate provenance values). */
+function ontologyOriginLabel(origin: string): string {
+  const words = origin.replace(/[_-]+/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : origin;
+}
+
+/**
+ * Header-action surface lifted to the page-header owner (SettingsMemoryHome),
+ * following the SettingsMemory refresh/raw-units controller pattern: the map
+ * publishes its pending count and the two gestures; the header renders the
+ * "+ Add triple" button and the badged review-queue inbox icon.
+ */
+export interface OntologyMapHeaderController {
+  pendingCount: number;
+  openAddTriple: () => void;
+  openQueue: () => void;
+}
 
 /**
  * The platform seeds every tenant with 4 baseline types (customer, person,
@@ -42,10 +157,14 @@ export const BASELINE_TYPE_COUNT = 4;
 
 /**
  * Living Map view (THINK-320 U6): the schema-graph canvas (self-fetching
- * @thinkwork/graph OntologyGraph) side by side with the review rail, plus
- * the Explorer-style Sheet hosting the evidence panel and the shared
- * triple form. The rail reads a typed copy of the same ontologySchemaGraph
- * feed; canvas ghost overflow (R18) surfaces as the rail's banner.
+ * @thinkwork/graph OntologyGraph) at full content width, with the review
+ * queue behind a badged inbox icon in the PAGE HEADER (published to
+ * SettingsMemoryHome via `onHeaderControllerChange`, next to "+ Add
+ * triple") that opens it as a slide-over sheet — the same Explorer-style
+ * Sheet that hosts the evidence panel and the
+ * shared triple form (one back-stack: queue → evidence → edit form). The
+ * queue reads a typed copy of the same ontologySchemaGraph feed; canvas
+ * ghost overflow (R18) surfaces as the queue's banner inside the sheet.
  *
  * U7 additions: a dismissible day-one "install a starter pack" callout for
  * fresh tenants (R12) and an `initialFocus` handoff so a pack install lands
@@ -55,6 +174,7 @@ export function OntologyMapView({
   initialFocus = null,
   onInitialFocusConsumed,
   onOpenPacks,
+  onHeaderControllerChange,
 }: {
   /** Open the sheet on this focus at mount (pack-install handoff, AE4). */
   initialFocus?: OntologyFocus | null;
@@ -62,6 +182,10 @@ export function OntologyMapView({
   onInitialFocusConsumed?: () => void;
   /** Navigate to the starter-pack browser (day-one callout, R12). */
   onOpenPacks?: () => void;
+  /** Publish the header actions (add-triple + badged queue icon) upward. */
+  onHeaderControllerChange?: (
+    controller: OntologyMapHeaderController | null,
+  ) => void;
 } = {}) {
   const { tenantId, userId } = useTenant();
   const effectiveTenantId = tenantId ?? null;
@@ -73,6 +197,105 @@ export function OntologyMapView({
   const calloutDismissed = usePackCalloutDismissed(
     userId ?? null,
     effectiveTenantId,
+  );
+
+  // --- Toolbar search + facet filters (Memory/Wiki graph parity). Search
+  // and filters DIM non-matching nodes in place (R3) — never remove nodes
+  // or restart the simulation. The graph reports its candidate origins via
+  // `onOriginsLoaded`; a headless filter table stores the selections,
+  // forwarded to OntologyGraph's facet-filter props.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [graphOrigins, setGraphOrigins] = useState<string[]>([]);
+  const [filterColumnFilters, setFilterColumnFilters] =
+    useState<ColumnFiltersState>([]);
+  const facetColumns: DataTableTokenFilterColumn[] = useMemo(
+    () => [
+      {
+        id: "status",
+        label: "Status",
+        type: "option",
+        icon: <BadgeCheck className="size-4" />,
+        options: [
+          { value: "approved", label: "Approved" },
+          { value: "proposed", label: "Proposed" },
+        ],
+      },
+      {
+        id: "origin",
+        label: "Origin",
+        type: "option",
+        icon: <Compass className="size-4" />,
+        options: graphOrigins.map((value) => ({
+          value,
+          label: ontologyOriginLabel(value),
+        })),
+      },
+      {
+        id: "evidence",
+        label: "Evidence",
+        type: "option",
+        icon: <FileText className="size-4" />,
+        options: [
+          { value: "has_evidence", label: "Has evidence" },
+          { value: "none", label: "None" },
+        ],
+      },
+      {
+        id: "activity",
+        label: "Activity",
+        type: "option",
+        icon: <Activity className="size-4" />,
+        options: [
+          { value: "has_instances", label: "Has instances" },
+          { value: "empty", label: "Empty" },
+        ],
+      },
+    ],
+    [graphOrigins],
+  );
+  const filterColumns: ColumnDef<Record<string, string>>[] = useMemo(
+    () =>
+      ["status", "origin", "evidence", "activity"].map((id) => ({
+        id,
+        accessorFn: (row: Record<string, string>) => row[id] ?? "",
+        filterFn: dataTableTokenFilterFns.option,
+      })),
+    [],
+  );
+  const filterTable = useReactTable({
+    data: [] as Record<string, string>[],
+    columns: filterColumns,
+    state: { columnFilters: filterColumnFilters },
+    onColumnFiltersChange: setFilterColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+  const selectedColumnValues = useCallback(
+    (id: string) => {
+      const raw = filterColumnFilters.find((c) => c.id === id)?.value as
+        | { value?: unknown }
+        | undefined;
+      const v = raw?.value;
+      const arr = Array.isArray(v) ? v : v != null ? [v] : [];
+      return arr.filter((x): x is string => typeof x === "string");
+    },
+    [filterColumnFilters],
+  );
+  const selectedStatuses = useMemo(
+    () => selectedColumnValues("status"),
+    [selectedColumnValues],
+  );
+  const selectedOrigins = useMemo(
+    () => selectedColumnValues("origin"),
+    [selectedColumnValues],
+  );
+  const selectedEvidence = useMemo(
+    () => selectedColumnValues("evidence"),
+    [selectedColumnValues],
+  );
+  const selectedActivity = useMemo(
+    () => selectedColumnValues("activity"),
+    [selectedColumnValues],
   );
 
   // The initial focus is captured into the sheet stack's initial state; tell
@@ -110,18 +333,18 @@ export function OntologyMapView({
   const pop = () => setStack((current) => current.slice(0, -1));
   const closeSheet = () => setStack([]);
 
+  // Queue rows push onto the stack so the evidence view's Back returns to
+  // the queue sheet.
   const openCandidate = (candidate: OntologyRailCandidate) => {
-    setStack([
-      {
-        kind: "focus",
-        focus: {
-          kind: "candidate",
-          itemId: candidate.itemId,
-          changeSetId: candidate.changeSetId,
-          label: ontologyCandidateLabel(candidate),
-        },
+    push({
+      kind: "focus",
+      focus: {
+        kind: "candidate",
+        itemId: candidate.itemId,
+        changeSetId: candidate.changeSetId,
+        label: ontologyCandidateLabel(candidate),
       },
-    ]);
+    });
   };
 
   const onNodeClick = useCallback((node: OntologyGraphNode) => {
@@ -170,6 +393,22 @@ export function OntologyMapView({
     return slugs;
   }, [graph, candidates]);
 
+  const pendingCount = candidates.length;
+
+  // Publish the header actions to the page-header owner (SettingsMemoryHome
+  // renders them at the far right of the top bar, like every other settings
+  // page). Same lifecycle as SettingsMemory's refresh controller: re-publish
+  // when the pending count changes, clear on unmount.
+  useEffect(() => {
+    if (!onHeaderControllerChange) return;
+    onHeaderControllerChange({
+      pendingCount,
+      openAddTriple: () => setStack([{ kind: "form", editItem: null }]),
+      openQueue: () => setStack([{ kind: "queue" }]),
+    });
+    return () => onHeaderControllerChange(null);
+  }, [onHeaderControllerChange, pendingCount]);
+
   if (!effectiveTenantId) {
     return (
       <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
@@ -192,23 +431,40 @@ export function OntologyMapView({
     !calloutDismissed;
 
   return (
-    <div className="flex h-full min-h-0 w-full gap-4">
-      <div className="border-border relative min-w-0 flex-1 overflow-hidden rounded-lg border">
+    <div className="flex h-full min-h-0 w-full flex-col">
+      <div className="mb-3 flex shrink-0 items-center gap-2">
+        <OntologyToolbarSearch
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+        />
+        <DataTableTokenFilter
+          table={filterTable}
+          columns={facetColumns}
+          addLabel="Filter"
+          showAddLabel={false}
+          clearLabel="Clear filters"
+          flattenToolbar
+          className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+          popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+        />
+      </div>
+      <div className="border-border relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border">
         <OntologyGraph
           ref={graphRef}
           tenantId={effectiveTenantId}
+          searchQuery={searchQuery || undefined}
+          statusFilter={selectedStatuses.length ? selectedStatuses : undefined}
+          originFilter={selectedOrigins.length ? selectedOrigins : undefined}
+          evidenceFilter={
+            selectedEvidence.length ? selectedEvidence : undefined
+          }
+          activityFilter={
+            selectedActivity.length ? selectedActivity : undefined
+          }
+          onOriginsLoaded={setGraphOrigins}
           onNodeClick={onNodeClick}
           onCandidateOverflow={setOverflowCount}
         />
-        <div className="absolute right-3 top-3 z-30">
-          <Button
-            size="sm"
-            onClick={() => setStack([{ kind: "form", editItem: null }])}
-          >
-            <Plus className="mr-1 size-3.5" aria-hidden />
-            Add triple
-          </Button>
-        </div>
         {showPackCallout ? (
           <div
             role="status"
@@ -240,17 +496,6 @@ export function OntologyMapView({
         ) : null}
       </div>
 
-      <div className="flex w-80 shrink-0 flex-col">
-        <OntologyReviewRail
-          candidates={candidates}
-          loading={railResult.fetching && !railResult.data}
-          error={railResult.error?.message ?? null}
-          overflowCount={overflowCount}
-          selectedItemId={selectedItemId}
-          onSelect={openCandidate}
-        />
-      </div>
-
       <Sheet
         open={stack.length > 0}
         onOpenChange={(open) => {
@@ -258,13 +503,25 @@ export function OntologyMapView({
         }}
       >
         <SheetContent className="flex flex-col sm:max-w-lg">
-          {top?.kind === "focus" ? (
+          {top?.kind === "queue" ? (
+            <div className="flex min-h-0 flex-1 flex-col p-6">
+              <OntologyReviewRail
+                candidates={candidates}
+                loading={railResult.fetching && !railResult.data}
+                error={railResult.error?.message ?? null}
+                overflowCount={overflowCount}
+                selectedItemId={selectedItemId}
+                onSelect={openCandidate}
+              />
+            </div>
+          ) : top?.kind === "focus" ? (
             <OntologyCandidateSheet
               tenantId={effectiveTenantId}
               focus={top.focus}
               historyDepth={stack.length - 1}
               onBack={pop}
               onEdit={(item) => push({ kind: "form", editItem: item })}
+              onFocusType={(focus) => push({ kind: "focus", focus })}
               onActionComplete={() => {
                 refreshAll();
                 closeSheet();

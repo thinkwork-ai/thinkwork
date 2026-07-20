@@ -59,6 +59,16 @@ This is the same “declared is not deployed” failure class as a cancelled
 Terraform/IAM apply. Every cutover gate must inspect live resources and execute
 the user path after deployment.
 
+Immutable endpoint publication has a second control-plane boundary: AgentCore
+counts the service-managed `DEFAULT` endpoint toward the Harness endpoint
+quota. Publishing a new immutable endpoint before reclaiming an older managed
+endpoint can therefore fail even when the Harness version itself is ready. The
+safe order is to retain the newest immutable rollback endpoint, reclaim only
+older managed endpoints (including a failed publication attempt), create and
+wait for the new endpoint, and only then advance the Terraform-attested SSM
+profile. A failed publication must leave the prior profile and Pi selection
+unchanged.
+
 ## Operational consequence
 
 Any mixed-runtime thread is a certification failure, even if both turns

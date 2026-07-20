@@ -334,3 +334,105 @@ describe("formatUserQuestionAnswerContext — delegation context", () => {
     expect(block).not.toContain("Re-delegate");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Mapping-candidate flow guidance (THINK-321 U6) — the resumed turn is told
+// the exact next call (confirm_mapping / decline_mapping_candidates) from
+// the candidate metadata that rode the question payload.
+// ---------------------------------------------------------------------------
+
+const CANDIDATE_QUESTIONS = [
+  {
+    question: "Which Twenty company is Acme Fuel?",
+    header: "CRM match",
+    candidateSetId: "set-1",
+    options: [
+      { label: "Acme Fuel Co", description: "matched", candidateId: "cand-1" },
+      { label: "None of these", description: "", candidateId: "none" },
+    ],
+  },
+];
+
+describe("formatUserQuestionAnswerContext — mapping-candidate guidance (U6)", () => {
+  it("parses candidateSetId and option candidateId from the payload", () => {
+    const parsed = parsePendingUserQuestions(
+      cardPayload({ questions: CANDIDATE_QUESTIONS }),
+    );
+    expect(parsed?.questions[0]?.candidateSetId).toBe("set-1");
+    expect(parsed?.questions[0]?.options.map((o) => o.candidateId)).toEqual([
+      "cand-1",
+      "none",
+    ]);
+  });
+
+  it("ignores malformed candidate metadata ids (never rendered)", () => {
+    const parsed = parsePendingUserQuestions(
+      cardPayload({
+        questions: [
+          {
+            ...CANDIDATE_QUESTIONS[0],
+            candidateSetId: "not a valid id!",
+            options: [
+              {
+                label: "Acme Fuel Co",
+                description: "",
+                candidateId: "<forged>",
+              },
+              { label: "None of these", description: "", candidateId: "none" },
+            ],
+          },
+        ],
+      }),
+    );
+    expect(parsed?.questions[0]?.candidateSetId).toBeUndefined();
+    expect(parsed?.questions[0]?.options[0]?.candidateId).toBeUndefined();
+  });
+
+  it("a selected candidate renders the confirm_mapping instruction", () => {
+    const block = format(
+      cardPayload({
+        questions: CANDIDATE_QUESTIONS,
+        answers: { "CRM match": "Acme Fuel Co" },
+      }),
+    );
+    expect(block).toContain("The user selected candidate cand-1");
+    expect(block).toContain('confirm_mapping with candidate_set_id "set-1"');
+    expect(block).toContain('candidate_id "cand-1"');
+  });
+
+  it("a 'None of these' pick renders the decline_mapping_candidates instruction", () => {
+    const block = format(
+      cardPayload({
+        questions: CANDIDATE_QUESTIONS,
+        answers: { "CRM match": "None of these" },
+      }),
+    );
+    expect(block).toContain("declined ALL mapping candidates");
+    expect(block).toContain(
+      'decline_mapping_candidates with candidate_set_id "set-1"',
+    );
+    expect(block).toContain("do not re-ask");
+  });
+
+  it("a free-text answer on a candidate question forbids confirm and asks for a re-present", () => {
+    const block = format(
+      cardPayload({
+        questions: CANDIDATE_QUESTIONS,
+        answers: { "CRM match": "it is actually a different company" },
+      }),
+    );
+    expect(block).toContain("no single candidate pick was recorded");
+    expect(block).toContain("Do NOT call confirm_mapping");
+  });
+
+  it("a reply-consumed candidate question also forbids confirm (no structured pick)", () => {
+    const block = format(replyPayload({ questions: CANDIDATE_QUESTIONS }));
+    expect(block).toContain("no single candidate pick was recorded");
+  });
+
+  it("non-candidate questions render no candidate guidance", () => {
+    const block = format(cardPayload());
+    expect(block).not.toContain("confirm_mapping");
+    expect(block).not.toContain("decline_mapping_candidates");
+  });
+});

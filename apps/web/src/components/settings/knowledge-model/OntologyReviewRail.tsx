@@ -50,8 +50,9 @@ function formatItemType(itemType: string) {
 /**
  * Review rail of the Living Map (THINK-320 U6, R4): one row per pending
  * candidate item from the same ontologySchemaGraph feed the canvas renders.
- * Mirrors ResolutionQueue's list pattern. Content only — the split layout
- * is owned by OntologyMapView.
+ * Mirrors ResolutionQueue's list pattern. Content only — OntologyMapView
+ * hosts it inside the Explorer-style review-queue Sheet behind the badged
+ * toolbar icon.
  */
 export function OntologyReviewRail({
   candidates,

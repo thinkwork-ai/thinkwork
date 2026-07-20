@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { navigateMock, kbDocs, kbRows } = vi.hoisted(() => ({
@@ -42,23 +42,64 @@ vi.mock("@/context/PageHeaderContext", () => ({
 
 vi.mock("@/lib/kb-queries", () => kbDocs);
 
-import { SettingsKnowledgeBases } from "./SettingsKnowledgeBases";
+import { act } from "react";
+import {
+  SettingsKnowledgeBases,
+  type KnowledgeBasesHeaderController,
+} from "./SettingsKnowledgeBases";
+
+// React 19 gates act() on this flag; these tests drive the published
+// header controller directly.
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 beforeEach(() => navigateMock.mockReset());
 afterEach(cleanup);
 
 describe("SettingsKnowledgeBases", () => {
-  it("renders the tenant's Knowledge Bases and a create action", () => {
+  it("renders the tenant's Knowledge Bases without an inline create button", () => {
     render(<SettingsKnowledgeBases />);
     expect(screen.getByText("Knowledge Bases")).toBeTruthy();
     expect(screen.getByText("Company Policies")).toBeTruthy();
     expect(screen.getByText("active")).toBeTruthy();
-    expect(screen.getByText(/new source/i)).toBeTruthy();
+    // The new-source gesture lives in the page header (SettingsMemoryHome
+    // Plus icon), not as an inline labeled button.
+    expect(screen.queryByText(/new source/i)).toBeNull();
   });
 
-  it("opens the create dialog from the new-source action", () => {
-    render(<SettingsKnowledgeBases />);
-    fireEvent.click(screen.getByText(/new source/i));
+  it("opens the create dialog from the published header controller", () => {
+    const controller = {
+      current: null as KnowledgeBasesHeaderController | null,
+    };
+    render(
+      <SettingsKnowledgeBases
+        onHeaderControllerChange={(c) => {
+          controller.current = c;
+        }}
+      />,
+    );
+
+    expect(controller.current).not.toBeNull();
+    expect(screen.queryByText("Create source")).toBeNull();
+    act(() => controller.current?.openNewSource());
     expect(screen.getByText("Create source")).toBeTruthy();
+  });
+
+  it("clears the header controller on unmount", () => {
+    const controller = {
+      current: null as KnowledgeBasesHeaderController | null,
+    };
+    const view = render(
+      <SettingsKnowledgeBases
+        onHeaderControllerChange={(c) => {
+          controller.current = c;
+        }}
+      />,
+    );
+
+    expect(controller.current).not.toBeNull();
+    view.unmount();
+    expect(controller.current).toBeNull();
   });
 });
