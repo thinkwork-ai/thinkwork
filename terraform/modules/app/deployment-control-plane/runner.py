@@ -925,6 +925,16 @@ def validate_terraform_execution_phase(payload, action):
     return "none"
 
 
+def canonical_state_identity_bytes(state):
+    """`terraform state pull` re-renders the state document on every run and
+    serializes the render-only check_results block in nondeterministic map
+    order, so identical remote state produces different raw bytes across
+    runs. Hash a canonical JSON form without check_results; lineage/serial
+    stay the authoritative change signal for the infrastructure content."""
+    comparable = {key: value for key, value in state.items() if key != "check_results"}
+    return json.dumps(comparable, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
 def terraform_state_identity():
     raw = output(["terraform", "state", "pull"], cwd=TF)
     state = json.loads(raw or "{}")
@@ -937,7 +947,7 @@ def terraform_state_identity():
     return {
         "lineage": lineage,
         "serial": serial,
-        "sha256": sha256_bytes(raw.encode("utf-8")),
+        "sha256": sha256_bytes(canonical_state_identity_bytes(state)),
         "terraformVersion": state.get("terraform_version"),
     }
 
@@ -6539,7 +6549,7 @@ def write_deployment_status_pointer(status, vars_json=None, terraform_exit_code=
     action = os.environ.get("THINKWORK_DEPLOYMENT_ACTION")
     if os.environ.get("THINKWORK_MANAGED_APP_OPERATION") == "true":
         return
-    if not bucket or action not in {"deploy", "update", "web"}:
+    if not bucket or action not in {"deploy", "update", "apply", "web"}:
         return
     vars_json = vars_json or {}
     previous = read_current_status_pointer(bucket)

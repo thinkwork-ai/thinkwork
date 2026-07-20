@@ -773,6 +773,89 @@ def test_web_only_release_sync_does_not_require_agentcore_control_runtime() -> N
     assert not runner.requires_agentcore_control_runtime("web", {}, None)
 
 
+def _state_document(check_results):
+    return {
+        "version": 4,
+        "terraform_version": "1.9.8",
+        "serial": 820,
+        "lineage": "61f4093e-41da-ac29-852a-267bc853e24f",
+        "resources": [{"type": "aws_s3_bucket", "name": "evidence"}],
+        "check_results": check_results,
+    }
+
+
+def test_state_identity_is_stable_across_check_results_render_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    check_a = {"object_kind": "var", "config_addr": "module.a.var.x", "status": "pass"}
+    check_b = {"object_kind": "var", "config_addr": "module.b.var.y", "status": "pass"}
+    pulls = iter(
+        [
+            json.dumps(_state_document([check_a, check_b]), indent=2) + "\n",
+            json.dumps(_state_document([check_b, check_a]), indent=2) + "\n",
+        ]
+    )
+    monkeypatch.setattr(runner, "output", lambda *_args, **_kwargs: next(pulls))
+
+    first = runner.terraform_state_identity()
+    second = runner.terraform_state_identity()
+
+    assert first == second
+    assert first["lineage"] == "61f4093e-41da-ac29-852a-267bc853e24f"
+    assert first["serial"] == 820
+    assert first["terraformVersion"] == "1.9.8"
+
+
+def test_state_identity_changes_when_resources_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    base = _state_document([])
+    changed = dict(base, serial=821, resources=[])
+    pulls = iter([json.dumps(base), json.dumps(changed)])
+    monkeypatch.setattr(runner, "output", lambda *_args, **_kwargs: next(pulls))
+
+    first = runner.terraform_state_identity()
+    second = runner.terraform_state_identity()
+
+    assert first["sha256"] != second["sha256"]
+    assert second["serial"] == 821
+
+
+def test_state_identity_still_refuses_missing_lineage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    document = _state_document([])
+    document.pop("lineage")
+    monkeypatch.setattr(runner, "output", lambda *_args, **_kwargs: json.dumps(document))
+
+    with pytest.raises(RuntimeError, match="no lineage"):
+        runner.terraform_state_identity()
+
+
+def test_deployment_status_pointer_writes_for_saved_plan_apply(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("THINKWORK_EVIDENCE_BUCKET", "evidence-bucket")
+    monkeypatch.setenv("THINKWORK_DEPLOYMENT_ACTION", "apply")
+    monkeypatch.delenv("THINKWORK_MANAGED_APP_OPERATION", raising=False)
+    commands = []
+    monkeypatch.setattr(runner, "read_current_status_pointer", lambda _bucket: {})
+    monkeypatch.setattr(runner, "run", lambda args, **_kwargs: commands.append(args))
+
+    runner.write_deployment_status_pointer(
+        "succeeded", {"stage": "tei-e2e", "account_id": "637423202447"}
+    )
+
+    assert any(
+        arg.endswith("deployment/status/current.json") for command in commands for arg in command
+    )
+
+
 def test_saved_plan_apply_stages_the_approved_release_artifacts() -> None:
     runner = load_runner()
 
