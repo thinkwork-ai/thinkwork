@@ -26,6 +26,14 @@ write_client_record() {
 
 reconcile_provider() {
   local client_id="$1"
+  local runtime_script="$script_dir/reconcile_twenty_provider.mjs"
+  if [[ -n "${THINKWORK_AGENTCORE_CONTROL_RUNTIME_DIR:-}" ]]; then
+    runtime_script="$THINKWORK_AGENTCORE_CONTROL_RUNTIME_DIR/reconcile_twenty_provider.js"
+    if [[ ! -f "$runtime_script" ]]; then
+      printf '%s\n' 'Managed AgentCore control runtime is missing reconcile_twenty_provider.js' >&2
+      return 66
+    fi
+  fi
   jq -n \
     --arg region "$AWS_REGION" \
     --arg name "$TWENTY_CREDENTIAL_PROVIDER_NAME" \
@@ -42,7 +50,7 @@ reconcile_provider() {
       tokenEndpoint: $tokenEndpoint,
       clientId: $clientId,
       secretArn: $secretArn
-    }' | node "$script_dir/reconcile_twenty_provider.mjs"
+    }' | node "$runtime_script"
 }
 
 verify_provider() {

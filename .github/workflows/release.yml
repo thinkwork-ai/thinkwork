@@ -87,6 +87,9 @@ jobs:
           mkdir -p dist/release/runner
           cp terraform/modules/app/deployment-control-plane/runner.py dist/release/runner/thinkwork-runner.py
 
+      - name: Package AgentCore control runtime
+        run: bash scripts/release/package-agentcore-control-runtime.sh
+
       - name: Stage Twenty ThinkWork app package
         run: |
           mkdir -p dist/release/managed-apps

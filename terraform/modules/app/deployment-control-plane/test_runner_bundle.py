@@ -696,6 +696,104 @@ def test_sync_release_artifacts_stages_artifacts_from_platform_bundle(
     assert {artifact["source"] for artifact in runner.RELEASE_EVIDENCE["artifacts"]} == {"bundle"}
 
 
+def test_packaged_agentcore_control_runtime_is_exact_and_runnable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    repo_root = Path(__file__).resolve().parents[4]
+    release_dir = tmp_path / "release"
+    runner_dir = release_dir / "bundles" / "platform" / "runner"
+    subprocess.run(
+        [
+            "bash",
+            str(repo_root / "scripts/release/package-agentcore-control-runtime.sh"),
+            str(runner_dir),
+        ],
+        cwd=repo_root,
+        check=True,
+        text=True,
+    )
+
+    monkeypatch.setattr(runner, "RELEASE", release_dir)
+    monkeypatch.setattr(runner, "RELEASE_EVIDENCE", {})
+    monkeypatch.delenv("THINKWORK_AGENTCORE_CONTROL_RUNTIME_DIR", raising=False)
+
+    evidence = runner.prepare_agentcore_control_runtime()
+
+    assert evidence["sdkVersion"] == "3.1089.0"
+    assert evidence["bundledRuntimeVerified"] is True
+    assert evidence["bundledEntrypoints"] == [
+        "harness-lifecycle.js",
+        "preflight.js",
+        "reconcile_twenty_provider.js",
+    ]
+    assert os.environ["THINKWORK_AGENTCORE_CONTROL_RUNTIME_DIR"] == str(
+        runner_dir / "agentcore-control-runtime"
+    )
+    assert all(item["sdkImportReady"] for item in evidence["entrypointPreflights"])
+
+
+@pytest.mark.parametrize("action", ["deploy", "update", "plan", "destroy"])
+def test_agentcore_control_runtime_is_required_even_when_proof_is_disabled(
+    action: str,
+) -> None:
+    runner = load_runner()
+
+    assert runner.requires_agentcore_control_runtime(
+        action,
+        {"enableAgentCoreHarness": False},
+        None,
+    )
+
+
+def test_web_only_release_sync_does_not_require_agentcore_control_runtime() -> None:
+    runner = load_runner()
+
+    assert runner.release_sync_request("web", {}, None) == {
+        "artifact_types": {"static-site"},
+        "artifact_names": {"web"},
+    }
+    assert not runner.requires_agentcore_control_runtime("web", {}, None)
+
+
+def test_packaged_agentcore_control_runtime_rebuild_removes_stale_files(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[4]
+    runner_dir = tmp_path / "runner"
+    runtime_dir = runner_dir / "agentcore-control-runtime"
+    runtime_dir.mkdir(parents=True)
+    (runtime_dir / "stale-chunk.js").write_text("stale\n", encoding="utf-8")
+
+    subprocess.run(
+        [
+            "bash",
+            str(repo_root / "scripts/release/package-agentcore-control-runtime.sh"),
+            str(runner_dir),
+        ],
+        cwd=repo_root,
+        check=True,
+        text=True,
+    )
+
+    manifest = json.loads(
+        (runner_dir / "agentcore-control-runtime.json").read_text(encoding="utf-8")
+    )
+    paths = {item["path"] for item in manifest["files"]}
+    generated = {
+        str(path.relative_to(runtime_dir))
+        for path in runtime_dir.rglob("*")
+        if path.is_file()
+    }
+    assert "stale-chunk.js" not in generated
+    assert paths == generated
+    assert {path for path in paths if "/" not in path} == {
+        "harness-lifecycle.js",
+        "preflight.js",
+        "reconcile_twenty_provider.js",
+    }
+
+
 def test_ensure_release_manifest_available_accepts_manifest_file_digest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -786,10 +884,12 @@ def test_sync_release_artifacts_can_materialize_only_web_static_bundle(
     monkeypatch.setenv("THINKWORK_RELEASE_ARTIFACT_BUCKET", "thinkwork-artifacts")
     monkeypatch.setattr(runner, "run", lambda args, **_kwargs: calls.append(args))
 
-    static_files = runner.sync_release_artifacts(
-        artifact_types={"static-site"},
-        artifact_names={"web"},
-    )
+    release_request = runner.release_sync_request("web", {}, None)
+    assert release_request == {
+        "artifact_types": {"static-site"},
+        "artifact_names": {"web"},
+    }
+    static_files = runner.sync_release_artifacts(**release_request)
 
     assert static_files == {"web": release_dir / "static/web.tar.gz"}
     assert static_files["web"].read_bytes() == web_bytes
@@ -1624,6 +1724,13 @@ def test_write_runner_files_persists_selected_release_to_controller_module(
     assert "deployment_release_manifest_signature_url" in main_tf
     assert "deployment_release_manifest_trusted_keys_json" in main_tf
     assert "deployment_terraform_module_source" in main_tf
+    assert 'required_version = ">= 1.8.5"' in main_tf
+    assert (
+        "from = "
+        "module.thinkwork.module.agentcore_proof_identity."
+        "terraform_data.twenty_identity_lifecycle"
+    ) in main_tf
+    assert "destroy = false" in main_tf
 
 
 def _cognito_email_runner_env(runner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:

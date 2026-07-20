@@ -269,4 +269,26 @@ describe("AgentCore downstream confidential-client bootstrap", () => {
       /registration-token/,
     );
   });
+
+  it("fails closed when a managed runtime is configured without its entrypoint", () => {
+    const { root, env } = mockEnvironment();
+    const runtimeDir = join(root, "missing-managed-runtime");
+    execFileSync("mkdir", ["-p", runtimeDir]);
+
+    const result = spawnSync("bash", [BOOTSTRAP], {
+      env: {
+        ...env,
+        THINKWORK_AGENTCORE_CONTROL_RUNTIME_DIR: runtimeDir,
+      },
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(66);
+    expect(result.stderr).toContain(
+      "Managed AgentCore control runtime is missing reconcile_twenty_provider.js",
+    );
+    expect(`${result.stdout}${result.stderr}`).not.toContain(
+      "ERR_MODULE_NOT_FOUND",
+    );
+  });
 });

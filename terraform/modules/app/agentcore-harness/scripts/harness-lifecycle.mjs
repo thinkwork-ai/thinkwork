@@ -24,6 +24,19 @@ import {
 const operation = process.argv[2];
 const region = process.env.AWS_REGION;
 
+if (operation === "--runtime-preflight") {
+  process.stdout.write(
+    JSON.stringify({
+      entrypoint: "harness-lifecycle",
+      sdkImportReady:
+        typeof BedrockAgentCoreControlClient === "function" &&
+        typeof CreateHarnessCommand === "function" &&
+        typeof GetHarnessCommand === "function",
+    }),
+  );
+  process.exit(0);
+}
+
 if (
   !operation ||
   !["reconcile", "read", "prune", "delete"].includes(operation)

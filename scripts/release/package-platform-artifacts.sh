@@ -26,6 +26,13 @@ if [[ ! -f "$RELEASE_DIR/runner/thinkwork-runner.py" ]]; then
   echo "Deployment runner script is missing: $RELEASE_DIR/runner/thinkwork-runner.py" >&2
   exit 66
 fi
+if [[ ! -f "$RELEASE_DIR/runner/agentcore-control-runtime.json" ]] ||
+  [[ ! -f "$RELEASE_DIR/runner/agentcore-control-runtime/preflight.js" ]] ||
+  [[ ! -f "$RELEASE_DIR/runner/agentcore-control-runtime/reconcile_twenty_provider.js" ]] ||
+  [[ ! -f "$RELEASE_DIR/runner/agentcore-control-runtime/harness-lifecycle.js" ]]; then
+  echo "Bundled AgentCore control runtime is incomplete under $RELEASE_DIR/runner" >&2
+  exit 66
+fi
 
 if ! compgen -G "$RELEASE_DIR/lambdas/*.zip" >/dev/null; then
   echo "No Lambda zip artifacts found under $RELEASE_DIR/lambdas" >&2
