@@ -526,7 +526,6 @@ resource "aws_cognito_user_pool_client" "auth_route" {
 
   write_attributes = [
     "email",
-    "email_verified",
     "name",
     "custom:tenant_id",
     "custom:entra_tenant_id",

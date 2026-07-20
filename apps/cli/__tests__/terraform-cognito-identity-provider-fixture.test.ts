@@ -74,7 +74,7 @@ describe("Cognito identity provider Terraform fixture", () => {
     )?.[0];
 
     expect(googleProvider).toMatch(/email_verified\s*=\s*"email_verified"/);
-    expect(routeClient).toMatch(
+    expect(routeClient).not.toMatch(
       /write_attributes\s*=\s*\[[\s\S]*?"email_verified"/,
     );
   });
