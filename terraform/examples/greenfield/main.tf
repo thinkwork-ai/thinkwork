@@ -540,6 +540,12 @@ variable "ontology_scan_sweep_enabled" {
   default     = false
 }
 
+variable "identity_drift_match_enabled" {
+  description = "Enable the recurring per-tenant identity drift match sweep (THINK-321 U7/KTD-7 — R10). Ships disabled; enabled per stage once bootstrap matching has been proven there."
+  type        = bool
+  default     = false
+}
+
 variable "wiki_source" {
   description = "Wiki compile pipeline source: 'planner' (LLM compile) or 'graph' (deterministic graph->wiki materializer). Dev flips first per THINK-133 U8/KTD-4; the default flips for all stages only after dev comparison evidence holds."
   type        = string
@@ -955,6 +961,7 @@ module "thinkwork" {
   capability_self_extension_tenants             = var.capability_self_extension_tenants
   knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled
   ontology_scan_sweep_enabled                   = var.ontology_scan_sweep_enabled
+  identity_drift_match_enabled                  = var.identity_drift_match_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   google_places_api_key                         = var.google_places_api_key
   requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled
