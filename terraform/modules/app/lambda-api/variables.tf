@@ -208,9 +208,14 @@ variable "agentcore_turn_assertion_active_key_version" {
   type        = string
   default     = "v1"
 
+  # Membership in agentcore_turn_assertion_key_versions is enforced by a
+  # precondition on aws_kms_key.agentcore_turn_assertion — variable validations
+  # cannot reference other variables until Terraform 1.9, and this module
+  # supports the repo floor of Terraform 1.5 (the customer deployment runner
+  # pins 1.8.5).
   validation {
-    condition     = contains(var.agentcore_turn_assertion_key_versions, var.agentcore_turn_assertion_active_key_version)
-    error_message = "agentcore_turn_assertion_active_key_version must be present in agentcore_turn_assertion_key_versions."
+    condition     = can(regex("^[a-z0-9][a-z0-9-]{0,15}$", var.agentcore_turn_assertion_active_key_version))
+    error_message = "agentcore_turn_assertion_active_key_version must be a lowercase version label."
   }
 }
 
