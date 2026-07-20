@@ -575,6 +575,11 @@ resource "aws_sfn_state_machine" "deployment" {
               "Value.$" = "$.sessionId"
             },
             {
+              Name      = "THINKWORK_DEPLOYMENT_EXECUTION_ARN"
+              Type      = "PLAINTEXT"
+              "Value.$" = "$$.Execution.Id"
+            },
+            {
               Name      = "THINKWORK_DEPLOYMENT_INPUT"
               Type      = "PLAINTEXT"
               "Value.$" = "States.JsonToString($)"
