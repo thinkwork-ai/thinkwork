@@ -45,6 +45,9 @@ describe("grouped API IAM policy size floor", () => {
     expect(source).toContain(
       "depends_on = [aws_iam_role_policy_attachment.api_invocation]",
     );
+    expect(source).toMatch(
+      /resource "aws_iam_policy" "api_orchestration"[\s\S]*?ignore_changes = \[description\]/,
+    );
   });
 
   it("checks every rendered grouped policy against IAM's hard limit", () => {
