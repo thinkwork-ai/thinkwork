@@ -3997,7 +3997,8 @@ def test_saved_plan_apply_revalidates_config_release_state_vars_and_rendered_pla
     tfvars = b'{"stage":"tei-e2e"}\n'
     (tf / "terraform.auto.tfvars.json").write_bytes(tfvars)
     saved_plan_bytes = b"opaque-saved-plan"
-    rendered_plan = b'{"format_version":"1.2","resource_changes":[]}\n'
+    accepted_plan = b'{"resource_changes":[],"format_version":"1.2"}\n'
+    rendered_plan = b'{\n  "format_version": "1.2",\n  "resource_changes": []\n}\n'
     descriptor = {
         "contract": runner.TERRAFORM_PLAN_APPROVAL_CONTRACT,
         "deploymentConfigSha256": runner.deployment_config_sha256(payload),
@@ -4010,7 +4011,7 @@ def test_saved_plan_apply_revalidates_config_release_state_vars_and_rendered_pla
         },
         "jsonPlan": {
             "s3Uri": "s3://evidence/plan.json",
-            "sha256": digest(rendered_plan),
+            "sha256": digest(accepted_plan),
         },
         "summary": {"resourceChangeCount": 0},
         "plannedAction": "update",
@@ -4023,9 +4024,13 @@ def test_saved_plan_apply_revalidates_config_release_state_vars_and_rendered_pla
     )
 
     def fake_download(uri, destination, expected_sha, _label):
-        assert uri == "s3://evidence/plan.bin"
-        destination.write_bytes(saved_plan_bytes)
-        assert digest(saved_plan_bytes) == expected_sha
+        if uri == "s3://evidence/plan.bin":
+            content = saved_plan_bytes
+        else:
+            assert uri == "s3://evidence/plan.json"
+            content = accepted_plan
+        destination.write_bytes(content)
+        assert digest(content) == expected_sha
         return expected_sha
 
     def fake_run(args, **kwargs):
@@ -4039,6 +4044,10 @@ def test_saved_plan_apply_revalidates_config_release_state_vars_and_rendered_pla
     assert approved["plannedAction"] == "update"
     assert approved["sourceSessionId"] == "plan-session"
     assert (tf / "tfplan").read_bytes() == saved_plan_bytes
+
+    rendered_plan = b'{"format_version":"1.2","resource_changes":[{"address":"changed"}]}\n'
+    with pytest.raises(RuntimeError, match="no longer renders"):
+        runner.validate_and_materialize_approved_plan(payload, state)
 
     descriptor["state"] = {**state, "serial": 8}
     with pytest.raises(RuntimeError, match="state changed after plan approval"):
@@ -4105,7 +4114,10 @@ def test_tei_v380_saved_plan_apply_refuses_any_delete_action(
             "s3Uri": "s3://evidence/plan.bin",
             "sha256": digest(saved_plan),
         },
-        "jsonPlan": {"sha256": digest(rendered_plan)},
+        "jsonPlan": {
+            "s3Uri": "s3://evidence/plan.json",
+            "sha256": digest(rendered_plan),
+        },
         "plannedAction": "update",
     }
     monkeypatch.setattr(
@@ -4113,11 +4125,11 @@ def test_tei_v380_saved_plan_apply_refuses_any_delete_action(
         "load_approved_plan_descriptor",
         lambda _payload: (descriptor, payload["approvedPlan"]["descriptor"]),
     )
-    monkeypatch.setattr(
-        runner,
-        "_download_approved_artifact",
-        lambda _uri, destination, _sha, _label: destination.write_bytes(saved_plan),
-    )
+
+    def fake_download(uri, destination, _sha, _label):
+        destination.write_bytes(saved_plan if uri.endswith("plan.bin") else rendered_plan)
+
+    monkeypatch.setattr(runner, "_download_approved_artifact", fake_download)
     monkeypatch.setattr(
         runner,
         "run",
