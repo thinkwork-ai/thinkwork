@@ -990,10 +990,11 @@ const GOAL_DOCUMENT_COMPOSITION_MAX_ITERATIONS = 1;
 
 /**
  * AgentCore currently drops configured inline functions when an invocation
- * narrows them by exact `allowedTools` name. Repeat only the attested
- * caller-fulfilled completion contract on the corrective invocation. This
- * deliberately excludes Browser and Gateway, whose configured definitions
- * must not be replayed at invocation time.
+ * narrows the harness default by exact `allowedTools` name. Override both
+ * invocation-time fields together: `tools` supplies the attested function
+ * schema while `allowedTools` authorizes that exact overridden tool set. This
+ * deliberately excludes Browser and Gateway, whose definitions must not be
+ * replayed on the completion-only corrective invocation.
  */
 function goalCompletionCorrectionTools(
   tools: HarnessInvocationTool[],
@@ -2044,6 +2045,7 @@ export async function runHarnessTurn(
                     tools: goalCompletionCorrectionTools(
                       harness.invocationTools,
                     ),
+                    allowedTools: ["goal_complete"],
                   }
                 : { allowedTools: ["goal_complete"] }),
             }
@@ -2192,6 +2194,27 @@ export async function runHarnessTurn(
               "AgentCore Skill Creator ended without a validated draft submission after one corrective continuation.",
           });
         }
+        if (RAW_HARNESS_TOOL_MARKUP_RE.test(finalText)) {
+          return await finalizeWith("failed", {
+            errorMessage:
+              "Harness returned raw tool-call markup instead of a managed tool execution.",
+          });
+        }
+        if (
+          payload.browser_automation_enabled === true &&
+          explicitBrowserRequested &&
+          !hasManagedBrowserEvidence(toolInvocations)
+        ) {
+          // Browser evidence must be established before a matched document
+          // plate can move the run into generation-only composition. Without
+          // this ordering, a Browser-shaped prompt that also matched a report
+          // plate could produce a convincing document from model-authored
+          // claims while never invoking the managed Browser.
+          return await finalizeWith("failed", {
+            errorMessage:
+              "Harness Browser was explicitly requested but no successful managed Browser invocation was observed.",
+          });
+        }
         if (
           documentEmissionRequired &&
           emissionSuccesses === 0 &&
@@ -2330,12 +2353,6 @@ export async function runHarnessTurn(
             },
           ];
           continue;
-        }
-        if (RAW_HARNESS_TOOL_MARKUP_RE.test(finalText)) {
-          return await finalizeWith("failed", {
-            errorMessage:
-              "Harness returned raw tool-call markup instead of a managed tool execution.",
-          });
         }
         if (
           payload.browser_automation_enabled === true &&

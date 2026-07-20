@@ -1536,6 +1536,99 @@ describe("runHarnessTurn — happy path", () => {
     );
   });
 
+  it("requires managed Browser evidence before entering matched plate composition", async () => {
+    const deps = makeDeps([
+      stream(
+        textEvents(
+          "I opened example.com and followed the link to IANA Reserved Domains.",
+        ),
+      ),
+    ]);
+    const payload = {
+      ...basePayload(),
+      message:
+        "Use the native managed Browser to open https://example.com and report the final page URL.",
+      browser_automation_enabled: true,
+      document_plates: [
+        {
+          slug: "browser-navigation-report",
+          displayName: "Browser Navigation Report",
+          useFor: "browser navigation reports with a final page URL",
+        },
+      ],
+    };
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("failed");
+    expect(deps.invocations).toHaveLength(1);
+    expect(deps.invocations[0]?.allowedTools).toEqual(["browser"]);
+    expect(deps.emissions).toHaveLength(0);
+    expect(deps.finalizePayloads[0]?.error_message).toContain(
+      "no successful managed Browser invocation",
+    );
+  });
+
+  it("carries managed Browser evidence into matched plate composition", async () => {
+    const deps = makeDeps([
+      stream(
+        managedBrowserEvents(
+          "TITLE=IANA — IANA-managed Reserved Domains\nURL=https://www.iana.org/domains/reserved",
+        ),
+      ),
+      stream(
+        textEvents(
+          JSON.stringify({
+            genre: "browser-navigation-report",
+            title: "Browser Navigation Proof",
+            abstract: "The managed Browser followed the example.com link.",
+            digest_markdown:
+              "## Result\n\nThe final page was IANA-managed Reserved Domains at https://www.iana.org/domains/reserved.",
+            status: "draft",
+          }),
+        ),
+      ),
+    ]);
+    const payload = {
+      ...basePayload(),
+      message:
+        "Use the native managed Browser to open https://example.com and create a browser navigation report with the final page URL.",
+      browser_automation_enabled: true,
+      document_plates: [
+        {
+          slug: "browser-navigation-report",
+          displayName: "Browser Navigation Report",
+          useFor: "browser navigation reports with a final page URL",
+        },
+      ],
+    };
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.invocations).toHaveLength(2);
+    expect(deps.invocations[0]?.allowedTools).toEqual(["browser"]);
+    expect(deps.invocations[1]?.allowedTools).toEqual([
+      "__thinkwork_document_envelope__",
+    ]);
+    expect(deps.internalToolExecutions).toEqual([
+      expect.objectContaining({
+        toolUseId: "browser-1",
+        toolName: "browser",
+        status: "completed",
+      }),
+    ]);
+    expect(deps.finalizePayloads[0]?.response?.tool_invocations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          tool_name: "browser",
+          protocol: "agentcore_harness_internal_v1",
+          status: "completed",
+        }),
+      ]),
+    );
+  });
+
   it("rejects raw function-call markup instead of publishing a fabricated Browser success", async () => {
     const deps = makeDeps([
       stream(
@@ -2256,7 +2349,7 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
         name: "goal_complete",
       }),
     ]);
-    expect(deps.invocations[1]?.allowedTools).toBeUndefined();
+    expect(deps.invocations[1]?.allowedTools).toEqual(["goal_complete"]);
     expect(JSON.stringify(deps.invocations[1].messages)).toContain(
       "without governed completion evidence",
     );
@@ -2295,7 +2388,7 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
         name: "goal_complete",
       }),
     ]);
-    expect(deps.invocations[1]?.allowedTools).toBeUndefined();
+    expect(deps.invocations[1]?.allowedTools).toEqual(["goal_complete"]);
     expect(deps.finalizePayloads[0].response?.goal_run).toMatchObject({
       status: "paused",
       summary: "More work remains after verification.",
