@@ -1,6 +1,7 @@
 /**
- * Living Map host tests (THINK-320 U6): canvas + review rail side by side,
- * canvas overflow surfacing in the rail (R18), node focus opening the
+ * Living Map host tests (THINK-320 U6): a full-width canvas with the review
+ * queue behind a badged toolbar icon that opens it as a sheet, canvas
+ * overflow surfacing in the queue's banner (R18), node focus opening the
  * evidence panel, the add-triple gesture opening the shared form (R7), and
  * decision completion refreshing both readers of the schema-graph feed.
  */
@@ -20,6 +21,7 @@ const {
   graphRefetchMock,
   railProps,
   sheetProps,
+  sheetOpenChange,
   formProps,
   railReexecuteMock,
   queryState,
@@ -29,6 +31,7 @@ const {
   graphRefetchMock: vi.fn(),
   railProps: { current: null as any },
   sheetProps: { current: null as any },
+  sheetOpenChange: { current: null as ((open: boolean) => void) | null },
   formProps: { current: null as any },
   railReexecuteMock: vi.fn(),
   queryState: {
@@ -104,11 +107,16 @@ vi.mock("@thinkwork/ui", async (importOriginal) => {
     ...actual,
     Sheet: ({
       open,
+      onOpenChange,
       children,
     }: {
       open?: boolean;
+      onOpenChange?: (open: boolean) => void;
       children?: React.ReactNode;
-    }) => (open ? <div>{children}</div> : null),
+    }) => {
+      sheetOpenChange.current = onOpenChange ?? null;
+      return open ? <div>{children}</div> : null;
+    },
     SheetContent: ({ children }: { children?: React.ReactNode }) => (
       <div>{children}</div>
     ),
@@ -176,6 +184,7 @@ describe("OntologyMapView", () => {
     graphProps.current = null;
     railProps.current = null;
     sheetProps.current = null;
+    sheetOpenChange.current = null;
     formProps.current = null;
     queryState.graph = {
       data: { ontologySchemaGraph: GRAPH },
@@ -185,21 +194,62 @@ describe("OntologyMapView", () => {
     window.localStorage.clear();
   });
 
-  it("hosts the self-fetching canvas and the review rail side by side", () => {
+  const openQueue = () =>
+    fireEvent.click(screen.getByRole("button", { name: /review queue/i }));
+
+  it("hosts the full-width canvas with no persistent rail column", () => {
     render(<OntologyMapView />);
 
     expect(screen.getByTestId("ontology-graph")).toBeTruthy();
-    expect(screen.getByTestId("review-rail")).toBeTruthy();
     expect(graphProps.current.tenantId).toBe("tenant-1");
-    // Only still-pending candidates reach the rail.
+    // The review queue is behind the toolbar icon — never a reserved column.
+    expect(screen.queryByTestId("review-rail")).toBeNull();
+  });
+
+  it("shows the pending count as a badge on the queue icon", () => {
+    render(<OntologyMapView />);
+
+    const trigger = screen.getByRole("button", { name: /review queue/i });
+    expect(trigger.textContent).toContain("1");
+  });
+
+  it("hides the badge when nothing is pending", () => {
+    queryState.graph = {
+      data: { ontologySchemaGraph: { ...GRAPH, candidates: [] } },
+      fetching: false,
+      error: undefined,
+    };
+    render(<OntologyMapView />);
+
+    const trigger = screen.getByRole("button", { name: /review queue/i });
+    expect(trigger.textContent).not.toContain("0");
+  });
+
+  it("opens the review queue sheet from the toolbar icon", () => {
+    render(<OntologyMapView />);
+
+    openQueue();
+
+    expect(screen.getByTestId("review-rail")).toBeTruthy();
+    // Only still-pending candidates reach the queue.
     expect(railProps.current.candidates).toHaveLength(1);
     expect(railProps.current.candidates[0].itemId).toBe("item-1");
   });
 
-  it("forwards canvas ghost overflow to the rail banner (R18)", () => {
+  it("closing the sheet dismisses the queue", () => {
+    render(<OntologyMapView />);
+
+    openQueue();
+    act(() => sheetOpenChange.current?.(false));
+
+    expect(screen.queryByTestId("review-rail")).toBeNull();
+  });
+
+  it("forwards canvas ghost overflow to the queue banner (R18)", () => {
     render(<OntologyMapView />);
 
     act(() => graphProps.current.onCandidateOverflow(7));
+    openQueue();
     expect(railProps.current.overflowCount).toBe(7);
   });
 
@@ -245,15 +295,22 @@ describe("OntologyMapView", () => {
     });
   });
 
-  it("opens the evidence panel from a rail row", () => {
+  it("opens the evidence panel from a queue row, with Back returning to the queue", () => {
     render(<OntologyMapView />);
 
+    openQueue();
     act(() => railProps.current.onSelect(GRAPH.candidates[0]));
 
     expect(sheetProps.current.focus).toMatchObject({
       kind: "candidate",
       itemId: "item-1",
     });
+    // Queue → evidence is a push: the panel gets a back-stack entry and
+    // Back lands on the queue sheet again.
+    expect(sheetProps.current.historyDepth).toBe(1);
+    act(() => sheetProps.current.onBack());
+    expect(screen.getByTestId("review-rail")).toBeTruthy();
+    expect(screen.queryByTestId("candidate-sheet")).toBeNull();
   });
 
   it("opens the shared triple form from the add-triple gesture (R7)", () => {
@@ -279,6 +336,7 @@ describe("OntologyMapView", () => {
   it("pushes the candidate into the form editor from the panel's Edit", () => {
     render(<OntologyMapView />);
 
+    openQueue();
     act(() => railProps.current.onSelect(GRAPH.candidates[0]));
     act(() =>
       sheetProps.current.onEdit({
@@ -298,9 +356,10 @@ describe("OntologyMapView", () => {
     expect(screen.getByTestId("candidate-sheet")).toBeTruthy();
   });
 
-  it("refreshes canvas and rail after a decision, then closes the sheet", () => {
+  it("refreshes canvas and queue after a decision, then closes the sheet", () => {
     render(<OntologyMapView />);
 
+    openQueue();
     act(() => railProps.current.onSelect(GRAPH.candidates[0]));
     act(() => sheetProps.current.onActionComplete());
 

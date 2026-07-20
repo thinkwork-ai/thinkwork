@@ -194,8 +194,11 @@ const CHANGE_SETS = [
 
 function openCandidateSheet() {
   render(<OntologyMapView />);
-  fireEvent.click(screen.getByRole("button", { name: /Work Order/ }));
+  // The queue now lives behind the badged toolbar icon: open the sheet,
+  // then drill into the candidate row.
+  fireEvent.click(screen.getByRole("button", { name: /review queue/i }));
   expect(screen.getByTestId("sheet")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /Work Order/ }));
 }
 
 describe("OntologyMapView decision refresh (real sheet)", () => {

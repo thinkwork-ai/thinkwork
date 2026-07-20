@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "urql";
-import { Plus, X } from "lucide-react";
+import { Inbox, Plus, X } from "lucide-react";
 import { Button, Sheet, SheetContent } from "@thinkwork/ui";
 import {
   OntologyGraph,
@@ -30,6 +30,7 @@ import {
 } from "./OntologyTripleForm";
 
 type SheetEntry =
+  | { kind: "queue" }
   | { kind: "focus"; focus: OntologyFocus }
   | { kind: "form"; editItem: OntologyEditableItem | null };
 
@@ -42,10 +43,12 @@ export const BASELINE_TYPE_COUNT = 4;
 
 /**
  * Living Map view (THINK-320 U6): the schema-graph canvas (self-fetching
- * @thinkwork/graph OntologyGraph) side by side with the review rail, plus
- * the Explorer-style Sheet hosting the evidence panel and the shared
- * triple form. The rail reads a typed copy of the same ontologySchemaGraph
- * feed; canvas ghost overflow (R18) surfaces as the rail's banner.
+ * @thinkwork/graph OntologyGraph) at full content width, with the review
+ * queue behind a badged toolbar icon that opens it as a slide-over sheet —
+ * the same Explorer-style Sheet that hosts the evidence panel and the
+ * shared triple form (one back-stack: queue → evidence → edit form). The
+ * queue reads a typed copy of the same ontologySchemaGraph feed; canvas
+ * ghost overflow (R18) surfaces as the queue's banner inside the sheet.
  *
  * U7 additions: a dismissible day-one "install a starter pack" callout for
  * fresh tenants (R12) and an `initialFocus` handoff so a pack install lands
@@ -110,18 +113,18 @@ export function OntologyMapView({
   const pop = () => setStack((current) => current.slice(0, -1));
   const closeSheet = () => setStack([]);
 
+  // Queue rows push onto the stack so the evidence view's Back returns to
+  // the queue sheet.
   const openCandidate = (candidate: OntologyRailCandidate) => {
-    setStack([
-      {
-        kind: "focus",
-        focus: {
-          kind: "candidate",
-          itemId: candidate.itemId,
-          changeSetId: candidate.changeSetId,
-          label: ontologyCandidateLabel(candidate),
-        },
+    push({
+      kind: "focus",
+      focus: {
+        kind: "candidate",
+        itemId: candidate.itemId,
+        changeSetId: candidate.changeSetId,
+        label: ontologyCandidateLabel(candidate),
       },
-    ]);
+    });
   };
 
   const onNodeClick = useCallback((node: OntologyGraphNode) => {
@@ -191,24 +194,46 @@ export function OntologyMapView({
     candidates.length === 0 &&
     !calloutDismissed;
 
+  const pendingCount = candidates.length;
+
   return (
-    <div className="flex h-full min-h-0 w-full gap-4">
-      <div className="border-border relative min-w-0 flex-1 overflow-hidden rounded-lg border">
+    <div className="flex h-full min-h-0 w-full flex-col">
+      {/* The map's toolbar (top-right of the Living Map header area): the
+          add-triple gesture next to the badged review-queue trigger. */}
+      <div className="mb-3 flex shrink-0 items-center justify-end gap-2">
+        <Button
+          size="sm"
+          onClick={() => setStack([{ kind: "form", editItem: null }])}
+        >
+          <Plus className="mr-1 size-3.5" aria-hidden />
+          Add triple
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="relative"
+          aria-label={`Review queue (${pendingCount} pending)`}
+          onClick={() => setStack([{ kind: "queue" }])}
+        >
+          <Inbox className="size-4" aria-hidden />
+          {pendingCount > 0 ? (
+            <span
+              aria-hidden
+              className="bg-primary text-primary-foreground absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium leading-none"
+            >
+              {pendingCount}
+            </span>
+          ) : null}
+        </Button>
+      </div>
+
+      <div className="border-border relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border">
         <OntologyGraph
           ref={graphRef}
           tenantId={effectiveTenantId}
           onNodeClick={onNodeClick}
           onCandidateOverflow={setOverflowCount}
         />
-        <div className="absolute right-3 top-3 z-30">
-          <Button
-            size="sm"
-            onClick={() => setStack([{ kind: "form", editItem: null }])}
-          >
-            <Plus className="mr-1 size-3.5" aria-hidden />
-            Add triple
-          </Button>
-        </div>
         {showPackCallout ? (
           <div
             role="status"
@@ -240,17 +265,6 @@ export function OntologyMapView({
         ) : null}
       </div>
 
-      <div className="flex w-80 shrink-0 flex-col">
-        <OntologyReviewRail
-          candidates={candidates}
-          loading={railResult.fetching && !railResult.data}
-          error={railResult.error?.message ?? null}
-          overflowCount={overflowCount}
-          selectedItemId={selectedItemId}
-          onSelect={openCandidate}
-        />
-      </div>
-
       <Sheet
         open={stack.length > 0}
         onOpenChange={(open) => {
@@ -258,7 +272,18 @@ export function OntologyMapView({
         }}
       >
         <SheetContent className="flex flex-col sm:max-w-lg">
-          {top?.kind === "focus" ? (
+          {top?.kind === "queue" ? (
+            <div className="flex min-h-0 flex-1 flex-col p-6">
+              <OntologyReviewRail
+                candidates={candidates}
+                loading={railResult.fetching && !railResult.data}
+                error={railResult.error?.message ?? null}
+                overflowCount={overflowCount}
+                selectedItemId={selectedItemId}
+                onSelect={openCandidate}
+              />
+            </div>
+          ) : top?.kind === "focus" ? (
             <OntologyCandidateSheet
               tenantId={effectiveTenantId}
               focus={top.focus}
