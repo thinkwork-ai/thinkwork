@@ -14,9 +14,11 @@
  *   - Filtering and focus dim in place via the painters; no interaction
  *     rebuilds graphData, re-registers forces, or resets the camera.
  *   - Live candidate arrival merges by stable id with IN-PLACE mutation of
- *     the existing graphData arrays. The graphData container object and
- *     every surviving node object keep their identity across refetches so
- *     the d3 simulation never restarts (`mergeOntologyGraphData`).
+ *     the existing graphData arrays. The arrays and every surviving
+ *     node/link object keep their identity across refetches so the d3
+ *     simulation never restarts (`mergeOntologyGraphData`); a fresh shallow
+ *     engine container per merge is what makes the react wrapper re-ingest
+ *     arrivals at all (its ref exposes no graphData setter).
  *   - At most ONTOLOGY_GHOST_CANDIDATE_CAP ghost candidates render at once
  *     (R18); overflow is enforced at data-merge time and surfaced to the
  *     review rail via `onCandidateOverflow`.
@@ -511,14 +513,22 @@ export const OntologyGraph = forwardRef<
   const graphData = graphDataRef.current;
 
   // The react wrapper shallow-compares the graphData prop, so the stable
-  // identity above would never reach the engine on refetch — poke the
-  // kapsule setter directly with the mutated arrays instead. Positions
-  // carry on the surviving node objects, so re-ingestion relaxes gently
-  // rather than restarting the layout.
-  useEffect(() => {
-    if (graphKey === null) return;
-    fgRef.current?.graphData?.(graphDataRef.current);
-  }, [graphKey]);
+  // container identity above would never reach the engine on refetch (the
+  // imperative ref exposes no graphData setter to poke). Hand the engine a
+  // FRESH shallow container per data merge instead: the wrapper re-ingests,
+  // while the node/link OBJECTS (and the live arrays above) keep their
+  // identity, so surviving nodes carry their positions/velocities and
+  // re-ingestion relaxes gently rather than restarting the layout (R17).
+  // Without this, live arrivals never reached the simulation — new ghost
+  // candidates had no coordinates, so they neither rendered nor hit-tested.
+  const engineData = useMemo(
+    () => ({
+      nodes: graphDataRef.current.nodes,
+      links: graphDataRef.current.links,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [graphKey],
+  );
 
   // R18 overflow surfaced to the review rail at data cadence.
   useEffect(() => {
@@ -968,7 +978,7 @@ export const OntologyGraph = forwardRef<
     >
       <ForceGraph2D
         ref={fgRef}
-        graphData={graphData}
+        graphData={engineData}
         width={dims.w}
         height={dims.h}
         backgroundColor="rgba(0,0,0,0)"

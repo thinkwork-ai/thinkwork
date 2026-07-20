@@ -2,6 +2,16 @@ import { useEffect, useRef, useState } from "react";
 
 export type GraphPointerTooltip = { x: number; y: number; text: string };
 
+/**
+ * Screen-space distance (px) a pressed pointer must travel before the
+ * press becomes a node drag. Real mice almost always jitter a pixel or
+ * two between pointerdown and pointerup, and Chrome delivers those as
+ * pointermove events — without a threshold every ordinary click on a
+ * node turned into a zero-length "drag" that pinned the node (fx/fy)
+ * and suppressed the click, so nodes were effectively unclickable.
+ */
+export const DRAG_START_THRESHOLD_PX = 4;
+
 interface UseGraphPointerArgs {
   /** The graph container element (same element the size observer uses). */
   containerEl: HTMLElement | null;
@@ -59,7 +69,12 @@ export function useGraphPointer({
 
     const hoverIdRef = { current: null as string | null };
     const dragRef = {
-      current: null as { node: any; moved: boolean } | null,
+      current: null as {
+        node: any;
+        moved: boolean;
+        startX: number;
+        startY: number;
+      } | null,
     };
     const suppressClickRef = { current: false };
 
@@ -129,7 +144,12 @@ export function useGraphPointer({
       const node = hitNode(x, y);
       if (!node) return;
       event.stopPropagation();
-      dragRef.current = { node, moved: false };
+      dragRef.current = {
+        node,
+        moved: false,
+        startX: event.clientX,
+        startY: event.clientY,
+      };
       updateHover(null);
     };
     const stopIfDragging = (event: Event) => {
@@ -139,6 +159,13 @@ export function useGraphPointer({
     const onWindowPointerMove = (event: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
+      // Sub-threshold movement is click jitter, not a drag: leave the node
+      // unpinned and keep the upcoming click alive.
+      if (!drag.moved) {
+        const dx = event.clientX - drag.startX;
+        const dy = event.clientY - drag.startY;
+        if (Math.hypot(dx, dy) < DRAG_START_THRESHOLD_PX) return;
+      }
       const fg = fgRef.current;
       const { x, y } = localPoint(event);
       const point = fg?.screen2GraphCoords?.(x, y);

@@ -597,9 +597,13 @@ describe("OntologyGraph", () => {
     await waitFor(() => expect(forceGraphCalls.length).toBeGreaterThan(1));
     const nextProps = latestForceGraphProps();
 
-    // The R17 proof: identical container object, identical arrays, and the
-    // surviving node is the SAME object reference — only the arrival is new.
-    expect(nextProps.graphData).toBe(firstGraphData);
+    // The engine container must be a FRESH object per data merge — the
+    // react wrapper shallow-compares the graphData prop, so a stable
+    // container would never re-ingest and live arrivals would neither
+    // render nor hit-test (no simulation coordinates). The R17 no-restart
+    // invariant lives one level down: the ARRAYS and every surviving node
+    // OBJECT keep their identity, so positions/velocities carry over.
+    expect(nextProps.graphData).not.toBe(firstGraphData);
     expect(nextProps.graphData.nodes).toBe(firstGraphData.nodes);
     expect(
       nextProps.graphData.nodes.find(
