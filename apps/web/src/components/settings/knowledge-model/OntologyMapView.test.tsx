@@ -1,9 +1,12 @@
 /**
- * Living Map host tests (THINK-320 U6): a full-width canvas with the review
- * queue behind a badged toolbar icon that opens it as a sheet, canvas
- * overflow surfacing in the queue's banner (R18), node focus opening the
- * evidence panel, the add-triple gesture opening the shared form (R7), and
- * decision completion refreshing both readers of the schema-graph feed.
+ * Living Map host tests (THINK-320 U6): a full-width canvas whose actions
+ * (add-triple + badged review-queue icon) publish to the PAGE HEADER via
+ * the OntologyMapHeaderController (SettingsMemoryHome renders them, the
+ * SettingsMemory refresh-controller pattern), canvas overflow surfacing in
+ * the queue's banner (R18), the chip's "View details" opening the evidence
+ * panel (node clicks only focus-dim + chip inside OntologyGraph), the
+ * add-triple gesture opening the shared form (R7), and decision completion
+ * refreshing both readers of the schema-graph feed.
  */
 
 import React, { act } from "react";
@@ -123,9 +126,26 @@ vi.mock("@thinkwork/ui", async (importOriginal) => {
   };
 });
 
-import { OntologyMapView } from "./OntologyMapView";
+import {
+  OntologyMapView,
+  type OntologyMapHeaderController,
+} from "./OntologyMapView";
 
 afterEach(cleanup);
+
+/** Captured header controller — the page header's view of the map. */
+const headerController = {
+  current: null as OntologyMapHeaderController | null,
+};
+const captureController = (controller: OntologyMapHeaderController | null) => {
+  headerController.current = controller;
+};
+
+function renderMap(props: React.ComponentProps<typeof OntologyMapView> = {}) {
+  return render(
+    <OntologyMapView onHeaderControllerChange={captureController} {...props} />,
+  );
+}
 
 const GRAPH = {
   tenantId: "tenant-1",
@@ -192,41 +212,50 @@ describe("OntologyMapView", () => {
       error: undefined,
     };
     window.localStorage.clear();
+    headerController.current = null;
   });
 
-  const openQueue = () =>
-    fireEvent.click(screen.getByRole("button", { name: /review queue/i }));
+  const openQueue = () => act(() => headerController.current?.openQueue());
 
-  it("hosts the full-width canvas with no persistent rail column", () => {
-    render(<OntologyMapView />);
+  it("hosts the full-width canvas with no local toolbar or rail column", () => {
+    renderMap();
 
     expect(screen.getByTestId("ontology-graph")).toBeTruthy();
     expect(graphProps.current.tenantId).toBe("tenant-1");
-    // The review queue is behind the toolbar icon — never a reserved column.
+    // The review queue is behind the header icon — never a reserved column,
+    // and the actions render in the page header, not a map-local toolbar.
     expect(screen.queryByTestId("review-rail")).toBeNull();
+    expect(screen.queryByRole("button", { name: /review queue/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /add triple/i })).toBeNull();
   });
 
-  it("shows the pending count as a badge on the queue icon", () => {
-    render(<OntologyMapView />);
+  it("publishes the pending count to the header controller", () => {
+    renderMap();
 
-    const trigger = screen.getByRole("button", { name: /review queue/i });
-    expect(trigger.textContent).toContain("1");
+    expect(headerController.current?.pendingCount).toBe(1);
   });
 
-  it("hides the badge when nothing is pending", () => {
+  it("publishes a zero pending count when nothing is pending", () => {
     queryState.graph = {
       data: { ontologySchemaGraph: { ...GRAPH, candidates: [] } },
       fetching: false,
       error: undefined,
     };
-    render(<OntologyMapView />);
+    renderMap();
 
-    const trigger = screen.getByRole("button", { name: /review queue/i });
-    expect(trigger.textContent).not.toContain("0");
+    expect(headerController.current?.pendingCount).toBe(0);
   });
 
-  it("opens the review queue sheet from the toolbar icon", () => {
-    render(<OntologyMapView />);
+  it("clears the header controller on unmount", () => {
+    const view = renderMap();
+
+    expect(headerController.current).not.toBeNull();
+    view.unmount();
+    expect(headerController.current).toBeNull();
+  });
+
+  it("opens the review queue sheet from the header queue action", () => {
+    renderMap();
 
     openQueue();
 
@@ -237,7 +266,7 @@ describe("OntologyMapView", () => {
   });
 
   it("closing the sheet dismisses the queue", () => {
-    render(<OntologyMapView />);
+    renderMap();
 
     openQueue();
     act(() => sheetOpenChange.current?.(false));
@@ -246,15 +275,15 @@ describe("OntologyMapView", () => {
   });
 
   it("forwards canvas ghost overflow to the queue banner (R18)", () => {
-    render(<OntologyMapView />);
+    renderMap();
 
     act(() => graphProps.current.onCandidateOverflow(7));
     openQueue();
     expect(railProps.current.overflowCount).toBe(7);
   });
 
-  it("opens the evidence panel when a ghost node is clicked (AE2 entry)", () => {
-    render(<OntologyMapView />);
+  it("opens the evidence panel from a ghost chip's View details (AE2 entry)", () => {
+    renderMap();
 
     act(() =>
       graphProps.current.onNodeClick({
@@ -276,8 +305,8 @@ describe("OntologyMapView", () => {
     });
   });
 
-  it("opens the definition panel when an approved type is clicked (R6 entry)", () => {
-    render(<OntologyMapView />);
+  it("opens the definition panel from an approved type chip's View details (R6 entry)", () => {
+    renderMap();
 
     act(() =>
       graphProps.current.onNodeClick({
@@ -296,7 +325,7 @@ describe("OntologyMapView", () => {
   });
 
   it("opens the evidence panel from a queue row, with Back returning to the queue", () => {
-    render(<OntologyMapView />);
+    renderMap();
 
     openQueue();
     act(() => railProps.current.onSelect(GRAPH.candidates[0]));
@@ -313,10 +342,10 @@ describe("OntologyMapView", () => {
     expect(screen.queryByTestId("candidate-sheet")).toBeNull();
   });
 
-  it("opens the shared triple form from the add-triple gesture (R7)", () => {
-    render(<OntologyMapView />);
+  it("opens the shared triple form from the header add-triple action (R7)", () => {
+    renderMap();
 
-    fireEvent.click(screen.getByRole("button", { name: /Add triple/ }));
+    act(() => headerController.current?.openAddTriple());
 
     expect(screen.getByTestId("triple-form")).toBeTruthy();
     expect(formProps.current.editItem).toBeNull();
@@ -334,7 +363,7 @@ describe("OntologyMapView", () => {
   });
 
   it("pushes the candidate into the form editor from the panel's Edit", () => {
-    render(<OntologyMapView />);
+    renderMap();
 
     openQueue();
     act(() => railProps.current.onSelect(GRAPH.candidates[0]));
@@ -357,7 +386,7 @@ describe("OntologyMapView", () => {
   });
 
   it("refreshes canvas and queue after a decision, then closes the sheet", () => {
-    render(<OntologyMapView />);
+    renderMap();
 
     openQueue();
     act(() => railProps.current.onSelect(GRAPH.candidates[0]));
@@ -436,9 +465,9 @@ describe("OntologyMapView", () => {
   });
 
   it("refreshes without closing after a form save conflict refresh (AE1 ghost via refetch)", () => {
-    render(<OntologyMapView />);
+    renderMap();
 
-    fireEvent.click(screen.getByRole("button", { name: /Add triple/ }));
+    act(() => headerController.current?.openAddTriple());
     act(() => formProps.current.onSaved());
 
     // Save success closes the form and re-fetches — the new triple renders

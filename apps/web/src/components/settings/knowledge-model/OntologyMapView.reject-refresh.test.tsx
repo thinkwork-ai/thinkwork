@@ -133,9 +133,16 @@ vi.mock("@thinkwork/ui", async (importOriginal) => {
   };
 });
 
-import { OntologyMapView } from "./OntologyMapView";
+import {
+  OntologyMapView,
+  type OntologyMapHeaderController,
+} from "./OntologyMapView";
 
 afterEach(cleanup);
+
+const headerController = {
+  current: null as OntologyMapHeaderController | null,
+};
 
 const ITEM = {
   id: "item-1",
@@ -193,10 +200,17 @@ const CHANGE_SETS = [
 ];
 
 function openCandidateSheet() {
-  render(<OntologyMapView />);
-  // The queue now lives behind the badged toolbar icon: open the sheet,
+  render(
+    <OntologyMapView
+      onHeaderControllerChange={(controller) => {
+        headerController.current = controller;
+      }}
+    />,
+  );
+  // The queue lives behind the badged inbox icon in the PAGE HEADER (the
+  // map publishes the gesture via its header controller): open the sheet,
   // then drill into the candidate row.
-  fireEvent.click(screen.getByRole("button", { name: /review queue/i }));
+  act(() => headerController.current?.openQueue());
   expect(screen.getByTestId("sheet")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: /Work Order/ }));
 }
@@ -207,6 +221,7 @@ describe("OntologyMapView decision refresh (real sheet)", () => {
     railReexecuteMock.mockReset();
     approveMock.mockReset();
     rejectItemMock.mockReset();
+    headerController.current = null;
     queryState.schemaGraph = {
       data: { ontologySchemaGraph: SCHEMA_GRAPH },
       fetching: false,

@@ -109,7 +109,11 @@ export interface OntologyGraphHandle {
 interface OntologyGraphProps {
   tenantId: string;
   searchQuery?: string;
-  /** Fires on canvas node click (type or ghost) for the host detail panel. */
+  /**
+   * Fires when the selected-node chip's "View details" is clicked (type or
+   * ghost) for the host detail panel. A canvas node click only focus-dims
+   * in place and surfaces the chip — Memory/Wiki graph parity.
+   */
   onNodeClick?: (node: OntologyGraphNode) => void;
   /**
    * R18 overflow: fires with the count of renderable ghost candidates that
@@ -570,6 +574,14 @@ export const OntologyGraph = forwardRef<
   const focusRef = useRef<GraphFocusState | null>(null);
   focusRef.current = focus;
 
+  // The focused node renders as an overlay chip instead of immediately
+  // opening the host detail sheet — clicking a node should not shift the
+  // layout mid-exploration (Memory/Wiki graph parity). Clicking the chip's
+  // "View details" opens the sheet via `onNodeClick`.
+  const [selectedNode, setSelectedNode] = useState<OntologyGraphNode | null>(
+    null,
+  );
+
   const searchClassification = useMemo<GraphClassification | null>(
     () => (matchedIds ? { matchedIds, neighborIds: new Set() } : null),
     [matchedIds],
@@ -583,7 +595,10 @@ export const OntologyGraph = forwardRef<
   const matchedIdsRef = useRef<Set<string> | null>(null);
   matchedIdsRef.current = matchedIds;
 
-  const exitFocus = useCallback(() => setFocus(null), []);
+  const exitFocus = useCallback(() => {
+    setFocus(null);
+    setSelectedNode(null);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -895,7 +910,9 @@ export const OntologyGraph = forwardRef<
         degreeUsed: expansion.degreeUsed,
         truncated: expansion.truncated,
       });
-      onNodeClick?.(node as OntologyGraphNode);
+      // Focus dims in place and surfaces the chip; the detail sheet only
+      // opens from the chip's "View details" (sibling-graph UX).
+      setSelectedNode(node as OntologyGraphNode);
     },
     onBackgroundClick: () => {
       if (focusRef.current) exitFocus();
@@ -1010,6 +1027,19 @@ export const OntologyGraph = forwardRef<
         }}
       />
       <div className="pointer-events-none absolute inset-0 z-20">
+        {focus && selectedNode && (
+          <div className="pointer-events-auto absolute top-3 right-3 z-30 flex flex-col items-end gap-1.5">
+            <button
+              type="button"
+              aria-label={`Open details for ${selectedNode.label}`}
+              className="flex items-center gap-2 text-xs bg-background/90 border border-border rounded-full px-3 py-1.5 hover:bg-accent hover:text-accent-foreground"
+              onClick={() => onNodeClick?.(selectedNode)}
+            >
+              <span className="font-medium">{selectedNode.label}</span>
+              <span className="text-muted-foreground">View details</span>
+            </button>
+          </div>
+        )}
         {tooltip && (
           <div
             className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md whitespace-nowrap backdrop-blur-sm"

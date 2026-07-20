@@ -43,6 +43,26 @@ describe("SettingsMemoryHome", () => {
     expect(source).toContain("setRefreshPending(true)");
   });
 
+  it("hosts the Living Map actions in the page header on the Ontology tab", () => {
+    // Icon-only ghost buttons with hover tooltips — the Agents page header
+    // TooltipIconButton pattern — driven by the controller the map
+    // publishes (SettingsMemory refresh-controller pattern).
+    expect(source).toContain("OntologyMapHeaderController");
+    expect(source).toContain("onMapHeaderControllerChange");
+    expect(source).toContain('label="Add triple"');
+    expect(source).toContain('label="Review queue"');
+    expect(source).toContain("ontologyMapController.openAddTriple()");
+    expect(source).toContain("ontologyMapController.openQueue()");
+    expect(source).toMatch(/activeTab === "ontology" && ontologyMapController/);
+    // The queue icon keeps its pending-count badge and accessible name.
+    expect(source).toContain("ontologyMapController.pendingCount > 0");
+    expect(source).toContain(
+      "`Review queue (${ontologyMapController.pendingCount} pending)`",
+    );
+    // Icon-only: no labeled pill buttons in the header actions.
+    expect(source).not.toContain(">Add triple</Button>");
+  });
+
   it("renders the active facet selected by the current route", () => {
     expect(source).toContain("tabForPath");
     expect(source).toMatch(/<SettingsMemory\s+[\s\S]*?\bembedded\b/);

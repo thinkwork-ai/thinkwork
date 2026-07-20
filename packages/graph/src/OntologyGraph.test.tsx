@@ -693,3 +693,88 @@ describe("OntologyGraph", () => {
     });
   });
 });
+
+/**
+ * Selected-node chip (Memory/Wiki graph parity): a canvas node click only
+ * focus-dims in place and surfaces the top-right "<label> View details"
+ * chip; `onNodeClick` fires from the chip, never from the canvas click.
+ * The pointer geometry rides useGraphPointer with the identity
+ * screen2GraphCoords of the engine mock, so a click at a node's (x, y)
+ * hit-tests that node.
+ */
+describe("OntologyGraph selected-node chip", () => {
+  async function renderWithNodeAt(onNodeClick: ReturnType<typeof vi.fn>) {
+    const { props } = await renderGraph(baseGraph, { onNodeClick });
+    // Give every node simulation coordinates so hit-testing can work;
+    // park the customer node at (100, 100), far from the others.
+    for (const [i, node] of (props.graphData.nodes as any[]).entries()) {
+      node.x = 400 + i * 60;
+      node.y = 400;
+    }
+    const target = props.graphData.nodes.find(
+      (node: any) => node.id === "type:customer",
+    );
+    target.x = 100;
+    target.y = 100;
+    const container = screen.getByTestId("graph-container");
+    return { container, target };
+  }
+
+  it("shows the chip on node click without firing onNodeClick", async () => {
+    const onNodeClick = vi.fn();
+    const { container } = await renderWithNodeAt(onNodeClick);
+
+    fireEvent.click(container, { clientX: 100, clientY: 100 });
+
+    expect(
+      screen.getByRole("button", { name: "Open details for Customer" }),
+    ).toBeTruthy();
+    expect(screen.getByText("View details")).toBeTruthy();
+    expect(onNodeClick).not.toHaveBeenCalled();
+  });
+
+  it("fires onNodeClick with the selected node from the chip's View details", async () => {
+    const onNodeClick = vi.fn();
+    const { container, target } = await renderWithNodeAt(onNodeClick);
+
+    fireEvent.click(container, { clientX: 100, clientY: 100 });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open details for Customer" }),
+    );
+
+    expect(onNodeClick).toHaveBeenCalledTimes(1);
+    expect(onNodeClick.mock.calls[0]![0]).toBe(target);
+  });
+
+  it("moves the chip to another node and clears it on background click", async () => {
+    const onNodeClick = vi.fn();
+    const { container } = await renderWithNodeAt(onNodeClick);
+    const other = latestForceGraphProps().graphData.nodes.find(
+      (node: any) => node.id === "type:person",
+    );
+    other.x = 200;
+    other.y = 200;
+
+    fireEvent.click(container, { clientX: 100, clientY: 100 });
+    fireEvent.click(container, { clientX: 200, clientY: 200 });
+    expect(
+      screen.getByRole("button", { name: "Open details for Person" }),
+    ).toBeTruthy();
+
+    // Background: nowhere near any node.
+    fireEvent.click(container, { clientX: 10, clientY: 10 });
+    expect(screen.queryByText("View details")).toBeNull();
+    expect(onNodeClick).not.toHaveBeenCalled();
+  });
+
+  it("clears focus and chip on Escape", async () => {
+    const onNodeClick = vi.fn();
+    const { container } = await renderWithNodeAt(onNodeClick);
+
+    fireEvent.click(container, { clientX: 100, clientY: 100 });
+    expect(screen.getByText("View details")).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByText("View details")).toBeNull();
+  });
+});

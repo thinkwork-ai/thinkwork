@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "urql";
-import { Inbox, Plus, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Button, Sheet, SheetContent } from "@thinkwork/ui";
 import {
   OntologyGraph,
@@ -35,6 +35,18 @@ type SheetEntry =
   | { kind: "form"; editItem: OntologyEditableItem | null };
 
 /**
+ * Header-action surface lifted to the page-header owner (SettingsMemoryHome),
+ * following the SettingsMemory refresh/raw-units controller pattern: the map
+ * publishes its pending count and the two gestures; the header renders the
+ * "+ Add triple" button and the badged review-queue inbox icon.
+ */
+export interface OntologyMapHeaderController {
+  pendingCount: number;
+  openAddTriple: () => void;
+  openQueue: () => void;
+}
+
+/**
  * The platform seeds every tenant with 4 baseline types (customer, person,
  * project, task). A tenant still at or under that count with nothing pending
  * has never grown its schema — the day-one pack callout's trigger (R12).
@@ -44,8 +56,10 @@ export const BASELINE_TYPE_COUNT = 4;
 /**
  * Living Map view (THINK-320 U6): the schema-graph canvas (self-fetching
  * @thinkwork/graph OntologyGraph) at full content width, with the review
- * queue behind a badged toolbar icon that opens it as a slide-over sheet —
- * the same Explorer-style Sheet that hosts the evidence panel and the
+ * queue behind a badged inbox icon in the PAGE HEADER (published to
+ * SettingsMemoryHome via `onHeaderControllerChange`, next to "+ Add
+ * triple") that opens it as a slide-over sheet — the same Explorer-style
+ * Sheet that hosts the evidence panel and the
  * shared triple form (one back-stack: queue → evidence → edit form). The
  * queue reads a typed copy of the same ontologySchemaGraph feed; canvas
  * ghost overflow (R18) surfaces as the queue's banner inside the sheet.
@@ -58,6 +72,7 @@ export function OntologyMapView({
   initialFocus = null,
   onInitialFocusConsumed,
   onOpenPacks,
+  onHeaderControllerChange,
 }: {
   /** Open the sheet on this focus at mount (pack-install handoff, AE4). */
   initialFocus?: OntologyFocus | null;
@@ -65,6 +80,10 @@ export function OntologyMapView({
   onInitialFocusConsumed?: () => void;
   /** Navigate to the starter-pack browser (day-one callout, R12). */
   onOpenPacks?: () => void;
+  /** Publish the header actions (add-triple + badged queue icon) upward. */
+  onHeaderControllerChange?: (
+    controller: OntologyMapHeaderController | null,
+  ) => void;
 } = {}) {
   const { tenantId, userId } = useTenant();
   const effectiveTenantId = tenantId ?? null;
@@ -173,6 +192,22 @@ export function OntologyMapView({
     return slugs;
   }, [graph, candidates]);
 
+  const pendingCount = candidates.length;
+
+  // Publish the header actions to the page-header owner (SettingsMemoryHome
+  // renders them at the far right of the top bar, like every other settings
+  // page). Same lifecycle as SettingsMemory's refresh controller: re-publish
+  // when the pending count changes, clear on unmount.
+  useEffect(() => {
+    if (!onHeaderControllerChange) return;
+    onHeaderControllerChange({
+      pendingCount,
+      openAddTriple: () => setStack([{ kind: "form", editItem: null }]),
+      openQueue: () => setStack([{ kind: "queue" }]),
+    });
+    return () => onHeaderControllerChange(null);
+  }, [onHeaderControllerChange, pendingCount]);
+
   if (!effectiveTenantId) {
     return (
       <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
@@ -194,39 +229,8 @@ export function OntologyMapView({
     candidates.length === 0 &&
     !calloutDismissed;
 
-  const pendingCount = candidates.length;
-
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
-      {/* The map's toolbar (top-right of the Living Map header area): the
-          add-triple gesture next to the badged review-queue trigger. */}
-      <div className="mb-3 flex shrink-0 items-center justify-end gap-2">
-        <Button
-          size="sm"
-          onClick={() => setStack([{ kind: "form", editItem: null }])}
-        >
-          <Plus className="mr-1 size-3.5" aria-hidden />
-          Add triple
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="relative"
-          aria-label={`Review queue (${pendingCount} pending)`}
-          onClick={() => setStack([{ kind: "queue" }])}
-        >
-          <Inbox className="size-4" aria-hidden />
-          {pendingCount > 0 ? (
-            <span
-              aria-hidden
-              className="bg-primary text-primary-foreground absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium leading-none"
-            >
-              {pendingCount}
-            </span>
-          ) : null}
-        </Button>
-      </div>
-
       <div className="border-border relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border">
         <OntologyGraph
           ref={graphRef}
@@ -290,6 +294,7 @@ export function OntologyMapView({
               historyDepth={stack.length - 1}
               onBack={pop}
               onEdit={(item) => push({ kind: "form", editItem: item })}
+              onFocusType={(focus) => push({ kind: "focus", focus })}
               onActionComplete={() => {
                 refreshAll();
                 closeSheet();
