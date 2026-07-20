@@ -142,6 +142,34 @@ describe("ask_user_question schema", () => {
       false,
     );
   });
+
+  it("accepts mapping-candidate metadata: candidateSetId + per-option candidateId (THINK-321 U6)", async () => {
+    const parameters = await schema();
+    const candidateQuestion = question({
+      candidateSetId: "set-1",
+      options: [
+        {
+          label: "Acme Fuel Co",
+          description: "matched on name",
+          candidateId: "cand-1",
+        },
+        {
+          label: "None of these",
+          description: "file for an operator",
+          candidateId: "none",
+        },
+      ],
+    });
+    expect(Check(parameters, { questions: [candidateQuestion] })).toBe(true);
+    // Still optional — plain questions carry no metadata.
+    expect(Check(parameters, { questions: [question()] })).toBe(true);
+    // The metadata is bounded (≤64 chars).
+    expect(
+      Check(parameters, {
+        questions: [question({ candidateSetId: "x".repeat(65) })],
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("ask_user_question execute", () => {

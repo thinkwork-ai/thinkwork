@@ -27,6 +27,9 @@
 export interface UserQuestionEchoOption {
   label: string;
   description: string;
+  /** Mapping-candidate metadata (THINK-321 U6): the candidate id this
+   *  option stood for ("none" on the "None of these" option). */
+  candidateId?: string;
 }
 
 export interface UserQuestionEcho {
@@ -34,6 +37,22 @@ export interface UserQuestionEcho {
   header: string;
   options: UserQuestionEchoOption[];
   multiSelect: boolean;
+  /** Mapping-candidate metadata (THINK-321 U6): set when this question
+   *  presented mapping candidates from propose_mapping_candidates. */
+  candidateSetId?: string;
+}
+
+/** Keep in sync with NONE_OF_THESE_CANDIDATE_ID (pi-extensions
+ *  identity-resolution) and the api candidate-consent lib. */
+const NONE_OF_THESE_CANDIDATE_ID = "none";
+
+/** Conservative id charset — anything else is ignored (never rendered). */
+const CANDIDATE_METADATA_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+function asCandidateMetadataId(value: unknown): string | undefined {
+  return typeof value === "string" && CANDIDATE_METADATA_ID_RE.test(value)
+    ? value
+    : undefined;
 }
 
 export interface UserQuestionAnswerContext {
@@ -86,17 +105,21 @@ export function parsePendingUserQuestions(
           if (!isRecord(rawOption)) continue;
           const label = asTrimmedString(rawOption.label);
           if (!label) continue;
+          const candidateId = asCandidateMetadataId(rawOption.candidateId);
           options.push({
             label,
             description: asTrimmedString(rawOption.description),
+            ...(candidateId ? { candidateId } : {}),
           });
         }
       }
+      const candidateSetId = asCandidateMetadataId(raw.candidateSetId);
       questions.push({
         question: questionText,
         header,
         options,
         multiSelect: raw.multiSelect === true,
+        ...(candidateSetId ? { candidateSetId } : {}),
       });
     }
   }
@@ -221,6 +244,68 @@ function renderAnswerValue(
   return parts.join(", ");
 }
 
+/**
+ * The unique option a single-string card answer matched, or null (free
+ * text, multi-pick, unanswered, ambiguous).
+ */
+function selectedOption(
+  value: unknown,
+  options: UserQuestionEchoOption[],
+): UserQuestionEchoOption | null {
+  const values = Array.isArray(value) ? value : [value];
+  const picked = values.filter(
+    (entry): entry is string => typeof entry === "string",
+  );
+  if (picked.length !== 1) return null;
+  const normalized = normalizeLabel(picked[0]!);
+  if (!normalized) return null;
+  const matches = options.filter(
+    (option) => normalizeLabel(option.label) === normalized,
+  );
+  return matches.length === 1 ? matches[0]! : null;
+}
+
+/**
+ * Resumed-turn miss-path guidance (THINK-321 U6): when a card-answered
+ * question carried mapping-candidate metadata, tell the agent the exact
+ * next call — confirm_mapping with the recorded candidate, or
+ * decline_mapping_candidates on a "None of these" pick (the server has
+ * already recorded the selection; a mismatched echo will be refused).
+ */
+function candidateFlowGuidance(
+  question: UserQuestionEcho,
+  value: unknown,
+): string | null {
+  if (!question.candidateSetId) return null;
+  const option =
+    value === undefined || value === null
+      ? null
+      : selectedOption(value, question.options);
+  if (!option?.candidateId) {
+    return (
+      `This question presented mapping candidates (candidate set ` +
+      `${question.candidateSetId}) but no single candidate pick was ` +
+      "recorded from this answer. Do NOT call confirm_mapping — " +
+      "re-present the candidates via ask_user_question if the mapping " +
+      "is still needed."
+    );
+  }
+  if (option.candidateId === NONE_OF_THESE_CANDIDATE_ID) {
+    return (
+      "The user declined ALL mapping candidates. Call " +
+      `decline_mapping_candidates with candidate_set_id ` +
+      `"${question.candidateSetId}" now — a resolution case is filed ` +
+      "for operators; tell the user and do not re-ask."
+    );
+  }
+  return (
+    `The user selected candidate ${option.candidateId}. Call ` +
+    `confirm_mapping with candidate_set_id "${question.candidateSetId}" ` +
+    `and candidate_id "${option.candidateId}" now, then continue the ` +
+    "answer using the confirmed mapping."
+  );
+}
+
 const UNANSWERED_LINE =
   'Answer: (not answered) — use the " (Recommended)" option if one exists, ' +
   "otherwise use your best judgment.";
@@ -335,10 +420,18 @@ export function formatUserQuestionAnswerContext(
           ? ""
           : renderAnswerValue(value, question.options);
       lines.push(rendered ? `Answer: ${rendered}` : UNANSWERED_LINE);
+      const guidance = candidateFlowGuidance(question, value);
+      if (guidance) lines.push(guidance);
     } else if (context.answeredVia === "card") {
       lines.push(UNANSWERED_LINE);
+      const guidance = candidateFlowGuidance(question, undefined);
+      if (guidance) lines.push(guidance);
     } else {
       lines.push("Answer: see the user's reply.");
+      // Reply-consumed candidate questions record no structured pick — the
+      // consent gate downstream would refuse a confirm, so say so here.
+      const guidance = candidateFlowGuidance(question, undefined);
+      if (guidance) lines.push(guidance);
     }
     lines.push("");
   });

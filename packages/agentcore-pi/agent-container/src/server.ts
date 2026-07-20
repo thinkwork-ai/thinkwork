@@ -1848,9 +1848,10 @@ export async function buildInvocationResources(
     }
   }
 
-  // Identity Resolution (THINK-321 U5) — `resolve_entities` /
-  // `propose_mapping_candidates` / `confirm_mapping` over the API's
-  // entity-identity GraphQL surface. Gated on the
+  // Identity Resolution (THINK-321 U5+U6) — `resolve_entities` /
+  // `propose_mapping_candidates` / `confirm_mapping` /
+  // `decline_mapping_candidates` over the API's entity-identity GraphQL
+  // surface. Gated on the
   // `identity_resolution_enabled` payload flag; skipped in eval mode
   // (user-less). Identity is turn-bound: the provider snapshots the
   // thread-turn reference at entry and the API resolves tenant/user/thread

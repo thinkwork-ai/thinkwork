@@ -94,6 +94,60 @@ describe("renderRoutingMapMarkdown", () => {
     );
   });
 
+  it("renders the parent-rollup rule for entries flagged rollup: 'parent' (THINK-321 U6, R17/AE8)", () => {
+    const content = renderRoutingMapMarkdown({
+      entityTypes: [
+        {
+          slug: "ship-to",
+          name: "Ship-To",
+          entries: [
+            { facet: "deliveries", sourceSystem: "lastmile" },
+            {
+              facet: "crm-touchpoints",
+              sourceSystem: "twenty",
+              note: "company-level crosswalk",
+              rollup: "parent",
+            },
+          ],
+        },
+      ],
+      connectorBySourceSystem: new Map([["lastmile", "lastmile-pg"]]),
+    });
+    // Table note cell carries the marker alongside the authored note.
+    expect(content).toContain("company-level crosswalk (parent rollup)");
+    // Per-type rollup rule: the agent performs the walk and states it.
+    expect(content).toContain(
+      "**Parent rollup:** `crm-touchpoints` for Ship-To routes through the " +
+        "PARENT entity's mapping in twenty.",
+    );
+    expect(content).toContain("resolve the parent with `resolve_entities`");
+    expect(content).toContain("state the rollup in the answer");
+    // Standing instruction explains the marker globally.
+    expect(content).toContain('A "(parent rollup)" entry routes through');
+    // Non-rollup entries get no rollup prose of their own.
+    expect(content).not.toContain("**Parent rollup:** `deliveries`");
+  });
+
+  it("recognizes a 'parent rollup' note as the rollup marker too", () => {
+    const content = renderRoutingMapMarkdown({
+      entityTypes: [
+        {
+          slug: "ship-to",
+          name: "Ship-To",
+          entries: [
+            {
+              facet: "crm-touchpoints",
+              sourceSystem: "twenty",
+              note: "parent rollup via customer",
+            },
+          ],
+        },
+      ],
+      connectorBySourceSystem: new Map(),
+    });
+    expect(content).toContain("**Parent rollup:** `crm-touchpoints`");
+  });
+
   it("is deterministic: identical inputs in any order render identical bytes", () => {
     const shuffled = {
       ...CUSTOMER_TYPE,
