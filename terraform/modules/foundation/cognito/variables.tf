@@ -147,8 +147,8 @@ variable "microsoft_oauth_tenant" {
   default     = ""
 
   validation {
-    condition     = var.microsoft_oauth_tenant == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$", var.microsoft_oauth_tenant))
-    error_message = "microsoft_oauth_tenant must be an Entra directory GUID."
+    condition     = var.microsoft_oauth_tenant == "" || contains(["common", "organizations", "consumers"], var.microsoft_oauth_tenant) || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$", var.microsoft_oauth_tenant))
+    error_message = "microsoft_oauth_tenant must be an Entra directory GUID or one of the Cognito-supported aliases: common, organizations, consumers."
   }
 }
 

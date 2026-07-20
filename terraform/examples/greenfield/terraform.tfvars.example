@@ -74,7 +74,7 @@ db_password = "CHANGE_ME_strong_password_here"
 # google_oauth_client_secret = ""
 # microsoft_oauth_client_id     = ""
 # microsoft_oauth_client_secret = "" # Supply securely; never commit a real value.
-# microsoft_oauth_tenant        = "" # Entra directory GUID; organizations/common are not valid Cognito issuers.
+# microsoft_oauth_tenant        = "" # Entra directory GUID, or common/organizations/consumers (Cognito-supported aliases).
 
 # Tenant-specific Entra IdPs are reconciled by `thinkwork enterprise
 # identity-provider`; Terraform receives safe provider metadata only.

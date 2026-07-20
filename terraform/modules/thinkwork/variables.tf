@@ -64,13 +64,13 @@ variable "microsoft_oauth_client_secret" {
 }
 
 variable "microsoft_oauth_tenant" {
-  description = "Microsoft Entra directory GUID for the deployment's default Microsoft login route. Cognito requires the exact tenant issuer; organizations/common authorities are not valid token issuers."
+  description = "Microsoft Entra tenant for the deployment's default Microsoft login route: a directory GUID or one of the Cognito-supported multi-tenant aliases (common, organizations, consumers)."
   type        = string
   default     = ""
 
   validation {
-    condition     = var.microsoft_oauth_tenant == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$", var.microsoft_oauth_tenant))
-    error_message = "microsoft_oauth_tenant must be an Entra directory GUID."
+    condition     = var.microsoft_oauth_tenant == "" || contains(["common", "organizations", "consumers"], var.microsoft_oauth_tenant) || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$", var.microsoft_oauth_tenant))
+    error_message = "microsoft_oauth_tenant must be an Entra directory GUID or one of the Cognito-supported aliases: common, organizations, consumers."
   }
 }
 

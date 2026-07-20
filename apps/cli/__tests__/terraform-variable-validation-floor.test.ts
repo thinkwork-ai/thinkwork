@@ -48,12 +48,27 @@ describe("terraform variable validation repo-floor compatibility", () => {
           );
           refs.delete(name);
           if (refs.size > 0) {
-            offenders.push(`${file}: variable "${name}" references ${[...refs].join(", ")}`);
+            offenders.push(
+              `${file}: variable "${name}" references ${[...refs].join(", ")}`,
+            );
           }
         }
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  it.each([
+    "terraform/modules/thinkwork/variables.tf",
+    "terraform/modules/foundation/cognito/variables.tf",
+  ])("%s accepts Entra tenant aliases alongside a directory GUID", (path) => {
+    const src = readFileSync(resolve(REPO_ROOT, path), "utf8");
+    expect(src).toMatch(
+      /contains\(\["common", "organizations", "consumers"\], var\.microsoft_oauth_tenant\)/,
+    );
+    expect(src).toMatch(
+      /microsoft_oauth_tenant must be an Entra directory GUID or one of the Cognito-supported aliases/,
+    );
   });
 
   it("active turn-assertion key membership is enforced by a resource precondition", () => {
