@@ -3997,8 +3997,13 @@ def test_saved_plan_apply_revalidates_config_release_state_vars_and_rendered_pla
     tfvars = b'{"stage":"tei-e2e"}\n'
     (tf / "terraform.auto.tfvars.json").write_bytes(tfvars)
     saved_plan_bytes = b"opaque-saved-plan"
-    accepted_plan = b'{"resource_changes":[],"format_version":"1.2"}\n'
-    rendered_plan = b'{\n  "format_version": "1.2",\n  "resource_changes": []\n}\n'
+    accepted_plan = (
+        b'{"resource_changes":[],"format_version":"1.2","timestamp":"2026-07-20T18:40:21Z"}\n'
+    )
+    rendered_plan = (
+        b'{\n  "format_version": "1.2",\n  "resource_changes": [],\n'
+        b'  "timestamp": "2026-07-20T18:49:12Z"\n}\n'
+    )
     descriptor = {
         "contract": runner.TERRAFORM_PLAN_APPROVAL_CONTRACT,
         "deploymentConfigSha256": runner.deployment_config_sha256(payload),

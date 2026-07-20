@@ -984,6 +984,13 @@ def load_approved_plan_descriptor(payload):
     return descriptor, descriptor_ref
 
 
+def comparable_terraform_plan(plan):
+    """Remove render-time metadata while preserving every approved plan decision."""
+    if not isinstance(plan, dict):
+        return plan
+    return {key: value for key, value in plan.items() if key != "timestamp"}
+
+
 def validate_and_materialize_approved_plan(payload, state_identity):
     descriptor, descriptor_ref = load_approved_plan_descriptor(payload)
     if descriptor.get("deploymentConfigSha256") != deployment_config_sha256(payload):
@@ -1020,7 +1027,7 @@ def validate_and_materialize_approved_plan(payload, state_identity):
         run(["terraform", "show", "-json", "tfplan"], cwd=TF, stdout=handle)
     accepted_plan = json.loads(accepted_json.read_text(encoding="utf-8"))
     rendered_plan = json.loads(rendered.read_text(encoding="utf-8"))
-    if rendered_plan != accepted_plan:
+    if comparable_terraform_plan(rendered_plan) != comparable_terraform_plan(accepted_plan):
         raise RuntimeError("Approved saved plan no longer renders to the accepted JSON plan")
     if payload.get("incidentRecovery") is not None:
         delete_addresses = terraform_plan_delete_addresses(rendered_plan)
