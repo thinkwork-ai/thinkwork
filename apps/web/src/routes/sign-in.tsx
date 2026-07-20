@@ -397,7 +397,7 @@ export function SignInPage() {
             <div className="text-center text-xs text-muted-foreground/60">
               <p>
                 {webDeploymentProfile.okForOAuth
-                  ? `${webDeploymentProfile.displayName} · ${webDeploymentProfile.stage} · ${webDeploymentProfile.region}`
+                  ? `${webDeploymentProfile.releaseVersion || webDeploymentProfile.displayName} · ${webDeploymentProfile.stage} · ${webDeploymentProfile.region}`
                   : `Configuration incomplete for ${webDeploymentProfile.stage}`}
               </p>
               {webConfigBlocked && (
