@@ -2192,6 +2192,27 @@ export async function runHarnessTurn(
               "AgentCore Skill Creator ended without a validated draft submission after one corrective continuation.",
           });
         }
+        if (RAW_HARNESS_TOOL_MARKUP_RE.test(finalText)) {
+          return await finalizeWith("failed", {
+            errorMessage:
+              "Harness returned raw tool-call markup instead of a managed tool execution.",
+          });
+        }
+        if (
+          payload.browser_automation_enabled === true &&
+          explicitBrowserRequested &&
+          !hasManagedBrowserEvidence(toolInvocations)
+        ) {
+          // Browser evidence must be established before a matched document
+          // plate can move the run into generation-only composition. Without
+          // this ordering, a Browser-shaped prompt that also matched a report
+          // plate could produce a convincing document from model-authored
+          // claims while never invoking the managed Browser.
+          return await finalizeWith("failed", {
+            errorMessage:
+              "Harness Browser was explicitly requested but no successful managed Browser invocation was observed.",
+          });
+        }
         if (
           documentEmissionRequired &&
           emissionSuccesses === 0 &&
@@ -2330,12 +2351,6 @@ export async function runHarnessTurn(
             },
           ];
           continue;
-        }
-        if (RAW_HARNESS_TOOL_MARKUP_RE.test(finalText)) {
-          return await finalizeWith("failed", {
-            errorMessage:
-              "Harness returned raw tool-call markup instead of a managed tool execution.",
-          });
         }
         if (
           payload.browser_automation_enabled === true &&
