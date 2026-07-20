@@ -694,6 +694,7 @@ describe("SignInPage", () => {
       VITE_COGNITO_CLIENT_ID: "runtime-client-id",
       VITE_COGNITO_DOMAIN: "https://runtime-auth.example.com",
       VITE_DEPLOYMENT_DISPLAY_NAME: "Runtime ThinkWork",
+      VITE_RELEASE_VERSION: "v0.1.0-canary.379",
       VITE_STAGE: "tei-e2e",
       VITE_AWS_REGION: "us-east-1",
     });
@@ -702,7 +703,7 @@ describe("SignInPage", () => {
     render(<SignInPage />);
 
     expect(
-      screen.getByText("Runtime ThinkWork · tei-e2e · us-east-1"),
+      screen.getByText("v0.1.0-canary.379 · tei-e2e · us-east-1"),
     ).toBeTruthy();
     expect(screen.getByText("Sign-in options are unavailable.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Log in" })).toBeNull();
