@@ -8,7 +8,10 @@ import {
   type MemoryRawUnitsController,
   type MemoryRefreshController,
 } from "@/components/settings/SettingsMemory";
-import { SettingsKnowledgeBases } from "@/components/settings/SettingsKnowledgeBases";
+import {
+  SettingsKnowledgeBases,
+  type KnowledgeBasesHeaderController,
+} from "@/components/settings/SettingsKnowledgeBases";
 import { KnowledgeModelTab } from "@/components/settings/knowledge-model/KnowledgeModelTab";
 import type { OntologyMapHeaderController } from "@/components/settings/knowledge-model/OntologyMapView";
 import { SettingsWiki } from "@/components/settings/SettingsWiki";
@@ -43,6 +46,8 @@ export function SettingsMemoryHome() {
     useState<MemoryRawUnitsController | null>(null);
   const [ontologyMapController, setOntologyMapController] =
     useState<OntologyMapHeaderController | null>(null);
+  const [kbController, setKbController] =
+    useState<KnowledgeBasesHeaderController | null>(null);
 
   const updateRefreshController = useCallback(
     (controller: MemoryRefreshController | null) => {
@@ -59,6 +64,12 @@ export function SettingsMemoryHome() {
   const updateOntologyMapController = useCallback(
     (controller: OntologyMapHeaderController | null) => {
       setOntologyMapController(controller);
+    },
+    [],
+  );
+  const updateKbController = useCallback(
+    (controller: KnowledgeBasesHeaderController | null) => {
+      setKbController(controller);
     },
     [],
   );
@@ -153,6 +164,20 @@ export function SettingsMemoryHome() {
       </div>
     ) : null;
 
+  // KBs header action (Ontology-parity): the new-source gesture renders as
+  // a Plus TooltipIconButton in the page header while the KBs tab is active.
+  const kbAction =
+    activeTab === "knowledge-bases" && kbController ? (
+      <TooltipIconButton
+        label="New source"
+        aria-label="New source"
+        data-testid="settings-kb-new-source"
+        onClick={() => kbController.openNewSource()}
+      >
+        <Plus className="size-4" />
+      </TooltipIconButton>
+    ) : null;
+
   usePageHeaderActions({
     title: "Memory",
     breadcrumbs: [{ label: "Memory" }],
@@ -162,8 +187,13 @@ export function SettingsMemoryHome() {
       { to: KNOWLEDGE_BASES, label: "KBs" },
       { to: ONTOLOGY, label: "Ontology" },
     ],
-    action: activeTab === "ontology" ? ontologyAction : refreshAction,
-    actionKey: `memory-refresh:${activeTab}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}:${rawUnitsController ? `${rawUnitsController.showRaw ? "raw" : "curated"}:${rawUnitsController.hiddenCount}` : "no-raw"}:${ontologyMapController ? `ontology:${ontologyMapController.pendingCount}` : "no-ontology"}`,
+    action:
+      activeTab === "ontology"
+        ? ontologyAction
+        : activeTab === "knowledge-bases"
+          ? kbAction
+          : refreshAction,
+    actionKey: `memory-refresh:${activeTab}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}:${rawUnitsController ? `${rawUnitsController.showRaw ? "raw" : "curated"}:${rawUnitsController.hiddenCount}` : "no-raw"}:${ontologyMapController ? `ontology:${ontologyMapController.pendingCount}` : "no-ontology"}:${kbController ? "kb" : "no-kb"}`,
   });
 
   return (
@@ -177,7 +207,10 @@ export function SettingsMemoryHome() {
       ) : null}
       {activeTab === "wiki" ? <SettingsWiki embedded /> : null}
       {activeTab === "knowledge-bases" ? (
-        <SettingsKnowledgeBases embedded />
+        <SettingsKnowledgeBases
+          embedded
+          onHeaderControllerChange={updateKbController}
+        />
       ) : null}
       {activeTab === "ontology" ? (
         <KnowledgeModelTab
