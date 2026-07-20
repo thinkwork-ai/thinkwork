@@ -51,6 +51,24 @@ MIGRATION_MARKER_KINDS = [
     ("-- creates-constraint:", "constraint"),
     ("-- creates:", "object"),
 ]
+NATIVE_AUTH_CUSTOM_ATTRIBUTES = [
+    {
+        "AttributeDataType": "String",
+        "DeveloperOnlyAttribute": False,
+        "Mutable": True,
+        "Name": "entra_tenant_id",
+        "Required": False,
+        "StringAttributeConstraints": {"MinLength": "0", "MaxLength": "36"},
+    },
+    {
+        "AttributeDataType": "String",
+        "DeveloperOnlyAttribute": False,
+        "Mutable": True,
+        "Name": "entra_object_id",
+        "Required": False,
+        "StringAttributeConstraints": {"MinLength": "0", "MaxLength": "36"},
+    },
+]
 
 
 def run(args, **kwargs):
@@ -4261,6 +4279,69 @@ def write_current_outputs_from_state(stage, outputs_path):
     return outputs
 
 
+def ensure_native_auth_custom_attributes(current_outputs):
+    """Add the native Entra claims to an existing pool before app clients use them."""
+    user_pool_id = str(_current_output_value(current_outputs, "user_pool_id") or "").strip()
+    if not user_pool_id:
+        return {"status": "skipped", "reason": "user-pool-not-created"}
+
+    def describe_attribute_names():
+        raw = output(
+            [
+                "aws",
+                "cognito-idp",
+                "describe-user-pool",
+                "--user-pool-id",
+                user_pool_id,
+                "--output",
+                "json",
+            ]
+        )
+        described = json.loads(raw or "{}")
+        attributes = described.get("UserPool", {}).get("SchemaAttributes", [])
+        return {
+            str(attribute.get("Name") or "")
+            for attribute in attributes
+            if isinstance(attribute, dict)
+        }
+
+    existing_names = describe_attribute_names()
+    missing = [
+        attribute
+        for attribute in NATIVE_AUTH_CUSTOM_ATTRIBUTES
+        if f"custom:{attribute['Name']}" not in existing_names
+    ]
+    if not missing:
+        return {"status": "current", "userPoolId": user_pool_id, "added": []}
+
+    request = {"UserPoolId": user_pool_id, "CustomAttributes": missing}
+    run(
+        [
+            "aws",
+            "cognito-idp",
+            "add-custom-attributes",
+            "--cli-input-json",
+            json.dumps(request, separators=(",", ":"), sort_keys=True),
+        ],
+        stdout=subprocess.DEVNULL,
+    )
+    reconciled_names = describe_attribute_names()
+    unresolved = [
+        attribute["Name"]
+        for attribute in missing
+        if f"custom:{attribute['Name']}" not in reconciled_names
+    ]
+    if unresolved:
+        raise RuntimeError(
+            "Cognito native-auth custom attributes were not added: " + ", ".join(unresolved)
+        )
+    return {
+        "status": "reconciled",
+        "userPoolId": user_pool_id,
+        "added": [attribute["Name"] for attribute in missing],
+    }
+
+
 def write_outputs_to_ssm(outputs_path, vars_json):
     outputs = json.loads(outputs_path.read_text(encoding="utf-8"))
     profile, web_env = runtime_profile(outputs, vars_json)
@@ -5511,6 +5592,11 @@ def main():
     if identity_operation is not None:
         CONTROLLER_EVIDENCE["identityProvider"] = reconcile_identity_provider_resource(
             payload, vars_json
+        )
+
+    if action in {"deploy", "update"} and not is_managed_app_operation(payload):
+        CONTROLLER_EVIDENCE["cognitoSchema"] = ensure_native_auth_custom_attributes(
+            current_terraform_outputs(vars_json["stage"])
         )
 
     configure_cloudflare_provider_auth(vars_json["stage"])
