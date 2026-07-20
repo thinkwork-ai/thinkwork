@@ -1497,6 +1497,25 @@ describe("runHarnessTurn — happy path", () => {
     );
   });
 
+  it("narrows an explicit Browser request to the configured managed Browser", async () => {
+    const deps = makeDeps([
+      stream(managedBrowserEvents("TITLE=Example Domain")),
+    ]);
+    const payload = {
+      ...basePayload(),
+      message:
+        "Use the native managed Browser to open https://example.com and click More information.",
+      browser_automation_enabled: true,
+    };
+
+    const result = await runHarnessTurn(payload, deps);
+
+    expect(result.status).toBe("completed");
+    expect(deps.invocations).toHaveLength(1);
+    expect(deps.invocations[0].tools).toBeUndefined();
+    expect(deps.invocations[0].allowedTools).toEqual(["browser"]);
+  });
+
   it("fails closed when an explicit Browser request ends without managed execution evidence", async () => {
     const deps = makeDeps([
       stream(textEvents("TITLE=Example Domain\nHEADING=Example Domain")),
@@ -1511,6 +1530,7 @@ describe("runHarnessTurn — happy path", () => {
     const result = await runHarnessTurn(payload, deps);
 
     expect(result.status).toBe("failed");
+    expect(deps.invocations[0].allowedTools).toEqual(["browser"]);
     expect(deps.finalizePayloads[0].error_message).toContain(
       "no successful managed Browser invocation",
     );
@@ -2230,8 +2250,13 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
     expect(deps.invocations).toHaveLength(2);
     expect(deps.invocations[0]?.tools).toBeUndefined();
     expect(deps.invocations[0]?.allowedTools).toBeUndefined();
-    expect(deps.invocations[1]?.tools).toBeUndefined();
-    expect(deps.invocations[1]?.allowedTools).toEqual(["goal_complete"]);
+    expect(deps.invocations[1]?.tools).toEqual([
+      expect.objectContaining({
+        type: "inline_function",
+        name: "goal_complete",
+      }),
+    ]);
+    expect(deps.invocations[1]?.allowedTools).toBeUndefined();
     expect(JSON.stringify(deps.invocations[1].messages)).toContain(
       "without governed completion evidence",
     );
@@ -2264,8 +2289,13 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
     );
 
     expect(deps.invocations).toHaveLength(2);
-    expect(deps.invocations[1]?.tools).toBeUndefined();
-    expect(deps.invocations[1]?.allowedTools).toEqual(["goal_complete"]);
+    expect(deps.invocations[1]?.tools).toEqual([
+      expect.objectContaining({
+        type: "inline_function",
+        name: "goal_complete",
+      }),
+    ]);
+    expect(deps.invocations[1]?.allowedTools).toBeUndefined();
     expect(deps.finalizePayloads[0].response?.goal_run).toMatchObject({
       status: "paused",
       summary: "More work remains after verification.",
