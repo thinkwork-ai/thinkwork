@@ -1554,6 +1554,44 @@ def test_write_runner_files_threads_cognito_email_vars_from_payload(
         assert f"= var.{name}" in main_tf
 
 
+def test_write_runner_files_threads_agentcore_harness_config_from_preserved_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    tf_dir = _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "tei-e2e",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "637423202447",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+            "preservedConfig": {
+                "enableAgentCoreHarness": True,
+                "agentCoreHarnessTenantSlug": "tei",
+                "agentCoreHarnessOwnerAllowlist": "owner-a,owner-b",
+            },
+        },
+        {},
+    )
+
+    assert vars_json["enable_agentcore_multiplayer_proof"] is True
+    assert vars_json["agentcore_multiplayer_proof_tenant_slug"] == "tei"
+    assert vars_json["agentcore_multiplayer_proof_owner_allowlist"] == "owner-a,owner-b"
+
+    tfvars = json.loads((tf_dir / "terraform.auto.tfvars.json").read_text(encoding="utf-8"))
+    assert tfvars["enable_agentcore_multiplayer_proof"] is True
+    main_tf = (tf_dir / "main.tf").read_text(encoding="utf-8")
+    for name in (
+        "enable_agentcore_multiplayer_proof",
+        "agentcore_multiplayer_proof_tenant_slug",
+        "agentcore_multiplayer_proof_owner_allowlist",
+    ):
+        assert f'variable "{name}"' in main_tf
+        assert f"= var.{name}" in main_tf
+
+
 def test_write_runner_files_repins_stale_thinkwork_git_module_source_to_release(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

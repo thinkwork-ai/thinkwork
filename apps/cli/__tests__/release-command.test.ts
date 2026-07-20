@@ -33,7 +33,15 @@ describe("release command registration", () => {
     for (const cmd of [release, deploy]) {
       const longs = cmd.options.map((o) => o.long);
       expect(longs).toEqual(
-        expect.arrayContaining(["--stage", "--yes", "--web-only", "--no-wait"]),
+        expect.arrayContaining([
+          "--stage",
+          "--yes",
+          "--web-only",
+          "--no-wait",
+          "--enable-agentcore-harness",
+          "--agentcore-tenant-slug",
+          "--agentcore-owner-allowlist",
+        ]),
       );
     }
   });
@@ -76,6 +84,33 @@ describe("release flag parsing", () => {
     expect(version).toBeUndefined();
     expect(opts.stage).toBe("tei-e2e");
     expect(opts.wait).toBe(false);
+  });
+
+  it("delivers AgentCore provisioning flags to the handler", async () => {
+    const deploySpy = vi.fn().mockResolvedValue(undefined);
+    const program = new Command();
+    registerReleaseCommand(program, deploySpy);
+
+    await program.parseAsync(
+      [
+        "release",
+        "deploy",
+        "v0.1.0-canary.368",
+        "--enable-agentcore-harness",
+        "--agentcore-tenant-slug",
+        "tei",
+        "--agentcore-owner-allowlist",
+        "owner-a,owner-b",
+      ],
+      { from: "user" },
+    );
+
+    const [, opts] = deploySpy.mock.calls[0];
+    expect(opts).toMatchObject({
+      enableAgentcoreHarness: true,
+      agentcoreTenantSlug: "tei",
+      agentcoreOwnerAllowlist: "owner-a,owner-b",
+    });
   });
 });
 
@@ -326,6 +361,48 @@ describe("buildControllerUpdateInput", () => {
       customerDomainDelegated: true,
       customerDomainLegacyRetired: false,
     });
+  });
+
+  it("initializes and preserves managed AgentCore provisioning config", () => {
+    const prior = parsePriorControllerInput(PRIOR);
+    const input = buildControllerUpdateInput({
+      prior,
+      release,
+      sessionId: "session-agentcore",
+      agentCoreHarness: {
+        enabled: true,
+        tenantSlug: "tei",
+        ownerAllowlist: "owner-a,owner-b",
+      },
+    });
+
+    expect(input).toMatchObject({
+      enableAgentCoreHarness: true,
+      agentCoreHarnessTenantSlug: "tei",
+      agentCoreHarnessOwnerAllowlist: "owner-a,owner-b",
+      preservedConfig: {
+        enableAgentCoreHarness: true,
+        agentCoreHarnessTenantSlug: "tei",
+        agentCoreHarnessOwnerAllowlist: "owner-a,owner-b",
+      },
+    });
+
+    expect(parsePriorControllerInput(input)).toMatchObject({
+      enableAgentCoreHarness: true,
+      agentCoreHarnessTenantSlug: "tei",
+      agentCoreHarnessOwnerAllowlist: "owner-a,owner-b",
+    });
+  });
+
+  it("rejects incomplete AgentCore provisioning config", () => {
+    const prior = parsePriorControllerInput(PRIOR);
+    expect(() =>
+      buildControllerUpdateInput({
+        prior,
+        release,
+        agentCoreHarness: { enabled: true, tenantSlug: "tei" },
+      }),
+    ).toThrow(/at least two distinct admitted subjects/i);
   });
 
   it("builds web-only release update inputs without Terraform planning", () => {
