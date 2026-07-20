@@ -19,56 +19,27 @@ aws bedrock-agentcore-control update-workload-identity \
   --name "$WORKLOAD_IDENTITY_NAME" \
   --allowed-resource-oauth2-return-urls "$OAUTH_RETURN_URLS_JSON" >/dev/null
 
-client_record="$(aws secretsmanager get-secret-value \
-  --region "$AWS_REGION" \
-  --secret-id "$TWENTY_CLIENT_SECRET_ARN" \
-  --query SecretString \
-  --output text 2>/dev/null || true)"
-if [[ -z "$client_record" ]]; then
-  client_record='{}'
-fi
-client_id="$(jq -r '.client_id // empty' <<<"$client_record")"
-if [[ -z "$client_id" ]] ||
-  ! jq -e '.client_secret | type == "string" and length > 0' \
-    <<<"$client_record" >/dev/null 2>&1; then
-  printf '%s\n' \
-    'Twenty confidential client is not bootstrapped; run bootstrap_twenty_oauth_client.sh with an authenticated administrator token secret' >&2
-  exit 1
-fi
-
-provider_payload="$(jq -n \
-  --arg region "$AWS_REGION" \
-  --arg name "$TWENTY_CREDENTIAL_PROVIDER_NAME" \
-  --arg issuer "$TWENTY_OAUTH_ISSUER" \
-  --arg authorizationEndpoint "${TWENTY_OAUTH_ISSUER%/}/authorize" \
-  --arg tokenEndpoint "${TWENTY_OAUTH_ISSUER%/}/oauth/token" \
-  --arg clientId "$client_id" \
-  --arg secretArn "$TWENTY_CLIENT_SECRET_ARN" \
-  '{
-    region: $region,
-    name: $name,
-    issuer: $issuer,
-    authorizationEndpoint: $authorizationEndpoint,
-    tokenEndpoint: $tokenEndpoint,
-    clientId: $clientId,
-    secretArn: $secretArn
-  }')"
-
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-provider_response="$(printf '%s' "$provider_payload" | \
-  node "$script_dir/reconcile_twenty_provider.mjs")"
+provider_response="$(bash "$script_dir/bootstrap_twenty_oauth_client.sh")"
 callback_url="$(jq -r '.callbackUrl // empty' <<<"$provider_response")"
 if [[ -z "$callback_url" || "$callback_url" == "None" ]]; then
   printf '%s\n' 'AgentCore Identity did not return the Twenty callback URL' >&2
   exit 1
 fi
 
-registered_callback="$(jq -r '.redirect_uris[0] // empty' <<<"$client_record")"
-if [[ "$registered_callback" != "$callback_url" ]]; then
-  printf 'Twenty callback mismatch: registered=%s agentcore=%s\n' \
-    "$registered_callback" "$callback_url" >&2
-  exit 1
-fi
+client_record="$(aws secretsmanager get-secret-value \
+  --region "$AWS_REGION" \
+  --secret-id "$TWENTY_CLIENT_SECRET_ARN" \
+  --query SecretString \
+  --output text)"
+jq -e --arg callback "$callback_url" \
+  '.bootstrap_state == "ready" and
+   (.client_id | type == "string" and length > 0) and
+   (.client_secret | type == "string" and length > 0) and
+   (.redirect_uris | type == "array" and index($callback) != null) and
+   .token_endpoint_auth_method == "client_secret_post"' \
+  <<<"$client_record" >/dev/null
 
-printf 'AgentCore Twenty provider reconciled: workload=%s provider=%s resource=%s\n' \
-  "$WORKLOAD_IDENTITY_NAME" "$TWENTY_CREDENTIAL_PROVIDER_NAME" "$TWENTY_OAUTH_RESOURCE"
+printf 'AgentCore Twenty provider reconciled: workload=%s provider=%s resource=%s callback=%s\n' \
+  "$WORKLOAD_IDENTITY_NAME" "$TWENTY_CREDENTIAL_PROVIDER_NAME" \
+  "$TWENTY_OAUTH_RESOURCE" "$callback_url"

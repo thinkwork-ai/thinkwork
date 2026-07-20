@@ -39,6 +39,9 @@ locals {
     twenty_oauth_issuer             = var.twenty_oauth_issuer
     twenty_oauth_resource           = var.twenty_oauth_resource
     twenty_client_secret_arn        = try(aws_secretsmanager_secret.twenty_oauth_client[0].arn, "")
+    bootstrap_script_sha256         = filesha256("${path.module}/scripts/bootstrap_twenty_oauth_client.sh")
+    provider_reconciler_sha256      = filesha256("${path.module}/scripts/reconcile_twenty_provider.mjs")
+    identity_reconciler_sha256      = filesha256("${path.module}/scripts/reconcile_twenty_identity.sh")
   })))
 }
 
@@ -111,10 +114,31 @@ resource "terraform_data" "identity_lifecycle" {
   }
 }
 
-# Additive user-federation lifecycle. It may update the workload's callback
-# allowlist in place, but it never owns or deletes the workload/Gateway provider.
-# This keeps the proven exact-user admission path live while Twenty is added,
-# rotated, or removed independently.
+# Stable cleanup ownership is deliberately separate from reconciliation.
+# Script-only changes must never replace a resource whose destroy provisioner
+# deletes the external provider and invalidates its service-issued callback.
+resource "terraform_data" "twenty_identity_cleanup_owner" {
+  count = var.enabled ? 1 : 0
+
+  input = {
+    region                          = var.region
+    twenty_credential_provider_name = local.twenty_credential_provider_name
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "bash ${path.module}/scripts/delete_twenty_identity.sh"
+    environment = {
+      AWS_REGION                      = self.input.region
+      TWENTY_CREDENTIAL_PROVIDER_NAME = self.input.twenty_credential_provider_name
+    }
+  }
+}
+
+# Additive user-federation reconciliation. Code/configuration revisions replace
+# only this terraform_data record; it has no destroy action and always updates
+# the provider in place. The stable owner above deletes only when the module is
+# truly disabled or removed.
 resource "terraform_data" "twenty_identity_lifecycle" {
   count = var.enabled ? 1 : 0
 
@@ -138,17 +162,9 @@ resource "terraform_data" "twenty_identity_lifecycle" {
     }
   }
 
-  provisioner "local-exec" {
-    when    = destroy
-    command = "bash ${path.module}/scripts/delete_twenty_identity.sh"
-    environment = {
-      AWS_REGION                      = self.input.region
-      TWENTY_CREDENTIAL_PROVIDER_NAME = self.input.twenty_credential_provider_name
-    }
-  }
-
   depends_on = [
     terraform_data.identity_lifecycle,
+    terraform_data.twenty_identity_cleanup_owner,
     aws_secretsmanager_secret_policy.twenty_oauth_client,
   ]
 }

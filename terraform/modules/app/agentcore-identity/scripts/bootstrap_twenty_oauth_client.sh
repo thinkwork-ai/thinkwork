@@ -4,119 +4,209 @@ set -euo pipefail
 : "${AWS_REGION:?AWS_REGION is required}"
 : "${TWENTY_OAUTH_ISSUER:?TWENTY_OAUTH_ISSUER is required}"
 : "${TWENTY_CLIENT_SECRET_ARN:?TWENTY_CLIENT_SECRET_ARN is required}"
-: "${TWENTY_ADMIN_TOKEN_SECRET_ARN:?TWENTY_ADMIN_TOKEN_SECRET_ARN is required}"
+: "${TWENTY_CREDENTIAL_PROVIDER_NAME:?TWENTY_CREDENTIAL_PROVIDER_NAME is required}"
 
-callback_url="${TWENTY_CALLBACK_URL:-https://bedrock-agentcore.${AWS_REGION}.amazonaws.com/identities/oauth2/callback}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+issuer="${TWENTY_OAUTH_ISSUER%/}"
 
-if existing_secret="$(aws secretsmanager get-secret-value \
-  --region "$AWS_REGION" \
-  --secret-id "$TWENTY_CLIENT_SECRET_ARN" \
-  --query SecretString \
-  --output text 2>/dev/null)" &&
-  jq -e '.client_id | type == "string" and length > 0' <<<"$existing_secret" >/dev/null &&
-  jq -e '.client_secret | type == "string" and length > 0' <<<"$existing_secret" >/dev/null; then
-  existing_callback="$(jq -r '.redirect_uris[0] // empty' <<<"$existing_secret")"
-  if [[ "$existing_callback" == "$callback_url" ]]; then
-    printf 'Twenty confidential OAuth client already bootstrapped: secret=%s\n' \
-      "$TWENTY_CLIENT_SECRET_ARN"
-    exit 0
-  fi
-fi
+read_client_record() {
+  aws secretsmanager get-secret-value \
+    --region "$AWS_REGION" \
+    --secret-id "$TWENTY_CLIENT_SECRET_ARN" \
+    --query SecretString \
+    --output text 2>/dev/null || printf '{}'
+}
 
-# Twenty's RFC 7591 endpoint intentionally downgrades all dynamic clients to
-# public clients. Its authenticated metadata API is the supported path for a
-# confidential application registration: Twenty generates and bcrypt-hashes
-# the secret server-side and returns the plaintext exactly once.
-admin_record="$(aws secretsmanager get-secret-value \
-  --region "$AWS_REGION" \
-  --secret-id "$TWENTY_ADMIN_TOKEN_SECRET_ARN" \
-  --query SecretString \
-  --output text)"
-admin_token="$(jq -r '.access_token // empty' <<<"$admin_record")"
-if [[ -z "$admin_token" ]]; then
-  printf '%s\n' 'Twenty administrator token secret has no access_token' >&2
-  exit 1
-fi
-
-if [[ -n "${existing_secret:-}" ]] &&
-  jq -e '.registration_id | type == "string" and length > 0' \
-    <<<"$existing_secret" >/dev/null; then
-  registration_id="$(jq -r '.registration_id' <<<"$existing_secret")"
-  update_payload="$(jq -n \
-    --arg id "$registration_id" \
-    --arg callback "$callback_url" \
-    '{
-      query: "mutation UpdateAgentCoreRegistration($input: UpdateApplicationRegistrationInput!) { updateApplicationRegistration(input: $input) { id oAuthRedirectUris oAuthScopes } }",
-      variables: {
-        input: {
-          id: $id,
-          update: {oAuthRedirectUris: [$callback]}
-        }
-      }
-    }')"
-  update_response="$(curl --silent --show-error --fail-with-body \
-    -H "authorization: Bearer $admin_token" \
-    -H 'content-type: application/json' \
-    --data-binary "$update_payload" \
-    "${TWENTY_OAUTH_ISSUER%/}/metadata")"
-  if jq -e '.errors | type == "array" and length > 0' <<<"$update_response" >/dev/null; then
-    jq '{errors: [.errors[] | {message, extensions: {code: .extensions.code}}]}' \
-      <<<"$update_response" >&2
-    printf '%s\n' 'Twenty OAuth callback update failed' >&2
-    exit 1
-  fi
-  updated_secret="$(jq --arg callback "$callback_url" \
-    '.redirect_uris = [$callback]' <<<"$existing_secret")"
-  printf '%s' "$updated_secret" | aws secretsmanager put-secret-value \
+write_client_record() {
+  aws secretsmanager put-secret-value \
     --region "$AWS_REGION" \
     --secret-id "$TWENTY_CLIENT_SECRET_ARN" \
     --secret-string file:///dev/stdin >/dev/null
-  printf 'Twenty confidential OAuth client callback updated: secret=%s callback=%s\n' \
-    "$TWENTY_CLIENT_SECRET_ARN" "$callback_url"
-  exit 0
-fi
+}
 
-graphql_payload="$(jq -n \
-  --arg callback "$callback_url" \
-  '{
-    query: "mutation CreateAgentCoreRegistration($input: CreateApplicationRegistrationInput!) { createApplicationRegistration(input: $input) { applicationRegistration { id universalIdentifier oAuthClientId oAuthRedirectUris oAuthScopes } clientSecret } }",
-    variables: {
-      input: {
-        name: "ThinkWork AgentCore Identity Twenty CRM",
-        oAuthRedirectUris: [$callback],
-        oAuthScopes: ["api", "profile"]
-      }
-    }
-  }')"
-graphql_response="$(curl --silent --show-error --fail-with-body \
-  -H "authorization: Bearer $admin_token" \
-  -H 'content-type: application/json' \
-  --data-binary "$graphql_payload" \
-  "${TWENTY_OAUTH_ISSUER%/}/metadata")"
+reconcile_provider() {
+  local client_id="$1"
+  jq -n \
+    --arg region "$AWS_REGION" \
+    --arg name "$TWENTY_CREDENTIAL_PROVIDER_NAME" \
+    --arg issuer "$issuer" \
+    --arg authorizationEndpoint "$issuer/oauth/authorize" \
+    --arg tokenEndpoint "$issuer/oauth/token" \
+    --arg clientId "$client_id" \
+    --arg secretArn "$TWENTY_CLIENT_SECRET_ARN" \
+    '{
+      region: $region,
+      name: $name,
+      issuer: $issuer,
+      authorizationEndpoint: $authorizationEndpoint,
+      tokenEndpoint: $tokenEndpoint,
+      clientId: $clientId,
+      secretArn: $secretArn
+    }' | node "$script_dir/reconcile_twenty_provider.mjs"
+}
 
-if jq -e '.errors | type == "array" and length > 0' <<<"$graphql_response" >/dev/null; then
-  jq '{errors: [.errors[] | {message, extensions: {code: .extensions.code}}]}' \
-    <<<"$graphql_response" >&2
-  printf '%s\n' 'Twenty confidential OAuth client bootstrap failed' >&2
+verify_provider() {
+  local response="$1"
+  local expected_client_id="$2"
+  local expected_callback="$3"
+  jq -e \
+    --arg name "$TWENTY_CREDENTIAL_PROVIDER_NAME" \
+    --arg client_id "$expected_client_id" \
+    --arg callback "$expected_callback" \
+    --arg secret_arn "$TWENTY_CLIENT_SECRET_ARN" \
+    '.name == $name and
+     .clientId == $client_id and
+     .callbackUrl == $callback and
+     .clientSecretArn == $secret_arn and
+     .clientSecretJsonKey == "client_secret" and
+     .clientSecretSource == "EXTERNAL" and
+     .status == "READY"' <<<"$response" >/dev/null
+}
+
+client_record="$(read_client_record)"
+if ! jq -e 'type == "object"' <<<"$client_record" >/dev/null 2>&1; then
+  printf '%s\n' 'Twenty client secret must contain a JSON object' >&2
   exit 1
 fi
 
-client_record="$(jq -e '{
-  client_id: .data.createApplicationRegistration.applicationRegistration.oAuthClientId,
-  client_secret: .data.createApplicationRegistration.clientSecret,
-  registration_id: .data.createApplicationRegistration.applicationRegistration.id,
-  universal_identifier: .data.createApplicationRegistration.applicationRegistration.universalIdentifier,
-  redirect_uris: .data.createApplicationRegistration.applicationRegistration.oAuthRedirectUris,
-  scopes: .data.createApplicationRegistration.applicationRegistration.oAuthScopes
-} | select(
-  (.client_id | type == "string" and length > 0) and
-  (.client_secret | type == "string" and length > 0)
-)' <<<"$graphql_response")"
+client_id="$(jq -r '.client_id // empty' <<<"$client_record")"
+client_secret_ready=false
+if [[ -n "$client_id" ]] &&
+  jq -e '.client_secret | type == "string" and length > 0' \
+    <<<"$client_record" >/dev/null 2>&1 &&
+  [[ "$(jq -r '.bootstrap_state // empty' <<<"$client_record")" == "ready" ]]; then
+  client_secret_ready=true
+else
+  placeholder_id="thinkwork-bootstrap-$(openssl rand -hex 12)"
+  placeholder_secret="$(openssl rand -base64 48 | tr -d '\n')"
+  client_record="$(jq -n \
+    --arg client_id "$placeholder_id" \
+    --arg client_secret "$placeholder_secret" \
+    '{
+      bootstrap_state: "placeholder",
+      client_id: $client_id,
+      client_secret: $client_secret,
+      token_endpoint_auth_method: "client_secret_post"
+    }')"
+  printf '%s' "$client_record" | write_client_record
+  client_id="$placeholder_id"
+fi
 
-printf '%s' "$client_record" | aws secretsmanager put-secret-value \
-  --region "$AWS_REGION" \
-  --secret-id "$TWENTY_CLIENT_SECRET_ARN" \
-  --secret-string file:///dev/stdin >/dev/null
+# AgentCore issues a provider-specific callback only after the provider exists.
+# The placeholder is never used for a user grant; it only lets AgentCore return
+# the callback that Twenty must bind to the confidential client registration.
+provider_response="$(reconcile_provider "$client_id")"
+callback_url="$(jq -r '.callbackUrl // empty' <<<"$provider_response")"
+if [[ -z "$callback_url" ]]; then
+  printf '%s\n' 'AgentCore Identity did not return a provider callback URL' >&2
+  exit 1
+fi
 
-printf 'Twenty confidential OAuth client bootstrapped: secret=%s callback=%s\n' \
-  "$TWENTY_CLIENT_SECRET_ARN" "$callback_url"
+registered_callback_matches=false
+if $client_secret_ready &&
+  jq -e --arg callback "$callback_url" \
+    '.redirect_uris | type == "array" and index($callback) != null' \
+    <<<"$client_record" >/dev/null 2>&1 &&
+  [[ "$(jq -r '.token_endpoint_auth_method // empty' <<<"$client_record")" == \
+    "client_secret_post" ]]; then
+  registered_callback_matches=true
+fi
+
+if $registered_callback_matches; then
+  verify_provider "$provider_response" "$client_id" "$callback_url"
+  printf 'Twenty confidential OAuth client reused: provider=%s callback=%s\n' \
+    "$TWENTY_CREDENTIAL_PROVIDER_NAME" "$callback_url" >&2
+  printf '%s' "$provider_response"
+  exit 0
+fi
+
+discovery="$(curl --silent --show-error --fail-with-body \
+  "$issuer/.well-known/oauth-authorization-server")"
+registration_endpoint="$(jq -r '.registration_endpoint // empty' <<<"$discovery")"
+if ! python3 - "$issuer" "$registration_endpoint" <<'PY'
+import sys
+from urllib.parse import urlsplit
+
+
+def origin(url: str) -> tuple[str, str, int]:
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError("HTTPS origin without userinfo required")
+    return parsed.scheme, parsed.hostname.lower(), parsed.port or 443
+
+
+try:
+    issuer_origin = origin(sys.argv[1])
+    registration_origin = origin(sys.argv[2])
+except (ValueError, IndexError):
+    raise SystemExit(1)
+raise SystemExit(0 if issuer_origin == registration_origin else 1)
+PY
+then
+  printf '%s\n' 'Twenty registration endpoint is not on the exact issuer origin' >&2
+  exit 1
+fi
+if ! jq -e \
+    --arg issuer "$issuer" \
+    '.issuer == $issuer and
+     (.grant_types_supported | index("authorization_code") != null) and
+     (.token_endpoint_auth_methods_supported | index("client_secret_post") != null) and
+     (.scopes_supported | index("api") != null) and
+     (.scopes_supported | index("profile") != null)' \
+    <<<"$discovery" >/dev/null; then
+  printf '%s\n' \
+    'Twenty discovery does not advertise same-origin confidential authorization-code DCR' >&2
+  exit 1
+fi
+
+registration_payload="$(jq -n \
+  --arg callback "$callback_url" \
+  '{
+    client_name: "ThinkWork AgentCore Identity Twenty CRM",
+    redirect_uris: [$callback],
+    grant_types: ["authorization_code"],
+    response_types: ["code"],
+    token_endpoint_auth_method: "client_secret_post",
+    scope: "api profile"
+  }')"
+registration_response="$(curl --silent --show-error --fail-with-body \
+  -H 'content-type: application/json' \
+  --data-binary "$registration_payload" \
+  "$registration_endpoint")"
+
+client_record="$(jq -e \
+  --arg callback "$callback_url" \
+  '{
+    bootstrap_state: "ready",
+    client_id: .client_id,
+    client_secret: .client_secret,
+    client_id_issued_at: .client_id_issued_at,
+    client_secret_expires_at: .client_secret_expires_at,
+    client_name: .client_name,
+    redirect_uris: .redirect_uris,
+    grant_types: .grant_types,
+    response_types: .response_types,
+    token_endpoint_auth_method: .token_endpoint_auth_method,
+    scope: (.scope // "api profile"),
+    registration_access_token: .registration_access_token,
+    registration_client_uri: .registration_client_uri
+  } | select(
+    (.client_id | type == "string" and length > 0) and
+    (.client_secret | type == "string" and length > 0) and
+    (.redirect_uris | type == "array" and index($callback) != null) and
+    .token_endpoint_auth_method == "client_secret_post"
+  )' <<<"$registration_response")" || {
+  printf '%s\n' 'Twenty DCR did not return a confidential callback-bound client' >&2
+  exit 1
+}
+
+# A Secrets Manager version write is atomic. The plaintext client secret never
+# enters Terraform state or process arguments and is not printed to logs.
+printf '%s' "$client_record" | write_client_record
+client_id="$(jq -r '.client_id' <<<"$client_record")"
+provider_response="$(reconcile_provider "$client_id")"
+verify_provider "$provider_response" "$client_id" "$callback_url"
+
+printf 'Twenty confidential OAuth client registered: provider=%s callback=%s\n' \
+  "$TWENTY_CREDENTIAL_PROVIDER_NAME" "$callback_url" >&2
+printf '%s' "$provider_response"

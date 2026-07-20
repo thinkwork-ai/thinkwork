@@ -24,9 +24,7 @@ describe("AgentCore turn assertion Terraform fixture", () => {
   const harnessLifecycle = read(
     "terraform/modules/app/agentcore-harness/scripts/harness-lifecycle.mjs",
   );
-  const gatewayModule = read(
-    "terraform/modules/app/agentcore-gateway/main.tf",
-  );
+  const gatewayModule = read("terraform/modules/app/agentcore-gateway/main.tf");
   const gatewayReconciler = read(
     "terraform/modules/app/agentcore-gateway/scripts/reconcile_gateway.sh",
   );
@@ -116,12 +114,38 @@ describe("AgentCore turn assertion Terraform fixture", () => {
       'resource "terraform_data" "twenty_identity_lifecycle"',
     );
     expect(identity).toContain(
+      'resource "terraform_data" "twenty_identity_cleanup_owner"',
+    );
+    expect(identity).toContain("bootstrap_script_sha256");
+    expect(identity).toContain(
       "depends_on = [\n    terraform_data.identity_lifecycle",
     );
-    expect(twentyClientBootstrap).toContain("createApplicationRegistration");
-    expect(twentyClientBootstrap).toContain("oAuthRedirectUris");
-    expect(twentyClientBootstrap).toContain("TWENTY_ADMIN_TOKEN_SECRET_ARN");
-    expect(twentyClientBootstrap).not.toContain("/oauth/register");
+    expect(identityReconciler).toContain(
+      'provider_response="$(bash "$script_dir/bootstrap_twenty_oauth_client.sh")"',
+    );
+    expect(twentyClientBootstrap).toContain(
+      '"$issuer/.well-known/oauth-authorization-server"',
+    );
+    expect(twentyClientBootstrap).toContain(
+      'token_endpoint_auth_method: "client_secret_post"',
+    );
+    expect(twentyClientBootstrap).toContain("registration_endpoint");
+    expect(twentyClientBootstrap).not.toContain(
+      "TWENTY_ADMIN_TOKEN_SECRET_ARN",
+    );
+    expect(twentyClientBootstrap).not.toContain("/metadata");
+    const cleanupOwner = identity.match(
+      /resource "terraform_data" "twenty_identity_cleanup_owner" \{([\s\S]*?)\n\}\n\n# Additive user-federation reconciliation/,
+    )?.[1];
+    const reconciliation = identity.match(
+      /resource "terraform_data" "twenty_identity_lifecycle" \{([\s\S]*?)\n\}\n\n# Read back/,
+    )?.[1];
+    expect(cleanupOwner).toContain("when    = destroy");
+    expect(cleanupOwner).toContain("delete_twenty_identity.sh");
+    expect(cleanupOwner).not.toContain("triggers_replace");
+    expect(reconciliation).toContain("triggers_replace");
+    expect(reconciliation).not.toContain("when    = destroy");
+    expect(reconciliation).not.toContain("delete_twenty_identity.sh");
     expect(twentyProviderReconciler).toContain(
       'clientAuthenticationMethod: "CLIENT_SECRET_POST"',
     );
