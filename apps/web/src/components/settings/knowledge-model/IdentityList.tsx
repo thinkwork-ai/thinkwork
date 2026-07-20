@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
 import { ChevronDown, ChevronRight, Loader2, Search } from "lucide-react";
 import {
   Badge,
@@ -12,9 +12,14 @@ import {
   SelectValue,
 } from "@thinkwork/ui";
 import type { SettingsCanonicalEntitiesQuery as SettingsCanonicalEntitiesData } from "@/gql/graphql";
-import { SettingsCanonicalEntitiesQuery } from "@/lib/settings-queries";
+import {
+  SettingsCanonicalEntitiesQuery,
+  SettingsRevokeEntitySourceMappingMutation,
+} from "@/lib/settings-queries";
 import { useTenant } from "@/context/TenantContext";
+import { AuthorMappingDialog } from "./AuthorMappingDialog";
 import { MergeDialog } from "./MergeDialog";
+import { SplitDialog } from "./SplitDialog";
 import { relativeAge } from "./knowledge-model-utils";
 
 export type CanonicalEntityRow =
@@ -43,9 +48,13 @@ function statusBadgeClass(status: string): string {
 }
 
 /**
- * Identity sub-view of the Model tab: canonical entity instances with their
- * exact source mappings, plus the merge-repair entry point. Content only —
- * the title row is owned by KnowledgeModelTab.
+ * Identity sub-view of the Model tab (THINK-193 U4 + THINK-321 U8):
+ * canonical entity instances with their exact source mappings, plus the full
+ * stewardship verb set — merge repair, crosswalk link authoring, per-mapping
+ * revoke (two-click confirm), and guarded split. User-confirmed links render
+ * visually distinct with their source turn (R11) so operators can triage
+ * agent-era mappings; the audit trail is the review surface — no viewed
+ * state. Content only — the title row is owned by KnowledgeModelTab.
  */
 export function IdentityList() {
   const { tenantId } = useTenant();
@@ -53,6 +62,15 @@ export function IdentityList() {
   const [status, setStatus] = useState<StatusFilter>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [authorEntity, setAuthorEntity] = useState<CanonicalEntityRow | null>(
+    null,
+  );
+  const [splitEntity, setSplitEntity] = useState<CanonicalEntityRow | null>(
+    null,
+  );
+  const [revokeArmId, setRevokeArmId] = useState<string | null>(null);
+  const [revokeBusyId, setRevokeBusyId] = useState<string | null>(null);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   const [result, reexecute] = useQuery({
     query: SettingsCanonicalEntitiesQuery,
@@ -71,6 +89,43 @@ export function IdentityList() {
     [result.data],
   );
   const loading = result.fetching && !result.data;
+
+  const refetch = () => reexecute({ requestPolicy: "network-only" });
+
+  const [, revokeMapping] = useMutation(
+    SettingsRevokeEntitySourceMappingMutation,
+  );
+
+  // Two-click confirm: the first click arms the button, the second revokes.
+  const handleRevoke = async (mappingId: string) => {
+    if (revokeArmId !== mappingId) {
+      setRevokeArmId(mappingId);
+      setRevokeError(null);
+      return;
+    }
+    setRevokeBusyId(mappingId);
+    setRevokeError(null);
+    try {
+      const revoked = await revokeMapping({
+        tenantId,
+        mappingId,
+        reason: null,
+      });
+      if (revoked.error) {
+        setRevokeError(revoked.error.message);
+        return;
+      }
+      const payload = revoked.data?.revokeEntitySourceMapping;
+      if (payload?.status !== "revoked") {
+        setRevokeError(`Revoke refused: ${payload?.reason ?? "unknown"}`);
+        return;
+      }
+      refetch();
+    } finally {
+      setRevokeBusyId(null);
+      setRevokeArmId(null);
+    }
+  };
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
@@ -187,27 +242,102 @@ export function IdentityList() {
                         </p>
                       ) : (
                         <ul className="space-y-1">
-                          {entity.sourceMappings.map((mapping) => (
-                            <li
-                              key={mapping.id}
-                              className="flex flex-wrap items-center gap-2 text-xs"
-                            >
-                              <Badge variant="outline" className="text-xs">
-                                {mapping.sourceSystem}
-                              </Badge>
-                              <span className="text-muted-foreground">
-                                {mapping.namespace} / {mapping.externalId}
-                              </span>
-                              <span className="text-muted-foreground">
-                                visibility: {mapping.visibility}
-                              </span>
-                              <span className="text-muted-foreground">
-                                by {mapping.createdBy}
-                              </span>
-                            </li>
-                          ))}
+                          {entity.sourceMappings.map((mapping) => {
+                            const armed = revokeArmId === mapping.id;
+                            const busy = revokeBusyId === mapping.id;
+                            const userConfirmed = mapping.createdBy === "user";
+                            return (
+                              <li
+                                key={mapping.id}
+                                className="flex flex-wrap items-center gap-2 text-xs"
+                              >
+                                <Badge variant="outline" className="text-xs">
+                                  {mapping.sourceSystem}
+                                </Badge>
+                                <span className="text-muted-foreground">
+                                  {mapping.namespace} / {mapping.externalId}
+                                </span>
+                                <span className="text-muted-foreground">
+                                  visibility: {mapping.visibility}
+                                </span>
+                                {userConfirmed ? (
+                                  // User-confirmed links are visually
+                                  // distinct with their source turn (R11) —
+                                  // these are the agent-era mappings an
+                                  // operator most wants to triage.
+                                  <Badge
+                                    variant="outline"
+                                    className="border-sky-500/40 text-xs text-sky-600 dark:text-sky-400"
+                                  >
+                                    user-confirmed
+                                  </Badge>
+                                ) : (
+                                  <span className="text-muted-foreground">
+                                    by {mapping.createdBy}
+                                  </span>
+                                )}
+                                {userConfirmed && mapping.createdThreadRef ? (
+                                  <span className="text-muted-foreground">
+                                    turn {mapping.createdThreadRef}
+                                  </span>
+                                ) : null}
+                                <Button
+                                  variant={armed ? "destructive" : "ghost"}
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                  disabled={busy || !tenantId}
+                                  aria-label={
+                                    armed
+                                      ? `Confirm revoke of ${mapping.sourceSystem} ${mapping.externalId}`
+                                      : `Revoke mapping ${mapping.sourceSystem} ${mapping.externalId}`
+                                  }
+                                  onClick={() => void handleRevoke(mapping.id)}
+                                >
+                                  {busy ? (
+                                    <Loader2
+                                      className="size-3 animate-spin"
+                                      aria-hidden
+                                    />
+                                  ) : armed ? (
+                                    "Confirm revoke"
+                                  ) : (
+                                    "Revoke"
+                                  )}
+                                </Button>
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
+                      {revokeError ? (
+                        <p className="text-destructive text-xs" role="alert">
+                          {revokeError}
+                        </p>
+                      ) : null}
+                      <div className="flex gap-2 pt-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={!tenantId || entity.status !== "active"}
+                          onClick={() => setAuthorEntity(entity)}
+                        >
+                          Add mapping
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={
+                            !tenantId ||
+                            entity.status !== "active" ||
+                            entity.sourceMappings.length < 2
+                          }
+                          onClick={() => setSplitEntity(entity)}
+                        >
+                          Split
+                        </Button>
+                      </div>
                     </div>
                   ) : null}
                 </li>
@@ -222,7 +352,25 @@ export function IdentityList() {
         onOpenChange={setMergeOpen}
         tenantId={tenantId}
         entities={entities}
-        onMerged={() => reexecute({ requestPolicy: "network-only" })}
+        onMerged={refetch}
+      />
+      <AuthorMappingDialog
+        open={authorEntity !== null}
+        onOpenChange={(open) => {
+          if (!open) setAuthorEntity(null);
+        }}
+        tenantId={tenantId}
+        entity={authorEntity}
+        onAuthored={refetch}
+      />
+      <SplitDialog
+        open={splitEntity !== null}
+        onOpenChange={(open) => {
+          if (!open) setSplitEntity(null);
+        }}
+        tenantId={tenantId}
+        entity={splitEntity}
+        onSplit={refetch}
       />
     </div>
   );

@@ -2458,6 +2458,9 @@ export const SettingsCanonicalEntitiesQuery = graphql(`
         externalId
         visibility
         createdBy
+        createdByUserId
+        createdThreadRef
+        createdAt
       }
     }
   }
@@ -2551,6 +2554,109 @@ export const SettingsMergeCanonicalEntitiesMutation = graphql(`
         identityClaimCount
         memoryClaimCount
         graphEntityCount
+      }
+    }
+  }
+`);
+
+// ─── Identity stewardship (THINK-321 U8) ──────────────────────────────────
+
+export const SettingsAuthorEntitySourceMappingMutation = graphql(`
+  mutation SettingsAuthorEntitySourceMapping(
+    $tenantId: ID
+    $canonicalEntityId: ID!
+    $sourceSystem: String!
+    $namespace: String
+    $externalId: String!
+  ) {
+    authorEntitySourceMapping(
+      tenantId: $tenantId
+      canonicalEntityId: $canonicalEntityId
+      sourceSystem: $sourceSystem
+      namespace: $namespace
+      externalId: $externalId
+    ) {
+      status
+      reason
+      mapping {
+        id
+        canonicalEntityId
+        sourceSystem
+        namespace
+        externalId
+        createdBy
+      }
+      existingMappingId
+      existingCanonicalEntityId
+    }
+  }
+`);
+
+export const SettingsRevokeEntitySourceMappingMutation = graphql(`
+  mutation SettingsRevokeEntitySourceMapping(
+    $tenantId: ID
+    $mappingId: ID!
+    $reason: String
+  ) {
+    revokeEntitySourceMapping(
+      tenantId: $tenantId
+      mappingId: $mappingId
+      reason: $reason
+    ) {
+      status
+      reason
+      canonicalEntityId
+      sourceSystem
+      namespace
+      externalId
+    }
+  }
+`);
+
+export const SettingsCanonicalEntitySplitPreviewQuery = graphql(`
+  query SettingsCanonicalEntitySplitPreview(
+    $tenantId: ID
+    $canonicalEntityId: ID!
+    $assignments: [SplitMappingAssignmentInput!]!
+  ) {
+    canonicalEntitySplitPreview(
+      tenantId: $tenantId
+      canonicalEntityId: $canonicalEntityId
+      assignments: $assignments
+    ) {
+      mappingCountA
+      mappingCountB
+      claimCountFollowingB
+      claimCountRemainingA
+      memoryClaimCount
+      graphEntityCount
+      wikiPageId
+    }
+  }
+`);
+
+export const SettingsSplitCanonicalEntityMutation = graphql(`
+  mutation SettingsSplitCanonicalEntity(
+    $tenantId: ID
+    $canonicalEntityId: ID!
+    $assignments: [SplitMappingAssignmentInput!]!
+    $newEntityDisplayName: String!
+    $confirmImpact: CanonicalEntitySplitImpactInput!
+  ) {
+    splitCanonicalEntity(
+      tenantId: $tenantId
+      canonicalEntityId: $canonicalEntityId
+      assignments: $assignments
+      newEntityDisplayName: $newEntityDisplayName
+      confirmImpact: $confirmImpact
+    ) {
+      entityAId
+      entityBId
+      impact {
+        mappingCountA
+        mappingCountB
+        claimCountFollowingB
+        claimCountRemainingA
       }
     }
   }
