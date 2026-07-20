@@ -182,9 +182,7 @@ interface EvalResultRow {
  * deployments unlinked historical result rows by clearing testCaseId, so keep
  * the UI resilient while those rows are removed by the server-side fix.
  */
-export function visibleEvalResults(
-  results: EvalResultRow[],
-): EvalResultRow[] {
+export function visibleEvalResults(results: EvalResultRow[]): EvalResultRow[] {
   return results.filter(
     (result) =>
       typeof result.testCaseId === "string" && result.testCaseId.length > 0,
@@ -492,6 +490,39 @@ const resultColumns: ColumnDef<EvalResultRow>[] = [
   },
 ];
 
+/**
+ * Delete-run cache invalidation: urql's default document cache invalidates
+ * cached queries by the typenames present in a mutation response, and
+ * `deleteEvalRun` returns a bare Boolean — no typenames. Passing the
+ * Evaluations-dashboard typenames via `additionalTypenames` is what makes
+ * the Recent Runs list (plus the summary cards and pass-rate trend fed by
+ * the same cache) refetch instead of serving the deleted run from cache
+ * after navigating back to /settings/evaluations.
+ */
+export const DELETED_EVAL_RUN_TYPENAMES = [
+  "EvalRun",
+  "EvalRunsPage",
+  "EvalSummary",
+  "EvalTimeSeriesPoint",
+];
+
+export async function performEvalRunDelete(opts: {
+  runId: string;
+  deleteRun: (
+    variables: { id: string },
+    context: { additionalTypenames: string[] },
+  ) => Promise<{ error?: { message: string } }>;
+  onError: (message: string) => void;
+  onDeleted: () => void;
+}): Promise<void> {
+  const result = await opts.deleteRun(
+    { id: opts.runId },
+    { additionalTypenames: DELETED_EVAL_RUN_TYPENAMES },
+  );
+  if (result.error) opts.onError(result.error.message);
+  else opts.onDeleted();
+}
+
 export function SettingsEvalRunDetail() {
   const { runId } = useParams({
     from: "/_authed/settings/evaluations/$runId",
@@ -722,14 +753,19 @@ export function SettingsEvalRunDetail() {
     });
   }
 
-  const handleDelete = useCallback(async () => {
-    const result = await deleteRun({ id: runId });
-    if (result.error) toast.error("Failed to delete: " + result.error.message);
-    else {
-      toast.success("Evaluation deleted");
-      navigate({ to: "/settings/evaluations" });
-    }
-  }, [deleteRun, navigate, runId]);
+  const handleDelete = useCallback(
+    () =>
+      performEvalRunDelete({
+        runId,
+        deleteRun,
+        onError: (message) => toast.error("Failed to delete: " + message),
+        onDeleted: () => {
+          toast.success("Evaluation deleted");
+          navigate({ to: "/settings/evaluations" });
+        },
+      }),
+    [deleteRun, navigate, runId],
+  );
 
   const handleCancel = useCallback(async () => {
     const result = await cancelRun({ id: runId });
