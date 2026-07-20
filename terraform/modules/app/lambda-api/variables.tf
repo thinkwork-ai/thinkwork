@@ -204,14 +204,9 @@ variable "agentcore_turn_assertion_key_versions" {
 }
 
 variable "agentcore_turn_assertion_active_key_version" {
-  description = "Published AgentCore assertion key version used for new signatures."
+  description = "Published AgentCore assertion key version used for new signatures. Must be present in agentcore_turn_assertion_key_versions — enforced by a precondition on the signing key (cross-variable validation needs Terraform >= 1.9, but customer deployment runners pin 1.8.x)."
   type        = string
   default     = "v1"
-
-  validation {
-    condition     = contains(var.agentcore_turn_assertion_key_versions, var.agentcore_turn_assertion_active_key_version)
-    error_message = "agentcore_turn_assertion_active_key_version must be present in agentcore_turn_assertion_key_versions."
-  }
 }
 
 variable "agentcore_proof_oauth_client_id" {
