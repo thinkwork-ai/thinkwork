@@ -1,11 +1,63 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  DELETED_EVAL_RUN_TYPENAMES,
   calculateCategoryPassRates,
   groupEvalResultsByCase,
+  performEvalRunDelete,
   summarizeVisibleEvalResults,
   visibleEvalResults,
 } from "./SettingsEvalRunDetail";
+
+// Deleting a run must invalidate the urql document cache: deleteEvalRun
+// returns a bare Boolean (no typenames), so without the additionalTypenames
+// hint the Evaluations dashboard keeps serving the stale Recent Runs list
+// after navigating back.
+describe("performEvalRunDelete cache invalidation", () => {
+  it("passes the dashboard typenames so cached runs/summary/trend queries refetch", async () => {
+    const deleteRun = vi.fn().mockResolvedValue({});
+    const onDeleted = vi.fn();
+    const onError = vi.fn();
+
+    await performEvalRunDelete({
+      runId: "run-1",
+      deleteRun,
+      onDeleted,
+      onError,
+    });
+
+    expect(deleteRun).toHaveBeenCalledWith(
+      { id: "run-1" },
+      { additionalTypenames: DELETED_EVAL_RUN_TYPENAMES },
+    );
+    expect(DELETED_EVAL_RUN_TYPENAMES).toEqual([
+      "EvalRun",
+      "EvalRunsPage",
+      "EvalSummary",
+      "EvalTimeSeriesPoint",
+    ]);
+    expect(onDeleted).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it("surfaces mutation failure without treating the run as deleted", async () => {
+    const deleteRun = vi.fn().mockResolvedValue({
+      error: { message: "denied" },
+    });
+    const onDeleted = vi.fn();
+    const onError = vi.fn();
+
+    await performEvalRunDelete({
+      runId: "run-1",
+      deleteRun,
+      onDeleted,
+      onError,
+    });
+
+    expect(onError).toHaveBeenCalledWith("denied");
+    expect(onDeleted).not.toHaveBeenCalled();
+  });
+});
 
 describe("SettingsEvalRunDetail category pass rates", () => {
   it("scores categories from completed eval results only", () => {
