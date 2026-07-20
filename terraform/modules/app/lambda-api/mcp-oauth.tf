@@ -120,13 +120,6 @@ resource "aws_kms_key" "agentcore_turn_assertion" {
   customer_master_key_spec = "RSA_2048"
   deletion_window_in_days  = 7
 
-  lifecycle {
-    precondition {
-      condition     = contains(var.agentcore_turn_assertion_key_versions, var.agentcore_turn_assertion_active_key_version)
-      error_message = "agentcore_turn_assertion_active_key_version must be present in agentcore_turn_assertion_key_versions."
-    }
-  }
-
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -143,6 +136,13 @@ resource "aws_kms_key" "agentcore_turn_assertion" {
   tags = {
     Name       = "thinkwork-${var.stage}-agentcore-turn-assertion-${each.key}"
     KeyVersion = each.key
+  }
+
+  lifecycle {
+    precondition {
+      condition     = contains(var.agentcore_turn_assertion_key_versions, var.agentcore_turn_assertion_active_key_version)
+      error_message = "agentcore_turn_assertion_active_key_version must be present in agentcore_turn_assertion_key_versions."
+    }
   }
 }
 
