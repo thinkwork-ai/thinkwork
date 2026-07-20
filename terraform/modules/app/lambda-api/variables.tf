@@ -857,6 +857,12 @@ variable "knowledge_graph_tool_enabled" {
   default     = true
 }
 
+variable "identity_resolution_tool_enabled" {
+  description = "Stage gate for the Pi identity-resolution tools (resolve_entities / propose_mapping_candidates / confirm_mapping, THINK-321 U5). Per-agent tool policy gates on top."
+  type        = bool
+  default     = true
+}
+
 variable "parameters_secrets_extension_layer_arn" {
   description = "Override for the AWS Parameters and Secrets Lambda Extension layer ARN. Empty uses the per-region map in runtime-config.tf; regions absent from the map run without the layer (the runtime-config loader falls back to SDK reads)."
   type        = string

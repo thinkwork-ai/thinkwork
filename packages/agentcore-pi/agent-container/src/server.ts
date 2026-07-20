@@ -53,6 +53,7 @@ import {
   createDelegationExtension,
   createDocumentComposerExtension,
   createFetchWorkspaceSourceExtension,
+  createIdentityResolutionExtension,
   createKnowledgeGraphExtension,
   createSearchExtension,
   createSkillsExtension,
@@ -184,6 +185,7 @@ import {
 } from "./runtime/memory-question.js";
 import { createApiCanvasProvider } from "./runtime/providers/canvas-provider.js";
 import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
+import { createApiIdentityResolutionProvider } from "./runtime/providers/identity-resolution-provider.js";
 import { createApiKnowledgeGraphProvider } from "./runtime/providers/knowledge-graph-provider.js";
 import { createApiSearchProvider } from "./runtime/providers/search-provider.js";
 import { createOkfWikiProvider } from "./runtime/providers/okf-wiki-provider.js";
@@ -1842,6 +1844,58 @@ export async function buildInvocationResources(
         hasApiUrl: Boolean(kgApiUrl),
         hasApiSecret: Boolean(kgApiSecret),
         hasTurnReference: Boolean(kgThreadTurnId || kgThreadId),
+      });
+    }
+  }
+
+  // Identity Resolution (THINK-321 U5) — `resolve_entities` /
+  // `propose_mapping_candidates` / `confirm_mapping` over the API's
+  // entity-identity GraphQL surface. Gated on the
+  // `identity_resolution_enabled` payload flag; skipped in eval mode
+  // (user-less). Identity is turn-bound: the provider snapshots the
+  // thread-turn reference at entry and the API resolves tenant/user/thread
+  // server-side from it (KTD-1) — no tenant assertion travels with the
+  // request. `addExtension` folds the tool names into the allowlist; omit
+  // that and the tools register but are silently gated from the model.
+  if (
+    args.payload.eval_mode !== true &&
+    args.payload.identity_resolution_enabled === true
+  ) {
+    const idApiUrl = asString(args.payload.thinkwork_api_url);
+    const idApiSecret = asString(args.payload.thinkwork_api_secret);
+    const idThreadTurnId = asString(args.payload.thread_turn_id);
+    const idThreadId = args.identity.threadId;
+    if (idApiUrl && idApiSecret && (idThreadTurnId || idThreadId)) {
+      addExtension(
+        createIdentityResolutionExtension({
+          onError: (error, { phase }) =>
+            logStructured({
+              level: "warn",
+              event: "identity_resolution_failed",
+              phase,
+              tenantId: args.identity.tenantId,
+              threadId: args.identity.threadId,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+        }),
+        {
+          identityResolution: createApiIdentityResolutionProvider({
+            apiUrl: idApiUrl,
+            apiSecret: idApiSecret,
+            threadTurnId: idThreadTurnId || undefined,
+            threadId: idThreadId || undefined,
+          }),
+        },
+      );
+    } else {
+      logStructured({
+        level: "warn",
+        event: "identity_resolution_skipped_missing_wiring",
+        tenantId: args.identity.tenantId,
+        threadId: args.identity.threadId,
+        hasApiUrl: Boolean(idApiUrl),
+        hasApiSecret: Boolean(idApiSecret),
+        hasTurnReference: Boolean(idThreadTurnId || idThreadId),
       });
     }
   }

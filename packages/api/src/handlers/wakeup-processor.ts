@@ -300,8 +300,9 @@ export async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -571,8 +572,9 @@ export async function renderWorkspaceTupleForWakeup(input: {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({
     region: process.env.AWS_REGION || "us-east-1",
   });
@@ -1623,12 +1625,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } =
-          await import("../lib/orchestration/process-parser.js");
-        const { materializeProcess } =
-          await import("../lib/orchestration/process-materializer.js");
-        const { S3Client, GetObjectCommand } =
-          await import("@aws-sdk/client-s3");
+        const { parseProcessTemplate } = await import(
+          "../lib/orchestration/process-parser.js"
+        );
+        const { materializeProcess } = await import(
+          "../lib/orchestration/process-materializer.js"
+        );
+        const { S3Client, GetObjectCommand } = await import(
+          "@aws-sdk/client-s3"
+        );
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -2187,6 +2192,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const effectiveKnowledgeGraphEnabled =
     (process.env.KNOWLEDGE_GRAPH_TOOL_ENABLED || "").toLowerCase() === "true" &&
     isAnyToolAllowed(...toolPolicyAliases("knowledge_graph_search"));
+  // THINK-321 U5 — identity-resolution tool parity with chat-agent-invoke:
+  // wakeup turns get the crosswalk tools under the same stage env flag and
+  // per-agent tool policy.
+  const effectiveIdentityResolutionEnabled =
+    (process.env.IDENTITY_RESOLUTION_ENABLED || "").toLowerCase() === "true" &&
+    isAnyToolAllowed(...toolPolicyAliases("resolve_entities"));
   const effectiveOkfWikiNavigatorEnabled = isAnyToolAllowed(
     ...toolPolicyAliases("okf_wiki_navigator"),
   );
@@ -2531,6 +2542,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       context_engine_enabled: effectiveContextEngineEnabled || undefined,
       context_engine_config: effectiveContextEngineConfig,
       knowledge_graph_enabled: effectiveKnowledgeGraphEnabled || undefined,
+      identity_resolution_enabled:
+        effectiveIdentityResolutionEnabled || undefined,
       runtime_type: runtimeType,
       // The Harness runner uses the canonical wakeup source to apply
       // source-specific control-plane behavior (for example, AgentLoop's
@@ -3324,6 +3337,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             context_engine_config: effectiveContextEngineConfig,
             knowledge_graph_enabled:
               effectiveKnowledgeGraphEnabled || undefined,
+            identity_resolution_enabled:
+              effectiveIdentityResolutionEnabled || undefined,
             runtime_type: runtimeType,
             invocation_source: wakeup.source,
             model: agentModel,
@@ -3585,8 +3600,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } =
-          await import("../lib/push-notifications.js");
+        const { sendTurnCompletedPush } = await import(
+          "../lib/push-notifications.js"
+        );
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,

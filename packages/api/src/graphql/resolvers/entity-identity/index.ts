@@ -13,9 +13,15 @@ import {
   entityResolutionCases,
 } from "./entityResolutionCases.query.js";
 import {
+  confirmEntityMapping,
+  declineEntityMappingCandidates,
+  proposeMappingCandidates,
+} from "./mappingCandidates.mutation.js";
+import {
   canonicalEntityMergePreview,
   mergeCanonicalEntities,
 } from "./mergeCanonicalEntities.mutation.js";
+import { resolveEntities } from "./resolveEntities.query.js";
 import { resolveEntityResolutionCase } from "./resolveEntityResolutionCase.mutation.js";
 
 export const entityIdentityQueries = {
@@ -24,9 +30,16 @@ export const entityIdentityQueries = {
   entityResolutionCases,
   entityResolutionCase,
   canonicalEntityMergePreview,
+  // THINK-321 U5 agent routing read (turn-bound for service callers).
+  resolveEntities,
 };
 
 export const entityIdentityMutations = {
   resolveEntityResolutionCase,
   mergeCanonicalEntities,
+  // THINK-321 U5 consent-bound routing writes (turn-bound for service
+  // callers; the consent echo check lives in the U2 routing lib).
+  proposeMappingCandidates,
+  confirmEntityMapping,
+  declineEntityMappingCandidates,
 };

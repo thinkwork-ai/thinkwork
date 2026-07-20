@@ -7,6 +7,7 @@ export * from "./context-engine.js";
 export * from "./delegation.js";
 export * from "./document-composer.js";
 export * from "./fetch-workspace-source.js";
+export * from "./identity-resolution.js";
 export * from "./knowledge-graph.js";
 export * from "./search.js";
 export * from "./memory.js";

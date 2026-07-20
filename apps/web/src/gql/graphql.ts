@@ -1744,6 +1744,20 @@ export type ConfirmAutomationDraftInput = {
   input: SaveAgentLoopInput;
 };
 
+export type ConfirmEntityMappingResult = {
+  __typename?: "ConfirmEntityMappingResult";
+  canonicalEntityId?: Maybe<Scalars["ID"]["output"]>;
+  existingCanonicalEntityId?: Maybe<Scalars["ID"]["output"]>;
+  existingMappingId?: Maybe<Scalars["ID"]["output"]>;
+  externalId?: Maybe<Scalars["String"]["output"]>;
+  mappingId?: Maybe<Scalars["ID"]["output"]>;
+  namespace?: Maybe<Scalars["String"]["output"]>;
+  reason?: Maybe<Scalars["String"]["output"]>;
+  sourceSystem?: Maybe<Scalars["String"]["output"]>;
+  /** confirmed | already_linked | refused. */
+  status: Scalars["String"]["output"];
+};
+
 export type ConnectionResearchPayload = {
   __typename?: "ConnectionResearchPayload";
   definitions: Array<CapabilityDefinition>;
@@ -2253,6 +2267,15 @@ export type DecideRoutineApprovalInput = {
   inboxItemId: Scalars["ID"]["input"];
 };
 
+export type DeclineEntityMappingResult = {
+  __typename?: "DeclineEntityMappingResult";
+  caseId?: Maybe<Scalars["ID"]["output"]>;
+  coalesced?: Maybe<Scalars["Boolean"]["output"]>;
+  reason?: Maybe<Scalars["String"]["output"]>;
+  /** declined | refused. */
+  status: Scalars["String"]["output"];
+};
+
 export type DelegateThreadInput = {
   agentId: Scalars["ID"]["input"];
   assigneeId: Scalars["ID"]["input"];
@@ -2741,6 +2764,30 @@ export type EntityDossierResult = {
   disambiguation: Array<SearchEntityHit>;
   /** The assembled dossier, or null when ambiguous or no grounded match. */
   match?: Maybe<EntityDossier>;
+};
+
+/**
+ * One entity reference for resolveEntities (THINK-321 U5). Exactly one shape
+ * applies, checked in precedence order: canonicalId, then
+ * (sourceSystem, externalId), then (name, entityTypeSlug). A ref matching no
+ * shape resolves to an explicit invalid_ref miss rather than being dropped.
+ */
+export type EntityRefInput = {
+  canonicalId?: InputMaybe<Scalars["ID"]["input"]>;
+  entityTypeSlug?: InputMaybe<Scalars["String"]["input"]>;
+  externalId?: InputMaybe<Scalars["String"]["input"]>;
+  name?: InputMaybe<Scalars["String"]["input"]>;
+  namespace?: InputMaybe<Scalars["String"]["input"]>;
+  sourceSystem?: InputMaybe<Scalars["String"]["input"]>;
+};
+
+export type EntityRefResolution = {
+  __typename?: "EntityRefResolution";
+  entity?: Maybe<ResolvedEntityHit>;
+  /** hit | miss. */
+  status: Scalars["String"]["output"];
+  /** Miss reason: not_found | ambiguous_name | archived | invalid_ref. */
+  unroutable?: Maybe<Scalars["String"]["output"]>;
 };
 
 /**
@@ -4514,6 +4561,14 @@ export type Mutation = {
   compileWikiNow: WikiCompileJob;
   configureEmailProvider: EmailProviderInstall;
   confirmAutomationDraft: AgentLoop;
+  /**
+   * Consent-bound confirm (THINK-321 KTD-2): succeeds only when the echoed
+   * candidate id equals the user selection recorded at answer intake on an
+   * open, unexpired set for the same thread. Attribution is SERVER-derived —
+   * created_by='user' and the user id come from the turn context, never from
+   * arguments.
+   */
+  confirmEntityMapping: ConfirmEntityMappingResult;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
   createCanvasRefreshSchedule: CanvasRefreshSchedule;
@@ -4574,6 +4629,12 @@ export type Mutation = {
   deactivatePlugin: UserPluginActivation;
   decideInboxItem: InboxItem;
   decideRoutineApproval: InboxItem;
+  /**
+   * Reject-all path (THINK-321 R16): no mapping is written; a
+   * signature-deduped resolution case is filed with agent/turn provenance so
+   * the miss converges to operator stewardship instead of re-asking forever.
+   */
+  declineEntityMappingCandidates: DeclineEntityMappingResult;
   delegateThread: Thread;
   deleteAgentLoop: DeleteAgentLoopResult;
   deleteAgentProfile: Scalars["Boolean"]["output"];
@@ -4682,6 +4743,13 @@ export type Mutation = {
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
   promoteSpaceMemoriesToTenant: TenantMemoryPromotionResult;
+  /**
+   * Rank candidate matches for one entity's unmapped target system and persist
+   * the set for the consent echo check (THINK-321 KTD-2). Turn-bound service
+   * callers derive threadRef server-side; an asserted threadRef that mismatches
+   * the derivation is rejected. Admin callers must supply threadRef.
+   */
+  proposeMappingCandidates: ProposeMappingCandidatesResult;
   /**
    * Run the analyst connector provisioning ceremony for the caller's tenant
    * (THINK-230) — the operator-facing action that replaces the
@@ -5203,6 +5271,13 @@ export type MutationConfirmAutomationDraftArgs = {
   input: ConfirmAutomationDraftInput;
 };
 
+export type MutationConfirmEntityMappingArgs = {
+  candidateId: Scalars["String"]["input"];
+  candidateSetId: Scalars["ID"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadRef?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
 export type MutationCreateAgentProfileArgs = {
   input: AgentProfileInput;
   tenantId: Scalars["ID"]["input"];
@@ -5346,6 +5421,12 @@ export type MutationDecideInboxItemArgs = {
 
 export type MutationDecideRoutineApprovalArgs = {
   input: DecideRoutineApprovalInput;
+};
+
+export type MutationDeclineEntityMappingCandidatesArgs = {
+  candidateSetId: Scalars["ID"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadRef?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type MutationDelegateThreadArgs = {
@@ -5718,6 +5799,13 @@ export type MutationPromoteSpaceMemoriesToTenantArgs = {
   memoryIds: Array<Scalars["ID"]["input"]>;
   spaceId: Scalars["ID"]["input"];
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type MutationProposeMappingCandidatesArgs = {
+  canonicalEntityId: Scalars["ID"]["input"];
+  targetSystem: Scalars["String"]["input"];
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+  threadRef?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type MutationProvisionAnalystConnectorArgs = {
@@ -7323,6 +7411,21 @@ export type PromoteDraftAppletInput = {
   threadId: Scalars["ID"]["input"];
 };
 
+/**
+ * Candidate proposal result (THINK-321 KTD-2). candidates is the ranked
+ * MappingCandidate array (external-record identity evidence only); the set is
+ * persisted server-side for the consent echo check.
+ */
+export type ProposeMappingCandidatesResult = {
+  __typename?: "ProposeMappingCandidatesResult";
+  candidateSetId?: Maybe<Scalars["ID"]["output"]>;
+  candidates?: Maybe<Scalars["AWSJSON"]["output"]>;
+  expiresAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  reason?: Maybe<Scalars["String"]["output"]>;
+  /** proposed | refused. */
+  status: Scalars["String"]["output"];
+};
+
 export type PublishRoutineVersionInput = {
   asl: Scalars["AWSJSON"]["input"];
   markdownSummary: Scalars["String"]["input"];
@@ -7597,6 +7700,14 @@ export type Query = {
   recipe?: Maybe<Recipe>;
   recipes: Array<Recipe>;
   releaseUpdateJob?: Maybe<ReleaseUpdateJob>;
+  /**
+   * Bulk-first crosswalk resolve (THINK-321 U5, R1/R2). Service (agent-tool)
+   * callers are turn-bound: tenant derives server-side from the
+   * x-thread-turn-id / x-thread-id header; other callers are tenant-admin
+   * gated. Results are paged (server-capped page size) so unbounded bulk
+   * resolves cannot blow the payload envelope.
+   */
+  resolveEntities: ResolveEntitiesResult;
   routine?: Maybe<Routine>;
   routineAslVersion?: Maybe<RoutineAslVersion>;
   routineDefinition?: Maybe<RoutineDefinition>;
@@ -8436,6 +8547,14 @@ export type QueryReleaseUpdateJobArgs = {
   jobId: Scalars["ID"]["input"];
 };
 
+export type QueryResolveEntitiesArgs = {
+  limit?: InputMaybe<Scalars["Int"]["input"]>;
+  page?: InputMaybe<Scalars["Int"]["input"]>;
+  refs: Array<EntityRefInput>;
+  targetSystems?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
 export type QueryRoutineArgs = {
   id: Scalars["ID"]["input"];
 };
@@ -9169,6 +9288,45 @@ export enum ResendMemberInviteStatus {
   NotPending = "NOT_PENDING",
   Resent = "RESENT",
 }
+
+export type ResolveEntitiesResult = {
+  __typename?: "ResolveEntitiesResult";
+  hasMore: Scalars["Boolean"]["output"];
+  limit: Scalars["Int"]["output"];
+  page: Scalars["Int"]["output"];
+  results: Array<EntityRefResolution>;
+  totalRefs: Scalars["Int"]["output"];
+};
+
+export type ResolvedEntityHit = {
+  __typename?: "ResolvedEntityHit";
+  canonicalEntityId: Scalars["ID"]["output"];
+  displayName: Scalars["String"]["output"];
+  entityTypeSlug: Scalars["String"]["output"];
+  mappings: Array<ResolvedEntityMapping>;
+};
+
+/**
+ * One crosswalk mapping with full provenance (THINK-321 KTD-1/KTD-5).
+ * connectorSlug is null — and fetchable false — when the source system has no
+ * registered connector link (fail-closed): callers must never invent a slug.
+ */
+export type ResolvedEntityMapping = {
+  __typename?: "ResolvedEntityMapping";
+  /** curated | matched | user_confirmed — who vouches for this link (R3). */
+  caveat: Scalars["String"]["output"];
+  confidence?: Maybe<Scalars["Float"]["output"]>;
+  connectorSlug?: Maybe<Scalars["String"]["output"]>;
+  createdAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  createdBy: Scalars["String"]["output"];
+  createdByUserId?: Maybe<Scalars["ID"]["output"]>;
+  createdThreadRef?: Maybe<Scalars["String"]["output"]>;
+  externalId: Scalars["String"]["output"];
+  fetchable: Scalars["Boolean"]["output"];
+  namespace: Scalars["String"]["output"];
+  sourceSystem: Scalars["String"]["output"];
+  unroutableReason?: Maybe<Scalars["String"]["output"]>;
+};
 
 export type ResubmitInboxItemInput = {
   config?: InputMaybe<Scalars["AWSJSON"]["input"]>;

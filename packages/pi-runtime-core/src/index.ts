@@ -7,6 +7,7 @@ export * from "./desktop-session.js";
 export * from "./durable-session-manager.js";
 export * from "./finalize-client.js";
 export * from "./history.js";
+export * from "./identity-resolution-provider.js";
 export * from "./json-render-runtime.js";
 export * from "./knowledge-graph-provider.js";
 export * from "./memory-provider.js";

@@ -17,6 +17,14 @@ const KNOWLEDGE_GRAPH_ALIASES = [
   "knowledge_graph",
 ] as const;
 
+const IDENTITY_RESOLUTION_ALIASES = [
+  "resolve_entities",
+  "propose_mapping_candidates",
+  "confirm_mapping",
+  "identity-resolution",
+  "identity_resolution",
+] as const;
+
 const OKF_WIKI_NAVIGATOR_ALIASES = [
   "okf_wiki_navigator",
   "okf-wiki-navigator",
@@ -29,6 +37,11 @@ const TOOL_POLICY_ALIASES: Record<string, readonly string[]> = {
   knowledge_graph_neighbors: KNOWLEDGE_GRAPH_ALIASES,
   "knowledge-graph": KNOWLEDGE_GRAPH_ALIASES,
   knowledge_graph: KNOWLEDGE_GRAPH_ALIASES,
+  resolve_entities: IDENTITY_RESOLUTION_ALIASES,
+  propose_mapping_candidates: IDENTITY_RESOLUTION_ALIASES,
+  confirm_mapping: IDENTITY_RESOLUTION_ALIASES,
+  "identity-resolution": IDENTITY_RESOLUTION_ALIASES,
+  identity_resolution: IDENTITY_RESOLUTION_ALIASES,
   okf_wiki_navigator: OKF_WIKI_NAVIGATOR_ALIASES,
   "okf-wiki-navigator": OKF_WIKI_NAVIGATOR_ALIASES,
   wiki_ls: OKF_WIKI_NAVIGATOR_ALIASES,
