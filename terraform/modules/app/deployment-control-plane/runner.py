@@ -1008,12 +1008,20 @@ def validate_and_materialize_approved_plan(payload, state_identity):
         saved_plan.get("sha256"),
         "approvedPlan.savedPlan",
     )
+    accepted_json = WORK / "accepted-terraform-plan.json"
+    _download_approved_artifact(
+        plan_json.get("s3Uri"),
+        accepted_json,
+        plan_json.get("sha256"),
+        "approvedPlan.jsonPlan",
+    )
     rendered = WORK / "approved-terraform-plan.json"
     with rendered.open("w", encoding="utf-8") as handle:
         run(["terraform", "show", "-json", "tfplan"], cwd=TF, stdout=handle)
-    if sha256_file(rendered) != plan_json.get("sha256"):
-        raise RuntimeError("Approved saved plan no longer renders to the accepted JSON plan")
+    accepted_plan = json.loads(accepted_json.read_text(encoding="utf-8"))
     rendered_plan = json.loads(rendered.read_text(encoding="utf-8"))
+    if rendered_plan != accepted_plan:
+        raise RuntimeError("Approved saved plan no longer renders to the accepted JSON plan")
     if payload.get("incidentRecovery") is not None:
         delete_addresses = terraform_plan_delete_addresses(rendered_plan)
         if delete_addresses:
