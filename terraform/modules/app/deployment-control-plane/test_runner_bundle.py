@@ -370,9 +370,7 @@ def test_native_auth_reconciliation_accepts_cognito_tenant_aliases(alias: str) -
         for item in payload["connections"]
         if item["connectionKey"] == "microsoft:organizations"
     )
-    assert microsoft_connection["issuerUrl"] == (
-        f"https://login.microsoftonline.com/{alias}/v2.0"
-    )
+    assert microsoft_connection["issuerUrl"] == (f"https://login.microsoftonline.com/{alias}/v2.0")
 
 
 @pytest.mark.parametrize("tenant", ["tenant.example", "contoso", "9d65869f", ""])
@@ -721,16 +719,35 @@ def test_packaged_agentcore_control_runtime_is_exact_and_runnable(
     evidence = runner.prepare_agentcore_control_runtime()
 
     assert evidence["sdkVersion"] == "3.1089.0"
+    assert int(evidence["nodeVersion"].removeprefix("v").split(".", 1)[0]) >= 22
     assert evidence["bundledRuntimeVerified"] is True
     assert evidence["bundledEntrypoints"] == [
         "harness-lifecycle.js",
         "preflight.js",
         "reconcile_twenty_provider.js",
     ]
+    assert json.loads(
+        (runner_dir / "agentcore-control-runtime" / "package.json").read_text(encoding="utf-8")
+    ) == {"type": "module"}
     assert os.environ["THINKWORK_AGENTCORE_CONTROL_RUNTIME_DIR"] == str(
         runner_dir / "agentcore-control-runtime"
     )
     assert all(item["sdkImportReady"] for item in evidence["entrypointPreflights"])
+
+
+@pytest.mark.parametrize("version", ["v22.14.0", "v24.1.0", "26.5.0"])
+def test_agentcore_control_runtime_accepts_supported_node_versions(version: str) -> None:
+    runner = load_runner()
+
+    assert runner.validate_agentcore_node_runtime(version).startswith("v")
+
+
+@pytest.mark.parametrize("version", ["v20.19.5", "v18.20.8", "unknown", ""])
+def test_agentcore_control_runtime_rejects_unsupported_node_versions(version: str) -> None:
+    runner = load_runner()
+
+    with pytest.raises(RuntimeError, match="Node.js 22|Cannot determine"):
+        runner.validate_agentcore_node_runtime(version)
 
 
 @pytest.mark.parametrize("action", ["deploy", "update", "plan", "destroy"])
@@ -781,14 +798,13 @@ def test_packaged_agentcore_control_runtime_rebuild_removes_stale_files(
     )
     paths = {item["path"] for item in manifest["files"]}
     generated = {
-        str(path.relative_to(runtime_dir))
-        for path in runtime_dir.rglob("*")
-        if path.is_file()
+        str(path.relative_to(runtime_dir)) for path in runtime_dir.rglob("*") if path.is_file()
     }
     assert "stale-chunk.js" not in generated
     assert paths == generated
     assert {path for path in paths if "/" not in path} == {
         "harness-lifecycle.js",
+        "package.json",
         "preflight.js",
         "reconcile_twenty_provider.js",
     }
@@ -2035,7 +2051,7 @@ def test_main_reconciles_native_auth_before_destructive_schema() -> None:
     source = Path(__file__).with_name("runner.py").read_text(encoding="utf-8")
     post_apply = source[source.index("def main():") :]
     reconciliation = post_apply.index(
-        "CONTROLLER_EVIDENCE[\"authReconciliation\"] = reconcile_native_auth_metadata"
+        'CONTROLLER_EVIDENCE["authReconciliation"] = reconcile_native_auth_metadata'
     )
     schema = post_apply.index("push_database_schema(outputs_path, vars_json)", reconciliation)
 

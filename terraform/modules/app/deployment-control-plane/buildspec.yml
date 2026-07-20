@@ -2,6 +2,8 @@ version: 0.2
 
 phases:
   install:
+    runtime-versions:
+      nodejs: 22
     commands:
       - |
         if ! command -v terraform >/dev/null 2>&1; then
@@ -17,6 +19,7 @@ phases:
           fi
         fi
       - terraform version
+      - node --version
       - psql --version
   build:
     commands:

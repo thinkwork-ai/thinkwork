@@ -22,3 +22,17 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+
+  agentcore-control-runtime-node22:
+    name: AgentCore control runtime (Node 22)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: bash scripts/release/package-agentcore-control-runtime.sh
+      - run: bash scripts/release/verify-agentcore-control-runtime-node22.sh

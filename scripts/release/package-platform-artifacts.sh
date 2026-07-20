@@ -27,6 +27,7 @@ if [[ ! -f "$RELEASE_DIR/runner/thinkwork-runner.py" ]]; then
   exit 66
 fi
 if [[ ! -f "$RELEASE_DIR/runner/agentcore-control-runtime.json" ]] ||
+  [[ ! -f "$RELEASE_DIR/runner/agentcore-control-runtime/package.json" ]] ||
   [[ ! -f "$RELEASE_DIR/runner/agentcore-control-runtime/preflight.js" ]] ||
   [[ ! -f "$RELEASE_DIR/runner/agentcore-control-runtime/reconcile_twenty_provider.js" ]] ||
   [[ ! -f "$RELEASE_DIR/runner/agentcore-control-runtime/harness-lifecycle.js" ]]; then

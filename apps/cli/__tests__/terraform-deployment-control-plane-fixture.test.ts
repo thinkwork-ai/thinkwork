@@ -64,6 +64,8 @@ describe("deployment control plane Terraform fixture", () => {
     expect(source).toMatch(/type\s*=\s*"NO_SOURCE"/);
     expect(source).toMatch(/buildspec = file/);
     expect(buildspec).toMatch(/THINKWORK_RUNNER_SCRIPT_S3_URI/);
+    expect(buildspec).toMatch(/runtime-versions:\s*\n\s*nodejs:\s*22/);
+    expect(buildspec).toMatch(/node --version/);
     expect(buildspec).toMatch(/python3 \/tmp\/thinkwork-runner\.py/);
     expect(source).toMatch(/THINKWORK_RUNNER_SCRIPT_S3_URI/);
     expect(source).toMatch(/THINKWORK_DEPLOYMENT_INPUT/);

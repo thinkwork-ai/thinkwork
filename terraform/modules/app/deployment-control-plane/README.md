@@ -30,6 +30,24 @@ Full deploy/update plans fail closed when they would delete customer-domain
 resources or remove web CloudFront aliases unless
 `allowCustomerDomainRemoval=true` is set for an intentional reviewed retirement.
 
+## Node.js 22 control-runtime transition
+
+The AgentCore control SDK requires Node.js 20 or newer, and the ThinkWork
+toolchain requires Node.js 22 or newer. New and reconciled CodeBuild projects
+therefore select Node.js 22 in the checked-in buildspec, and release CI executes
+every packaged control-runtime entrypoint under that exact major.
+
+An established deployment whose live CodeBuild project still embeds the older
+Node.js 18 buildspec upgrades in 2 managed stages. First, the existing Python
+runner loads the ESM-bounded release under Node.js 18 only long enough to produce
+and apply an independently accepted Terraform plan. That transition must perform
+no AgentCore SDK API operation; the plan may only update CodeBuild to Node.js 22
+in place alongside the intended application changes, with zero delete or replace
+actions. Then read back the live buildspec, refresh the runner through the
+release-remediation API using the manifest's standalone runner asset and digest,
+and rerun the controller under Node.js 22. Do not claim Node.js 18 support from
+this bounded transition. Subsequent updates are entirely Terraform-owned.
+
 Platform deploys stay on the root Terraform state key:
 `thinkwork/<stage>/terraform.tfstate`.
 

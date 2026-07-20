@@ -404,8 +404,25 @@ def safe_extract_tar_file(archive_path, destination):
         tar.extractall(destination, members=members)
 
 
+def validate_agentcore_node_runtime(version):
+    normalized = str(version or "").strip().removeprefix("v")
+    try:
+        major = int(normalized.split(".", 1)[0])
+    except (TypeError, ValueError):
+        raise RuntimeError(
+            f"Cannot determine Node.js version for AgentCore runtime: {version}"
+        ) from None
+    if major < 22:
+        raise RuntimeError(
+            "AgentCore control runtime requires Node.js 22 or newer; "
+            f"deployment runner is using {version}"
+        )
+    return f"v{normalized}"
+
+
 def prepare_agentcore_control_runtime():
     global RELEASE_EVIDENCE
+    node_version = validate_agentcore_node_runtime(output(["node", "--version"]))
     runner_bundle = bundle_extract_dir({"name": "platform"}) / "runner"
     manifest_path = runner_bundle / "agentcore-control-runtime.json"
     if not manifest_path.is_file():
@@ -434,9 +451,8 @@ def prepare_agentcore_control_runtime():
         "preflight.js",
         "reconcile_twenty_provider.js",
     }
-    if len(runtime_paths) != len(set(runtime_paths)) or not required_entrypoints.issubset(
-        runtime_paths
-    ):
+    required_files = required_entrypoints | {"package.json"}
+    if len(runtime_paths) != len(set(runtime_paths)) or not required_files.issubset(runtime_paths):
         raise RuntimeError("AgentCore control runtime manifest has an invalid file set")
     for runtime_file in runtime_files:
         file_path = safe_join(runtime_dir, str(runtime_file.get("path") or ""))
@@ -445,12 +461,14 @@ def prepare_agentcore_control_runtime():
                 f"AgentCore control runtime file digest mismatch: {runtime_file.get('path')}"
             )
     actual_runtime_paths = {
-        str(path.relative_to(runtime_dir))
-        for path in runtime_dir.rglob("*")
-        if path.is_file()
+        str(path.relative_to(runtime_dir)) for path in runtime_dir.rglob("*") if path.is_file()
     }
     if actual_runtime_paths != set(runtime_paths):
         raise RuntimeError("AgentCore control runtime contains unmanifested or missing files")
+
+    module_boundary = json.loads((runtime_dir / "package.json").read_text(encoding="utf-8"))
+    if module_boundary != {"type": "module"}:
+        raise RuntimeError("AgentCore control runtime has an invalid ESM module boundary")
 
     preflight = json.loads(output(["node", str(runtime_dir / "preflight.js")]))
     if preflight != expected_sdk:
@@ -477,10 +495,9 @@ def prepare_agentcore_control_runtime():
         "manifestSha256": sha256_file(manifest_path),
         "sdkPackage": preflight["package"],
         "sdkVersion": preflight["version"],
+        "nodeVersion": node_version,
         "bundledEntrypoints": sorted(
-            item["path"]
-            for item in runtime_files
-            if item.get("path") in required_entrypoints
+            item["path"] for item in runtime_files if item.get("path") in required_entrypoints
         ),
         "bundledRuntimeVerified": True,
         "entrypointPreflights": entrypoint_preflights,
@@ -3288,11 +3305,7 @@ def write_runner_files(payload, runner_secrets):
         current_outputs=current_outputs,
     )
     prior_phase_output = current_outputs.get("auth_retirement_phase")
-    prior_phase = (
-        prior_phase_output.get("value")
-        if isinstance(prior_phase_output, dict)
-        else None
-    )
+    prior_phase = prior_phase_output.get("value") if isinstance(prior_phase_output, dict) else None
     if prior_phase not in {"coexistence", "cutover", "retired"}:
         # An existing pre-native-auth stack must enter through coexistence.
         # A truly empty state is greenfield and has no WorkOS runtime to keep.
