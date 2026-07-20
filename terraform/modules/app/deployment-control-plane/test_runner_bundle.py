@@ -750,7 +750,7 @@ def test_agentcore_control_runtime_rejects_unsupported_node_versions(version: st
         runner.validate_agentcore_node_runtime(version)
 
 
-@pytest.mark.parametrize("action", ["deploy", "update", "plan", "destroy"])
+@pytest.mark.parametrize("action", ["deploy", "update", "plan", "apply", "destroy"])
 def test_agentcore_control_runtime_is_required_even_when_proof_is_disabled(
     action: str,
 ) -> None:
@@ -771,6 +771,15 @@ def test_web_only_release_sync_does_not_require_agentcore_control_runtime() -> N
         "artifact_names": {"web"},
     }
     assert not runner.requires_agentcore_control_runtime("web", {}, None)
+
+
+def test_saved_plan_apply_stages_the_approved_release_artifacts() -> None:
+    runner = load_runner()
+
+    assert runner.release_sync_request("apply", {}, None) == {
+        "artifact_types": None,
+        "artifact_names": None,
+    }
 
 
 def test_packaged_agentcore_control_runtime_rebuild_removes_stale_files(

@@ -1243,7 +1243,7 @@ def is_web_only_operation(payload, action=None):
 
 def release_sync_request(action, payload, identity_operation):
     if (
-        action not in {"deploy", "update", "web"}
+        action not in {"deploy", "update", "apply", "web"}
         or is_managed_app_operation(payload)
         or identity_operation is not None
     ):
@@ -1257,7 +1257,7 @@ def release_sync_request(action, payload, identity_operation):
 
 def requires_agentcore_control_runtime(action, payload, identity_operation):
     return (
-        action in {"deploy", "update", "plan", "destroy"}
+        action in {"deploy", "update", "plan", "apply", "destroy"}
         and not is_managed_app_operation(payload)
         and identity_operation is None
     )
