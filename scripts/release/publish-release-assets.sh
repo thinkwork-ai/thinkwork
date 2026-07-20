@@ -61,6 +61,11 @@ else
   fi
 fi
 
+RUNNER_SCRIPT="$RELEASE_DIR/runner/thinkwork-runner.py"
+if [[ -f "$RUNNER_SCRIPT" ]]; then
+  ASSETS+=("$RUNNER_SCRIPT")
+fi
+
 if [[ ${#ASSETS[@]} -eq 0 ]]; then
   echo "No deployable assets found under $RELEASE_DIR" >&2
   exit 66

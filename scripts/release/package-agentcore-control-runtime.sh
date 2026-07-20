@@ -31,6 +31,11 @@ pnpm exec esbuild \
   --chunk-names=chunks/[name]-[hash] \
   --outdir="$runtime_dir"
 
+# The bundled entrypoints use ESM syntax but intentionally retain a .js suffix
+# because Terraform wrappers refer to stable filenames. Ship an explicit module
+# boundary with the runtime so CodeBuild never falls back to CommonJS parsing.
+printf '%s\n' '{"type":"module"}' >"$runtime_dir/package.json"
+
 preflight="$(node "$runtime_dir/preflight.js")"
 if ! jq -e '
   .package == "@aws-sdk/client-bedrock-agentcore-control" and
@@ -55,6 +60,11 @@ entrypoints="$(find "$runtime_dir" -maxdepth 1 -type f -name '*.js' -exec basena
 if [[ "$entrypoints" != $'harness-lifecycle.js\npreflight.js\nreconcile_twenty_provider.js' ]]; then
   echo "Bundled AgentCore control runtime has an unexpected entrypoint set:" >&2
   printf '%s\n' "$entrypoints" >&2
+  exit 1
+fi
+
+if [[ "$(jq -cS . "$runtime_dir/package.json")" != '{"type":"module"}' ]]; then
+  echo "Bundled AgentCore control runtime has an invalid ESM module boundary" >&2
   exit 1
 fi
 

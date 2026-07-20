@@ -90,6 +90,9 @@ jobs:
       - name: Package AgentCore control runtime
         run: bash scripts/release/package-agentcore-control-runtime.sh
 
+      - name: Verify AgentCore control runtime under deployment Node.js
+        run: bash scripts/release/verify-agentcore-control-runtime-node22.sh
+
       - name: Stage Twenty ThinkWork app package
         run: |
           mkdir -p dist/release/managed-apps
@@ -244,6 +247,7 @@ jobs:
             dist/release/thinkwork-release.json
             dist/release/thinkwork-release.sig.json
             dist/release/platform-artifacts.tar.gz
+            dist/release/runner/thinkwork-runner.py
           retention-days: 7
 
   # ── Publish CLI to npm ──────────────────────────────────────────
