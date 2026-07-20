@@ -1202,6 +1202,13 @@ resource "aws_iam_policy" "api_orchestration" {
   depends_on = [aws_iam_role_policy_attachment.api_invocation]
 
   lifecycle {
+    # Existing environments may retain the historical description that also
+    # mentioned Lambda invocation. Description changes replace IAM managed
+    # policies, which would destroy the old orchestration grant before the new
+    # invocation attachment is ready. Keep the policy identity stable so the
+    # depends_on edge above orders an in-place document update after attach.
+    ignore_changes = [description]
+
     precondition {
       condition     = length(local.api_grouped_policy_documents.orchestration) <= 6144
       error_message = "The grouped API orchestration managed-policy document exceeds AWS IAM's 6,144-character limit."
