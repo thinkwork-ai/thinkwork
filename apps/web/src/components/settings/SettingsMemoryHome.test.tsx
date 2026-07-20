@@ -43,10 +43,42 @@ describe("SettingsMemoryHome", () => {
     expect(source).toContain("setRefreshPending(true)");
   });
 
+  it("hosts the Living Map actions in the page header on the Ontology tab", () => {
+    // Icon-only ghost buttons with hover tooltips — the Agents page header
+    // TooltipIconButton pattern — driven by the controller the map
+    // publishes (SettingsMemory refresh-controller pattern).
+    expect(source).toContain("OntologyMapHeaderController");
+    expect(source).toContain("onMapHeaderControllerChange");
+    expect(source).toContain('label="Add triple"');
+    expect(source).toContain('label="Review queue"');
+    expect(source).toContain("ontologyMapController.openAddTriple()");
+    expect(source).toContain("ontologyMapController.openQueue()");
+    expect(source).toMatch(/activeTab === "ontology" && ontologyMapController/);
+    // The queue icon keeps its pending-count badge and accessible name.
+    expect(source).toContain("ontologyMapController.pendingCount > 0");
+    expect(source).toContain(
+      "`Review queue (${ontologyMapController.pendingCount} pending)`",
+    );
+    // Icon-only: no labeled pill buttons in the header actions.
+    expect(source).not.toContain(">Add triple</Button>");
+  });
+
+  it("hosts the KBs new-source action in the page header on the KBs tab", () => {
+    // Plus TooltipIconButton with a hover tooltip, driven by the controller
+    // the KBs tab publishes — the Ontology header-action pattern.
+    expect(source).toContain("KnowledgeBasesHeaderController");
+    expect(source).toContain("onHeaderControllerChange={updateKbController}");
+    expect(source).toContain('label="New source"');
+    expect(source).toContain("kbController.openNewSource()");
+    expect(source).toMatch(/activeTab === "knowledge-bases" && kbController/);
+    // Icon-only: no labeled "+ New source" pill in the header actions.
+    expect(source).not.toContain("+ New source");
+  });
+
   it("renders the active facet selected by the current route", () => {
     expect(source).toContain("tabForPath");
     expect(source).toMatch(/<SettingsMemory\s+[\s\S]*?\bembedded\b/);
-    expect(source).toContain("<SettingsKnowledgeBases embedded");
+    expect(source).toMatch(/<SettingsKnowledgeBases\s+[\s\S]*?\bembedded\b/);
     expect(source).toContain("<KnowledgeModelTab");
     expect(source).toContain("<SettingsWiki embedded");
     // No in-body tab strip — the tabs live in the header now.

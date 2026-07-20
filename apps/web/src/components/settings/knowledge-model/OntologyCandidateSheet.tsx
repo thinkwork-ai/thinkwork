@@ -9,10 +9,16 @@ import {
   SheetTitle,
 } from "@thinkwork/ui";
 import {
+  OntologyChangeItemType,
   OntologyChangeSetStatus,
   OntologyExcludedItemDisposition,
   type SettingsOntologyChangeSetsQuery as SettingsOntologyChangeSetsData,
 } from "@/gql/graphql";
+import {
+  NodeBadge,
+  RelationshipConnector,
+  hashColor,
+} from "@/components/memory/relationship-badges";
 import {
   SettingsApproveOntologyChangeSetMutation,
   SettingsKnowledgeGraphOntologyQuery,
@@ -70,6 +76,7 @@ export function OntologyCandidateSheet({
   onBack,
   onEdit,
   onActionComplete,
+  onFocusType,
 }: {
   tenantId: string;
   focus: OntologyFocus;
@@ -79,6 +86,8 @@ export function OntologyCandidateSheet({
   onEdit: (item: OntologyEditableItem) => void;
   /** Approve/reject landed — the host refreshes map + rail and closes. */
   onActionComplete: () => void;
+  /** Refocus the sheet on another approved type (relationship-badge hop). */
+  onFocusType?: (focus: Extract<OntologyFocus, { kind: "type" }>) => void;
 }) {
   const [result] = useQuery({
     query: SettingsOntologyChangeSetsQuery,
@@ -116,6 +125,7 @@ export function OntologyCandidateSheet({
           loading || (definitionsResult.fetching && !definitionsResult.data)
         }
         backButton={backButton}
+        onFocusType={onFocusType}
       />
     );
   }
@@ -345,12 +355,97 @@ function CandidateFocus({
   );
 }
 
+/** One `[Source] ── NAME ──▶ [Target]` line of the type's triples. */
+interface TypeTripleRow {
+  key: string;
+  relationshipName: string;
+  /** null = the relationship end is unconstrained ("any"). */
+  sourceSlug: string | null;
+  targetSlug: string | null;
+  proposed: boolean;
+}
+
+/**
+ * All triples the focused type participates in (as source OR target),
+ * expanded from the approved relationship definitions plus any
+ * still-pending relationship candidates (rendered with a "proposed"
+ * badge). Multi-endpoint relationships expand to one row per pair that
+ * involves the focused slug.
+ */
+function typeTripleRows(
+  slug: string,
+  relationshipTypes: Array<{
+    slug: string;
+    name: string;
+    sourceTypeSlugs: string[];
+    targetTypeSlugs: string[];
+  }>,
+  changeSets: ChangeSet[],
+): TypeTripleRow[] {
+  const expand = (
+    keyBase: string,
+    name: string,
+    sourceSlugs: string[],
+    targetSlugs: string[],
+    proposed: boolean,
+  ): TypeTripleRow[] => {
+    const sources = sourceSlugs.length > 0 ? sourceSlugs : [null];
+    const targets = targetSlugs.length > 0 ? targetSlugs : [null];
+    const rows: TypeTripleRow[] = [];
+    for (const source of sources) {
+      for (const target of targets) {
+        if (source !== slug && target !== slug) continue;
+        rows.push({
+          key: `${keyBase}:${source ?? "*"}:${target ?? "*"}`,
+          relationshipName: name,
+          sourceSlug: source,
+          targetSlug: target,
+          proposed,
+        });
+      }
+    }
+    return rows;
+  };
+
+  const approved = relationshipTypes.flatMap((relationship) =>
+    expand(
+      `approved:${relationship.slug}`,
+      relationship.name,
+      relationship.sourceTypeSlugs,
+      relationship.targetTypeSlugs,
+      false,
+    ),
+  );
+  const pending = changeSets.flatMap((set) =>
+    set.items
+      .filter(
+        (item) =>
+          item.itemType === OntologyChangeItemType.RelationshipType &&
+          item.status === OntologyChangeSetStatus.PendingReview,
+      )
+      .flatMap((item) => {
+        const value = effectiveValue(item);
+        const asSlugs = (raw: unknown) =>
+          Array.isArray(raw) ? raw.filter((s) => typeof s === "string") : [];
+        return expand(
+          `proposed:${item.id}`,
+          String(value.name ?? item.targetSlug ?? item.title),
+          asSlugs(value.sourceTypeSlugs),
+          asSlugs(value.targetTypeSlugs),
+          true,
+        );
+      }),
+  );
+  return [...approved, ...pending];
+}
+
 function TypeFocus({
   focus,
   changeSets,
   definitions,
   loading,
   backButton,
+  onFocusType,
 }: {
   focus: Extract<OntologyFocus, { kind: "type" }>;
   changeSets: ChangeSet[];
@@ -373,6 +468,7 @@ function TypeFocus({
   } | null;
   loading: boolean;
   backButton: React.ReactNode;
+  onFocusType?: (focus: Extract<OntologyFocus, { kind: "type" }>) => void;
 }) {
   const entityType = definitions?.entityTypes.find(
     (type) => type.slug === focus.slug,
@@ -381,6 +477,41 @@ function TypeFocus({
     (type) => type.slug === focus.slug,
   );
   const definition = entityType ?? relationshipType ?? null;
+
+  // RELATIONSHIPS section (entity-type focus): every triple the type
+  // participates in, styled like the Memory/Wiki entity sheet's badge rows.
+  const tripleRows = entityType
+    ? typeTripleRows(
+        focus.slug,
+        definitions?.relationshipTypes ?? [],
+        changeSets,
+      )
+    : [];
+  const typeNameFor = (slug: string | null) =>
+    slug === null
+      ? "any"
+      : (definitions?.entityTypes.find((type) => type.slug === slug)?.name ??
+        slug);
+  const endBadge = (endSlug: string | null) => {
+    const slug = endSlug;
+    const label = typeNameFor(slug);
+    const hoppable =
+      slug !== null &&
+      slug !== focus.slug &&
+      !!onFocusType &&
+      !!definitions?.entityTypes.some((type) => type.slug === slug);
+    return (
+      <NodeBadge
+        label={label}
+        color={hashColor(label)}
+        onClick={
+          hoppable && slug !== null
+            ? () => onFocusType?.({ kind: "type", slug, name: label })
+            : undefined
+        }
+      />
+    );
+  };
 
   // Founding evidence (R6): quotes stored on the settled change-set item
   // that admitted this slug into the ontology.
@@ -459,6 +590,40 @@ function TypeFocus({
                     </Badge>
                   ))}
                 </div>
+              </section>
+            ) : null}
+
+            {entityType ? (
+              <section>
+                <h4 className="text-muted-foreground mb-2 text-xs font-medium uppercase tracking-wider">
+                  Relationships
+                </h4>
+                {tripleRows.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {tripleRows.map((row) => (
+                      <div
+                        key={row.key}
+                        className="flex items-center gap-1.5 overflow-hidden"
+                      >
+                        {endBadge(row.sourceSlug)}
+                        <RelationshipConnector label={row.relationshipName} />
+                        {endBadge(row.targetSlug)}
+                        {row.proposed ? (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 font-normal"
+                          >
+                            proposed
+                          </Badge>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    No relationships involve this type yet.
+                  </p>
+                )}
               </section>
             ) : null}
 

@@ -366,6 +366,125 @@ describe("OntologyCandidateSheet", () => {
     );
   });
 
+  it("lists the focused type's participating triples as relationship badge rows", () => {
+    queryState.definitions = {
+      data: {
+        ontologyDefinitions: {
+          ...DEFINITIONS,
+          relationshipTypes: [
+            {
+              id: "rel-billed",
+              slug: "billed_to",
+              name: "Billed to",
+              description: null,
+              sourceTypeSlugs: ["site"],
+              targetTypeSlugs: ["invoice"],
+              aliases: [],
+              lifecycleStatus: "APPROVED",
+              externalMappings: [],
+            },
+            {
+              id: "rel-unrelated",
+              slug: "invoice_owned_by",
+              name: "Invoice owned by",
+              description: null,
+              sourceTypeSlugs: ["invoice"],
+              targetTypeSlugs: ["invoice"],
+              aliases: [],
+              lifecycleStatus: "APPROVED",
+              externalMappings: [],
+            },
+          ],
+        },
+      },
+      fetching: false,
+      error: undefined,
+    };
+    const onFocusType = vi.fn();
+    render(
+      <OntologyCandidateSheet
+        tenantId="tenant-1"
+        focus={{ kind: "type", slug: "site", name: "Site" }}
+        onEdit={vi.fn()}
+        onActionComplete={vi.fn()}
+        onFocusType={onFocusType}
+      />,
+    );
+
+    // [Site] ── BILLED TO ──▶ [Invoice], Memory/Wiki entity-sheet style.
+    expect(screen.getByText("Relationships")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Site" })).toBeTruthy();
+    expect(screen.getByText("── BILLED TO ──▶")).toBeTruthy();
+    // Triples not involving the focused type stay out.
+    expect(screen.queryByText("── INVOICE OWNED BY ──▶")).toBeNull();
+
+    // Clicking the other end's badge refocuses that type.
+    fireEvent.click(screen.getByRole("button", { name: "Invoice" }));
+    expect(onFocusType).toHaveBeenCalledWith({
+      kind: "type",
+      slug: "invoice",
+      name: "Invoice",
+    });
+  });
+
+  it("includes pending ghost relationships involving the type with a proposed badge", () => {
+    queryState.changeSets = {
+      data: {
+        ontologyChangeSets: [
+          {
+            ...CHANGE_SETS[0],
+            items: [
+              {
+                ...ITEM,
+                id: "item-rel",
+                itemType: "RELATIONSHIP_TYPE",
+                targetSlug: "managed_by",
+                proposedValue: {
+                  slug: "managed_by",
+                  name: "Managed by",
+                  sourceTypeSlugs: ["site"],
+                  targetTypeSlugs: ["person"],
+                },
+                evidenceExamples: [],
+              },
+            ],
+          },
+        ],
+      },
+      fetching: false,
+      error: undefined,
+    };
+    render(
+      <OntologyCandidateSheet
+        tenantId="tenant-1"
+        focus={{ kind: "type", slug: "site", name: "Site" }}
+        onEdit={vi.fn()}
+        onActionComplete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("── MANAGED BY ──▶")).toBeTruthy();
+    expect(screen.getByText("proposed")).toBeTruthy();
+    // Unknown endpoint slugs render as-is and are not clickable hops.
+    expect(screen.getByRole("button", { name: "person" })).toBeTruthy();
+  });
+
+  it("renders the relationships section with an empty-state line for a type with none", () => {
+    render(
+      <OntologyCandidateSheet
+        tenantId="tenant-1"
+        focus={{ kind: "type", slug: "invoice", name: "Invoice" }}
+        onEdit={vi.fn()}
+        onActionComplete={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Relationships")).toBeTruthy();
+    expect(
+      screen.getByText("No relationships involve this type yet."),
+    ).toBeTruthy();
+  });
+
   it("explains when a focused candidate is no longer pending", () => {
     queryState.changeSets = {
       data: { ontologyChangeSets: [] },

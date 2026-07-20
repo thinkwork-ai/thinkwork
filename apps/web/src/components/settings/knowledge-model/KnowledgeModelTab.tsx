@@ -11,7 +11,10 @@ import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { KnowledgeGraphTab } from "@/components/settings/knowledge-graph/KnowledgeGraphTab";
 import { IdentityList } from "./IdentityList";
 import type { OntologyFocus } from "./OntologyCandidateSheet";
-import { OntologyMapView } from "./OntologyMapView";
+import {
+  OntologyMapView,
+  type OntologyMapHeaderController,
+} from "./OntologyMapView";
 import { OntologyPacksView } from "./OntologyPacksView";
 import { ResolutionQueue } from "./ResolutionQueue";
 
@@ -73,7 +76,19 @@ const VIEW_OPTIONS: ReadonlyArray<{
  * is component-local state so the existing
  * /settings/memory/ontology route keeps working unchanged.
  */
-export function KnowledgeModelTab() {
+export function KnowledgeModelTab({
+  onMapHeaderControllerChange,
+}: {
+  /**
+   * Living Map header actions (add-triple + badged queue icon) bubble up to
+   * the page-header owner (SettingsMemoryHome). The map only publishes a
+   * controller while the "map" view is mounted, so the actions vanish on
+   * the other ontology sub-views.
+   */
+  onMapHeaderControllerChange?: (
+    controller: OntologyMapHeaderController | null,
+  ) => void;
+} = {}) {
   const [view, setView] = useState<KnowledgeModelView>("map");
   // Pack-install handoff (THINK-320 U7, AE4): the packs view stages a change
   // set and asks the map to open it in the review flow. Cleared once the map
@@ -82,7 +97,7 @@ export function KnowledgeModelTab() {
   const { title, description } = VIEW_TITLES[view];
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col p-6">
+    <div className="flex h-full min-h-0 w-full flex-col p-6 pt-4">
       <SettingsPageTitle
         title={
           <DropdownMenu>
@@ -129,6 +144,7 @@ export function KnowledgeModelTab() {
             initialFocus={pendingFocus}
             onInitialFocusConsumed={() => setPendingFocus(null)}
             onOpenPacks={() => setView("packs")}
+            onHeaderControllerChange={onMapHeaderControllerChange}
           />
         ) : null}
         {view === "packs" ? (
