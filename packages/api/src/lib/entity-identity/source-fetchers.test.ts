@@ -83,7 +83,7 @@ describe("fetchPostgresSourceRecords discovery", () => {
     );
     expect(seen[0]).toContain("table_name IN (");
     expect(
-      result.warnings.filter((w) => w.includes("no granted table")),
+      (result.warnings ?? []).filter((w) => w.includes("no granted table")),
     ).toEqual([]);
   });
 
@@ -97,7 +97,7 @@ describe("fetchPostgresSourceRecords discovery", () => {
       }),
     );
     expect(
-      result.warnings.some((w) => w.includes("discovery truncated")),
+      (result.warnings ?? []).some((w) => w.includes("discovery truncated")),
     ).toBe(true);
   });
 });
