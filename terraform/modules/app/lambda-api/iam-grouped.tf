@@ -6,25 +6,25 @@
 # 10,240-byte aggregate hard cap for inline policies (#2378 failed the dev
 # apply with LimitExceeded; #2379 is this consolidation). Every grant that was
 # inline on this role — plus the one-off standalone managed policies that had
-# accreted as cap workarounds — now lives in exactly four grouped
+# accreted as cap workarounds — now lives in five grouped
 # customer-managed policies:
 #
 #   thinkwork-<stage>-api-data-plane     — RDS Data API, Secrets Manager, S3,
 #                                          DynamoDB, Cognito, SSM reads, KMS,
 #                                          SQS (here for size balance, see
 #                                          the locals note)
-#   thinkwork-<stage>-api-orchestration  — lambda:InvokeFunction, Scheduler,
-#                                          Step Functions, SES
+#   thinkwork-<stage>-api-orchestration  — Scheduler, Step Functions, SES
+#   thinkwork-<stage>-api-invocation     — internal lambda:InvokeFunction
 #   thinkwork-<stage>-api-ai             — Bedrock invoke, Knowledge Bases,
 #                                          AgentCore memory/eval/code-interp
 #   thinkwork-<stage>-api-observability  — CloudWatch Logs reads, ECS/ALB
 #                                          health reads
 #
-# STANDING RULE: new grants for aws_iam_role.lambda go into one of these four
+# STANDING RULE: new grants for aws_iam_role.lambda go into one of these five
 # grouped policies — never a new inline aws_iam_role_policy and never a new
 # standalone managed-policy attachment. (Managed-policy attachments have a
 # default quota of 10 per role; the steady state here is
-# AWSLambdaBasicExecutionRole + these four, plus the conditional AWS-managed
+# AWSLambdaBasicExecutionRole + these five, plus the conditional AWS-managed
 # VPC-access policy when OKF EFS wiring is enabled.)
 #
 # Each managed policy document caps at 6,144 characters (JSON minus
@@ -450,7 +450,7 @@ locals {
   # Group 2: orchestration — cross-function invokes, Scheduler, Step
   # Functions, SQS, SES.
   # ---------------------------------------------------------------------------
-  api_orchestration_statements = concat(
+  api_orchestration_candidate_statements = concat(
     [
       # (was inline policy "ses-send")
       # SES send permissions for the email-send handler. Scoped to any
@@ -507,6 +507,7 @@ locals {
       # pattern so we don't create a dependency cycle with the handler
       # resource.
       {
+        Sid    = "ApiCrossFunctionInvoke"
         Effect = "Allow"
         Action = ["lambda:InvokeFunction"]
         Resource = [
@@ -784,6 +785,20 @@ locals {
       },
     ] : [],
   )
+
+  # Internal Lambda invocation is intentionally partitioned from the remaining
+  # orchestration grants. The generated resource list grows with API features
+  # and can otherwise push the shared orchestration managed policy beyond
+  # IAM's hard 6,144-character document limit. Both partitions remain attached
+  # to the same shared Lambda role and are covered by the size assertion below.
+  api_orchestration_statements = [
+    for statement in local.api_orchestration_candidate_statements : statement
+    if !contains(try(statement.Action, []), "lambda:InvokeFunction")
+  ]
+  api_invocation_statements = [
+    for statement in local.api_orchestration_candidate_statements : statement
+    if contains(try(statement.Action, []), "lambda:InvokeFunction")
+  ]
 
   # ---------------------------------------------------------------------------
   # Group 3: AI — Bedrock model invocation, Knowledge Bases, AgentCore
@@ -1133,6 +1148,10 @@ locals {
       Version   = "2012-10-17"
       Statement = local.api_orchestration_statements
     })
+    invocation = jsonencode({
+      Version   = "2012-10-17"
+      Statement = local.api_invocation_statements
+    })
     ai = jsonencode({
       Version   = "2012-10-17"
       Statement = local.api_ai_statements
@@ -1158,6 +1177,13 @@ resource "aws_iam_policy" "api_data_plane" {
   description = "Grouped data-plane grants (RDS Data API, Secrets Manager, S3, DynamoDB, Cognito, SSM, KMS-via-SSM, SQS) for the shared api Lambda role"
 
   policy = local.api_grouped_policy_documents.data_plane
+
+  lifecycle {
+    precondition {
+      condition     = length(local.api_grouped_policy_documents.data_plane) <= 6144
+      error_message = "The grouped API data-plane managed-policy document exceeds AWS IAM's 6,144-character limit."
+    }
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "api_data_plane" {
@@ -1167,9 +1193,20 @@ resource "aws_iam_role_policy_attachment" "api_data_plane" {
 
 resource "aws_iam_policy" "api_orchestration" {
   name        = "thinkwork-${var.stage}-api-orchestration"
-  description = "Grouped orchestration grants (Lambda invoke, EventBridge Scheduler, Step Functions, SES) for the shared api Lambda role"
+  description = "Grouped orchestration grants (EventBridge Scheduler, Step Functions, SES) for the shared api Lambda role"
 
   policy = local.api_grouped_policy_documents.orchestration
+
+  # Attach the replacement invoke grant before removing it from this policy.
+  # This preserves Lambda-to-Lambda access if an apply stops between updates.
+  depends_on = [aws_iam_role_policy_attachment.api_invocation]
+
+  lifecycle {
+    precondition {
+      condition     = length(local.api_grouped_policy_documents.orchestration) <= 6144
+      error_message = "The grouped API orchestration managed-policy document exceeds AWS IAM's 6,144-character limit."
+    }
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "api_orchestration" {
@@ -1177,11 +1214,37 @@ resource "aws_iam_role_policy_attachment" "api_orchestration" {
   policy_arn = aws_iam_policy.api_orchestration.arn
 }
 
+resource "aws_iam_policy" "api_invocation" {
+  name        = "thinkwork-${var.stage}-api-invocation"
+  description = "Internal Lambda invocation grants for the shared api Lambda role"
+
+  policy = local.api_grouped_policy_documents.invocation
+
+  lifecycle {
+    precondition {
+      condition     = length(local.api_grouped_policy_documents.invocation) <= 6144
+      error_message = "The grouped API invocation managed-policy document exceeds AWS IAM's 6,144-character limit."
+    }
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "api_invocation" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = aws_iam_policy.api_invocation.arn
+}
+
 resource "aws_iam_policy" "api_ai" {
   name        = "thinkwork-${var.stage}-api-ai"
   description = "Grouped AI grants (Bedrock invoke, Knowledge Bases, AgentCore memory/eval/code-interpreter) for the shared api Lambda role"
 
   policy = local.api_grouped_policy_documents.ai
+
+  lifecycle {
+    precondition {
+      condition     = length(local.api_grouped_policy_documents.ai) <= 6144
+      error_message = "The grouped API AI managed-policy document exceeds AWS IAM's 6,144-character limit."
+    }
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "api_ai" {
@@ -1194,6 +1257,13 @@ resource "aws_iam_policy" "api_observability" {
   description = "Grouped observability grants (CloudWatch Logs reads, ECS/ALB health reads) for the shared api Lambda role"
 
   policy = local.api_grouped_policy_documents.observability
+
+  lifecycle {
+    precondition {
+      condition     = length(local.api_grouped_policy_documents.observability) <= 6144
+      error_message = "The grouped API observability managed-policy document exceeds AWS IAM's 6,144-character limit."
+    }
+  }
 }
 
 resource "aws_iam_role_policy_attachment" "api_observability" {
