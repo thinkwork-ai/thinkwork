@@ -142,6 +142,113 @@ def test_customer_update_accepts_customer_ecr_agentcore_pi_source_image() -> Non
     )
 
 
+def test_native_auth_custom_attributes_skip_before_user_pool_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(
+        runner,
+        "output",
+        lambda *_args, **_kwargs: pytest.fail("Cognito should not be queried"),
+    )
+
+    assert runner.ensure_native_auth_custom_attributes({}) == {
+        "status": "skipped",
+        "reason": "user-pool-not-created",
+    }
+
+
+def test_native_auth_custom_attributes_are_added_before_route_clients(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    descriptions = iter(
+        [
+            json.dumps(
+                {
+                    "UserPool": {
+                        "SchemaAttributes": [
+                            {"Name": "email"},
+                            {"Name": "custom:tenant_id"},
+                        ]
+                    }
+                }
+            ),
+            json.dumps(
+                {
+                    "UserPool": {
+                        "SchemaAttributes": [
+                            {"Name": "email"},
+                            {"Name": "custom:tenant_id"},
+                            {"Name": "custom:entra_tenant_id"},
+                            {"Name": "custom:entra_object_id"},
+                        ]
+                    }
+                }
+            ),
+        ]
+    )
+    calls = []
+    monkeypatch.setattr(runner, "output", lambda *_args, **_kwargs: next(descriptions))
+    monkeypatch.setattr(
+        runner,
+        "run",
+        lambda args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    result = runner.ensure_native_auth_custom_attributes(
+        {"user_pool_id": {"value": "us-east-1_Example123"}}
+    )
+
+    assert result == {
+        "status": "reconciled",
+        "userPoolId": "us-east-1_Example123",
+        "added": ["entra_tenant_id", "entra_object_id"],
+    }
+    assert len(calls) == 1
+    command, kwargs = calls[0]
+    assert command[:3] == ["aws", "cognito-idp", "add-custom-attributes"]
+    request = json.loads(command[command.index("--cli-input-json") + 1])
+    assert request == {
+        "UserPoolId": "us-east-1_Example123",
+        "CustomAttributes": runner.NATIVE_AUTH_CUSTOM_ATTRIBUTES,
+    }
+    assert kwargs == {"stdout": subprocess.DEVNULL}
+
+
+def test_native_auth_custom_attributes_are_idempotent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = load_runner()
+    monkeypatch.setattr(
+        runner,
+        "output",
+        lambda *_args, **_kwargs: json.dumps(
+            {
+                "UserPool": {
+                    "SchemaAttributes": [
+                        {"Name": "custom:entra_tenant_id"},
+                        {"Name": "custom:entra_object_id"},
+                    ]
+                }
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "run",
+        lambda *_args, **_kwargs: pytest.fail("No mutation should be required"),
+    )
+
+    assert runner.ensure_native_auth_custom_attributes(
+        {"user_pool_id": {"value": "us-east-1_Example123"}}
+    ) == {
+        "status": "current",
+        "userPoolId": "us-east-1_Example123",
+        "added": [],
+    }
+
+
 def test_native_auth_reconciliation_builds_route_specific_secret_free_manifest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
