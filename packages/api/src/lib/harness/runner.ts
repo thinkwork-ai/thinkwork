@@ -990,10 +990,11 @@ const GOAL_DOCUMENT_COMPOSITION_MAX_ITERATIONS = 1;
 
 /**
  * AgentCore currently drops configured inline functions when an invocation
- * narrows them by exact `allowedTools` name. Repeat only the attested
- * caller-fulfilled completion contract on the corrective invocation. This
- * deliberately excludes Browser and Gateway, whose configured definitions
- * must not be replayed at invocation time.
+ * narrows the harness default by exact `allowedTools` name. Override both
+ * invocation-time fields together: `tools` supplies the attested function
+ * schema while `allowedTools` authorizes that exact overridden tool set. This
+ * deliberately excludes Browser and Gateway, whose definitions must not be
+ * replayed on the completion-only corrective invocation.
  */
 function goalCompletionCorrectionTools(
   tools: HarnessInvocationTool[],
@@ -2044,6 +2045,7 @@ export async function runHarnessTurn(
                     tools: goalCompletionCorrectionTools(
                       harness.invocationTools,
                     ),
+                    allowedTools: ["goal_complete"],
                   }
                 : { allowedTools: ["goal_complete"] }),
             }
