@@ -2250,8 +2250,13 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
     expect(deps.invocations).toHaveLength(2);
     expect(deps.invocations[0]?.tools).toBeUndefined();
     expect(deps.invocations[0]?.allowedTools).toBeUndefined();
-    expect(deps.invocations[1]?.tools).toBeUndefined();
-    expect(deps.invocations[1]?.allowedTools).toEqual(["goal_complete"]);
+    expect(deps.invocations[1]?.tools).toEqual([
+      expect.objectContaining({
+        type: "inline_function",
+        name: "goal_complete",
+      }),
+    ]);
+    expect(deps.invocations[1]?.allowedTools).toBeUndefined();
     expect(JSON.stringify(deps.invocations[1].messages)).toContain(
       "without governed completion evidence",
     );
@@ -2284,8 +2289,13 @@ describe("runHarnessTurn — ThinkWork-managed Goal mode", () => {
     );
 
     expect(deps.invocations).toHaveLength(2);
-    expect(deps.invocations[1]?.tools).toBeUndefined();
-    expect(deps.invocations[1]?.allowedTools).toEqual(["goal_complete"]);
+    expect(deps.invocations[1]?.tools).toEqual([
+      expect.objectContaining({
+        type: "inline_function",
+        name: "goal_complete",
+      }),
+    ]);
+    expect(deps.invocations[1]?.allowedTools).toBeUndefined();
     expect(deps.finalizePayloads[0].response?.goal_run).toMatchObject({
       status: "paused",
       summary: "More work remains after verification.",
