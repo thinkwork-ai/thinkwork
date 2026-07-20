@@ -1321,6 +1321,9 @@ export async function runHarnessTurn(
   const now = deps.now ?? Date.now;
   const startedAt = now();
   const turn = extractTurn(payload);
+  const explicitBrowserRequested = EXPLICIT_BROWSER_REQUEST_RE.test(
+    turn.userMessage,
+  );
   const selectedDocumentPlate = selectRequestedDocumentPlate(
     turn.userMessage,
     payload.document_plates,
@@ -2019,14 +2022,25 @@ export async function runHarnessTurn(
               allowedTools: ["goal_complete"],
             }
           : !documentCompositionPhase &&
-              payload.browser_automation_enabled !== true
+              payload.browser_automation_enabled === true &&
+              explicitBrowserRequested
             ? {
-                // Browser authorization is participant-specific. Keep the
-                // control-plane tools intact and narrow only the effective
-                // per-turn allowlist when this participant lacks Browser.
-                allowedTools: [...LEGACY_BROWSER_DISABLED_ALLOWED_TOOLS],
+                // An explicit interactive Browser request must not drift to
+                // cheaper read-only Gateway substitutes such as web_extract.
+                // `allowedTools` narrows model selection without replaying the
+                // configured Browser declaration (which the live Harness
+                // dispatcher rejects as an invocation-time duplicate).
+                allowedTools: ["browser"],
               }
-            : {}),
+            : !documentCompositionPhase &&
+                payload.browser_automation_enabled !== true
+              ? {
+                  // Browser authorization is participant-specific. Keep the
+                  // control-plane tools intact and narrow only the effective
+                  // per-turn allowlist when this participant lacks Browser.
+                  allowedTools: [...LEGACY_BROWSER_DISABLED_ALLOWED_TOOLS],
+                }
+              : {}),
         ...(documentEmissionRequired && !documentCompositionPhase
           ? {
               // Use the Harness's configured Gateway allowlist. Live testing
@@ -2299,7 +2313,7 @@ export async function runHarnessTurn(
         }
         if (
           payload.browser_automation_enabled === true &&
-          EXPLICIT_BROWSER_REQUEST_RE.test(turn.userMessage) &&
+          explicitBrowserRequested &&
           !hasManagedBrowserEvidence(toolInvocations)
         ) {
           return await finalizeWith("failed", {
