@@ -139,7 +139,7 @@ resource "terraform_data" "twenty_identity_cleanup_owner" {
 # only this terraform_data record; it has no destroy action and always updates
 # the provider in place. The stable owner above deletes only when the module is
 # truly disabled or removed.
-resource "terraform_data" "twenty_identity_lifecycle" {
+resource "terraform_data" "twenty_identity_reconciliation" {
   count = var.enabled ? 1 : 0
 
   input = {
@@ -176,7 +176,7 @@ data "external" "identity_state" {
   count = var.enabled ? 1 : 0
   depends_on = [
     terraform_data.identity_lifecycle,
-    terraform_data.twenty_identity_lifecycle,
+    terraform_data.twenty_identity_reconciliation,
   ]
   program = ["bash", "${path.module}/scripts/read_identity.sh"]
 

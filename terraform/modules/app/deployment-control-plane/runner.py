@@ -69,6 +69,7 @@ NATIVE_AUTH_CUSTOM_ATTRIBUTES = [
         "StringAttributeConstraints": {"MinLength": "0", "MaxLength": "36"},
     },
 ]
+AGENTCORE_CONTROL_SDK_VERSION = "3.1089.0"
 
 
 def run(args, **kwargs):
@@ -401,6 +402,95 @@ def safe_extract_tar_file(archive_path, destination):
                 raise RuntimeError(f"Archive member type is not allowed: {member.name}")
             safe_join(destination, member.name)
         tar.extractall(destination, members=members)
+
+
+def prepare_agentcore_control_runtime():
+    global RELEASE_EVIDENCE
+    runner_bundle = bundle_extract_dir({"name": "platform"}) / "runner"
+    manifest_path = runner_bundle / "agentcore-control-runtime.json"
+    if not manifest_path.is_file():
+        raise RuntimeError("Release bundle is missing the AgentCore control runtime manifest")
+
+    runtime_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    expected_sdk = runtime_manifest.get("sdk") or {}
+    if (
+        expected_sdk.get("package") != "@aws-sdk/client-bedrock-agentcore-control"
+        or expected_sdk.get("version") != AGENTCORE_CONTROL_SDK_VERSION
+    ):
+        raise RuntimeError("Release does not pin the required AgentCore control SDK version")
+
+    runtime_dir = safe_join(
+        runner_bundle,
+        str(runtime_manifest.get("directory") or "agentcore-control-runtime"),
+    )
+    if not runtime_dir.is_dir():
+        raise RuntimeError("Release bundle has no AgentCore control runtime directory")
+    runtime_files = runtime_manifest.get("files") or []
+    if not runtime_files:
+        raise RuntimeError("AgentCore control runtime manifest has no files")
+    runtime_paths = [str(item.get("path") or "") for item in runtime_files]
+    required_entrypoints = {
+        "harness-lifecycle.js",
+        "preflight.js",
+        "reconcile_twenty_provider.js",
+    }
+    if len(runtime_paths) != len(set(runtime_paths)) or not required_entrypoints.issubset(
+        runtime_paths
+    ):
+        raise RuntimeError("AgentCore control runtime manifest has an invalid file set")
+    for runtime_file in runtime_files:
+        file_path = safe_join(runtime_dir, str(runtime_file.get("path") or ""))
+        if not file_path.is_file() or sha256_file(file_path) != runtime_file.get("sha256"):
+            raise RuntimeError(
+                f"AgentCore control runtime file digest mismatch: {runtime_file.get('path')}"
+            )
+    actual_runtime_paths = {
+        str(path.relative_to(runtime_dir))
+        for path in runtime_dir.rglob("*")
+        if path.is_file()
+    }
+    if actual_runtime_paths != set(runtime_paths):
+        raise RuntimeError("AgentCore control runtime contains unmanifested or missing files")
+
+    preflight = json.loads(output(["node", str(runtime_dir / "preflight.js")]))
+    if preflight != expected_sdk:
+        raise RuntimeError("AgentCore control runtime preflight differs from its manifest")
+    entrypoint_preflights = [
+        json.loads(
+            output(
+                [
+                    "node",
+                    str(runtime_dir / entrypoint),
+                    "--runtime-preflight",
+                ]
+            )
+        )
+        for entrypoint in (
+            "harness-lifecycle.js",
+            "reconcile_twenty_provider.js",
+        )
+    ]
+    if any(not item.get("sdkImportReady") for item in entrypoint_preflights):
+        raise RuntimeError("An AgentCore control runtime entrypoint cannot import its SDK")
+    os.environ["THINKWORK_AGENTCORE_CONTROL_RUNTIME_DIR"] = str(runtime_dir)
+    evidence = {
+        "manifestSha256": sha256_file(manifest_path),
+        "sdkPackage": preflight["package"],
+        "sdkVersion": preflight["version"],
+        "bundledEntrypoints": sorted(
+            item["path"]
+            for item in runtime_files
+            if item.get("path") in required_entrypoints
+        ),
+        "bundledRuntimeVerified": True,
+        "entrypointPreflights": entrypoint_preflights,
+    }
+    RELEASE_EVIDENCE["agentCoreControlRuntime"] = evidence
+    print(
+        "[runner] AgentCore control runtime ready: "
+        f"sdk={evidence['sdkVersion']} manifest={evidence['manifestSha256']}"
+    )
+    return evidence
 
 
 def release_artifacts_by_name(manifest):
@@ -813,6 +903,28 @@ def is_web_only_operation(payload, action=None):
             return True
     component = str(payload.get("component") or "").strip().lower()
     return component == "web" or truthy(payload.get("webOnly"))
+
+
+def release_sync_request(action, payload, identity_operation):
+    if (
+        action not in {"deploy", "update", "web"}
+        or is_managed_app_operation(payload)
+        or identity_operation is not None
+    ):
+        return None
+    web_only = is_web_only_operation(payload, action)
+    return {
+        "artifact_types": {"static-site"} if web_only else None,
+        "artifact_names": {"web"} if web_only else None,
+    }
+
+
+def requires_agentcore_control_runtime(action, payload, identity_operation):
+    return (
+        action in {"deploy", "update", "plan", "destroy"}
+        and not is_managed_app_operation(payload)
+        and identity_operation is None
+    )
 
 
 def configure_managed_app_evidence_prefix(payload):
@@ -3446,7 +3558,10 @@ def write_runner_files(payload, runner_secrets):
     (TF / "main.tf").write_text(
         f"""
 terraform {{
-  required_version = ">= 1.5"
+  # The managed deployment runtime is pinned to this floor. Terraform 1.8.5
+  # adds declarative state-only removal, used below to forget the original
+  # non-owning AgentCore reconciliation marker without a destroy action.
+  required_version = ">= 1.8.5"
 
   backend "s3" {{}}
 
@@ -3479,6 +3594,19 @@ provider "aws" {{
 # file. Managed-app targeted plans still need the provider schema available
 # even though they do not change those records.
 provider "cloudflare" {{}}
+
+# The original AgentCore Twenty reconciliation marker never owned external
+# cleanup, but an interrupted local-exec may have left it tainted. Forget every
+# counted instance from managed-deployment state without refresh, provider RPC,
+# or destroy provisioners. The child module owns the replacement idempotent
+# reconciliation marker under a new address.
+removed {{
+  from = module.thinkwork.module.agentcore_proof_identity.terraform_data.twenty_identity_lifecycle
+
+  lifecycle {{
+    destroy = false
+  }}
+}}
 
 variable "stage" {{
   type = string
@@ -4108,7 +4236,7 @@ output "deployment_appconfig_configuration_profile_id" {{ value = module.thinkwo
 
 def sync_release_artifacts(artifact_types=None, artifact_names=None):
     global RELEASE_EVIDENCE
-    artifact_types = set(artifact_types or {"lambda", "static-site"})
+    artifact_types = {"lambda", "static-site"} if artifact_types is None else set(artifact_types)
     artifact_names = set(artifact_names or [])
     manifest_url = os.environ.get("THINKWORK_RELEASE_MANIFEST_URL")
     expected = os.environ.get("THINKWORK_RELEASE_MANIFEST_SHA256", "").lower()
@@ -5543,17 +5671,22 @@ def main():
     web_only = is_web_only_operation(payload, action)
     identity_operation = identity_provider_operation(payload)
     static_files = {}
-    if (
-        action in {"deploy", "update", "web"}
-        and not is_managed_app_operation(payload)
-        and identity_operation is None
-    ):
-        static_files = sync_release_artifacts(
-            artifact_types={"static-site"} if web_only else None,
-            artifact_names={"web"} if web_only else None,
-        )
+    release_request = release_sync_request(action, payload, identity_operation)
+    control_runtime_operation = requires_agentcore_control_runtime(
+        action, payload, identity_operation
+    )
+    if release_request is not None:
+        static_files = sync_release_artifacts(**release_request)
+    elif control_runtime_operation:
+        # Plan and destroy still execute AgentCore local-exec wrappers for
+        # existing resources. Download the content-addressed platform bundle
+        # without publishing application artifacts so those paths never depend
+        # on an ambient CodeBuild SDK.
+        sync_release_artifacts(artifact_types=set())
     managed_app_artifacts = stage_managed_app_release_artifacts(action, payload)
     vars_json = write_runner_files(payload, runner_secrets)
+    if control_runtime_operation:
+        prepare_agentcore_control_runtime()
     controller_summary = controller_input_summary(payload)
     CONTROLLER_EVIDENCE = {
         "inputSummary": controller_summary,

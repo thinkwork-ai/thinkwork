@@ -1,0 +1,12 @@
+{
+  "name": "@thinkwork/agentcore-control-runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@aws-sdk/client-bedrock-agentcore-control": "3.1089.0"
+  }
+}

@@ -8,6 +8,20 @@ import {
   UpdateOauth2CredentialProviderCommand,
 } from "@aws-sdk/client-bedrock-agentcore-control";
 
+if (process.argv[2] === "--runtime-preflight") {
+  process.stdout.write(
+    JSON.stringify({
+      entrypoint: "reconcile_twenty_provider",
+      sdkImportReady:
+        typeof BedrockAgentCoreControlClient === "function" &&
+        typeof CreateOauth2CredentialProviderCommand === "function" &&
+        typeof GetOauth2CredentialProviderCommand === "function" &&
+        typeof UpdateOauth2CredentialProviderCommand === "function",
+    }),
+  );
+  process.exit(0);
+}
+
 const chunks = [];
 for await (const chunk of process.stdin) chunks.push(chunk);
 const input = JSON.parse(Buffer.concat(chunks).toString("utf8"));

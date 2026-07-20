@@ -111,11 +111,13 @@ describe("AgentCore turn assertion Terraform fixture", () => {
     );
     expect(identity).toContain("TWENTY_CLIENT_SECRET_ARN");
     expect(identity).toContain(
-      'resource "terraform_data" "twenty_identity_lifecycle"',
+      'resource "terraform_data" "twenty_identity_reconciliation"',
     );
     expect(identity).toContain(
       'resource "terraform_data" "twenty_identity_cleanup_owner"',
     );
+    expect(identity).not.toContain("required_version");
+    expect(identity).not.toContain("removed {");
     expect(identity).toContain("bootstrap_script_sha256");
     expect(identity).toContain(
       "depends_on = [\n    terraform_data.identity_lifecycle",
@@ -138,7 +140,7 @@ describe("AgentCore turn assertion Terraform fixture", () => {
       /resource "terraform_data" "twenty_identity_cleanup_owner" \{([\s\S]*?)\n\}\n\n# Additive user-federation reconciliation/,
     )?.[1];
     const reconciliation = identity.match(
-      /resource "terraform_data" "twenty_identity_lifecycle" \{([\s\S]*?)\n\}\n\n# Read back/,
+      /resource "terraform_data" "twenty_identity_reconciliation" \{([\s\S]*?)\n\}\n\n# Read back/,
     )?.[1];
     expect(cleanupOwner).toContain("when    = destroy");
     expect(cleanupOwner).toContain("delete_twenty_identity.sh");

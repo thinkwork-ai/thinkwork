@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 
@@ -28,10 +30,7 @@ describe("managed multiplayer Harness topology", () => {
       "terraform/modules/app/agentcore-harness/scripts/harness-lifecycle.mjs",
     );
     assert.match(lifecycle, /`\$\{endpointPrefix\}\$\{version\}`/);
-    assert.match(
-      terraform,
-      /LEGACY_ENDPOINT_NAME\s+= "ThinkworkProof"/,
-    );
+    assert.match(terraform, /LEGACY_ENDPOINT_NAME\s+= "ThinkworkProof"/);
     assert.match(
       lifecycle,
       /selectHarnessEndpointsForRetention\(endpoints, \{[\s\S]*?activeEndpointName: endpointName,[\s\S]*?CreateHarnessEndpointCommand/,
@@ -94,5 +93,37 @@ describe("managed multiplayer Harness topology", () => {
     assert.match(terraform, /___mixed_disclosure/);
     assert.match(terraform, /gateway-and-cedar-authoritative/);
     assert.match(terraform, /managed_multiplayer_harness_configuration/);
+  });
+
+  it("fails closed when managed cleanup runtime entrypoints are absent", async () => {
+    const runtimeDir = await mkdtemp(
+      join(tmpdir(), "thinkwork-agentcore-runtime-"),
+    );
+    try {
+      for (const operation of ["delete", "prune", "read", "reconcile"]) {
+        const wrapper = join(
+          repoRoot,
+          `terraform/modules/app/agentcore-harness/scripts/${operation}_harness.sh`,
+        );
+        const result = spawnSync("bash", [wrapper], {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            THINKWORK_AGENTCORE_CONTROL_RUNTIME_DIR: runtimeDir,
+          },
+        });
+        assert.equal(result.status, 66, `${operation}: ${result.stderr}`);
+        assert.match(
+          result.stderr,
+          /Managed AgentCore control runtime is missing harness-lifecycle\.js/,
+        );
+        assert.doesNotMatch(
+          `${result.stdout}${result.stderr}`,
+          /ERR_MODULE_NOT_FOUND/,
+        );
+      }
+    } finally {
+      await rm(runtimeDir, { recursive: true });
+    }
   });
 });

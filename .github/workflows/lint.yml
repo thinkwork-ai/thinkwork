@@ -15,8 +15,14 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.5
+          terraform_wrapper: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      - name: Verify tainted AgentCore state migration floor
+        run: bash scripts/test-agentcore-identity-state-migration.sh
       - name: Lint AgentCore IAM grants vs boto3 calls
         run: pnpm lint:agentcore-iam
 
