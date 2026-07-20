@@ -20,6 +20,7 @@ import {
   resolveEntities,
   revokeEntitySourceMapping,
   validateCandidateConfirmation,
+  DECLINED_CANDIDATE_MARKER,
   DEFAULT_RESOLVE_PAGE_SIZE,
   type CandidateSetRow,
   type EntityRef,
@@ -198,6 +199,15 @@ describe("validateCandidateConfirmation", () => {
     expect(
       validateCandidateConfirmation(
         openSet({ selected_candidate_id: "cand-2" }),
+        args,
+      ),
+    ).toEqual({ ok: false, reason: "selection_mismatch" });
+  });
+
+  it("refuses a confirm when the recorded selection is the decline marker", () => {
+    expect(
+      validateCandidateConfirmation(
+        openSet({ selected_candidate_id: DECLINED_CANDIDATE_MARKER }),
         args,
       ),
     ).toEqual({ ok: false, reason: "selection_mismatch" });
@@ -604,17 +614,34 @@ const dbSetRow = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("recordCandidateSelection", () => {
+  const recordArgs = {
+    tenantId: TENANT,
+    threadRef: "thread-1",
+    candidateSetId: "set-1",
+    candidateId: "cand-1",
+    now: NOW,
+  };
+
   it("records the user's selection on an open set", async () => {
     const fake = createFakeIdentityDb();
     fake.selectQueue.push([dbSetRow({ selected_candidate_id: null })]);
-    const result = await recordCandidateSelection(fake.db as never, {
-      candidateSetId: "set-1",
-      candidateId: "cand-1",
-      now: NOW,
-    });
+    const result = await recordCandidateSelection(fake.db as never, recordArgs);
     expect(result).toEqual({ status: "recorded" });
     expect(fake.updates[0]?.values).toEqual({
       selected_candidate_id: "cand-1",
+    });
+  });
+
+  it("records the decline marker for a 'None of these' pick without a set-membership check", async () => {
+    const fake = createFakeIdentityDb();
+    fake.selectQueue.push([dbSetRow({ selected_candidate_id: null })]);
+    const result = await recordCandidateSelection(fake.db as never, {
+      ...recordArgs,
+      candidateId: DECLINED_CANDIDATE_MARKER,
+    });
+    expect(result).toEqual({ status: "recorded" });
+    expect(fake.updates[0]?.values).toEqual({
+      selected_candidate_id: DECLINED_CANDIDATE_MARKER,
     });
   });
 
@@ -622,15 +649,53 @@ describe("recordCandidateSelection", () => {
     const fake = createFakeIdentityDb();
     fake.selectQueue.push([dbSetRow({ selected_candidate_id: null })]);
     const result = await recordCandidateSelection(fake.db as never, {
-      candidateSetId: "set-1",
+      ...recordArgs,
       candidateId: "cand-forged",
-      now: NOW,
     });
     expect(result).toEqual({
       status: "refused",
       reason: "candidate_not_in_set",
     });
     expect(fake.updates).toHaveLength(0);
+  });
+
+  it("refuses a set bound to another thread (forged candidateSetId)", async () => {
+    const fake = createFakeIdentityDb();
+    fake.selectQueue.push([
+      dbSetRow({ selected_candidate_id: null, thread_ref: "other-thread" }),
+    ]);
+    const result = await recordCandidateSelection(fake.db as never, recordArgs);
+    expect(result).toEqual({ status: "refused", reason: "thread_mismatch" });
+    expect(fake.updates).toHaveLength(0);
+  });
+
+  it("refuses non-open and expired sets", async () => {
+    const fake = createFakeIdentityDb();
+    fake.selectQueue.push([
+      dbSetRow({ selected_candidate_id: null, status: "superseded" }),
+    ]);
+    expect(
+      await recordCandidateSelection(fake.db as never, recordArgs),
+    ).toEqual({ status: "refused", reason: "set_not_open" });
+
+    fake.selectQueue.push([
+      dbSetRow({
+        selected_candidate_id: null,
+        expires_at: new Date(NOW.getTime() - 1),
+      }),
+    ]);
+    expect(
+      await recordCandidateSelection(fake.db as never, recordArgs),
+    ).toEqual({ status: "refused", reason: "set_expired" });
+    expect(fake.updates).toHaveLength(0);
+  });
+
+  it("refuses a missing set", async () => {
+    const fake = createFakeIdentityDb();
+    fake.selectQueue.push([]);
+    expect(
+      await recordCandidateSelection(fake.db as never, recordArgs),
+    ).toEqual({ status: "refused", reason: "set_not_found" });
   });
 });
 
@@ -745,9 +810,10 @@ describe("confirmMapping", () => {
 describe("declineCandidates", () => {
   it("files one deduped case across repeat declines of the same target", async () => {
     const fake = createFakeIdentityDb();
-    // First decline — no open case yet, a new one is filed.
+    // First decline — no open case yet, a new one is filed. The set carries
+    // the decline marker recorded at answer intake (consent gate).
     fake.selectQueue.push(
-      [dbSetRow()], // set load
+      [dbSetRow({ selected_candidate_id: DECLINED_CANDIDATE_MARKER })], // set load
       [], // no existing open case for the signature
       [{ count: 0 }], // open-case count for budget enforcement
     );
@@ -782,7 +848,13 @@ describe("declineCandidates", () => {
 
     // Second decline (fresh set, same target) — coalesces onto case-1.
     fake.selectQueue.push(
-      [dbSetRow({ id: "set-2", thread_ref: "thread-2" })],
+      [
+        dbSetRow({
+          id: "set-2",
+          thread_ref: "thread-2",
+          selected_candidate_id: DECLINED_CANDIDATE_MARKER,
+        }),
+      ],
       [{ id: "case-1" }], // the open case already exists for the signature
     );
     const second = await declineCandidates(fake.db as never, {
@@ -804,7 +876,9 @@ describe("declineCandidates", () => {
 
   it("refuses declines for a set bound to another thread", async () => {
     const fake = createFakeIdentityDb();
-    fake.selectQueue.push([dbSetRow()]);
+    fake.selectQueue.push([
+      dbSetRow({ selected_candidate_id: DECLINED_CANDIDATE_MARKER }),
+    ]);
     const result = await declineCandidates(fake.db as never, {
       tenantId: TENANT,
       threadRef: "other-thread",
@@ -813,6 +887,32 @@ describe("declineCandidates", () => {
     });
     expect(result).toEqual({ status: "refused", reason: "thread_mismatch" });
     expect(fake.inserts).toHaveLength(0);
+  });
+
+  it("refuses when no 'None of these' pick was recorded at answer intake (consent gate)", async () => {
+    const fake = createFakeIdentityDb();
+    // Recorded selection is a REAL candidate — the model cannot flip it
+    // into a decline.
+    fake.selectQueue.push([dbSetRow({ selected_candidate_id: "cand-1" })]);
+    const declineArgs = {
+      tenantId: TENANT,
+      threadRef: "thread-1",
+      candidateSetId: "set-1",
+      userId: "user-7",
+    };
+    expect(await declineCandidates(fake.db as never, declineArgs)).toEqual({
+      status: "refused",
+      reason: "no_decline_recorded",
+    });
+
+    // No selection recorded at all (question never answered) — same refusal.
+    fake.selectQueue.push([dbSetRow({ selected_candidate_id: null })]);
+    expect(await declineCandidates(fake.db as never, declineArgs)).toEqual({
+      status: "refused",
+      reason: "no_decline_recorded",
+    });
+    expect(fake.inserts).toHaveLength(0);
+    expect(fake.updates).toHaveLength(0);
   });
 });
 

@@ -125,6 +125,16 @@ const askUserQuestionParameters = Type.Object({
             description:
               "One-line explanation of what choosing this option means.",
           }),
+          candidateId: Type.Optional(
+            Type.String({
+              maxLength: 64,
+              description:
+                "ONLY when presenting mapping candidates from " +
+                "propose_mapping_candidates: the candidate id this option " +
+                'stands for, or "none" on the mandatory "None of these" ' +
+                "option. Requires candidateSetId on the question.",
+            }),
+          ),
         }),
         {
           minItems: 2,
@@ -135,6 +145,19 @@ const askUserQuestionParameters = Type.Object({
       multiSelect: Type.Optional(
         Type.Boolean({
           description: "True when the user may select more than one option.",
+        }),
+      ),
+      candidateSetId: Type.Optional(
+        Type.String({
+          maxLength: 64,
+          description:
+            "ONLY when presenting mapping candidates from " +
+            "propose_mapping_candidates: the candidate_set_id being " +
+            "presented. Each option must then carry its candidateId (with " +
+            'a "None of these" option carrying candidateId "none"), and ' +
+            "the question must not be multiSelect — the platform records " +
+            "the user's pick server-side for the confirm_mapping consent " +
+            "check.",
         }),
       ),
     }),

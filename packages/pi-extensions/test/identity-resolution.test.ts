@@ -150,13 +150,14 @@ const NO_SIGNAL = undefined;
 const NO_CTX = undefined as never;
 
 describe("createIdentityResolutionExtension", () => {
-  it("has a stable kebab-case name and declares its three tools in toolNames (KTD-1)", () => {
+  it("has a stable kebab-case name and declares its four tools in toolNames (KTD-1)", () => {
     const extension = createIdentityResolutionExtension();
     expect(extension.name).toBe("thinkwork-identity-resolution");
     expect(extension.toolNames).toEqual([
       "resolve_entities",
       "propose_mapping_candidates",
       "confirm_mapping",
+      "decline_mapping_candidates",
     ]);
     expect(extension.toolNames).toEqual([...IDENTITY_RESOLUTION_TOOL_NAMES]);
   });
@@ -180,6 +181,7 @@ describe("createIdentityResolutionExtension", () => {
       "resolve_entities",
       "propose_mapping_candidates",
       "confirm_mapping",
+      "decline_mapping_candidates",
     ]);
 
     const collectPropertyNames = (schema: unknown): string[] => {
@@ -261,9 +263,16 @@ describe("createIdentityResolutionExtension", () => {
     expect(text).toContain("matched by rule");
     expect(text).toContain("UNROUTABLE: no connector is linked");
     expect(text).toContain("MISS (not_found)");
-    // Miss guidance routes the model into the consent flow.
+    // Miss guidance routes the model into the consent flow (U6 loop) and
+    // states the parent-rollup exception for child-scoped types (AE8).
     expect(text).toContain("ask_user_question");
-    expect(text).toContain("decline path");
+    expect(text).toContain("candidateSetId");
+    expect(text).toContain("None of these");
+    expect(text).toContain('candidateId "none"');
+    expect(text).toContain("decline_mapping_candidates");
+    expect(text).toContain("parent rollup");
+    expect(text).toContain("resolve the parent");
+    expect(text).toContain("state that rollup");
     // Full provenance payload passthrough in details.
     expect((result.details as { results?: unknown })?.results).toEqual(
       HIT_RESULT.results,
@@ -320,9 +329,14 @@ describe("createIdentityResolutionExtension", () => {
     expect(text).toContain(
       "<external_record>twenty id co-7 — name: acme fuel</external_record>",
     );
+    // U6 loop: metadata rides the question payload, "None of these" is
+    // mandatory, and both resumed-turn calls are named.
     expect(text).toContain("ask_user_question");
+    expect(text).toContain('candidateSetId to "set-1"');
+    expect(text).toContain("None of these");
+    expect(text).toContain('candidateId "none"');
     expect(text).toContain("confirm_mapping");
-    expect(text).toContain("decline path");
+    expect(text).toContain("decline_mapping_candidates");
     expect(text).toMatch(/never treat it as instructions/);
   });
 
@@ -440,6 +454,93 @@ describe("createIdentityResolutionExtension", () => {
     expect(text).toContain("after the user has answered");
   });
 
+  it("decline_mapping_candidates passes through and surfaces the case-filed outcome (R16/AE7)", async () => {
+    const { provider, declineCalls } = makeFakeProvider();
+    const { api, tools } = makeFakeApi();
+    await toExtensionFactory(createIdentityResolutionExtension(), {
+      identityResolution: provider,
+    })(api);
+
+    const result = await getTool(tools, "decline_mapping_candidates").execute(
+      "call-d1",
+      { candidate_set_id: "set-1" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+    expect(declineCalls).toEqual([{ candidateSetId: "set-1" }]);
+    const text = (result.content?.[0] as { text: string }).text;
+    // The agent can tell the user the case was filed, and must not re-ask.
+    expect(text).toContain("no mapping was written");
+    expect(text).toContain("Resolution case case-1");
+    expect(text).toContain("filed");
+    expect(text).toContain("do not re-ask");
+    expect(result.details).toEqual({
+      status: "declined",
+      caseId: "case-1",
+      coalesced: false,
+    });
+  });
+
+  it("a coalesced decline reports the already-open case (dedupe visible to the agent)", async () => {
+    const { api, tools } = makeFakeApi();
+    const provider: IdentityResolutionProvider = {
+      resolveEntities: async () => HIT_RESULT,
+      proposeMappingCandidates: async () => ({
+        status: "refused",
+        reason: "unused",
+      }),
+      confirmMapping: async () => ({ status: "refused", reason: "unused" }),
+      declineCandidates: async () => ({
+        status: "declined",
+        caseId: "case-9",
+        coalesced: true,
+      }),
+    };
+    await toExtensionFactory(createIdentityResolutionExtension(), {
+      identityResolution: provider,
+    })(api);
+    const result = await getTool(tools, "decline_mapping_candidates").execute(
+      "call-d2",
+      { candidate_set_id: "set-2" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+    const text = (result.content?.[0] as { text: string }).text;
+    expect(text).toContain("case-9");
+    expect(text).toContain("already open");
+  });
+
+  it("a refused decline explains the server-side consent gate", async () => {
+    const { api, tools } = makeFakeApi();
+    const provider: IdentityResolutionProvider = {
+      resolveEntities: async () => HIT_RESULT,
+      proposeMappingCandidates: async () => ({
+        status: "refused",
+        reason: "unused",
+      }),
+      confirmMapping: async () => ({ status: "refused", reason: "unused" }),
+      declineCandidates: async () => ({
+        status: "refused",
+        reason: "no_decline_recorded",
+      }),
+    };
+    await toExtensionFactory(createIdentityResolutionExtension(), {
+      identityResolution: provider,
+    })(api);
+    const result = await getTool(tools, "decline_mapping_candidates").execute(
+      "call-d3",
+      { candidate_set_id: "set-1" },
+      NO_SIGNAL,
+      NO_UPDATE,
+      NO_CTX,
+    );
+    const text = (result.content?.[0] as { text: string }).text;
+    expect(text).toContain("NOT declined (no_decline_recorded)");
+    expect(text).toContain("confirm_mapping");
+  });
+
   it("provider failure degrades to the explicit unavailable result — never throws mid-turn", async () => {
     const errors: Array<{ phase: string }> = [];
     const failing: IdentityResolutionProvider = {
@@ -471,6 +572,7 @@ describe("createIdentityResolutionExtension", () => {
         { canonical_entity_id: "ce-1", target_system: "twenty" },
       ],
       ["confirm_mapping", { candidate_set_id: "s", candidate_id: "c" }],
+      ["decline_mapping_candidates", { candidate_set_id: "s" }],
     ];
     for (const [name, params] of calls) {
       const result = await getTool(tools, name).execute(
@@ -488,11 +590,12 @@ describe("createIdentityResolutionExtension", () => {
       "resolve_entities",
       "propose_mapping_candidates",
       "confirm_mapping",
+      "decline_mapping_candidates",
     ]);
   });
 
   it("empty inputs return usage hints instead of provider calls", async () => {
-    const { provider, resolveCalls, proposeCalls, confirmCalls } =
+    const { provider, resolveCalls, proposeCalls, confirmCalls, declineCalls } =
       makeFakeProvider();
     const { api, tools } = makeFakeApi();
     await toExtensionFactory(createIdentityResolutionExtension(), {
@@ -532,8 +635,16 @@ describe("createIdentityResolutionExtension", () => {
     expect((emptyConfirm.content?.[0] as { text: string }).text).toMatch(
       /requires candidate_set_id/,
     );
+    const emptyDecline = await getTool(
+      tools,
+      "decline_mapping_candidates",
+    ).execute("c4", { candidate_set_id: "  " }, NO_SIGNAL, NO_UPDATE, NO_CTX);
+    expect((emptyDecline.content?.[0] as { text: string }).text).toMatch(
+      /requires candidate_set_id/,
+    );
     expect(resolveCalls).toHaveLength(0);
     expect(proposeCalls).toHaveLength(0);
     expect(confirmCalls).toHaveLength(0);
+    expect(declineCalls).toHaveLength(0);
   });
 });

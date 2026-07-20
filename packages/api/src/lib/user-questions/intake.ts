@@ -57,6 +57,7 @@ import { hasPgErrorCode } from "../pg-utils.js";
 import { notifyNewMessage, notifyThreadUpdate } from "../../graphql/notify.js";
 import {
   renderQuestionMarkdown,
+  sanitizeCandidateQuestions,
   userQuestionPart,
   validateQuestionBatch,
   type UserQuestionInput,
@@ -137,7 +138,10 @@ export async function handleQuestionIntake(
   if (validationError) {
     return badRequest(validationError);
   }
-  const questions = payload.questions;
+  // Mapping-candidate questions carry external-record-derived labels —
+  // sanitize them at the point they enter the payload (THINK-321 U6
+  // injection boundary; non-candidate questions pass through untouched).
+  const questions = sanitizeCandidateQuestions(payload.questions);
 
   // ---- Ownership join (security-critical) -------------------------------
   // The secret is shared service auth; the turn row is what scopes the

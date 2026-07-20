@@ -3,8 +3,10 @@
  * (plan 2026-06-09-005 U3; R22 idempotent answer→resume).
  *
  * Flow: auth → load question row → thread-visibility check → CAS-consume
- * (all pending rows for the thread, answeredVia 'card') → enqueue the
- * resume wakeup → return the answered UserQuestion.
+ * (all pending rows for the thread, answeredVia 'card') → record any
+ * mapping-candidate selection (THINK-321 U6, KTD-2 — before the resumed
+ * turn can run) → enqueue the resume wakeup → return the answered
+ * UserQuestion.
  *
  * Wakeup contract (mirrors the producer-side wakeup-defer contract):
  *   - source `question_answer`, idempotency_key `question-answer:<id>`
@@ -49,6 +51,7 @@ import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import { callerVisibleThreadPredicate } from "../threads/access.js";
 import { shouldDeferWakeup } from "../../../lib/wakeup-defer.js";
 import { consumePendingQuestions } from "../../../lib/user-questions/consume.js";
+import { recordCandidateSelectionsFromAnswers } from "../../../lib/entity-identity/candidate-consent.js";
 import { requestedModelIdFromMetadata } from "../../../lib/turn-model-selection.js";
 import { notifyThreadUpdate } from "../../notify.js";
 import { userQuestionToGraphql } from "./user-question.shared.js";
@@ -167,6 +170,30 @@ export const answerUserQuestion = async (
     }
   }
 
+  // On recovery re-entry the committed row is the source of truth for the
+  // answer fields (the original CAS already persisted them).
+  const effectiveAnswers = recoveryRow
+    ? ((recoveryRow.answers as Record<string, unknown> | null) ?? parsedAnswers)
+    : parsedAnswers;
+  const effectiveAnsweredBy = recoveryRow
+    ? (recoveryRow.answered_by ?? caller.userId ?? null)
+    : (caller.userId ?? null);
+
+  // ---- Mapping-candidate consent recording (THINK-321 U6, KTD-2) ---------
+  // When the batch carries mapping-candidate metadata, record which
+  // candidate the user picked BEFORE the resume wakeup is enqueued — the
+  // resumed turn's confirm_mapping/decline path checks its echo against
+  // this server-side record. Best-effort (the helper never throws): a
+  // failed recording fails closed downstream, never the answer itself.
+  // Re-running on recovery re-entry is idempotent (same selection, still
+  // open set).
+  await recordCandidateSelectionsFromAnswers(db, {
+    tenantId: question.tenant_id,
+    threadId: question.thread_id,
+    questions: question.questions,
+    answers: effectiveAnswers,
+  });
+
   // ---- Resume wakeup (winner only) ----------------------------------------
   const [thread] = await db
     .select({
@@ -188,8 +215,9 @@ export const answerUserQuestion = async (
     // The asking turn was agent-driven, so threads.agent_id is normally set;
     // fall back to the tenant platform agent before failing loudly.
     try {
-      const { resolveTenantPlatformAgent } =
-        await import("../../../lib/agents/tenant-platform-agent.js");
+      const { resolveTenantPlatformAgent } = await import(
+        "../../../lib/agents/tenant-platform-agent.js"
+      );
       agentId = (await resolveTenantPlatformAgent(question.tenant_id, db)).id;
     } catch {
       agentId = null;
@@ -201,14 +229,6 @@ export const answerUserQuestion = async (
     );
   }
 
-  // On recovery re-entry the committed row is the source of truth for the
-  // answer fields (the original CAS already persisted them).
-  const effectiveAnswers = recoveryRow
-    ? ((recoveryRow.answers as Record<string, unknown> | null) ?? parsedAnswers)
-    : parsedAnswers;
-  const effectiveAnsweredBy = recoveryRow
-    ? (recoveryRow.answered_by ?? caller.userId ?? null)
-    : (caller.userId ?? null);
   const requestedModelId = await resolveQuestionResumeModelId(question);
   const runtimeType = await resolveQuestionResumeRuntimeType(question);
   const wakeupPayload = {
