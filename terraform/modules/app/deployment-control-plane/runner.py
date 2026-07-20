@@ -1079,6 +1079,14 @@ def execute_terraform_plan_phase(
     )
 
 
+def should_reconcile_native_auth_schema(terraform_phase, planned_action, payload):
+    return (
+        terraform_phase in {"apply", "legacy"}
+        and planned_action in {"deploy", "update"}
+        and not is_managed_app_operation(payload)
+    )
+
+
 def truthy(value):
     if isinstance(value, bool):
         return value
@@ -6769,6 +6777,12 @@ def main():
         if terraform_phase in {"plan", "legacy"}
         else None
     )
+    if terraform_phase == "legacy" and should_reconcile_native_auth_schema(
+        terraform_phase, planned_action, payload
+    ):
+        CONTROLLER_EVIDENCE["cognitoSchema"] = ensure_native_auth_custom_attributes(
+            current_terraform_outputs(vars_json["stage"])
+        )
     applied_plan = None
     if terraform_phase == "apply":
         applied_plan = validate_and_materialize_approved_plan(payload, state_identity)
@@ -6776,7 +6790,7 @@ def main():
         if planned_action not in {"deploy", "update", "destroy"}:
             raise RuntimeError("Approved plan has an invalid plannedAction")
         TERRAFORM_EVIDENCE["approvedPlan"] = applied_plan
-        if planned_action in {"deploy", "update"} and not is_managed_app_operation(payload):
+        if should_reconcile_native_auth_schema(terraform_phase, planned_action, payload):
             CONTROLLER_EVIDENCE["cognitoSchema"] = ensure_native_auth_custom_attributes(
                 current_terraform_outputs(vars_json["stage"])
             )

@@ -3929,6 +3929,24 @@ def test_legacy_combined_terraform_actions_remain_compatible(action: str) -> Non
     assert runner.validate_terraform_execution_phase(payload, action) == "legacy"
 
 
+def test_legacy_and_approved_apply_reconcile_native_auth_schema() -> None:
+    runner = load_runner()
+
+    assert runner.should_reconcile_native_auth_schema("legacy", "deploy", {}) is True
+    assert runner.should_reconcile_native_auth_schema("legacy", "update", {}) is True
+    assert runner.should_reconcile_native_auth_schema("apply", "update", {}) is True
+    assert runner.should_reconcile_native_auth_schema("plan", "update", {}) is False
+    assert runner.should_reconcile_native_auth_schema("legacy", "destroy", {}) is False
+    assert (
+        runner.should_reconcile_native_auth_schema(
+            "legacy",
+            "update",
+            {"appKey": "twenty"},
+        )
+        is False
+    )
+
+
 def test_apply_phase_requires_separate_approved_plan() -> None:
     runner = load_runner()
     payload = _approval_payload("apply", plan=False, apply=True)
