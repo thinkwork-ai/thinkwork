@@ -3769,3 +3769,25 @@ def test_ensure_first_admin_failure_is_nonfatal(
     )
     assert runner.FIRST_ADMIN_EVIDENCE["status"] == "failed"
     assert "user_pool_id" in runner.FIRST_ADMIN_EVIDENCE["error"]
+
+
+def test_agentcore_assertion_key_cross_variable_invariant_uses_module_check() -> None:
+    """Keep the released module compatible with the controller's Terraform 1.8.x."""
+    repo_root = Path(__file__).resolve().parents[4]
+    lambda_api = repo_root / "terraform/modules/app/lambda-api"
+    variables = (lambda_api / "variables.tf").read_text(encoding="utf-8")
+    main = (lambda_api / "main.tf").read_text(encoding="utf-8")
+
+    active_key_variable = variables.split(
+        'variable "agentcore_turn_assertion_active_key_version"', 1
+    )[1].split(
+        'variable "agentcore_proof_oauth_client_id"', 1
+    )[0]
+
+    assert "agentcore_turn_assertion_key_versions" not in active_key_variable
+    assert 'check "agentcore_turn_assertion_active_key_is_published"' in main
+    assert re.search(
+        r"contains\(\s*var\.agentcore_turn_assertion_key_versions,\s*"
+        r"var\.agentcore_turn_assertion_active_key_version,?\s*\)",
+        main,
+    )

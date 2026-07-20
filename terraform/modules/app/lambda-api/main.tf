@@ -280,3 +280,17 @@ resource "terraform_data" "auth_migration_recovery_deadline_guard" {
     }
   }
 }
+
+# Cross-variable input validation must remain a module check instead of a
+# variable validation block. The enterprise deployment controller supports
+# Terraform 1.8.x, where variable validation conditions may reference only the
+# variable being validated.
+check "agentcore_turn_assertion_active_key_is_published" {
+  assert {
+    condition = contains(
+      var.agentcore_turn_assertion_key_versions,
+      var.agentcore_turn_assertion_active_key_version,
+    )
+    error_message = "agentcore_turn_assertion_active_key_version must be present in agentcore_turn_assertion_key_versions."
+  }
+}

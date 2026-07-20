@@ -207,11 +207,6 @@ variable "agentcore_turn_assertion_active_key_version" {
   description = "Published AgentCore assertion key version used for new signatures."
   type        = string
   default     = "v1"
-
-  validation {
-    condition     = contains(var.agentcore_turn_assertion_key_versions, var.agentcore_turn_assertion_active_key_version)
-    error_message = "agentcore_turn_assertion_active_key_version must be present in agentcore_turn_assertion_key_versions."
-  }
 }
 
 variable "agentcore_proof_oauth_client_id" {
