@@ -984,11 +984,20 @@ def load_approved_plan_descriptor(payload):
     return descriptor, descriptor_ref
 
 
-def comparable_terraform_plan(plan):
-    """Remove render-time metadata while preserving every approved plan decision."""
-    if not isinstance(plan, dict):
-        return plan
-    return {key: value for key, value in plan.items() if key != "timestamp"}
+def comparable_terraform_plan(value, *, _top_level=True, _parent_key=None):
+    """Normalize render-only Terraform JSON variance without changing plan decisions."""
+    if isinstance(value, dict):
+        return {
+            key: comparable_terraform_plan(item, _top_level=False, _parent_key=key)
+            for key, item in value.items()
+            if not (_top_level and key == "timestamp")
+        }
+    if isinstance(value, list):
+        normalized = [comparable_terraform_plan(item, _top_level=False) for item in value]
+        if _parent_key == "references" and all(isinstance(item, str) for item in normalized):
+            return sorted(normalized)
+        return normalized
+    return value
 
 
 def validate_and_materialize_approved_plan(payload, state_identity):

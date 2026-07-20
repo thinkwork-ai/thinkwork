@@ -3997,13 +3997,39 @@ def test_saved_plan_apply_revalidates_config_release_state_vars_and_rendered_pla
     tfvars = b'{"stage":"tei-e2e"}\n'
     (tf / "terraform.auto.tfvars.json").write_bytes(tfvars)
     saved_plan_bytes = b"opaque-saved-plan"
-    accepted_plan = (
-        b'{"resource_changes":[],"format_version":"1.2","timestamp":"2026-07-20T18:40:21Z"}\n'
-    )
-    rendered_plan = (
-        b'{\n  "format_version": "1.2",\n  "resource_changes": [],\n'
-        b'  "timestamp": "2026-07-20T18:49:12Z"\n}\n'
-    )
+    accepted_plan = json.dumps(
+        {
+            "resource_changes": [],
+            "format_version": "1.2",
+            "timestamp": "2026-07-20T18:40:21Z",
+            "configuration": {
+                "expression": {
+                    "references": [
+                        "aws_security_group.twenty.id",
+                        "aws_security_group.twenty",
+                        "var.cache_port",
+                    ]
+                }
+            },
+        }
+    ).encode()
+    rendered_plan = json.dumps(
+        {
+            "format_version": "1.2",
+            "resource_changes": [],
+            "timestamp": "2026-07-20T18:49:12Z",
+            "configuration": {
+                "expression": {
+                    "references": [
+                        "var.cache_port",
+                        "aws_security_group.twenty.id",
+                        "aws_security_group.twenty",
+                    ]
+                }
+            },
+        },
+        indent=2,
+    ).encode()
     descriptor = {
         "contract": runner.TERRAFORM_PLAN_APPROVAL_CONTRACT,
         "deploymentConfigSha256": runner.deployment_config_sha256(payload),
