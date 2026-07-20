@@ -137,6 +137,9 @@ export interface PriorControllerInput {
   authRetirementPhase?: "coexistence" | "cutover" | "retired";
   enableHindsight?: boolean;
   hindsightDatabaseName?: string;
+  enableAgentCoreHarness?: boolean;
+  agentCoreHarnessTenantSlug?: string;
+  agentCoreHarnessOwnerAllowlist?: string;
   features?: unknown;
   terraform?: unknown;
 }
@@ -231,6 +234,15 @@ export function parsePriorControllerInput(raw: unknown): PriorControllerInput {
     hindsightDatabaseName:
       stringValue(input.hindsightDatabaseName) ??
       stringValue(preservedConfig.hindsightDatabaseName),
+    enableAgentCoreHarness:
+      booleanValue(input.enableAgentCoreHarness) ??
+      booleanValue(preservedConfig.enableAgentCoreHarness),
+    agentCoreHarnessTenantSlug:
+      stringValue(input.agentCoreHarnessTenantSlug) ??
+      stringValue(preservedConfig.agentCoreHarnessTenantSlug),
+    agentCoreHarnessOwnerAllowlist:
+      stringValue(input.agentCoreHarnessOwnerAllowlist) ??
+      stringValue(preservedConfig.agentCoreHarnessOwnerAllowlist),
     features: input.features,
     terraform: input.terraform,
   };
@@ -287,6 +299,21 @@ export function recoverPriorControllerInput(
       ...(!recovered.hindsightDatabaseName && candidate.hindsightDatabaseName
         ? { hindsightDatabaseName: candidate.hindsightDatabaseName }
         : {}),
+      ...(recovered.enableAgentCoreHarness === undefined &&
+      candidate.enableAgentCoreHarness !== undefined
+        ? { enableAgentCoreHarness: candidate.enableAgentCoreHarness }
+        : {}),
+      ...(!recovered.agentCoreHarnessTenantSlug &&
+      candidate.agentCoreHarnessTenantSlug
+        ? { agentCoreHarnessTenantSlug: candidate.agentCoreHarnessTenantSlug }
+        : {}),
+      ...(!recovered.agentCoreHarnessOwnerAllowlist &&
+      candidate.agentCoreHarnessOwnerAllowlist
+        ? {
+            agentCoreHarnessOwnerAllowlist:
+              candidate.agentCoreHarnessOwnerAllowlist,
+          }
+        : {}),
     };
   }
 
@@ -302,6 +329,11 @@ export function buildControllerUpdateInput(options: {
   release: ResolvedReleaseManifest;
   sessionId?: string;
   webOnly?: boolean;
+  agentCoreHarness?: {
+    enabled?: boolean;
+    tenantSlug?: string;
+    ownerAllowlist?: string;
+  };
 }): Record<string, unknown> {
   const { prior, release } = options;
   if (
@@ -322,6 +354,31 @@ export function buildControllerUpdateInput(options: {
     manifestUrl: release.manifestUrl,
     manifestSha256: release.manifestSha256,
   };
+  const enableAgentCoreHarness =
+    options.agentCoreHarness?.enabled ?? prior.enableAgentCoreHarness;
+  const agentCoreHarnessTenantSlug =
+    options.agentCoreHarness?.tenantSlug ?? prior.agentCoreHarnessTenantSlug;
+  const agentCoreHarnessOwnerAllowlist =
+    options.agentCoreHarness?.ownerAllowlist ??
+    prior.agentCoreHarnessOwnerAllowlist;
+  if (enableAgentCoreHarness) {
+    if (!/^[a-z0-9][a-z0-9-]{0,47}$/.test(agentCoreHarnessTenantSlug ?? "")) {
+      throw new Error(
+        "Enabling AgentCore Harness requires --agentcore-tenant-slug with a lowercase tenant slug.",
+      );
+    }
+    const owners = new Set(
+      (agentCoreHarnessOwnerAllowlist ?? "")
+        .split(",")
+        .map((owner) => owner.trim().toLowerCase())
+        .filter(Boolean),
+    );
+    if (owners.size < 2) {
+      throw new Error(
+        "Enabling AgentCore Harness requires --agentcore-owner-allowlist with at least two distinct admitted subjects.",
+      );
+    }
+  }
   const preservedConfig = {
     ...(prior.customerDomain ? { customerDomain: prior.customerDomain } : {}),
     ...(prior.customerDomainDelegated !== undefined
@@ -335,6 +392,11 @@ export function buildControllerUpdateInput(options: {
       : {}),
     ...(prior.hindsightDatabaseName
       ? { hindsightDatabaseName: prior.hindsightDatabaseName }
+      : {}),
+    ...(enableAgentCoreHarness !== undefined ? { enableAgentCoreHarness } : {}),
+    ...(agentCoreHarnessTenantSlug ? { agentCoreHarnessTenantSlug } : {}),
+    ...(agentCoreHarnessOwnerAllowlist
+      ? { agentCoreHarnessOwnerAllowlist }
       : {}),
   };
   const hasPreservedConfig = Object.keys(preservedConfig).length > 0;

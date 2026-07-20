@@ -3243,6 +3243,28 @@ def write_runner_files(payload, runner_secrets):
             "hindsightDatabaseName",
             default="",
         ),
+        # AgentCore Harness is an environment-level deployment choice. The
+        # controller carries these reviewed, non-secret values forward so a
+        # release update cannot silently remove the managed runtime plane.
+        # The registry module retains its rollout-era multiplayer-proof input
+        # names for compatibility; all provisioning still happens in the
+        # normal Terraform apply owned by this controller.
+        "enable_agentcore_multiplayer_proof": safe_get_bool(
+            {},
+            reviewed_payload,
+            "enableAgentCoreHarness",
+            default=False,
+        ),
+        "agentcore_multiplayer_proof_tenant_slug": safe_get(
+            reviewed_payload,
+            "agentCoreHarnessTenantSlug",
+            default="",
+        ),
+        "agentcore_multiplayer_proof_owner_allowlist": safe_get(
+            reviewed_payload,
+            "agentCoreHarnessOwnerAllowlist",
+            default="",
+        ),
         "platform_operator_emails": safe_get(
             runner_secrets,
             "adminEmail",
@@ -3486,6 +3508,21 @@ variable "analyst_lambda_vpc_egress" {{
 }}
 
 variable "hindsight_database_name" {{
+  type    = string
+  default = ""
+}}
+
+variable "enable_agentcore_multiplayer_proof" {{
+  type    = bool
+  default = false
+}}
+
+variable "agentcore_multiplayer_proof_tenant_slug" {{
+  type    = string
+  default = ""
+}}
+
+variable "agentcore_multiplayer_proof_owner_allowlist" {{
   type    = string
   default = ""
 }}
@@ -3916,6 +3953,9 @@ module "thinkwork" {{
   analyst_lambda_vpc_egress      = var.analyst_lambda_vpc_egress
   hindsight_database_name        = var.hindsight_database_name
   enable_workspace_orchestration = true
+  enable_agentcore_multiplayer_proof          = var.enable_agentcore_multiplayer_proof
+  agentcore_multiplayer_proof_tenant_slug     = var.agentcore_multiplayer_proof_tenant_slug
+  agentcore_multiplayer_proof_owner_allowlist = var.agentcore_multiplayer_proof_owner_allowlist
 
   twenty_provisioned     = var.twenty_provisioned
   twenty_runtime_enabled = var.twenty_runtime_enabled
