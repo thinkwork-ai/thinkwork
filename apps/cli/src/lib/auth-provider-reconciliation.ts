@@ -41,6 +41,8 @@ type AwsExec = (args: string[]) => {
   stderr: string;
 };
 
+const ENTRA_TENANT_ALIASES = new Set(["common", "organizations", "consumers"]);
+
 const GUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -117,7 +119,9 @@ export function buildLocalAuthReconciliation(
   if (routeClients.length === 0) {
     throw new Error("auth_route_clients Terraform output is empty.");
   }
-  const providerNames = new Set(routeClients.flatMap((route) => route.providerNames));
+  const providerNames = new Set(
+    routeClients.flatMap((route) => route.providerNames),
+  );
   const connections: Array<Record<string, unknown>> = [
     {
       connectionKey: "local",
@@ -146,9 +150,12 @@ export function buildLocalAuthReconciliation(
   }
   if (providerNames.has("MicrosoftOrganizations")) {
     const tenantId = input.microsoftTenantId?.trim().toLowerCase();
-    if (!tenantId || !GUID_RE.test(tenantId)) {
+    if (
+      !tenantId ||
+      !(ENTRA_TENANT_ALIASES.has(tenantId) || GUID_RE.test(tenantId))
+    ) {
       throw new Error(
-        "Microsoft native auth reconciliation requires an exact microsoft_oauth_tenant GUID.",
+        "Microsoft native auth reconciliation requires microsoft_oauth_tenant to be an Entra directory GUID or one of: common, organizations, consumers.",
       );
     }
     connections.push({

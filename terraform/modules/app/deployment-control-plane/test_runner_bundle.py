@@ -226,6 +226,56 @@ def test_native_auth_reconciliation_builds_route_specific_secret_free_manifest(
     assert replay_state == state
 
 
+def _microsoft_reconciliation_scope(tenant: str) -> tuple[dict, dict]:
+    outputs = {
+        "user_pool_id": {"value": "us-east-1_TESTPOOL"},
+        "auth_route_clients": {
+            "value": {
+                "web:microsoft": {
+                    "client_id": "zyxwvutsrqponmlkjihgfedcba",
+                    "route_key": "microsoft",
+                    "client_family": "web",
+                    "provider_names": ["MicrosoftOrganizations"],
+                    "explicit_auth_flows": ["ALLOW_REFRESH_TOKEN_AUTH"],
+                    "callback_urls": ["https://app.example/auth/callback"],
+                    "logout_urls": ["https://app.example"],
+                    "lifecycle_state": "native",
+                },
+            }
+        },
+    }
+    scope = {
+        "stage": "dev",
+        "account_id": "123456789012",
+        "region": "us-east-1",
+        "microsoft_oauth_tenant": tenant,
+    }
+    return outputs, scope
+
+
+@pytest.mark.parametrize("alias", ["common", "organizations", "consumers"])
+def test_native_auth_reconciliation_accepts_cognito_tenant_aliases(alias: str) -> None:
+    runner = load_runner()
+    outputs, scope = _microsoft_reconciliation_scope(alias)
+    payload, _ = runner.native_auth_reconciliation_payload(outputs, scope, {})
+    microsoft_connection = next(
+        item
+        for item in payload["connections"]
+        if item["connectionKey"] == "microsoft:organizations"
+    )
+    assert microsoft_connection["issuerUrl"] == (
+        f"https://login.microsoftonline.com/{alias}/v2.0"
+    )
+
+
+@pytest.mark.parametrize("tenant", ["tenant.example", "contoso", "9d65869f", ""])
+def test_native_auth_reconciliation_rejects_arbitrary_tenant_values(tenant: str) -> None:
+    runner = load_runner()
+    outputs, scope = _microsoft_reconciliation_scope(tenant)
+    with pytest.raises(RuntimeError, match="Entra directory GUID or one of"):
+        runner.native_auth_reconciliation_payload(outputs, scope, {})
+
+
 def tenant_entra_operation(action: str, revision: int = 1) -> dict:
     tenant_id = "00000000-0000-4000-8000-000000000123"
     payload = {

@@ -122,10 +122,24 @@ describe("auth provider safe metadata validation", () => {
   });
 
   it.each(["organizations", "common", "consumers"])(
-    "rejects the Microsoft %s issuer alias because Cognito requires an exact tenant issuer",
+    "accepts the Cognito-supported Microsoft %s issuer alias",
     (alias) => {
       const payload = validPayload();
       payload.connections[0]!.issuerUrl = `https://login.microsoftonline.com/${alias}/v2.0`;
+      const { manifestFingerprint: _old, ...input } = payload;
+      payload.manifestFingerprint = canonicalAuthManifestFingerprint(input);
+      const validated = validateAuthProviderMetadata(payload);
+      expect(validated.connections[0]!.issuerUrl).toBe(
+        `https://login.microsoftonline.com/${alias}/v2.0`,
+      );
+    },
+  );
+
+  it.each(["tenant.example", "contoso", "9d65869f", "organizations2"])(
+    "rejects the arbitrary Microsoft issuer tenant %s",
+    (tenant) => {
+      const payload = validPayload();
+      payload.connections[0]!.issuerUrl = `https://login.microsoftonline.com/${tenant}/v2.0`;
       const { manifestFingerprint: _old, ...input } = payload;
       payload.manifestFingerprint = canonicalAuthManifestFingerprint(input);
       expectCode(

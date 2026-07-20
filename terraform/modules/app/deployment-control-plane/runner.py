@@ -4716,9 +4716,13 @@ def native_auth_reconciliation_payload(outputs, vars_json, previous_state=None):
         )
     if provider_client_ids.get("MicrosoftOrganizations"):
         microsoft_tenant = str(vars_json.get("microsoft_oauth_tenant") or "").lower()
-        if not microsoft_tenant:
+        if microsoft_tenant not in {"common", "organizations", "consumers"} and not re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}",
+            microsoft_tenant,
+        ):
             raise RuntimeError(
-                "Microsoft native auth reconciliation requires microsoft_oauth_tenant"
+                "Microsoft native auth reconciliation requires microsoft_oauth_tenant to be"
+                " an Entra directory GUID or one of: common, organizations, consumers"
             )
         connections.append(
             {

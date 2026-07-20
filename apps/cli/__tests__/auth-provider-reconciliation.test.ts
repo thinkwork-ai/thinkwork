@@ -57,14 +57,51 @@ describe("local auth-provider reconciliation", () => {
     expect(result.payload?.manifestFingerprint).toMatch(/^[a-f0-9]{64}$/);
   });
 
-  it("rejects the generic organizations issuer configuration", () => {
-    expect(() =>
-      buildLocalAuthReconciliation({
+  it.each(["common", "organizations", "consumers"])(
+    "accepts the Cognito-supported %s tenant alias",
+    (alias) => {
+      const result = buildLocalAuthReconciliation({
         ...base,
-        microsoftTenantId: "organizations",
-      }),
-    ).toThrow(/exact microsoft_oauth_tenant GUID/);
+        microsoftTenantId: alias,
+      });
+      expect(result.payload).toMatchObject({
+        connections: expect.arrayContaining([
+          expect.objectContaining({
+            connectionKey: "microsoft:organizations",
+            issuerUrl: `https://login.microsoftonline.com/${alias}/v2.0`,
+          }),
+        ]),
+      });
+    },
+  );
+
+  it("normalizes case and whitespace before validating the tenant", () => {
+    const result = buildLocalAuthReconciliation({
+      ...base,
+      microsoftTenantId: "Organizations ",
+    });
+    expect(result.payload).toMatchObject({
+      connections: expect.arrayContaining([
+        expect.objectContaining({
+          issuerUrl: "https://login.microsoftonline.com/organizations/v2.0",
+        }),
+      ]),
+    });
   });
+
+  it.each(["tenant.example", "contoso", "9d65869f"])(
+    "rejects the arbitrary tenant value %s",
+    (value) => {
+      expect(() =>
+        buildLocalAuthReconciliation({
+          ...base,
+          microsoftTenantId: value,
+        }),
+      ).toThrow(
+        /Entra directory GUID or one of: common, organizations, consumers/,
+      );
+    },
+  );
 
   it("posts the manifest before persisting its revision", async () => {
     const calls: string[][] = [];
@@ -75,10 +112,11 @@ describe("local auth-provider reconciliation", () => {
       }
       return { status: 0, stdout: "{}", stderr: "" };
     });
-    const fetchImpl = vi.fn(async () =>
-      new Response(JSON.stringify({ status: "applied", revision: 1 }), {
-        status: 200,
-      }),
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ status: "applied", revision: 1 }), {
+          status: 200,
+        }),
     );
 
     const result = await reconcileLocalNativeAuth(

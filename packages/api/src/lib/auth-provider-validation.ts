@@ -10,7 +10,7 @@ const STAGE_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MICROSOFT_TENANT_ISSUER_RE = new RegExp(
-  `^https://login\\.microsoftonline\\.com/(${UUID_RE.source.slice(1, -1)})/v2\\.0/?$`,
+  `^https://login\\.microsoftonline\\.com/(common|organizations|consumers|${UUID_RE.source.slice(1, -1)})/v2\\.0/?$`,
   "i",
 );
 const SHA256_RE = /^[a-f0-9]{64}$/;
@@ -170,7 +170,7 @@ function validateMicrosoftTenantIssuer(value: string, path: string): string {
   if (!match) {
     throw new AuthProviderValidationError(
       "invalid_microsoft_issuer",
-      `${path} must be the exact https://login.microsoftonline.com/<tenant-guid>/v2.0 issuer; common, organizations, and consumers aliases are not accepted by Cognito`,
+      `${path} must be an https://login.microsoftonline.com/<tenant>/v2.0 issuer where <tenant> is a directory GUID or one of the Cognito-supported aliases common, organizations, consumers`,
     );
   }
   return `https://login.microsoftonline.com/${match[1]!.toLowerCase()}/v2.0`;
