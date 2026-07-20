@@ -244,6 +244,7 @@ async function reconcile() {
     }),
   );
 
+  let createEndpoint = false;
   try {
     const existingEndpoint = await client.send(
       new GetHarnessEndpointCommand({ harnessId, endpointName }),
@@ -256,8 +257,32 @@ async function reconcile() {
         `Immutable Harness endpoint ${endpointName} points to unexpected version ${existingVersion}`,
       );
     }
+    if (existingEndpoint.endpoint?.status?.includes("FAILED")) {
+      // Failed endpoint creations consume the account endpoint quota. Remove
+      // the failed slot before making the idempotent publication attempt.
+      await deleteHarnessEndpoint(client, harnessId, endpointName);
+      createEndpoint = true;
+    }
   } catch (error) {
     if (!isNotFound(error)) throw error;
+    createEndpoint = true;
+  }
+
+  if (createEndpoint) {
+    // AgentCore currently admits only three endpoints per Harness, including
+    // DEFAULT. Reclaim managed endpoints older than the newest rollback
+    // before publishing the next immutable endpoint. If publication fails,
+    // DEFAULT and that newest rollback remain available and the SSM profile
+    // is not advanced by Terraform.
+    const endpoints = await listHarnessEndpoints(client, harnessId);
+    const retention = selectHarnessEndpointsForRetention(endpoints, {
+      activeEndpointName: endpointName,
+      endpointPrefix,
+      legacyEndpointName: required("LEGACY_ENDPOINT_NAME"),
+    });
+    for (const staleEndpointName of retention.deletedEndpointNames) {
+      await deleteHarnessEndpoint(client, harnessId, staleEndpointName);
+    }
     await client.send(
       new CreateHarnessEndpointCommand({
         harnessId,

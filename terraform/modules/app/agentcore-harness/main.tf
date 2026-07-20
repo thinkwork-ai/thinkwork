@@ -298,6 +298,7 @@ resource "terraform_data" "managed_multiplayer_harness_configuration" {
       AWS_REGION                    = var.region
       HARNESS_NAME                  = local.harness_name
       ENDPOINT_PREFIX               = local.endpoint_prefix
+      LEGACY_ENDPOINT_NAME          = "ThinkworkProof"
       EXECUTION_ROLE_ARN            = aws_iam_role.harness_execution[0].arn
       DISCOVERY_URL                 = var.discovery_url
       HARNESS_AUDIENCE              = var.harness_audience
