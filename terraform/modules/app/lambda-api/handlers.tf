@@ -446,9 +446,6 @@ locals {
       CAPABILITY_BROKER_API_ID        = var.capability_broker_api_id
       CAPABILITY_BROKER_VPCE_DNS      = var.capability_broker_vpce_dns
       CAPABILITY_BROKER_SESSION_TABLE = var.capability_broker_session_table
-      # THINK-321 U7 — startIdentityMatchJob Event-invokes this after
-      # inserting the durable match-job row. Name only (4KB env ceiling).
-      IDENTITY_MATCH_FUNCTION_NAME = "thinkwork-${var.stage}-api-identity-match"
     }
     # Compounding Memory compile Lambda. Any Converse-compatible Bedrock
     # model works; the planner + section-writer cap themselves at ~500
