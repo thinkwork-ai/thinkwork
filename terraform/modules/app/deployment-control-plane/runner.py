@@ -2050,7 +2050,7 @@ def recover_tei_v380_incident(payload):
     return {"proof": progress, "artifact": artifact}
 
 
-def tei_v380_recovery_import_blocks(payload, vars_json, current_state):
+def tei_v380_recovery_import_blocks(payload, vars_json):
     recovery = payload.get("incidentRecovery")
     if recovery is None:
         return ""
@@ -2062,6 +2062,14 @@ def tei_v380_recovery_import_blocks(payload, vars_json, current_state):
         raise RuntimeError("Incident recovery import scope does not match TEI v380 incident")
     if not isinstance(evidence_ref, dict):
         raise RuntimeError("incidentRecovery.evidence is required")
+
+    # The decoded Terraform state is used elsewhere to preserve outputs and
+    # guardrails, but it does not carry an object digest. Recovery approval is
+    # explicitly bound to the S3 state object's SHA/lineage/serial, so compare
+    # against the authoritative object snapshot instead of the decoded state.
+    current_state = terraform_state_object_snapshot(
+        vars_json.get("stage") or recovery.get("stage") or ""
+    )
 
     evidence_path = WORK / "accepted-incident-recovery.json"
     _download_approved_artifact(
@@ -4533,11 +4541,7 @@ def write_runner_files(payload, runner_secrets):
     vars_json.update(
         managed_app_terraform_overrides(payload, stage, account_id, current_outputs, current_state)
     )
-    incident_import_blocks = tei_v380_recovery_import_blocks(
-        payload,
-        vars_json,
-        current_state,
-    )
+    incident_import_blocks = tei_v380_recovery_import_blocks(payload, vars_json)
 
     TF.mkdir(parents=True, exist_ok=True)
     (TF / "backend.hcl").write_text(

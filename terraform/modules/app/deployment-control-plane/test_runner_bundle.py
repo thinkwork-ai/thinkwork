@@ -4482,19 +4482,26 @@ def test_tei_v380_recovery_imports_require_exact_evidence_and_current_state(
         return "a" * 64
 
     monkeypatch.setattr(runner, "_download_approved_artifact", fake_download)
-    blocks = runner.tei_v380_recovery_import_blocks(payload, vars_json, state)
+    snapshots = [state]
+    monkeypatch.setattr(
+        runner,
+        "terraform_state_object_snapshot",
+        lambda stage: snapshots.pop(0) if stage == "tei-e2e" else {},
+    )
+    blocks = runner.tei_v380_recovery_import_blocks(payload, vars_json)
     assert f"to = {runner.TEI_V380_SECRET_ADDRESS}" in blocks
     assert f"id = {runner.hcl_string(runner.TEI_V380_SECRET_ARN)}" in blocks
     assert f"to = {runner.TEI_V380_KMS_KEY_ADDRESS}" in blocks
     assert runner.TEI_V380_KMS_ALIAS_ADDRESS not in blocks
 
     moved_state = {**state, "sha256": "f" * 64}
+    snapshots.append(moved_state)
     with pytest.raises(RuntimeError, match="state moved"):
-        runner.tei_v380_recovery_import_blocks(payload, vars_json, moved_state)
+        runner.tei_v380_recovery_import_blocks(payload, vars_json)
 
     payload["incidentRecovery"]["stage"] = "dev"
     with pytest.raises(RuntimeError, match="scope does not match"):
-        runner.tei_v380_recovery_import_blocks(payload, vars_json, state)
+        runner.tei_v380_recovery_import_blocks(payload, vars_json)
 
 
 def test_terraform_plan_summary_counts_resource_actions() -> None:
