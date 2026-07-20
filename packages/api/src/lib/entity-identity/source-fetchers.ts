@@ -276,10 +276,31 @@ export async function fetchPostgresSourceRecords(
   args: SourceFetchArgs & { query: BrokerQueryFn },
 ): Promise<SourceFetchResult> {
   const warnings: string[] = [];
+  // Discovery is scoped to the candidate tables for the requested entity
+  // types: the broker inlines at most INLINE_ROW_CAP (200) result rows, so
+  // an unfiltered information_schema sweep silently loses every table past
+  // the cap on real customer databases (TEI's dispatch DB has ~2k
+  // information_schema rows — `customer.name` fell outside the inline
+  // window and both plans "resolved to no granted table/columns").
+  const candidateTables = [
+    ...new Set(args.entityTypeSlugs.flatMap(tableCandidatesForSlug)),
+  ];
+  const tableList = candidateTables
+    .map((t) => `'${t.replace(/'/g, "''")}'`)
+    .join(", ");
   const discovery = await args.query(
     "SELECT table_name, column_name FROM information_schema.columns " +
-      "WHERE table_schema = current_schema() ORDER BY table_name, ordinal_position",
+      `WHERE table_schema = current_schema() AND table_name IN (${tableList}) ` +
+      "ORDER BY table_name, ordinal_position",
   );
+  if (discovery.truncated) {
+    // Still possible with a very wide candidate set; surface it instead of
+    // reporting phantom "no granted table" skips downstream.
+    warnings.push(
+      `schema discovery truncated at the broker inline cap (${discovery.row_count} rows for ` +
+        `${candidateTables.length} candidate tables) — some tables/columns may be invisible`,
+    );
+  }
   const columnsByTable = new Map<string, Set<string>>();
   for (const row of rowsAsObjects(discovery)) {
     const table = String(row.table_name ?? "");
