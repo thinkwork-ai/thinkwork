@@ -213,3 +213,25 @@ test("retains the active endpoint and one newest rollback endpoint", () => {
   ]);
   assert.deepEqual(retention.deletedEndpointNames, ["ThinkworkProof"]);
 });
+
+test("reclaims the oldest managed endpoint before publishing a missing active endpoint", () => {
+  const retention = selectHarnessEndpointsForRetention(
+    [
+      { endpointName: "DEFAULT", liveVersion: "16" },
+      { endpointName: "ThinkworkProof", liveVersion: "14" },
+      { endpointName: "ThinkworkProofV15", liveVersion: "15" },
+    ],
+    {
+      activeEndpointName: "ThinkworkProofV16",
+      endpointPrefix: "ThinkworkProofV",
+      legacyEndpointName: "ThinkworkProof",
+    },
+  );
+
+  assert.equal(retention.rollbackEndpointName, "ThinkworkProofV15");
+  assert.deepEqual(retention.retainedEndpointNames, [
+    "ThinkworkProofV16",
+    "ThinkworkProofV15",
+  ]);
+  assert.deepEqual(retention.deletedEndpointNames, ["ThinkworkProof"]);
+});
