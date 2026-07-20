@@ -80,7 +80,7 @@ def main() -> int:
     drizzle_dir = Path(sys.argv[1])
     journal = Path(sys.argv[2])
     indexed = indexed_files(journal)
-    phase = os.environ.get("AUTH_RETIREMENT_PHASE", "retired")
+    retirement_finalized = os.environ.get("AUTH_RETIREMENT_FINALIZED", "false") == "true"
     creates: list[Create] = []
     drops: list[Drop] = []
     moves: list[Move] = []
@@ -92,7 +92,7 @@ def main() -> int:
     )
     for order, path in enumerate(migration_files):
         sql = path.read_text()
-        deferred = "-- deployment-phase: auth-retired" in sql and phase != "retired"
+        deferred = "-- deployment-phase: auth-retired" in sql and not retirement_finalized
         index_owners: dict[str, str] = {}
         for raw_index, raw_table in CREATE_INDEX.findall(sql):
             index = raw_index.replace('"', "")
