@@ -97,7 +97,7 @@ export function KnowledgeModelTab({
   const { title, description } = VIEW_TITLES[view];
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col p-6">
+    <div className="flex h-full min-h-0 w-full flex-col p-6 pt-4">
       <SettingsPageTitle
         title={
           <DropdownMenu>

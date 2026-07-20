@@ -29,7 +29,9 @@ const {
   railReexecuteMock,
   queryState,
   queryDocs,
+  tokenFilterProps,
 } = vi.hoisted(() => ({
+  tokenFilterProps: { current: null as any },
   graphProps: { current: null as any },
   graphRefetchMock: vi.fn(),
   railProps: { current: null as any },
@@ -123,6 +125,12 @@ vi.mock("@thinkwork/ui", async (importOriginal) => {
     SheetContent: ({ children }: { children?: React.ReactNode }) => (
       <div>{children}</div>
     ),
+    // Captured so tests can drive the headless filter table directly
+    // without Radix popover plumbing.
+    DataTableTokenFilter: (props: any) => {
+      tokenFilterProps.current = props;
+      return <div data-testid="token-filter" />;
+    },
   };
 });
 
@@ -206,6 +214,7 @@ describe("OntologyMapView", () => {
     sheetProps.current = null;
     sheetOpenChange.current = null;
     formProps.current = null;
+    tokenFilterProps.current = null;
     queryState.graph = {
       data: { ontologySchemaGraph: GRAPH },
       fetching: false,
@@ -227,6 +236,81 @@ describe("OntologyMapView", () => {
     expect(screen.queryByTestId("review-rail")).toBeNull();
     expect(screen.queryByRole("button", { name: /review queue/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /add triple/i })).toBeNull();
+  });
+
+  it("renders the toolbar search and drives the graph's live dim query", () => {
+    renderMap();
+
+    expect(graphProps.current.searchQuery).toBeUndefined();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Search the ontology map" }),
+    );
+    fireEvent.change(
+      screen.getByRole("searchbox", { name: "Search the ontology map" }),
+      { target: { value: "crew" } },
+    );
+
+    expect(graphProps.current.searchQuery).toBe("crew");
+    // Clearing collapses back to the icon and drops the dim query.
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(graphProps.current.searchQuery).toBeUndefined();
+  });
+
+  it("publishes the facet set with origin options from the live data", () => {
+    renderMap();
+
+    const columns = tokenFilterProps.current.columns;
+    expect(columns.map((c: any) => c.id)).toEqual([
+      "status",
+      "origin",
+      "evidence",
+      "activity",
+    ]);
+    expect(
+      columns
+        .find((c: any) => c.id === "status")
+        .options.map((o: any) => o.value),
+    ).toEqual(["approved", "proposed"]);
+
+    // Origin options arrive from the graph's onOriginsLoaded callback,
+    // labeled for humans.
+    act(() =>
+      graphProps.current.onOriginsLoaded(["suggestion_engine", "user"]),
+    );
+    expect(
+      tokenFilterProps.current.columns.find((c: any) => c.id === "origin")
+        .options,
+    ).toEqual([
+      { value: "suggestion_engine", label: "Suggestion engine" },
+      { value: "user", label: "User" },
+    ]);
+  });
+
+  it("forwards facet selections to the graph as dim filters", () => {
+    renderMap();
+
+    expect(graphProps.current.statusFilter).toBeUndefined();
+    act(() =>
+      tokenFilterProps.current.table
+        .getColumn("status")
+        ?.setFilterValue({ operator: "is", value: ["proposed"] }),
+    );
+    expect(graphProps.current.statusFilter).toEqual(["proposed"]);
+
+    act(() =>
+      tokenFilterProps.current.table
+        .getColumn("evidence")
+        ?.setFilterValue({ operator: "is", value: ["has_evidence"] }),
+    );
+    expect(graphProps.current.evidenceFilter).toEqual(["has_evidence"]);
+    expect(graphProps.current.originFilter).toBeUndefined();
+    expect(graphProps.current.activityFilter).toBeUndefined();
+
+    // Clearing a facet drops the filter prop entirely.
+    act(() =>
+      tokenFilterProps.current.table.getColumn("status")?.setFilterValue(null),
+    );
+    expect(graphProps.current.statusFilter).toBeUndefined();
   });
 
   it("publishes the pending count to the header controller", () => {

@@ -1,7 +1,29 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "urql";
-import { X } from "lucide-react";
-import { Button, Sheet, SheetContent } from "@thinkwork/ui";
+import {
+  Activity,
+  BadgeCheck,
+  Compass,
+  FileText,
+  Search,
+  X,
+} from "lucide-react";
+import {
+  type ColumnDef,
+  type ColumnFiltersState,
+  getCoreRowModel,
+  getFilteredRowModel,
+  useReactTable,
+} from "@tanstack/react-table";
+import {
+  Button,
+  DataTableTokenFilter,
+  dataTableTokenFilterFns,
+  Input,
+  Sheet,
+  SheetContent,
+  type DataTableTokenFilterColumn,
+} from "@thinkwork/ui";
 import {
   OntologyGraph,
   type OntologyGraphHandle,
@@ -33,6 +55,86 @@ type SheetEntry =
   | { kind: "queue" }
   | { kind: "focus"; focus: OntologyFocus }
   | { kind: "form"; editItem: OntologyEditableItem | null };
+
+// Collapsible search matching the Memory/Wiki graph toolbars: a search-icon
+// button that expands into an input. Drives the live `searchQuery` the
+// canvas dims against (R3 — non-matching nodes dim in place, never removed).
+function OntologyToolbarSearch({
+  searchQuery,
+  onSearchQueryChange,
+}: {
+  searchQuery: string;
+  onSearchQueryChange: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const isOpen = expanded || searchQuery.length > 0;
+
+  useEffect(() => {
+    if (expanded) inputRef.current?.focus();
+  }, [expanded]);
+
+  const clearSearch = () => {
+    onSearchQueryChange("");
+    setExpanded(false);
+  };
+
+  if (!isOpen) {
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="icon-sm"
+        className="h-8 w-8 rounded-md"
+        aria-label="Search the ontology map"
+        onClick={() => setExpanded(true)}
+      >
+        <Search className="h-4 w-4" aria-hidden="true" />
+      </Button>
+    );
+  }
+
+  return (
+    <div className="relative flex h-8 w-[min(20rem,calc(100vw-2rem))] items-center">
+      <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" />
+      <Input
+        ref={inputRef}
+        type="search"
+        aria-label="Search the ontology map"
+        placeholder="Search types..."
+        className="h-8 rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+        value={searchQuery}
+        onBlur={() => {
+          if (!searchQuery) setExpanded(false);
+        }}
+        onChange={(e) => onSearchQueryChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            clearSearch();
+          }
+        }}
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="absolute right-1 h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
+        aria-label="Clear search"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={clearSearch}
+      >
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
+      </Button>
+    </div>
+  );
+}
+
+/** "suggestion_engine" → "Suggestion engine" (candidate provenance values). */
+function ontologyOriginLabel(origin: string): string {
+  const words = origin.replace(/[_-]+/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : origin;
+}
 
 /**
  * Header-action surface lifted to the page-header owner (SettingsMemoryHome),
@@ -95,6 +197,105 @@ export function OntologyMapView({
   const calloutDismissed = usePackCalloutDismissed(
     userId ?? null,
     effectiveTenantId,
+  );
+
+  // --- Toolbar search + facet filters (Memory/Wiki graph parity). Search
+  // and filters DIM non-matching nodes in place (R3) — never remove nodes
+  // or restart the simulation. The graph reports its candidate origins via
+  // `onOriginsLoaded`; a headless filter table stores the selections,
+  // forwarded to OntologyGraph's facet-filter props.
+  const [searchQuery, setSearchQuery] = useState("");
+  const [graphOrigins, setGraphOrigins] = useState<string[]>([]);
+  const [filterColumnFilters, setFilterColumnFilters] =
+    useState<ColumnFiltersState>([]);
+  const facetColumns: DataTableTokenFilterColumn[] = useMemo(
+    () => [
+      {
+        id: "status",
+        label: "Status",
+        type: "option",
+        icon: <BadgeCheck className="size-4" />,
+        options: [
+          { value: "approved", label: "Approved" },
+          { value: "proposed", label: "Proposed" },
+        ],
+      },
+      {
+        id: "origin",
+        label: "Origin",
+        type: "option",
+        icon: <Compass className="size-4" />,
+        options: graphOrigins.map((value) => ({
+          value,
+          label: ontologyOriginLabel(value),
+        })),
+      },
+      {
+        id: "evidence",
+        label: "Evidence",
+        type: "option",
+        icon: <FileText className="size-4" />,
+        options: [
+          { value: "has_evidence", label: "Has evidence" },
+          { value: "none", label: "None" },
+        ],
+      },
+      {
+        id: "activity",
+        label: "Activity",
+        type: "option",
+        icon: <Activity className="size-4" />,
+        options: [
+          { value: "has_instances", label: "Has instances" },
+          { value: "empty", label: "Empty" },
+        ],
+      },
+    ],
+    [graphOrigins],
+  );
+  const filterColumns: ColumnDef<Record<string, string>>[] = useMemo(
+    () =>
+      ["status", "origin", "evidence", "activity"].map((id) => ({
+        id,
+        accessorFn: (row: Record<string, string>) => row[id] ?? "",
+        filterFn: dataTableTokenFilterFns.option,
+      })),
+    [],
+  );
+  const filterTable = useReactTable({
+    data: [] as Record<string, string>[],
+    columns: filterColumns,
+    state: { columnFilters: filterColumnFilters },
+    onColumnFiltersChange: setFilterColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+  const selectedColumnValues = useCallback(
+    (id: string) => {
+      const raw = filterColumnFilters.find((c) => c.id === id)?.value as
+        | { value?: unknown }
+        | undefined;
+      const v = raw?.value;
+      const arr = Array.isArray(v) ? v : v != null ? [v] : [];
+      return arr.filter((x): x is string => typeof x === "string");
+    },
+    [filterColumnFilters],
+  );
+  const selectedStatuses = useMemo(
+    () => selectedColumnValues("status"),
+    [selectedColumnValues],
+  );
+  const selectedOrigins = useMemo(
+    () => selectedColumnValues("origin"),
+    [selectedColumnValues],
+  );
+  const selectedEvidence = useMemo(
+    () => selectedColumnValues("evidence"),
+    [selectedColumnValues],
+  );
+  const selectedActivity = useMemo(
+    () => selectedColumnValues("activity"),
+    [selectedColumnValues],
   );
 
   // The initial focus is captured into the sheet stack's initial state; tell
@@ -231,10 +432,36 @@ export function OntologyMapView({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
+      <div className="mb-3 flex shrink-0 items-center gap-2">
+        <OntologyToolbarSearch
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+        />
+        <DataTableTokenFilter
+          table={filterTable}
+          columns={facetColumns}
+          addLabel="Filter"
+          showAddLabel={false}
+          clearLabel="Clear filters"
+          flattenToolbar
+          className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+          popoverClassName="w-[min(16rem,calc(100vw-2rem))]"
+        />
+      </div>
       <div className="border-border relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border">
         <OntologyGraph
           ref={graphRef}
           tenantId={effectiveTenantId}
+          searchQuery={searchQuery || undefined}
+          statusFilter={selectedStatuses.length ? selectedStatuses : undefined}
+          originFilter={selectedOrigins.length ? selectedOrigins : undefined}
+          evidenceFilter={
+            selectedEvidence.length ? selectedEvidence : undefined
+          }
+          activityFilter={
+            selectedActivity.length ? selectedActivity : undefined
+          }
+          onOriginsLoaded={setGraphOrigins}
           onNodeClick={onNodeClick}
           onCandidateOverflow={setOverflowCount}
         />

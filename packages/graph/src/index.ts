@@ -38,10 +38,13 @@ export {
   OntologyGraph,
   buildOntologyGraphData,
   mergeOntologyGraphData,
+  matchesOntologySearch,
+  ontologyNodeMatchesFilters,
   ONTOLOGY_GHOST_CANDIDATE_CAP,
 } from "./OntologyGraph.js";
 export type {
   OntologyGraphData,
+  OntologyGraphFilters,
   OntologyGraphHandle,
   OntologyGraphLink,
   OntologyGraphNode,

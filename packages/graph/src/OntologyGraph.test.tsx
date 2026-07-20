@@ -12,10 +12,12 @@ import {
   buildOntologyGraphData,
   mergeOntologyGraphData,
   ontologyLinkLabelMidpoint,
+  ontologyNodeMatchesFilters,
   ONTOLOGY_GHOST_CANDIDATE_CAP,
   type OntologyGraphData,
   type OntologyGraphLink,
   type OntologyGraphHandle,
+  type OntologyGraphNode,
 } from "./OntologyGraph.js";
 
 const forceGraphCalls = vi.hoisted(() => [] as any[]);
@@ -337,6 +339,101 @@ function canonicalSide(link: OntologyGraphLink): number {
   return (source <= target ? link.curvature : -link.curvature) || 0;
 }
 
+describe("ontologyNodeMatchesFilters", () => {
+  const typeNode = (
+    overrides: Partial<OntologyGraphNode> = {},
+  ): OntologyGraphNode => ({
+    id: "type:customer",
+    kind: "type",
+    slug: "customer",
+    label: "Customer",
+    instanceCount: 40,
+    evidenceCount: 0,
+    lifecycleStatus: "APPROVED",
+    itemId: null,
+    changeSetId: null,
+    itemType: null,
+    origin: null,
+    ...overrides,
+  });
+  const ghostNode = (
+    overrides: Partial<OntologyGraphNode> = {},
+  ): OntologyGraphNode => ({
+    id: "candidate:item-1",
+    kind: "candidate",
+    slug: "work_order",
+    label: "Work Order",
+    instanceCount: 0,
+    evidenceCount: 4,
+    lifecycleStatus: null,
+    itemId: "item-1",
+    changeSetId: "cs-1",
+    itemType: "ENTITY_TYPE",
+    origin: "suggestion_engine",
+    ...overrides,
+  });
+
+  it("matches everything when no filters are set", () => {
+    expect(ontologyNodeMatchesFilters(typeNode(), {})).toBe(true);
+    expect(ontologyNodeMatchesFilters(ghostNode(), {})).toBe(true);
+  });
+
+  it("classifies status as approved types vs proposed ghosts", () => {
+    const filters = { statusFilter: ["approved"] };
+    expect(ontologyNodeMatchesFilters(typeNode(), filters)).toBe(true);
+    expect(ontologyNodeMatchesFilters(ghostNode(), filters)).toBe(false);
+    const proposed = { statusFilter: ["proposed"] };
+    expect(ontologyNodeMatchesFilters(typeNode(), proposed)).toBe(false);
+    expect(ontologyNodeMatchesFilters(ghostNode(), proposed)).toBe(true);
+  });
+
+  it("matches origin only for candidates carrying that provenance", () => {
+    const filters = { originFilter: ["suggestion_engine"] };
+    expect(ontologyNodeMatchesFilters(ghostNode(), filters)).toBe(true);
+    expect(
+      ontologyNodeMatchesFilters(ghostNode({ origin: "user" }), filters),
+    ).toBe(false);
+    // Approved types have no origin — they never match an origin filter.
+    expect(ontologyNodeMatchesFilters(typeNode(), filters)).toBe(false);
+  });
+
+  it("splits evidence into has_evidence vs none", () => {
+    const has = { evidenceFilter: ["has_evidence"] };
+    expect(ontologyNodeMatchesFilters(ghostNode(), has)).toBe(true);
+    expect(
+      ontologyNodeMatchesFilters(ghostNode({ evidenceCount: 0 }), has),
+    ).toBe(false);
+    expect(ontologyNodeMatchesFilters(typeNode(), has)).toBe(false);
+    expect(
+      ontologyNodeMatchesFilters(typeNode(), { evidenceFilter: ["none"] }),
+    ).toBe(true);
+  });
+
+  it("splits activity into has_instances vs empty", () => {
+    const active = { activityFilter: ["has_instances"] };
+    expect(ontologyNodeMatchesFilters(typeNode(), active)).toBe(true);
+    expect(
+      ontologyNodeMatchesFilters(typeNode({ instanceCount: 0 }), active),
+    ).toBe(false);
+    expect(ontologyNodeMatchesFilters(ghostNode(), active)).toBe(false);
+    expect(
+      ontologyNodeMatchesFilters(ghostNode(), { activityFilter: ["empty"] }),
+    ).toBe(true);
+  });
+
+  it("ANDs multiple facets together", () => {
+    const filters = {
+      statusFilter: ["proposed"],
+      originFilter: ["suggestion_engine"],
+      evidenceFilter: ["has_evidence"],
+    };
+    expect(ontologyNodeMatchesFilters(ghostNode(), filters)).toBe(true);
+    expect(
+      ontologyNodeMatchesFilters(ghostNode({ evidenceCount: 0 }), filters),
+    ).toBe(false);
+  });
+});
+
 describe("link curvature assignment", () => {
   const bidirectionalGraph = {
     ...baseGraph,
@@ -636,6 +733,65 @@ describe("OntologyGraph", () => {
     );
     expect(paintNode(nextProps, matched).fillAlpha).toBe(1);
     expect(paintNode(nextProps, dimmed).fillAlpha).toBe(0.15);
+  });
+
+  it("dims in place for facet filters without rebuilding graphData (R3)", async () => {
+    const { view, props } = await renderGraph();
+    const firstGraphData = props.graphData;
+
+    view.rerender(
+      <OntologyGraph tenantId="tenant-1" statusFilter={["approved"]} />,
+    );
+    await waitFor(() => expect(forceGraphCalls.length).toBeGreaterThan(1));
+    const nextProps = latestForceGraphProps();
+
+    expect(nextProps.graphData).toBe(firstGraphData);
+    const approved = firstGraphData.nodes.find(
+      (node: any) => node.id === "type:customer",
+    );
+    const ghost = firstGraphData.nodes.find(
+      (node: any) => node.id === "candidate:item-1",
+    );
+    expect(paintNode(nextProps, approved).fillAlpha).toBe(1);
+    // Ghost fills at alpha * 0.25 — dimmed ghosts land at 0.15 * 0.25.
+    expect(paintNode(nextProps, ghost).fillAlpha).toBeCloseTo(0.0375);
+
+    // Proposed-only flips the dimming to the approved side.
+    view.rerender(
+      <OntologyGraph tenantId="tenant-1" statusFilter={["proposed"]} />,
+    );
+    const proposedProps = latestForceGraphProps();
+    expect(paintNode(proposedProps, approved).fillAlpha).toBe(0.15);
+    expect(paintNode(proposedProps, ghost).fillAlpha).toBeCloseTo(0.25);
+  });
+
+  it("intersects search with facet filters", async () => {
+    const { view, props } = await renderGraph();
+    const firstGraphData = props.graphData;
+
+    // "Customer" matches by name but is dimmed once status=proposed.
+    view.rerender(
+      <OntologyGraph
+        tenantId="tenant-1"
+        searchQuery="Customer"
+        statusFilter={["proposed"]}
+      />,
+    );
+    await waitFor(() => expect(forceGraphCalls.length).toBeGreaterThan(1));
+    const nextProps = latestForceGraphProps();
+    const customer = firstGraphData.nodes.find(
+      (node: any) => node.id === "type:customer",
+    );
+    expect(paintNode(nextProps, customer).fillAlpha).toBe(0.15);
+  });
+
+  it("reports distinct candidate origins via onOriginsLoaded", async () => {
+    const onOriginsLoaded = vi.fn();
+    await renderGraph(baseGraph, { onOriginsLoaded });
+
+    // item-1 is a ghost node (origin suggestion_engine); item-rel renders
+    // as a ghost edge, so only node origins are reported.
+    expect(onOriginsLoaded).toHaveBeenCalledWith(["suggestion_engine"]);
   });
 
   it("renders 4 baseline nodes for an empty tenant without crashing", async () => {

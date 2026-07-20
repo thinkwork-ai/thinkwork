@@ -106,9 +106,71 @@ export interface OntologyGraphHandle {
   refetch: () => void;
 }
 
-interface OntologyGraphProps {
+/**
+ * Facet filters dimming non-matching nodes in place (R3 — same treatment
+ * as search/focus; never removes nodes or restarts the simulation):
+ *   - status: "approved" (solid types) / "proposed" (ghost candidates)
+ *   - origin: candidate change-set provenance (suggestion_engine, user, ...)
+ *   - evidence: "has_evidence" / "none" (candidate evidence backing)
+ *   - activity: "has_instances" / "empty" (live instance counts)
+ */
+export interface OntologyGraphFilters {
+  statusFilter?: string[];
+  originFilter?: string[];
+  evidenceFilter?: string[];
+  activityFilter?: string[];
+}
+
+/** Pure node predicate behind the facet filters (empty/omitted = match). */
+export function ontologyNodeMatchesFilters(
+  node: OntologyGraphNode,
+  {
+    statusFilter,
+    originFilter,
+    evidenceFilter,
+    activityFilter,
+  }: OntologyGraphFilters,
+): boolean {
+  if (
+    statusFilter &&
+    statusFilter.length > 0 &&
+    !statusFilter.includes(node.kind === "candidate" ? "proposed" : "approved")
+  ) {
+    return false;
+  }
+  if (
+    originFilter &&
+    originFilter.length > 0 &&
+    !(node.origin != null && originFilter.includes(node.origin))
+  ) {
+    return false;
+  }
+  if (
+    evidenceFilter &&
+    evidenceFilter.length > 0 &&
+    !evidenceFilter.includes(node.evidenceCount > 0 ? "has_evidence" : "none")
+  ) {
+    return false;
+  }
+  if (
+    activityFilter &&
+    activityFilter.length > 0 &&
+    !activityFilter.includes(node.instanceCount > 0 ? "has_instances" : "empty")
+  ) {
+    return false;
+  }
+  return true;
+}
+
+interface OntologyGraphProps extends OntologyGraphFilters {
   tenantId: string;
   searchQuery?: string;
+  /**
+   * Fires with the distinct candidate origins present in the data (sorted)
+   * so the host can build its Origin facet from live values — the
+   * MemoryGraph `onBanksLoaded` pattern.
+   */
+  onOriginsLoaded?: (origins: string[]) => void;
   /**
    * Fires when the selected-node chip's "View details" is clicked (type or
    * ghost) for the host detail panel. A canvas node click only focus-dims
@@ -449,7 +511,7 @@ export function mergeOntologyGraphData(
   return next.overflow;
 }
 
-function matchesOntologySearch(
+export function matchesOntologySearch(
   node: OntologyGraphNode,
   searchQuery: string,
 ): boolean {
@@ -467,8 +529,13 @@ export const OntologyGraph = forwardRef<
   {
     tenantId,
     searchQuery,
+    statusFilter,
+    originFilter,
+    evidenceFilter,
+    activityFilter,
     onNodeClick,
     onCandidateOverflow,
+    onOriginsLoaded,
     pollIntervalMs,
     loadingFallback,
     emptyFallback,
@@ -540,6 +607,26 @@ export const OntologyGraph = forwardRef<
     onCandidateOverflow?.(overflowRef.current);
   }, [graphKey, onCandidateOverflow]);
 
+  // Distinct candidate origins surfaced to the host's Origin facet at data
+  // cadence (MemoryGraph onBanksLoaded pattern) — only re-emitted when the
+  // origin set actually changes.
+  const prevOriginsRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (graphKey === null || !onOriginsLoaded) return;
+    const origins = Array.from(
+      new Set(
+        graphDataRef.current.nodes
+          .map((node) => node.origin)
+          .filter((origin): origin is string => !!origin),
+      ),
+    ).sort();
+    const key = origins.join(",");
+    if (key !== prevOriginsRef.current) {
+      prevOriginsRef.current = key;
+      onOriginsLoaded(origins);
+    }
+  }, [graphKey, onOriginsLoaded]);
+
   // Disc sizes normalize to this graph's instance-count distribution.
   const maxInstanceCount = useMemo(
     () => Math.max(1, ...graphData.nodes.map((node) => node.instanceCount)),
@@ -559,16 +646,39 @@ export const OntologyGraph = forwardRef<
 
   // --- Dim-in-place classification (R3): search + focus mutate painter
   // alpha through refs; graphData is never rebuilt for either.
+  const hasFacetFilter = Boolean(
+    (statusFilter && statusFilter.length > 0) ||
+      (originFilter && originFilter.length > 0) ||
+      (evidenceFilter && evidenceFilter.length > 0) ||
+      (activityFilter && activityFilter.length > 0),
+  );
   const matchedIds = useMemo(() => {
-    if (!searchQuery) return null;
-    return new Set(
-      graphData.nodes
-        .filter((node) => matchesOntologySearch(node, searchQuery))
-        .map((node) => node.id),
+    if (!searchQuery && !hasFacetFilter) return null; // null = all match
+    let filtered = graphData.nodes.filter((node) =>
+      ontologyNodeMatchesFilters(node, {
+        statusFilter,
+        originFilter,
+        evidenceFilter,
+        activityFilter,
+      }),
     );
+    if (searchQuery) {
+      filtered = filtered.filter((node) =>
+        matchesOntologySearch(node, searchQuery),
+      );
+    }
+    return new Set(filtered.map((node) => node.id));
     // graphKey stands in for graphData content (identity is stable).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, graphKey]);
+  }, [
+    searchQuery,
+    hasFacetFilter,
+    statusFilter,
+    originFilter,
+    evidenceFilter,
+    activityFilter,
+    graphKey,
+  ]);
 
   const [focus, setFocus] = useState<GraphFocusState | null>(null);
   const focusRef = useRef<GraphFocusState | null>(null);
