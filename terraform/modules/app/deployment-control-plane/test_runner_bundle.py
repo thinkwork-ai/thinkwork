@@ -4196,6 +4196,7 @@ def test_incident_recovery_exclusivity_ignores_only_current_operation(
                 executions.append({"executionArn": "arn:other"})
             return json.dumps({"executions": executions})
         if args[1:3] == ["codebuild", "list-builds-for-project"]:
+            assert "--no-paginate" in args
             return json.dumps({"ids": [build_id]})
         if args[1:3] == ["codebuild", "batch-get-builds"]:
             return json.dumps({"builds": [{"id": build_id, "buildStatus": "IN_PROGRESS"}]})
@@ -4229,6 +4230,7 @@ def test_incident_recovery_exclusivity_supports_one_managed_transition_execution
         if args[1:3] == ["stepfunctions", "list-executions"]:
             return json.dumps({"executions": [{"executionArn": execution_arn}]})
         if args[1:3] == ["codebuild", "list-builds-for-project"]:
+            assert "--no-paginate" in args
             return json.dumps({"ids": [build_id]})
         if args[1:3] == ["codebuild", "batch-get-builds"]:
             return json.dumps({"builds": [{"id": build_id, "buildStatus": "IN_PROGRESS"}]})

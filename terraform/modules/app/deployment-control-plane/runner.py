@@ -1664,6 +1664,7 @@ def assert_incident_recovery_operation_is_exclusive():
                 project,
                 "--sort-order",
                 "DESCENDING",
+                "--no-paginate",
                 "--output",
                 "json",
             ]
