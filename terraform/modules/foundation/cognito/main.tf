@@ -452,6 +452,13 @@ resource "aws_cognito_identity_provider" "microsoft_organizations" {
   provider_name = "MicrosoftOrganizations"
   provider_type = "OIDC"
 
+  lifecycle {
+    precondition {
+      condition     = can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$", var.microsoft_oauth_tenant))
+      error_message = "An active Microsoft login route requires microsoft_oauth_tenant to be an Entra directory GUID — organizations/common authorities are not valid Cognito token issuers."
+    }
+  }
+
   provider_details = {
     client_id                 = var.microsoft_oauth_client_id
     client_secret             = var.microsoft_oauth_client_secret

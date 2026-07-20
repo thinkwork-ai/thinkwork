@@ -142,13 +142,17 @@ variable "microsoft_oauth_client_secret" {
 }
 
 variable "microsoft_oauth_tenant" {
-  description = "Microsoft Entra directory GUID used to build the exact OIDC issuer for the default Microsoft route"
+  description = "Microsoft Entra directory GUID used to build the exact OIDC issuer for the default Microsoft route. Legacy authority aliases (organizations/common/consumers) are tolerated only as vestigial WorkOS-era config while no Microsoft client id is set; an active route still requires a GUID, enforced by a precondition on the MicrosoftOrganizations IdP."
   type        = string
   default     = ""
 
   validation {
-    condition     = var.microsoft_oauth_tenant == "" || can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$", var.microsoft_oauth_tenant))
-    error_message = "microsoft_oauth_tenant must be an Entra directory GUID."
+    condition = (
+      var.microsoft_oauth_tenant == "" ||
+      contains(["organizations", "common", "consumers"], lower(var.microsoft_oauth_tenant)) ||
+      can(regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$", var.microsoft_oauth_tenant))
+    )
+    error_message = "microsoft_oauth_tenant must be an Entra directory GUID (legacy authority aliases are tolerated only while no Microsoft client id is configured)."
   }
 }
 
