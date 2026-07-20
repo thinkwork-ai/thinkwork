@@ -322,7 +322,13 @@ export function SignInPage() {
             </div>
           )}
           {!showLegacyMigration && showPublicOAuthOptions && (
-            <div className="grid w-full gap-3 min-[360px]:grid-cols-2">
+            <div
+              className={
+                publicOAuthOptions.length > 1
+                  ? "grid w-full gap-3 min-[360px]:grid-cols-2"
+                  : "grid w-full gap-3"
+              }
+            >
               {publicOAuthOptions.map((option) => {
                 const provider = oauthProviderLabel(option);
                 const isOpening = startingOAuthKey === option.key;

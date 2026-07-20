@@ -233,6 +233,77 @@ describe("SignInPage", () => {
     expect(screen.queryByRole("link", { name: "Create one" })).toBeNull();
   });
 
+  it("renders a single OAuth provider full-width (no two-column grid)", async () => {
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+      password: { enabled: false },
+      oauthOptions: [
+        {
+        key: "google",
+        label: "Continue with Google",
+        icon: "google",
+        provider: "google",
+        providerSpecific: true,
+        route: {
+          type: "cognitoHostedUi",
+          clientId: "web-google-client",
+          identityProvider: "Google",
+          prompt: "select_account",
+        },
+      },
+      ],
+    });
+
+    render(<SignInPage />);
+
+    const googleButton = await screen.findByRole("button", {
+      name: "Continue with Google",
+    });
+    expect(googleButton.parentElement?.className).not.toContain("grid-cols-2");
+  });
+
+  it("renders two OAuth providers in a two-column grid", async () => {
+    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
+    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
+      password: { enabled: false },
+      oauthOptions: [
+        {
+        key: "google",
+        label: "Continue with Google",
+        icon: "google",
+        provider: "google",
+        providerSpecific: true,
+        route: {
+          type: "cognitoHostedUi",
+          clientId: "web-google-client",
+          identityProvider: "Google",
+          prompt: "select_account",
+        },
+      },
+        {
+        key: "microsoft",
+        label: "Continue with Microsoft",
+        icon: "microsoft",
+        provider: "microsoft",
+        providerSpecific: true,
+        route: {
+          type: "cognitoHostedUi",
+          clientId: "web-microsoft-client",
+          identityProvider: "Microsoft",
+          prompt: "select_account",
+        },
+      },
+      ],
+    });
+
+    render(<SignInPage />);
+
+    const googleButton = await screen.findByRole("button", {
+      name: "Continue with Google",
+    });
+    expect(googleButton.parentElement?.className).toContain("grid-cols-2");
+  });
+
   it("shows environment creation only on the central app host", () => {
     setWindowLocation("https://app.thinkwork.ai/sign-in");
     desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
