@@ -137,6 +137,13 @@ resource "aws_kms_key" "agentcore_turn_assertion" {
     Name       = "thinkwork-${var.stage}-agentcore-turn-assertion-${each.key}"
     KeyVersion = each.key
   }
+
+  lifecycle {
+    precondition {
+      condition     = contains(var.agentcore_turn_assertion_key_versions, var.agentcore_turn_assertion_active_key_version)
+      error_message = "agentcore_turn_assertion_active_key_version must be present in agentcore_turn_assertion_key_versions."
+    }
+  }
 }
 
 resource "aws_kms_alias" "agentcore_turn_assertion" {
