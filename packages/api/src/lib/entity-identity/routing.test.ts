@@ -9,6 +9,7 @@ import {
 import { createFakeIdentityDb } from "./fake-db.test-helper.js";
 import { hashIdentityValue } from "./normalizers.js";
 import {
+  authorEntitySourceMapping,
   confirmMapping,
   declineCandidates,
   declineCaseSignature,
@@ -978,6 +979,119 @@ describe("revokeEntitySourceMapping", () => {
     });
     expect(result).toEqual({ status: "refused", reason: "mapping_not_found" });
     expect(fake.deletes).toHaveLength(0);
+    expect(fake.inserts).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// authorEntitySourceMapping (U8 / R12: operator hand-authoring)
+// ---------------------------------------------------------------------------
+
+describe("authorEntitySourceMapping", () => {
+  const authorArgs = {
+    tenantId: TENANT,
+    canonicalEntityId: "c-1",
+    sourceSystem: "lastmile",
+    namespace: "",
+    externalId: "cust-42",
+    actorUserId: "user-op",
+  };
+
+  it("writes an operator-attributed mapping + link audit event", async () => {
+    const fake = createFakeIdentityDb();
+    fake.selectQueue.push([{ id: "c-1", status: "active" }]);
+    fake.insertReturningQueue.push([{ id: "map-new" }]);
+
+    const result = await authorEntitySourceMapping(
+      fake.db as never,
+      authorArgs,
+    );
+    expect(result).toEqual({
+      status: "created",
+      mapping: {
+        id: "map-new",
+        canonicalEntityId: "c-1",
+        sourceSystem: "lastmile",
+        namespace: "",
+        externalId: "cust-42",
+        visibility: "tenant",
+        createdBy: "operator",
+      },
+    });
+    const mappingInsert = fake.inserts.find(
+      (insert) => insert.table === entitySourceMappings,
+    );
+    expect(mappingInsert?.values).toMatchObject({
+      tenant_id: TENANT,
+      canonical_entity_id: "c-1",
+      source_system: "lastmile",
+      external_id: "cust-42",
+      created_by: "operator",
+      created_by_user_id: "user-op",
+    });
+    const event = fake.inserts.find(
+      (insert) => insert.table === entityResolutionEvents,
+    );
+    expect(event?.values).toMatchObject({
+      event_type: "link",
+      actor_user_id: "user-op",
+    });
+    expect(event?.values.payload).toMatchObject({
+      mappingId: "map-new",
+      sourceSystem: "lastmile",
+      externalId: "cust-42",
+      createdBy: "operator",
+    });
+  });
+
+  it("maps a unique-index conflict to a typed already_linked result", async () => {
+    const fake = createFakeIdentityDb();
+    fake.selectQueue.push(
+      [{ id: "c-1", status: "active" }],
+      // existing-mapping lookup after the conflict
+      [{ id: "map-exist", canonical_entity_id: "c-other" }],
+    );
+    fake.insertReturningQueue.push([]); // onConflictDoNothing returned no row
+
+    const result = await authorEntitySourceMapping(
+      fake.db as never,
+      authorArgs,
+    );
+    expect(result).toEqual({
+      status: "already_linked",
+      existingMappingId: "map-exist",
+      existingCanonicalEntityId: "c-other",
+    });
+    // No audit event on the losing author.
+    expect(
+      fake.inserts.filter((insert) => insert.table === entityResolutionEvents),
+    ).toHaveLength(0);
+  });
+
+  it("refuses a missing or non-active canonical entity", async () => {
+    const missing = createFakeIdentityDb();
+    missing.selectQueue.push([]);
+    expect(
+      await authorEntitySourceMapping(missing.db as never, authorArgs),
+    ).toEqual({ status: "refused", reason: "entity_not_found" });
+    expect(missing.inserts).toHaveLength(0);
+
+    const merged = createFakeIdentityDb();
+    merged.selectQueue.push([{ id: "c-1", status: "merged" }]);
+    expect(
+      await authorEntitySourceMapping(merged.db as never, authorArgs),
+    ).toEqual({ status: "refused", reason: "entity_not_active" });
+    expect(merged.inserts).toHaveLength(0);
+  });
+
+  it("refuses blank source system or external id without touching the db", async () => {
+    const fake = createFakeIdentityDb();
+    expect(
+      await authorEntitySourceMapping(fake.db as never, {
+        ...authorArgs,
+        externalId: "   ",
+      }),
+    ).toEqual({ status: "refused", reason: "invalid_input" });
     expect(fake.inserts).toHaveLength(0);
   });
 });

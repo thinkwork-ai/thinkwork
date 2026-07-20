@@ -34,6 +34,14 @@ type EntitySourceMapping {
   externalId: String!
   visibility: String!
   createdBy: String!
+  """
+  Set when createdBy='user' — the confirming user (server-derived, R11).
+  """
+  createdByUserId: ID
+  """
+  Audit reference to the thread/turn that produced a user confirm.
+  """
+  createdThreadRef: String
   createdAt: AWSDateTime
 }
 
@@ -94,6 +102,82 @@ type CanonicalEntityMergeResult {
   survivorId: ID!
   loserId: ID!
   impact: CanonicalEntityMergeImpact!
+}
+
+"""
+Which resulting half of a split a source mapping is assigned to (THINK-321
+U8, KTD-8). Half `a` keeps the original canonical id; half `b` is the new
+canonical entity created by the split.
+"""
+enum SplitHalf {
+  a
+  b
+}
+
+input SplitMappingAssignmentInput {
+  mappingId: ID!
+  half: SplitHalf!
+}
+
+"""
+Split impact preview — computed before the split and echoed back as the
+confirmation input; a stale preview aborts the split (mirrors merge).
+Memory claims, graph entities, and the wiki page stay on half A and
+re-derive on the next compile.
+"""
+type CanonicalEntitySplitImpact {
+  mappingCountA: Int!
+  mappingCountB: Int!
+  claimCountFollowingB: Int!
+  claimCountRemainingA: Int!
+  memoryClaimCount: Int!
+  graphEntityCount: Int!
+  wikiPageId: ID
+}
+
+input CanonicalEntitySplitImpactInput {
+  mappingCountA: Int!
+  mappingCountB: Int!
+  claimCountFollowingB: Int!
+  claimCountRemainingA: Int!
+  memoryClaimCount: Int!
+  graphEntityCount: Int!
+  wikiPageId: ID
+}
+
+type SplitCanonicalEntityResult {
+  entityAId: ID!
+  entityBId: ID!
+  impact: CanonicalEntitySplitImpact!
+}
+
+type AuthorEntitySourceMappingResult {
+  """
+  created | already_linked | refused.
+  """
+  status: String!
+  """
+  Refusal reason: entity_not_found | entity_not_active | invalid_input.
+  """
+  reason: String
+  mapping: EntitySourceMapping
+  existingMappingId: ID
+  existingCanonicalEntityId: ID
+}
+
+type RevokeEntitySourceMappingResult {
+  """
+  revoked | refused.
+  """
+  status: String!
+  """
+  Refusal reason: mapping_not_found.
+  """
+  reason: String
+  canonicalEntityId: ID
+  sourceSystem: String
+  namespace: String
+  externalId: String
 }
 
 """
@@ -223,6 +307,16 @@ extend type Query {
     loserId: ID!
   ): CanonicalEntityMergeImpact!
   """
+  Split impact preview (THINK-321 U8): the operator's mapping partition is
+  validated (every mapping assigned exactly once, both halves non-empty) and
+  the resulting impact is returned for the confirm echo. Tenant-admin gated.
+  """
+  canonicalEntitySplitPreview(
+    tenantId: ID
+    canonicalEntityId: ID!
+    assignments: [SplitMappingAssignmentInput!]!
+  ): CanonicalEntitySplitImpact!
+  """
   Bulk-first crosswalk resolve (THINK-321 U5, R1/R2). Service (agent-tool)
   callers are turn-bound: tenant derives server-side from the
   x-thread-turn-id / x-thread-id header; other callers are tenant-admin
@@ -298,4 +392,44 @@ extend type Mutation {
     threadRef: ID
     candidateSetId: ID!
   ): DeclineEntityMappingResult!
+  """
+  Operator hand-authoring of a crosswalk link (THINK-321 U8, R12): bind a
+  source-system record to a canonical entity. Tenant-admin gated — never
+  reachable by service (agent) callers (write-asymmetry). Writes the mapping
+  with created_by='operator' plus a `link` audit event; a source identity
+  that is already linked returns a typed already_linked result.
+  """
+  authorEntitySourceMapping(
+    tenantId: ID
+    canonicalEntityId: ID!
+    sourceSystem: String!
+    namespace: String
+    externalId: String!
+  ): AuthorEntitySourceMappingResult!
+  """
+  Revoke a crosswalk mapping (THINK-321 U8, R13/R15): deletes the mapping,
+  appends a `revoke` audit event, and records negative evidence so the next
+  drift pass demotes any re-proposal of the pairing to at most a case.
+  Tenant-admin gated (write-asymmetry).
+  """
+  revokeEntitySourceMapping(
+    tenantId: ID
+    mappingId: ID!
+    reason: String
+  ): RevokeEntitySourceMappingResult!
+  """
+  Guarded split of a wrongly merged canonical entity (THINK-321 U8, R13,
+  AE5): the operator partitions the entity's source mappings between half A
+  (keeps the original canonical id) and half B (a new canonical entity named
+  `newEntityDisplayName`). `confirmImpact` must echo the preview exactly or
+  the split aborts. Rejections are written in both directions so the pair is
+  not immediately re-proposed for merge. Tenant-admin gated.
+  """
+  splitCanonicalEntity(
+    tenantId: ID
+    canonicalEntityId: ID!
+    assignments: [SplitMappingAssignmentInput!]!
+    newEntityDisplayName: String!
+    confirmImpact: CanonicalEntitySplitImpactInput!
+  ): SplitCanonicalEntityResult!
 }
