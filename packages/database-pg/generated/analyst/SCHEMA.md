@@ -172,6 +172,7 @@ Conventions:
 - [thread_turn_events](#thread-turn-events)
 - [thread_turns](#thread-turns)
 - [threads](#threads)
+- [tool_execution_events](#tool-execution-events)
 - [trace_cost_reconciliation_facts](#trace-cost-reconciliation-facts)
 - [trace_events](#trace-events)
 - [trace_runs](#trace-runs)
@@ -4266,6 +4267,43 @@ Join hints:
 - `threads.space_id` → `spaces.id`
 - `threads.tenant_id` → `tenants.id`
 - `threads.user_id` → `users.id`
+
+## tool_execution_events
+
+| column | type | flags |
+| --- | --- | --- |
+| id | bigserial | PK, not null |
+| tenant_id | uuid | not null |
+| thread_id | uuid | not null |
+| turn_id | uuid | not null |
+| principal_type | text | not null |
+| principal_id | text | not null |
+| tool_use_id | text | not null |
+| operation | text | not null |
+| policy_revision | text |  |
+| policy_decision_id | text |  |
+| idempotency_key | text | not null |
+| event_type | text | not null |
+| input_preview | jsonb |  |
+| output_preview | jsonb |  |
+| error_preview | jsonb |  |
+| provider_request_id | text |  |
+| duration_ms | integer |  |
+| provider_cost_usd | numeric(18, 8) |  |
+| created_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `principal_type`: `user`, `service`
+- `event_type`: `started`, `completed`, `failed`, `uncertain`
+
+Join hints:
+
+- `tool_execution_events.tenant_id` → `tenants.id`
+- `tool_execution_events.thread_id` → `threads.id`
+- `tool_execution_events.turn_id` → `thread_turns.id`
+
+Not granted (do not query): `credential_owner_alias`.
 
 ## trace_cost_reconciliation_facts
 

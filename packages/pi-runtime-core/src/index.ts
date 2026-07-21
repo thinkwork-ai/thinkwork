@@ -1,4 +1,5 @@
 export * from "./activity-client.js";
+export * from "./tool-execution-client.js";
 export * from "./agent-loop.js";
 export * from "./canvas-provider.js";
 export * from "./collision-registry.js";

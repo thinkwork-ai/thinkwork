@@ -40,6 +40,7 @@ import {
   okfWikiContextTraceMessage,
 } from "./okf-wiki-navigator.js";
 import { collectToolCosts } from "./tool-costs.js";
+import type { ToolExecutionEmitEvent } from "./tool-execution-client.js";
 import type {
   AgentProfileRunRecord,
   PiInvocationIdentity,
@@ -138,6 +139,12 @@ export interface RunAgentLoopDeps {
    * slow emitter can never fail or delay the turn.
    */
   emitActivity?: (event: ActivityEmitEvent) => void;
+  /**
+   * Optional tool-execution ledger emitter (THINK-324 C17). When present, the
+   * loop fires it with a `started` record on each tool start and a terminal
+   * record on each tool end. Same best-effort contract as `emitActivity`.
+   */
+  emitToolExecution?: (event: ToolExecutionEmitEvent) => void;
 }
 
 export interface OpenSessionInputs {
@@ -525,6 +532,22 @@ function emitActivitySafely(
 }
 
 /**
+ * Fire the host's tool-execution ledger emitter, swallowing any throw. The
+ * ledger is evidence, not control flow — it must never affect the turn.
+ */
+function emitToolExecutionSafely(
+  deps: RunAgentLoopDeps,
+  event: ToolExecutionEmitEvent,
+): void {
+  if (!deps.emitToolExecution) return;
+  try {
+    deps.emitToolExecution(event);
+  } catch {
+    // swallow — ledger emission is never allowed to affect the turn
+  }
+}
+
+/**
  * Adapt a low-level pi-agent-core {@link AgentTool} into a coding-agent
  * {@link ToolDefinition}. `ToolDefinition` is a superset whose extra fields
  * (render hooks, prompt snippets) are optional; in the overlapping surface only
@@ -879,6 +902,12 @@ export async function runAgentLoop(
             status: "running",
           },
         });
+        emitToolExecutionSafely(deps, {
+          eventType: "started",
+          toolUseId: event.toolCallId,
+          operation: event.toolName,
+          inputPreview: { preview: toolPreview(event.args) },
+        });
         return;
       }
       if (event.type === "tool_execution_end") {
@@ -955,6 +984,22 @@ export async function runAgentLoop(
             is_error: event.isError,
           },
         });
+        {
+          const toolCostUsd = collectToolCosts(event.result).reduce(
+            (sum, cost) => sum + (Number(cost.amount_usd) || 0),
+            0,
+          );
+          emitToolExecutionSafely(deps, {
+            eventType: event.isError ? "failed" : "completed",
+            toolUseId: event.toolCallId,
+            operation: event.toolName,
+            ...(event.isError
+              ? { errorPreview: { preview: toolPreview(event.result) } }
+              : { outputPreview: { preview: toolPreview(event.result) } }),
+            ...(started ? { durationMs: Date.now() - started } : {}),
+            ...(toolCostUsd > 0 ? { providerCostUsd: toolCostUsd } : {}),
+          });
+        }
         if (okfWikiTrace) {
           emitActivitySafely(deps, {
             eventType: OKF_WIKI_CONTEXT_TRACE_EVENT_TYPE,

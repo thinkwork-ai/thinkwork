@@ -938,6 +938,10 @@ resource "aws_lambda_function" "handler" {
     # POSTs one row per agent-session-start. Shared
     # API_AUTH_SECRET bearer (runtime→API; no tenant OAuth).
     "manifest-log",
+    # Pi tool-execution ledger write endpoint (THINK-324 C17). The runtime
+    # POSTs paired started/terminal evidence rows per tool call. Shared
+    # API_AUTH_SECRET bearer (runtime→API; no tenant OAuth).
+    "tool-executions",
     # Governed capability runtime control-plane service (THINK-280 U2).
     # NO HTTP route: the Pi container invokes it directly (RequestResponse)
     # via lambda:InvokeFunction over the approved in-account path — public
@@ -1917,6 +1921,12 @@ locals {
       # API_AUTH_SECRET; no tenant OAuth.
       "POST /api/runtime/manifests"    = "manifest-log"
       "OPTIONS /api/runtime/manifests" = "manifest-log"
+
+      # Pi tool-execution ledger (THINK-324 C17). The runtime POSTs paired
+      # started/terminal evidence rows per tool call. Shared API_AUTH_SECRET;
+      # no tenant OAuth.
+      "POST /api/runtime/tool-executions"    = "tool-executions"
+      "OPTIONS /api/runtime/tool-executions" = "tool-executions"
 
       # SI-7 catalog-list read (plan §U15 pt 3/3). The runtime fetches
       # the allowed slug set once per session-start. Shared API_AUTH_SECRET.

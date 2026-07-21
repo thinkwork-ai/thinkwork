@@ -973,6 +973,12 @@ BEGIN
   ELSE
     missing := missing || 'threads'::text;
   END IF;
+  IF to_regclass('public.tool_execution_events') IS NOT NULL THEN
+    REVOKE ALL PRIVILEGES ON public.tool_execution_events FROM analyst_reader;
+    GRANT SELECT (created_at, duration_ms, error_preview, event_type, id, idempotency_key, input_preview, operation, output_preview, policy_decision_id, policy_revision, principal_id, principal_type, provider_cost_usd, provider_request_id, tenant_id, thread_id, tool_use_id, turn_id) ON public.tool_execution_events TO analyst_reader;
+  ELSE
+    missing := missing || 'tool_execution_events'::text;
+  END IF;
   IF to_regclass('public.trace_cost_reconciliation_facts') IS NOT NULL THEN
     GRANT SELECT ON public.trace_cost_reconciliation_facts TO analyst_reader;
   ELSE

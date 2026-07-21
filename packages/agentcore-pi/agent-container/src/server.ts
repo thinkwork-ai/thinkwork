@@ -87,6 +87,9 @@ import {
   buildEmitJsonRenderUiTool,
   collectToolCosts,
   createActivityEmitter,
+  createToolExecutionEmitter,
+  readToolExecutionCallbackConfig,
+  type ToolExecutionEmitEvent,
   type ActivityEmitEvent,
   type DelegationProvider,
   isFinalizeCallbackConfigured,
@@ -548,6 +551,7 @@ export async function runParentOwnedProfileOrchestration(input: {
   runLoop: typeof runAgentLoop;
   log: (entry: LogFields) => void;
   emitActivity: (event: ActivityEmitEvent) => void;
+  emitToolExecution?: (event: ToolExecutionEmitEvent) => void;
   /** Wraps the parent prompt (e.g. with the U4 answer-context block) right
    *  before the parent loop runs — the orchestration owns the chain message,
    *  so the caller cannot pre-compose it. */
@@ -664,6 +668,7 @@ export async function runParentOwnedProfileOrchestration(input: {
     {
       log: input.log,
       emitActivity: input.emitActivity,
+      emitToolExecution: input.emitToolExecution,
     },
   );
   return combineProfileChainRunResult({
@@ -3060,6 +3065,7 @@ export async function handleInvocation(
       finalizeFunctionName: env.chatAgentFinalizeFnName || "",
       activityFunctionName: env.chatAgentActivityFnName || "",
       manifestFunctionName: env.manifestLogFnName || "",
+      toolExecutionsFunctionName: env.toolExecutionsFnName || "",
       logger: callbackLogger,
     });
   const workspaceBucket =
@@ -3861,6 +3867,13 @@ export async function handleInvocation(
     readActivityCallbackConfig(args.payload),
     { fetchImpl: callbackFetchImpl, logger: (entry) => logStructured(entry) },
   );
+  // Tool-execution ledger emitter (THINK-324 C17). Same snapshot-at-entry and
+  // best-effort contract as the activity emitter; the endpoint URL derives
+  // from thinkwork_api_url and rides the same callback secret.
+  const toolExecutionEmitter = createToolExecutionEmitter(
+    readToolExecutionCallbackConfig(args.payload),
+    { fetchImpl: callbackFetchImpl, logger: (entry) => logStructured(entry) },
+  );
   const profileDelegationOptions = (
     parentModelId: string,
   ): ProfileDelegationToolOptions => ({
@@ -4074,6 +4087,7 @@ export async function handleInvocation(
         runLoop,
         log: (entry) => logStructured(entry),
         emitActivity: activityEmitter.emit,
+        emitToolExecution: toolExecutionEmitter.emit,
       });
     } else {
       runResult = await runLoop(
@@ -4112,6 +4126,7 @@ export async function handleInvocation(
         {
           log: (entry) => logStructured(entry),
           emitActivity: activityEmitter.emit,
+          emitToolExecution: toolExecutionEmitter.emit,
         },
       );
     }
@@ -4147,6 +4162,7 @@ export async function handleInvocation(
           {
             log: (entry) => logStructured(entry),
             emitActivity: activityEmitter.emit,
+            emitToolExecution: toolExecutionEmitter.emit,
           },
         ),
     });
@@ -4226,6 +4242,7 @@ export async function handleInvocation(
     // turn already completed, so this never extends its wall-clock, and it
     // closes the Lambda-Web-Adapter unawaited-promise gap for the live view.
     await activityEmitter.drain();
+    await toolExecutionEmitter.drain();
     // Per-turn capability manifest (capability-mapping plan U12, R14).
     // Gated on the API wiring every dispatch path carries (KTD-6) — never on
     // the chat-only finalize callback, so wakeup/automation turns emit too.

@@ -684,6 +684,12 @@ build_handler "mcp-admin-provision" \
 build_handler "manifest-log" \
   "$REPO_ROOT/packages/api/src/handlers/manifest-log.ts"
 
+# Runtime → API tool-execution ledger endpoint (THINK-324 C17). The Pi
+# container POSTs paired started/terminal evidence rows per tool call.
+# Shared API_AUTH_SECRET; no tenant OAuth.
+build_handler "tool-executions" \
+  "$REPO_ROOT/packages/api/src/handlers/tool-executions.ts"
+
 # Runtime → API capability-catalog list (plan §U15 pt 3/3, SI-7). GET
 # /api/runtime/capability-catalog?type=tool&source=builtin returns the
 # allowed slug set the Strands runtime uses to enforce "a tool that
