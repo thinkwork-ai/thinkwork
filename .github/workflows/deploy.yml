@@ -802,11 +802,11 @@ jobs:
             -v ON_ERROR_STOP=1 \
             -f ../../../packages/database-pg/drizzle/0187_native_work_items.sql
 
-      # AgentCore Harness runtime parity requires the governed tool ledger and
-      # exact eval requester identity before the updated Lambdas are published.
-      # Both migrations are idempotent and remain covered by the downstream
-      # manual-migration drift gate.
-      - name: Apply AgentCore Harness parity schema
+      # Exact eval requester identity + eval-profile runtime type must land
+      # before the updated Lambdas are published. Idempotent and covered by
+      # the downstream manual-migration drift gate. (The harness tool-ledger
+      # migration this step also applied was retired with THINK-324 #4017.)
+      - name: Apply eval schema prerequisites
         working-directory: terraform/examples/greenfield
         run: |
           set -euo pipefail
@@ -814,7 +814,7 @@ jobs:
           DB_ENDPOINT=$(tf_output_raw db_cluster_endpoint 2>/dev/null || echo "")
           DB_SECRET_ARN=$(tf_output_raw db_secret_arn 2>/dev/null || echo "")
           if [ -z "$DB_ENDPOINT" ] || [ -z "$DB_SECRET_ARN" ]; then
-            echo "Skipping AgentCore Harness parity schema: no existing DB outputs (greenfield apply)."
+            echo "Skipping eval schema prerequisites: no existing DB outputs (greenfield apply)."
             exit 0
           fi
           DB_PASS=$(aws secretsmanager get-secret-value \
@@ -824,7 +824,6 @@ jobs:
           psql "$DATABASE_URL" \
             -v ON_ERROR_STOP=1 \
             --single-transaction \
-            -f ../../../packages/database-pg/drizzle/0264_harness_tool_execution_ledger.sql \
             -f ../../../packages/database-pg/drizzle/0265_eval_runs_requester_identity.sql \
             -f ../../../packages/database-pg/drizzle/0266_eval_profiles_runtime_type.sql
 
