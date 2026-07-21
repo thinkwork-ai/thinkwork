@@ -3354,6 +3354,7 @@ export const DocumentPlatesListQuery = gql`
       tokensLight
       tokensDark
       allowedDirectives
+      authoringInstructions
       origin
       hidden
       customized
@@ -3420,6 +3421,7 @@ export const SaveDocumentPlateMutation = gql`
       tokensLight
       tokensDark
       allowedDirectives
+      authoringInstructions
       origin
       hidden
       customized

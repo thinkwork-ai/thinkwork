@@ -2419,6 +2419,7 @@ export type DocumentPlate = {
   __typename?: 'DocumentPlate';
   allowedDirectives?: Maybe<Array<Scalars['String']['output']>>;
   analyses?: Maybe<Scalars['AWSJSON']['output']>;
+  authoringInstructions?: Maybe<Scalars['String']['output']>;
   customized: Scalars['Boolean']['output'];
   displayName: Scalars['String']['output'];
   eyebrow: Scalars['String']['output'];
@@ -2442,6 +2443,7 @@ export type DocumentPlateDiagnostic = {
 export type DocumentPlateDraftConfigInput = {
   allowedDirectives?: InputMaybe<Array<Scalars['String']['input']>>;
   analyses?: InputMaybe<Scalars['AWSJSON']['input']>;
+  authoringInstructions?: InputMaybe<Scalars['String']['input']>;
   displayName?: InputMaybe<Scalars['String']['input']>;
   eyebrow?: InputMaybe<Scalars['String']['input']>;
   ownContract?: InputMaybe<Scalars['Boolean']['input']>;
@@ -10551,6 +10553,7 @@ export type SaveAppletStateInput = {
 export type SaveDocumentPlateInput = {
   allowedDirectives?: InputMaybe<Array<Scalars['String']['input']>>;
   analyses?: InputMaybe<Scalars['AWSJSON']['input']>;
+  authoringInstructions?: InputMaybe<Scalars['String']['input']>;
   displayName?: InputMaybe<Scalars['String']['input']>;
   eyebrow?: InputMaybe<Scalars['String']['input']>;
   hidden?: InputMaybe<Scalars['Boolean']['input']>;

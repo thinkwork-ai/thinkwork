@@ -13,6 +13,7 @@ import type { DocumentPlateConfig } from "@thinkwork/database-pg/schema";
 import {
   badInput,
   boundedAnalyses,
+  boundedAuthoringInstructions,
   boundedDirectives,
   boundedPalette,
   boundedSections,
@@ -38,6 +39,8 @@ interface SaveDocumentPlateInput {
   sections?: unknown;
   analyses?: unknown;
   sectionOverrides?: unknown;
+  /** Plate-wide authoring instructions; editable on platform AND tenant plates. */
+  authoringInstructions?: string | null;
   /** Platform plates: sections/analyses are the FULL contract (ownership). */
   ownContract?: boolean | null;
 }
@@ -82,6 +85,9 @@ export async function saveDocumentPlate(
 
   const sections = boundedSections(input.sections);
   const analyses = boundedAnalyses(input.analyses);
+  const authoringInstructions = boundedAuthoringInstructions(
+    input.authoringInstructions,
+  );
 
   let origin: "platform_override" | "tenant";
   let config: DocumentPlateConfig;
@@ -120,6 +126,7 @@ export async function saveDocumentPlate(
         ownContract: true,
         sections: sections ?? [],
         analyses: analyses ?? [],
+        ...(authoringInstructions ? { authoringInstructions } : {}),
       };
     } else {
       const floorSections = platform!.sections ?? [];
@@ -155,6 +162,7 @@ export async function saveDocumentPlate(
         ...(sections && sections.length > 0 ? { sections } : {}),
         ...(analyses && analyses.length > 0 ? { analyses } : {}),
         ...(sectionOverrides ? { sectionOverrides } : {}),
+        ...(authoringInstructions ? { authoringInstructions } : {}),
       };
     }
   } else {
@@ -180,6 +188,10 @@ export async function saveDocumentPlate(
       allowedDirectives: allowedDirectives ?? prior.allowedDirectives,
       sections: sections ?? prior.sections,
       analyses: analyses ?? prior.analyses,
+      authoringInstructions:
+        input.authoringInstructions === undefined
+          ? prior.authoringInstructions
+          : authoringInstructions,
     };
     if (!config.displayName || !config.useFor) {
       throw badInput(

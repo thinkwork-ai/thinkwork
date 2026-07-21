@@ -55,6 +55,7 @@ function renderList(ui: React.ReactElement) {
 
 function plate(overrides: Partial<PlateItem> = {}): PlateItem {
   return {
+    authoringInstructions: "",
     slug: "report",
     displayName: "Report",
     useFor: "Board reports",

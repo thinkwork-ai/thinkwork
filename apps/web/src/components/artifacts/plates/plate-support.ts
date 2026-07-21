@@ -82,6 +82,8 @@ export interface PlateItem {
   /** Resolved, provenance-annotated content contract (THINK-188). */
   sections: PlateContractSection[];
   analyses: PlateContractAnalysis[];
+  /** Plate-wide authoring instructions (the plate's "system prompt"). */
+  authoringInstructions: string;
 }
 
 /**
@@ -135,7 +137,11 @@ export function parsePlate(
     | "hidden"
     | "customized"
     | "overrides"
-  > & { sections?: unknown; analyses?: unknown },
+  > & {
+    sections?: unknown;
+    analyses?: unknown;
+    authoringInstructions?: string | null;
+  },
 ): PlateItem {
   return {
     slug: node.slug,
@@ -150,6 +156,7 @@ export function parsePlate(
     hidden: node.hidden,
     customized: node.customized,
     overrides: parseOverrides(node.overrides),
+    authoringInstructions: node.authoringInstructions ?? "",
     sections: parseContractSections(node.sections),
     analyses: parseContractAnalyses(node.analyses),
   };

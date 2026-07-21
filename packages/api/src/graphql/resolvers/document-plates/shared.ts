@@ -397,6 +397,25 @@ export function boundedSectionOverrides(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+/**
+ * Plate-wide authoring instructions (operator "system prompt"). Optional;
+ * bounded by the guidance ceiling.
+ */
+export function boundedAuthoringInstructions(
+  value: string | null | undefined,
+): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") {
+    throw badInput("authoringInstructions must be a string");
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.length > MAX_GUIDANCE) {
+    throw badInput(`authoringInstructions must be ≤${MAX_GUIDANCE} characters`);
+  }
+  return trimmed;
+}
+
 /** Bound and validate declared analyses (THINK-183 R13/AE5). */
 export function boundedAnalyses(
   value: unknown,
@@ -674,6 +693,7 @@ export function plateToGraphql(
     tokensDark: JSON.stringify(plate.tokensDark),
     allowedDirectives:
       plate.allowedDirectives === "all" ? null : [...plate.allowedDirectives],
+    authoringInstructions: plate.authoringInstructions ?? null,
     origin: plate.origin,
     hidden: plate.hidden,
     customized: plate.customized,

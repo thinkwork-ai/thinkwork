@@ -80,6 +80,8 @@ export interface PlateDefinition {
   sections?: readonly PlateSectionSpec[];
   /** Content contract: declared server-computed analyses (absent = none). */
   analyses?: readonly PlateAnalysisSpec[];
+  /** Plate-wide authoring instructions shown to the agent (absent = none). */
+  authoringInstructions?: string;
 }
 
 /** The four core plates — values ported verbatim from GENRE_TEMPLATES. */

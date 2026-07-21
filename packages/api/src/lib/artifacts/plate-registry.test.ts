@@ -661,6 +661,36 @@ describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () =
     expect(srr.sections?.[0]?.guidance).toBe(longGuidance);
   });
 
+  it("dispatch summaries carry plate authoring instructions and section chart hints", async () => {
+    const store = fakeStore([
+      {
+        slug: "report",
+        origin: "platform_override",
+        config: {
+          authoringInstructions: "Lead with a summary; visualize trends.",
+          sections: [
+            {
+              id: "pipeline-health",
+              title: "Pipeline Health",
+              tier: "required",
+              guidance: "Funnel with rates.",
+              suggestedDirectives: [{ kind: "chart", chartType: "funnel" }],
+            },
+          ],
+        } as never,
+        hidden: false,
+      },
+    ]);
+    const summaries = visiblePlateSummaries(await listPlates(TENANT, store));
+    const srr = summaries.find((s) => s.slug === "report")!;
+    expect(srr.authoringInstructions).toBe(
+      "Lead with a summary; visualize trends.",
+    );
+    expect(srr.sections?.[0]?.suggestedDirectives).toEqual([
+      { kind: "chart", chartType: "funnel" },
+    ]);
+  });
+
   it("dispatch summaries carry analysis guidance", async () => {
     const store = fakeStore([
       {
