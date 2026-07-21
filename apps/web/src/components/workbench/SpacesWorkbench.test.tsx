@@ -333,7 +333,7 @@ describe("SpacesWorkbench", () => {
     });
   });
 
-  it("waits for the first managed send before routing to the created thread", async () => {
+  it("routes to the created thread immediately, before the first send resolves", async () => {
     let resolveSend:
       | ((value: { data: { sendMessage: { id: string } } }) => void)
       | undefined;
@@ -348,15 +348,8 @@ describe("SpacesWorkbench", () => {
     setComposerText("Fast route please");
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
 
-    await waitFor(() => {
-      expect(createThread).toHaveBeenCalled();
-    });
-    expect(navigate).not.toHaveBeenCalled();
-
-    resolveSend?.({ data: { sendMessage: { id: "message-1" } } });
-    await waitFor(() => {
-      expect(sendMessage).toHaveBeenCalledTimes(1);
-    });
+    // Navigation happens as soon as the thread id exists — the send
+    // continues in the background behind the pending-start scaffold.
     await waitFor(() => {
       expect(navigate).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -364,6 +357,37 @@ describe("SpacesWorkbench", () => {
           params: { id: "thread-1" },
         }),
       );
+    });
+    expect(getPendingThreadStart("thread-1")).toMatchObject({
+      content: "Fast route please",
+    });
+
+    resolveSend?.({ data: { sendMessage: { id: "message-1" } } });
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("clears the pending-start scaffold when the background send fails", async () => {
+    let rejectSend: ((err: Error) => void) | undefined;
+    sendMessage.mockReturnValue(
+      new Promise((_, reject) => {
+        rejectSend = reject;
+      }),
+    );
+
+    render(<SpacesWorkbench />);
+
+    setComposerText("Doomed first message");
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalled();
+    });
+    expect(getPendingThreadStart("thread-1")).toBeTruthy();
+
+    rejectSend?.(new Error("send exploded"));
+    await waitFor(() => {
+      expect(getPendingThreadStart("thread-1")).toBeFalsy();
     });
   });
 
