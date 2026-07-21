@@ -337,9 +337,9 @@ function ProfileFormDialog({
 }) {
   const [name, setName] = useState(profile?.name ?? "");
   const [model, setModel] = useState(profile?.model ?? "");
-  const [runtimeType, setRuntimeType] = useState<"pi" | "agentcore">(
-    profile?.runtimeType ?? "pi",
-  );
+  // THINK-324: profiles are Pi-only; editing a legacy agentcore profile
+  // rewrites it to Pi on save.
+  const runtimeType = "pi" as const;
   const [judgeModel, setJudgeModel] = useState(profile?.judgeModel ?? "");
   const [trials, setTrials] = useState(profile?.trials ?? 1);
   const [submitting, setSubmitting] = useState(false);
@@ -408,26 +408,9 @@ function ProfileFormDialog({
               placeholder="e.g. Kimi baseline"
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="eval-profile-runtime">Runtime</Label>
-            <p className="text-xs text-muted-foreground">
-              Pins the execution harness for every run under this profile.
-            </p>
-            <Select
-              value={runtimeType}
-              onValueChange={(value) =>
-                setRuntimeType(value as "pi" | "agentcore")
-              }
-            >
-              <SelectTrigger id="eval-profile-runtime" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="agentcore">AgentCore Harness</SelectItem>
-                <SelectItem value="pi">Pi</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          {/* THINK-324: the managed-harness runtime is retired — new and
+              edited profiles are Pi-only. Historical agentcore profiles/runs
+              keep their stored runtimeType for display (runtimeLabel). */}
           <div className="flex flex-col gap-1.5">
             <Label>Model (agent under test)</Label>
             <ModelSelect

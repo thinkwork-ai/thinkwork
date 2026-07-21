@@ -1,5 +1,5 @@
 // Config sheet (Agent page merge, THINK-132 U1): the Default Agent settings —
-// runtime, default Space, default model, goal token budget — relocated out of
+// default Space, default model, goal token budget — relocated out of
 // the Agents page into a side sheet on the Composer surface. The section body
 // is exported separately so the legacy Agents page keeps its mount until the
 // route cutover retires it.
@@ -8,14 +8,6 @@ import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
   Button,
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
   Input,
   Select,
   SelectContent,
@@ -28,11 +20,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@thinkwork/ui";
-import { AgentRuntime } from "@/gql/graphql";
 import { useTenant } from "@/context/TenantContext";
 import {
   SettingsTenantAgentQuery,
-  SettingsDeploymentStatusQuery,
   SettingsTenantGoalBudgetQuery,
   SettingsTenantModelCatalogQuery,
   SettingsUpdateTenantAgentMutation,
@@ -59,7 +49,7 @@ export function AgentConfigSection({
 }: {
   spaces: AgentConfigSpaceOption[];
 }) {
-  const { tenantId, isOperator } = useTenant();
+  const { tenantId } = useTenant();
   const [agentResult] = useQuery({
     query: SettingsTenantAgentQuery,
     variables: { tenantId: tenantId ?? "" },
@@ -75,35 +65,22 @@ export function AgentConfigSection({
     variables: { id: tenantId ?? "" },
     pause: !tenantId,
   });
-  const [deploymentResult] = useQuery({
-    query: SettingsDeploymentStatusQuery,
-    pause: !isOperator,
-  });
   const [saveState, save] = useMutation(SettingsUpdateTenantAgentMutation);
   const [goalBudgetSaveState, saveGoalBudget] = useMutation(
     SettingsUpdateTenantGoalBudgetMutation,
   );
 
-  const [runtime, setRuntime] = useState<AgentRuntime | null>(null);
   const [model, setModel] = useState<string | null>(null);
   const [runtimeConfig, setRuntimeConfig] = useState<JsonRecord>({});
   const [defaultSpaceId, setDefaultSpaceId] = useState<string | null>(null);
   const [goalTokenBudget, setGoalTokenBudget] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [confirmHarness, setConfirmHarness] = useState(false);
 
   const agent = agentResult.data?.agent;
 
   useEffect(() => {
     if (agent) {
       const config = parseJson<JsonRecord>(agent.runtimeConfig, {});
-      setRuntime(
-        ["agentcore", "harness"].includes(
-          stringOrNull(config.defaultThreadRuntime) ?? "",
-        )
-          ? AgentRuntime.Agentcore
-          : AgentRuntime.Flue,
-      );
       setModel(agent.model ?? null);
       setRuntimeConfig(config);
       setDefaultSpaceId(stringOrNull(config.defaultSpaceId));
@@ -119,27 +96,8 @@ export function AgentConfigSection({
   const catalog = catalogResult.data?.tenantModelCatalog ?? [];
   const catalogFailed = !!catalogResult.error;
   const goalBudgetValid = validGoalTokenBudgetOrEmpty(goalTokenBudget);
-  const agentcoreHarness =
-    deploymentResult.data?.deploymentStatus.agentcoreHarness;
-  const runtimeOptions: Array<{
-    value: AgentRuntime;
-    label: string;
-    disabled?: boolean;
-  }> = [
-    { value: AgentRuntime.Flue, label: "Pi" },
-    ...(isOperator
-      ? [
-          {
-            value: AgentRuntime.Agentcore,
-            label: "AgentCore Harness",
-            disabled: agentcoreHarness?.ready !== true,
-          },
-        ]
-      : []),
-  ];
 
   async function persist(input: {
-    runtime?: AgentRuntime;
     model?: string | null;
     runtimeConfig?: JsonRecord;
   }) {
@@ -148,36 +106,6 @@ export function AgentConfigSection({
     const result = await save({ tenantId, input });
     if (result.error) setErrorMsg(result.error.message);
     return result;
-  }
-
-  async function saveDefaultThreadRuntime(next: AgentRuntime) {
-    const nextRuntimeConfig = {
-      ...runtimeConfig,
-      defaultThreadRuntime:
-        next === AgentRuntime.Agentcore ? "agentcore" : "pi",
-    };
-    const previous = runtime;
-    setRuntime(next);
-    setRuntimeConfig(nextRuntimeConfig);
-    const saved = await persist({ runtimeConfig: nextRuntimeConfig });
-    if (!saved || saved.error) {
-      setRuntime(previous);
-      setRuntimeConfig(runtimeConfig);
-      return false;
-    }
-    toast.success(
-      next === AgentRuntime.Agentcore
-        ? "New Composer threads will use AgentCore Harness"
-        : "New Composer threads will use Pi",
-    );
-    return true;
-  }
-
-  async function activateHarnessDefault() {
-    if (!tenantId || !agentcoreHarness?.ready) return;
-    setErrorMsg(null);
-    await saveDefaultThreadRuntime(AgentRuntime.Agentcore);
-    setConfirmHarness(false);
   }
 
   async function persistDefaultSpace(spaceId: string) {
@@ -222,81 +150,6 @@ export function AgentConfigSection({
         ) : null
       }
     >
-      <SettingsRow
-        label="Runtime"
-        description="Default runtime for new Composer threads. Existing threads keep their pinned runtime."
-      >
-        <div className="w-full max-w-60" data-testid="agent-runtime-control">
-          <Select
-            value={runtime ?? undefined}
-            onValueChange={(v) => {
-              const next = v as AgentRuntime;
-              if (next === AgentRuntime.Agentcore) {
-                setConfirmHarness(true);
-                return;
-              }
-              void saveDefaultThreadRuntime(next);
-            }}
-            disabled={saveState.fetching}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select runtime" />
-            </SelectTrigger>
-            <SelectContent>
-              {runtimeOptions.map((opt) => (
-                <SelectItem
-                  key={opt.value}
-                  value={opt.value}
-                  disabled={opt.disabled}
-                >
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {isOperator && agentcoreHarness?.ready !== true ? (
-            <p
-              className="mt-1.5 text-xs text-muted-foreground"
-              data-testid="agentcore-harness-readiness"
-            >
-              {deploymentResult.fetching
-                ? "Checking AgentCore availability…"
-                : `AgentCore unavailable · ${agentcoreHarness?.reasonCode ?? "status_unavailable"}`}
-            </p>
-          ) : null}
-        </div>
-      </SettingsRow>
-
-      <AlertDialog open={confirmHarness} onOpenChange={setConfirmHarness}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Use AgentCore Harness for new threads?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This changes only the default for future Composer threads.
-              Existing Pi and Harness threads keep their pinned runtimes and
-              continue in parallel. Create a normal new thread after saving to
-              use Harness.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={saveState.fetching}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault();
-                void activateHarnessDefault();
-              }}
-              disabled={saveState.fetching}
-            >
-              {saveState.fetching ? "Saving…" : "Save Harness default"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       <SettingsRow
         label="Default Space"
         description="Space used for new default Agent and automation conversation threads."

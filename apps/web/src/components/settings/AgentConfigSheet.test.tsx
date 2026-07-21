@@ -134,39 +134,16 @@ afterEach(() => {
 });
 
 describe("AgentConfigSection", () => {
-  it("renders all four Default Agent fields from query data", () => {
+  it("renders the Default Agent fields from query data (runtime picker retired — THINK-324)", () => {
     render(<AgentConfigSection spaces={SPACES} />);
-    expect(screen.getByText("Runtime")).toBeTruthy();
+    expect(screen.queryByText("Runtime")).toBeNull();
     expect(screen.getByText("Default Space")).toBeTruthy();
     expect(screen.getByText("Default model")).toBeTruthy();
     expect(screen.getByText("Goal token budget")).toBeTruthy();
-    expect(screen.queryByTestId("agentcore-harness-readiness")).toBeNull();
-    expect(screen.getByTestId("agent-runtime-control").className).toContain(
-      "max-w-60",
-    );
+    expect(screen.queryByTestId("agent-runtime-control")).toBeNull();
     expect(
       (screen.getByLabelText("Goal token budget") as HTMLInputElement).value,
     ).toBe("100000");
-  });
-
-  it("shows compact runtime guidance only when AgentCore is unavailable", () => {
-    queryResponses.set("SettingsDeploymentStatus", {
-      data: {
-        deploymentStatus: {
-          agentcoreHarness: {
-            state: "degraded",
-            ready: false,
-            reasonCode: "target_not_ready",
-          },
-        },
-      },
-    });
-
-    render(<AgentConfigSection spaces={SPACES} />);
-
-    expect(screen.getByTestId("agentcore-harness-readiness").textContent).toBe(
-      "AgentCore unavailable · target_not_ready",
-    );
   });
 
   it("saves a valid goal budget through the goal-budget mutation", async () => {
@@ -212,35 +189,6 @@ describe("AgentConfigSection", () => {
     });
     render(<AgentConfigSection spaces={SPACES} />);
     expect(screen.getByText("(model catalog unavailable)")).toBeTruthy();
-  });
-
-  it("saves Harness as the default only for future Composer threads", async () => {
-    executeMutationMock.mockReturnValue({ data: {} });
-    render(<AgentConfigSection spaces={SPACES} />);
-
-    fireEvent.click(screen.getAllByRole("combobox")[0]);
-    fireEvent.click(
-      await screen.findByRole("option", {
-        name: "AgentCore Harness",
-      }),
-    );
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Save Harness default",
-      }),
-    );
-
-    expect(executeMutationMock).toHaveBeenCalledTimes(1);
-    expect(executeMutationMock).toHaveBeenCalledWith("UpdateTenantAgent", {
-      tenantId: "tenant-1",
-      input: {
-        runtimeConfig: {
-          defaultSpaceId: "space-1",
-          defaultThreadRuntime: "agentcore",
-        },
-      },
-    });
-    expect(screen.queryByRole("button", { name: /open.*thread/i })).toBeNull();
   });
 });
 
