@@ -2152,14 +2152,16 @@ export async function runHarnessTurn(
 
       if (
         segment.stopReason === "max_iterations_exceeded" &&
-        goalExecution &&
         documentEmissionRequired &&
         !documentCompositionPhase
       ) {
-        // A goal run has a hard ThinkWork token budget, while Harness only
-        // exposes a per-invocation iteration limit. Treat the bounded
-        // discovery cutoff as the phase boundary and compose from evidence
-        // already retained in this fresh turn's Harness session.
+        // The runner itself capped this discovery invocation
+        // (DOCUMENT_DISCOVERY_MAX_ITERATIONS), so hitting the cap is a phase
+        // boundary, not a failure: compose from the evidence already retained
+        // in this turn's Harness session — for manual chat and goal runs
+        // alike, mirroring the natural_end_turn fallback below. (Observed
+        // live: a manual-chat QBR whose connector calls all 502'd burned the
+        // cap on retries and hard-failed instead of composing.)
         enterDocumentComposition("max_iterations_exceeded");
         continue;
       }
