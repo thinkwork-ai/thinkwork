@@ -18,10 +18,14 @@ name: TEI LastMile → Twenty sync
 # The LastMile RDS security group must admit the runner's egress IP.
 
 on:
-  schedule:
-    # 03:00 America/Chicago (CDT = 08:00 UTC). Cutover freezes LastMile edits,
-    # so exact timing is not load-sensitive; picked for a quiet window.
-    - cron: "0 8 * * *"
+  # NIGHTLY SCHEDULE IS GATED until the runner can reach the LastMile RDS.
+  # A dry-run from a GitHub-hosted runner times out on 54.83.34.87:5432 — the
+  # RDS security group admits fixed IPs (e.g. the operator's) but not GitHub's
+  # dynamic runner ranges. Re-enable this block once a stable egress IP is
+  # allowlisted (static-IP larger runner, or self-hosted runner in TEI's VPC).
+  # schedule:
+  #   # 03:00 America/Chicago (CDT = 08:00 UTC).
+  #   - cron: "0 8 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -72,7 +76,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Run LastMile → Twenty sync
+        # pipefail so a failed sync (e.g. the DB unreachable) fails the job —
+        # `| tee` otherwise masks the script's exit code behind tee's success.
         run: |
+          set -o pipefail
           if [ "$APPLY" = "true" ]; then
             echo "Mode: APPLY (writing delta to Twenty)"
             pnpm --filter @thinkwork/plugin-twenty exec \
