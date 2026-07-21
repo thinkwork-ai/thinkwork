@@ -1,0 +1,24 @@
+# Company Brain twin read queries (plan 2026-07-21-001 U6).
+#
+# The agent's read surface over the Neptune digital twin: typed requests
+# only — the VPC twin-query Lambda compiles them server-side (no raw graph
+# query surface exists anywhere). Tenant scope resolves turn-bound for
+# service callers (the knowledge-graph search-auth discipline); results are
+# AWSJSON payloads of the shape { ok, results | reason } with per-fact
+# provenance stamps the Pi tool layer formats.
+#
+# `filter` on twinCohort carries { predicates: [{ facet, attribute, op,
+# value? }], path?: { relationship, targetType, predicates } } — the
+# KTD-5 typed cohort grammar declared alongside facets in the ontology.
+
+extend type Query {
+  twinEntity(tenantId: ID, canonicalId: ID!): AWSJSON!
+  twinNeighbors(tenantId: ID, canonicalId: ID!, depth: Int = 1): AWSJSON!
+  twinSystemEdges(tenantId: ID, canonicalId: ID!): AWSJSON!
+  twinCohort(
+    tenantId: ID
+    entityType: String!
+    filter: AWSJSON!
+    limit: Int = 25
+  ): AWSJSON!
+}

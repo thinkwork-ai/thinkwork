@@ -8295,6 +8295,10 @@ export type Query = {
   threads: Array<Thread>;
   threadsPaged: ThreadsPage;
   turnInvocationLogs: Array<ModelInvocation>;
+  twinCohort: Scalars['AWSJSON']['output'];
+  twinEntity: Scalars['AWSJSON']['output'];
+  twinNeighbors: Scalars['AWSJSON']['output'];
+  twinSystemEdges: Scalars['AWSJSON']['output'];
   unreadThreadCount: Scalars['Int']['output'];
   user?: Maybe<User>;
   userBudgetStatus?: Maybe<BudgetStatus>;
@@ -9585,6 +9589,33 @@ export type QueryThreadsPagedArgs = {
 export type QueryTurnInvocationLogsArgs = {
   tenantId: Scalars['ID']['input'];
   turnId: Scalars['ID']['input'];
+};
+
+
+export type QueryTwinCohortArgs = {
+  entityType: Scalars['String']['input'];
+  filter: Scalars['AWSJSON']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryTwinEntityArgs = {
+  canonicalId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryTwinNeighborsArgs = {
+  canonicalId: Scalars['ID']['input'];
+  depth?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryTwinSystemEdgesArgs = {
+  canonicalId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
