@@ -224,6 +224,9 @@ export async function postFinalizeCallback(
   }
 
   const body = JSON.stringify(buildFinalizeBody(args));
+  // THINK-324 C19 — echo the dispatch-minted turn assertion on every
+  // attempt so the finalize verifier can bind the write to its turn.
+  const turnAssertion = asString(payload.turn_assertion);
   const totalAttempts = COMPLETION_RETRY_DELAYS_MS.length + 1;
   for (let attempt = 0; attempt < totalAttempts; attempt += 1) {
     try {
@@ -232,6 +235,9 @@ export async function postFinalizeCallback(
         headers: {
           "content-type": "application/json",
           authorization: `Bearer ${callbackSecret}`,
+          ...(turnAssertion
+            ? { "x-thinkwork-turn-assertion": turnAssertion }
+            : {}),
         },
         body,
         signal: AbortSignal.timeout(attemptTimeoutMs),

@@ -187,3 +187,27 @@ describe("createActivityEmitter", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
+describe("turn assertion echo (THINK-324 C19)", () => {
+  it("sends x-thinkwork-turn-assertion when the payload carries one", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response("{}"));
+    const emitter = createActivityEmitter(
+      readActivityCallbackConfig({
+        activity_callback_url: "https://api.example.com/api/threads/t/activity",
+        activity_callback_secret: "s",
+        thread_turn_id: "turn-1",
+        tenant_id: "tenant-1",
+        thread_id: "t",
+        thinkwork_api_url: "https://api.example.com",
+        turn_assertion: "twta1.p.s",
+      }),
+      { fetchImpl: fetchImpl as unknown as typeof fetch },
+    );
+    emitter.emit({ eventType: "tool_invocation_started", message: "x" });
+    await emitter.drain();
+    const headers = fetchImpl.mock.calls[0]![1].headers as Record<
+      string,
+      string
+    >;
+    expect(headers["x-thinkwork-turn-assertion"]).toBe("twta1.p.s");
+  });
+});

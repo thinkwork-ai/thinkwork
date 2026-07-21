@@ -36,10 +36,7 @@ import { getDb } from "@thinkwork/database-pg";
 import { tenants, toolExecutionEvents } from "@thinkwork/database-pg/schema";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
 import { error, json, notFound, unauthorized } from "../lib/response.js";
-import {
-  TURN_ASSERTION_HEADER,
-  verifyTurnAssertion,
-} from "../lib/turn-assertion.js";
+import { enforceTurnAssertion } from "../lib/turn-assertion.js";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -134,45 +131,15 @@ export async function handler(
     );
   }
 
-  // Signed-turn identity (THINK-324 C18). When the runtime presents the
-  // dispatch-minted assertion, its binding must match the write target —
-  // the shared bearer secret alone can then no longer forge evidence for
-  // other turns. Absence stays tolerated (fail-open rollout posture; C19
-  // flips governed surfaces to required), as does verifier unavailability.
-  const assertionToken =
-    event.headers[TURN_ASSERTION_HEADER] ??
-    event.headers[TURN_ASSERTION_HEADER.toUpperCase()] ??
-    null;
-  if (assertionToken) {
-    const verdict = await verifyTurnAssertion(assertionToken);
-    if (verdict.status === "invalid") {
-      console.warn(
-        `[tool-executions] turn assertion rejected (${verdict.reason}): turn=${turn_id}`,
-      );
-      return unauthorized();
-    }
-    if (verdict.status === "valid") {
-      const b = verdict.binding;
-      if (
-        b.tenant_id !== tenant_id ||
-        b.thread_id !== thread_id ||
-        b.turn_id !== turn_id
-      ) {
-        console.warn(
-          `[tool-executions] turn assertion binding mismatch: asserted turn=${b.turn_id} body turn=${turn_id}`,
-        );
-        return unauthorized();
-      }
-    } else {
-      console.warn(
-        `[tool-executions] turn assertion verifier unavailable (${verdict.reason}); accepting bearer-only`,
-      );
-    }
-  } else {
-    console.info(
-      `[tool-executions] no turn assertion presented (tolerated): turn=${turn_id}`,
-    );
-  }
+  // Signed-turn identity (THINK-324 C18/C19): when presented, the
+  // dispatch-minted assertion must bind to the write target; with
+  // TURN_ASSERTION_REQUIRED=true, assertion-less writes are refused.
+  const assertion = await enforceTurnAssertion({
+    headers: event.headers,
+    binding: { tenant_id, thread_id, turn_id },
+    surface: "tool-executions",
+  });
+  if (!assertion.ok) return unauthorized();
 
   if (!Array.isArray(parsed.events) || parsed.events.length === 0) {
     return error("events: required non-empty array", 400);

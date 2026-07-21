@@ -30,6 +30,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { threadTurns } from "@thinkwork/database-pg/schema";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
+import { enforceTurnAssertion } from "../lib/turn-assertion.js";
 import {
   appendThreadTurnEvent,
   drizzleThreadTurnEventStore,
@@ -194,6 +195,27 @@ export async function handler(
   }
   if (payload.thread_id !== pathThreadId) {
     return badRequest("Body thread_id does not match path threadId");
+  }
+
+  // ---- Signed-turn identity (THINK-324 C19) ---------------------------
+  // When the runtime presents the dispatch-minted assertion, its binding
+  // must match the write target. Absence tolerated until every producer
+  // echoes it (TURN_ASSERTION_REQUIRED flips the posture per handler).
+  const assertion = await enforceTurnAssertion({
+    headers: event.headers,
+    binding: {
+      tenant_id: payload.tenant_id,
+      thread_id: payload.thread_id,
+      turn_id: payload.thread_turn_id,
+    },
+    surface: "chat-agent-activity",
+  });
+  if (!assertion.ok) {
+    return json(401, {
+      ok: false,
+      error: "Turn assertion rejected",
+      code: "UNAUTHORIZED",
+    });
   }
 
   // ---- document.emit branch (THINK-147 U3) ------------------------------

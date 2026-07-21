@@ -30,6 +30,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { threadTurns } from "@thinkwork/database-pg/schema";
 import { extractBearerToken, validateApiSecret } from "../lib/auth.js";
+import { enforceTurnAssertion } from "../lib/turn-assertion.js";
 import {
   processFinalize,
   toFinalizeResponse,
@@ -116,6 +117,26 @@ export async function handler(
   if (payload.thread_id !== pathThreadId) {
     return badRequest("Body thread_id does not match path threadId");
   }
+
+  // Signed-turn identity (THINK-324 C19): a presented assertion must bind
+  // to this turn. Absence tolerated until TURN_ASSERTION_REQUIRED flips.
+  const assertion = await enforceTurnAssertion({
+    headers: event.headers,
+    binding: {
+      tenant_id: payload.tenant_id,
+      thread_id: payload.thread_id,
+      turn_id: payload.thread_turn_id,
+    },
+    surface: "chat-agent-finalize",
+  });
+  if (!assertion.ok) {
+    return json(401, {
+      ok: false,
+      error: "Turn assertion rejected",
+      code: "UNAUTHORIZED",
+    });
+  }
+
   if (payload.status !== "completed" && payload.status !== "failed") {
     return badRequest(`Invalid status: ${payload.status}`);
   }
