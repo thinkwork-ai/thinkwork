@@ -32,7 +32,6 @@ import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-select
 import {
   clearPendingThreadStart,
   getPendingThreadStart,
-  getPendingThreadStart,
 } from "@/lib/pending-thread-starts";
 import { SpacesWorkbench } from "./SpacesWorkbench";
 
