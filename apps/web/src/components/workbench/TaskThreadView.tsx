@@ -4764,6 +4764,18 @@ export function actionRowsForTurn(
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
+    const emitRow = emitDocumentActionRow(name, record);
+    if (emitRow) {
+      rows.push(emitRow);
+      if (isTurnFinished(turn.status)) {
+        rows.push({
+          title: "tool invocation completed",
+          detail: toolInvocationCompletionDetail(record),
+          kind: toolKind(name),
+        });
+      }
+      continue;
+    }
     const detail = toolInvocationDetail(record);
     rows.push({
       title: toolActionTitle(name),
@@ -5739,8 +5751,62 @@ function toolKind(name: string): "tool" | "source" | "code" {
   return "tool";
 }
 
+/**
+ * First-class action row for emit_document (plates feedback 2026-07-21):
+ * names the plate and the document, and lists per-section outcomes from the
+ * emit response details (present / waived / missing) instead of hiding the
+ * plate behind a generic "Using emit document" JSON dump. Returns null when
+ * the record is not an emit_document call — the generic row renders instead.
+ */
+function emitDocumentActionRow(
+  name: string,
+  record: Record<string, unknown>,
+): { title: string; detail: string; kind: "tool" } | null {
+  if (name.toLowerCase() !== "emit_document") return null;
+  const args = parseRecord(record.args);
+  const result = parseRecord(record.result);
+  const details = parseRecord(result.details);
+  const plate = parseRecord(details.plate);
+  const plateName =
+    stringValue(plate.displayName) ||
+    stringValue(details.genre) ||
+    stringValue(args.genre);
+  const plateSlug = stringValue(plate.slug);
+  const docTitle = stringValue(details.title) || stringValue(args.title);
+  const lines: string[] = [];
+  if (plateName) {
+    lines.push(
+      `Plate: ${plateName}${
+        plateSlug && plateSlug !== plateName ? ` (${plateSlug})` : ""
+      }`,
+    );
+  }
+  if (docTitle) lines.push(`Document: ${docTitle}`);
+  const sections = Array.isArray(details.sections) ? details.sections : [];
+  if (sections.length > 0) {
+    lines.push("Sections:");
+    for (const entry of sections) {
+      const section = parseRecord(entry);
+      const title = stringValue(section.title) || stringValue(section.id);
+      const status = stringValue(section.status) || "unknown";
+      if (title) lines.push(`- ${title}: ${status}`);
+    }
+  }
+  const base = toolInvocationDetail(record);
+  return {
+    title: plateName
+      ? `Composing document — ${plateName}`
+      : "Composing document",
+    detail: lines.length > 0 ? `${lines.join("\n")}\n\n${base}` : base,
+    kind: "tool",
+  };
+}
+
 function toolActionTitle(name: string) {
   const normalized = name.toLowerCase();
+  if (normalized === "emit_document") {
+    return "Composing document";
+  }
   if (normalized === "query_wiki_context") {
     return "Checking wiki";
   }

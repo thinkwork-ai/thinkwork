@@ -618,11 +618,14 @@ describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () =
     const summaries = visiblePlateSummaries(await listPlates(TENANT, store));
     const srr = summaries.find((s) => s.slug === "report")!;
     // Suggested-tier sections are for THINK-185/189, not the dispatch floor.
+    // Guidance rides pre-emission (plates feedback 2026-07-21) so the model
+    // authors from the operator's instructions, not just the section title.
     expect(srr.sections).toEqual([
       {
         id: "pipeline-health",
         title: "Pipeline Health",
         tier: "required-if-material",
+        guidance: "Funnel with rates.",
       },
     ]);
     expect(srr.analyses).toEqual([
@@ -632,6 +635,31 @@ describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () =
         inputHint: "ordered stages: [{ label, count }], >=2 stages",
       },
     ]);
+  });
+
+  it("truncates over-long section guidance on the dispatch surface", async () => {
+    const store = fakeStore([
+      {
+        slug: "report",
+        origin: "platform_override",
+        config: {
+          sections: [
+            {
+              id: "pipeline-health",
+              title: "Pipeline Health",
+              tier: "required",
+              guidance: "x".repeat(1000),
+            },
+          ],
+        } as never,
+        hidden: false,
+      },
+    ]);
+    const summaries = visiblePlateSummaries(await listPlates(TENANT, store));
+    const srr = summaries.find((s) => s.slug === "report")!;
+    const guidance = srr.sections?.[0]?.guidance ?? "";
+    expect(guidance.length).toBeLessThanOrEqual(320);
+    expect(guidance.endsWith("…")).toBe(true);
   });
 
   it("a contract-less plate's summary keeps the original three-field shape", async () => {

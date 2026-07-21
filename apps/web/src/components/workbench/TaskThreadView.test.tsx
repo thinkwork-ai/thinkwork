@@ -3874,6 +3874,62 @@ describe("TaskThreadView", () => {
     expect(screen.getAllByText("Finding sources")).toHaveLength(1);
   });
 
+  it("renders emit_document invocations as a plate-named composing row with section outcomes", () => {
+    const rows = actionRowsForTurn(
+      {
+        id: "turn-emit",
+        status: "succeeded",
+        invocationSource: "chat_message",
+      },
+      {
+        tool_invocations: [
+          {
+            id: "tool-emit",
+            tool_name: "emit_document",
+            args: {
+              genre: "sales-rep-review",
+              title: "Sales Rep Review — Eric",
+            },
+            result: {
+              details: {
+                artifactId: "artifact-1",
+                documentId: "doc-1",
+                status: "final",
+                headVersion: 1,
+                genre: "sales-rep-review",
+                title: "Sales Rep Review — Eric",
+                plate: {
+                  slug: "sales-rep-review",
+                  displayName: "Sales Rep Review",
+                },
+                sections: [
+                  { id: "summary", title: "Summary", status: "present" },
+                  {
+                    id: "pipeline-health",
+                    title: "Pipeline Health",
+                    status: "waived",
+                  },
+                ],
+              },
+            },
+          },
+        ],
+      },
+    );
+
+    const emitRow = rows.find((row) =>
+      row.title.startsWith("Composing document"),
+    );
+    expect(emitRow).toBeDefined();
+    expect(emitRow?.title).toBe("Composing document — Sales Rep Review");
+    expect(emitRow?.detail).toContain(
+      "Plate: Sales Rep Review (sales-rep-review)",
+    );
+    expect(emitRow?.detail).toContain("Document: Sales Rep Review — Eric");
+    expect(emitRow?.detail).toContain("- Summary: present");
+    expect(emitRow?.detail).toContain("- Pipeline Health: waived");
+  });
+
   it("renders query_wiki_context invocations as wiki context thinking rows", () => {
     const rows = actionRowsForTurn(
       {

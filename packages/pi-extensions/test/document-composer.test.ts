@@ -308,6 +308,7 @@ describe("plate content contracts on the tool surface (THINK-183 U6)", () => {
         id: "pipeline-health",
         title: "Pipeline Health",
         tier: "required-if-material" as const,
+        guidance: "Funnel stages with conversion rates vs the team median.",
       },
       { id: "summary", title: "Summary", tier: "required" as const },
     ],
@@ -352,6 +353,12 @@ describe("plate content contracts on the tool surface (THINK-183 U6)", () => {
     };
     const genreDesc = tool.parameters.properties.genre.description;
     expect(genreDesc).toContain('"## Pipeline Health"');
+    // Operator-authored section instructions ride the tool surface
+    // pre-emission (plates feedback 2026-07-21) — the model must author
+    // from them, not discover them via rejection diagnostics.
+    expect(genreDesc).toContain(
+      "Funnel stages with conversion rates vs the team median.",
+    );
     expect(genreDesc).toContain("waive via tw:waiver");
     expect(genreDesc).toContain("pipeline-conversion");
     expect(genreDesc).toContain(
@@ -361,6 +368,54 @@ describe("plate content contracts on the tool surface (THINK-183 U6)", () => {
     // plate carries a contract.
     expect(tool.description).toContain("tw:waiver");
     expect(tool.description).toContain("tw:analysis");
+  });
+
+  it("success details carry plate identity + per-section outcomes for the thread activity row", async () => {
+    const fetchImpl = okFetch({
+      ok: true,
+      artifactId: "artifact-1",
+      documentId: "doc-1",
+      status: "final",
+      headVersion: 1,
+      plate: { slug: "sales-rep-review", displayName: "Sales Rep Review" },
+      sections: [
+        {
+          id: "summary",
+          title: "Summary",
+          tier: "required",
+          status: "present",
+        },
+        {
+          id: "pipeline-health",
+          title: "Pipeline Health",
+          tier: "required-if-material",
+          status: "waived",
+        },
+      ],
+    });
+    const { tools } = register({
+      documentComposerConfig: {
+        ...CONFIG,
+        documentPlates: [CONTRACT_PLATE],
+      },
+      fetchImpl,
+    });
+    const result = await tools[0].execute("call-1", {
+      ...VALID_PARAMS,
+      genre: "sales-rep-review",
+      status: "final",
+    });
+    expect(result.details?.plate).toMatchObject({
+      slug: "sales-rep-review",
+      displayName: "Sales Rep Review",
+    });
+    expect(result.details?.genre).toBe("sales-rep-review");
+    expect(result.details?.title).toBeDefined();
+    expect(result.details?.sections).toHaveLength(2);
+    expect(result.content[0].text).toContain("plate: Sales Rep Review");
+    expect(result.content[0].text).toContain(
+      "Waived sections: Pipeline Health",
+    );
   });
 
   it("contract-less plate lists keep the plain surface (no contract prose)", () => {

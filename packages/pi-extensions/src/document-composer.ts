@@ -41,6 +41,8 @@ export interface DocumentPlateSummary {
     id: string;
     title: string;
     tier: "required" | "required-if-material";
+    /** Operator-authored section instructions — shown pre-emission. */
+    guidance?: string;
   }>;
   analyses?: Array<{ key: string; op: string; inputHint: string }>;
 }
@@ -102,7 +104,9 @@ function normalizePlateSections(
     ) {
       continue;
     }
-    sections.push({ id, title, tier });
+    const guidance =
+      typeof rec.guidance === "string" ? rec.guidance.trim() : "";
+    sections.push({ id, title, tier, ...(guidance ? { guidance } : {}) });
   }
   return sections.length > 0 ? sections : undefined;
 }
@@ -232,18 +236,24 @@ export function createDocumentComposerExtension(
         plates = FALLBACK_PLATES;
       }
       // THINK-183 KTD8 (R14 floor): each contract-bearing plate's line names
-      // its enforced sections (expected heading titles) and declared analyses
-      // (key + op + input-shape hint) — enough to author a contract-satisfying
-      // emission first-pass. Full guidance arrives in rejection diagnostics.
+      // its enforced sections (expected heading titles + the operator's
+      // section instructions) and declared analyses (key + op + input-shape
+      // hint) — enough to author a contract-satisfying emission first-pass.
+      // Guidance rides up front: operators write section instructions
+      // expecting first-pass adherence, not rejection-loop discovery.
       const genreLines = plates
         .map((p) => {
           let line = `\`${p.slug}\`${p.useFor ? ` — ${p.useFor}` : ""}`;
           if (p.sections?.length) {
-            const parts = p.sections.map(
-              (s) =>
-                `"## ${s.title}"${s.tier === "required-if-material" ? " (waive via tw:waiver if data is unavailable)" : ""}`,
-            );
-            line += ` [required sections: ${parts.join(", ")}]`;
+            const parts = p.sections.map((s) => {
+              const waiveNote =
+                s.tier === "required-if-material"
+                  ? " (waive via tw:waiver if data is unavailable)"
+                  : "";
+              const guidanceNote = s.guidance ? `: ${s.guidance}` : "";
+              return `"## ${s.title}"${waiveNote}${guidanceNote}`;
+            });
+            line += ` [required sections — follow each section's instructions: ${parts.join("; ")}]`;
           }
           if (p.analyses?.length) {
             const parts = p.analyses.map(
@@ -390,10 +400,27 @@ export function createDocumentComposerExtension(
                     .map((w) => `- [${w.code}] ${w.message}`)
                     .join("\n")}`
                 : "";
+            // Plate identity + per-section outcomes from the emit response
+            // (older servers omit them; degrade to the plain shape).
+            const plate =
+              body.plate && typeof body.plate === "object"
+                ? (body.plate as { slug?: unknown; displayName?: unknown })
+                : null;
+            const plateName = plate ? asString(plate.displayName) : "";
+            const sections = Array.isArray(body.sections)
+              ? (body.sections as Array<Record<string, unknown>>)
+              : [];
+            const waived = sections.filter((s) => s.status === "waived");
+            const waivedText =
+              waived.length > 0
+                ? ` Waived sections: ${waived.map((s) => asString(s.title)).join(", ")}.`
+                : "";
             const text =
-              `Document saved (${status}${status === "final" ? `, pinned version ${headVersion}` : ""}). ` +
+              `Document saved (${status}${status === "final" ? `, pinned version ${headVersion}` : ""}` +
+              `${plateName ? `, plate: ${plateName}` : ""}). ` +
               `document_id: ${asString(body.documentId)} — pass this document_id on every revision. ` +
               `The document card is visible in the thread.` +
+              waivedText +
               warningText;
             return {
               content: [{ type: "text", text }],
@@ -402,6 +429,10 @@ export function createDocumentComposerExtension(
                 documentId: body.documentId,
                 status,
                 headVersion,
+                genre,
+                title: asString(typed.title),
+                ...(plate ? { plate: body.plate } : {}),
+                ...(sections.length > 0 ? { sections: body.sections } : {}),
               },
             };
           }

@@ -712,10 +712,12 @@ export async function listPlates(
 /**
  * The agent-facing plate summary (R10 + THINK-183 KTD8/R14): discovery
  * fields plus a terse contract projection — enforced section ids with their
- * expected titles and tier, and declared analysis keys with their ops and
- * the op's one-line input-shape hint. No guidance text (token cost scales
- * with plate count; full guidance arrives in rejection diagnostics at point
- * of use). Contract-less plates keep the original three-field shape.
+ * expected titles, tier, AND the operator-authored guidance (bounded).
+ * Guidance rides pre-emission because rejection-diagnostics-only delivery
+ * left the model authoring from section titles alone — operators write
+ * instructions expecting the agent to follow them on the first pass, and
+ * the plate editor promises exactly that. Contract-less plates keep the
+ * original three-field shape.
  */
 export interface PlateDispatchSummary {
   slug: string;
@@ -725,8 +727,25 @@ export interface PlateDispatchSummary {
     id: string;
     title: string;
     tier: "required" | "required-if-material";
+    /** Operator-authored section instructions, truncated to the dispatch cap. */
+    guidance?: string;
   }>;
   analyses?: Array<{ key: string; op: string; inputHint: string }>;
+}
+
+/**
+ * Per-section guidance ceiling on the dispatch surface. Bounds token cost
+ * as plate count grows; the untruncated text still reaches the model in
+ * rejection diagnostics at point of use.
+ */
+const DISPATCH_GUIDANCE_MAX_CHARS = 320;
+
+function boundedGuidance(guidance: string | undefined): string | undefined {
+  const trimmed = guidance?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.length > DISPATCH_GUIDANCE_MAX_CHARS
+    ? `${trimmed.slice(0, DISPATCH_GUIDANCE_MAX_CHARS - 1)}…`
+    : trimmed;
 }
 
 export function visiblePlateSummaries(
@@ -737,11 +756,15 @@ export function visiblePlateSummaries(
     .map((p) => {
       const sections = (p.sections ?? [])
         .filter((s) => s.tier !== "suggested")
-        .map((s) => ({
-          id: s.id,
-          title: s.title,
-          tier: s.tier as "required" | "required-if-material",
-        }));
+        .map((s) => {
+          const guidance = boundedGuidance(s.guidance);
+          return {
+            id: s.id,
+            title: s.title,
+            tier: s.tier as "required" | "required-if-material",
+            ...(guidance ? { guidance } : {}),
+          };
+        });
       const analyses = (p.analyses ?? []).map((a) => ({
         key: a.key,
         op: a.op,

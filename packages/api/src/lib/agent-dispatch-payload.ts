@@ -160,6 +160,8 @@ export interface AgentDispatchControlFieldArgs {
       id: string;
       title: string;
       tier: "required" | "required-if-material";
+      /** Operator-authored section instructions (bounded at projection). */
+      guidance?: string;
     }>;
     /** THINK-183 KTD8: declared analyses with op input-shape hints. */
     analyses?: Array<{ key: string; op: string; inputHint: string }>;
