@@ -31,9 +31,12 @@ locals {
   workload_identity_name          = "thinkwork-${var.stage}-multiplayer-proof"
   credential_provider_name        = "thinkwork-${var.stage}-proof-oauth"
   twenty_credential_provider_name = "thinkwork-${var.stage}-twenty-crm"
-  oauth_issuer                    = trimsuffix(var.oauth_issuer, "/")
-  oauth_return_url                = "${local.oauth_issuer}/complete"
-  allowed_oauth_return_urls       = distinct(concat([local.oauth_return_url], var.user_federation_return_urls))
+  oauth_issuer = trimsuffix(var.oauth_issuer, "/")
+  # THINK-324: with the proof plane retired the issuer is empty; a bare
+  # "/complete" fails UpdateWorkloadIdentity's URL-pattern validation, so the
+  # proof return URL only joins the allowlist when an issuer is configured.
+  oauth_return_url                = local.oauth_issuer != "" ? "${local.oauth_issuer}/complete" : ""
+  allowed_oauth_return_urls       = distinct(concat(compact([local.oauth_return_url]), var.user_federation_return_urls))
   configuration_hash = nonsensitive(sha256(jsonencode({
     issuer        = local.oauth_issuer
     client_id     = var.oauth_client_id
