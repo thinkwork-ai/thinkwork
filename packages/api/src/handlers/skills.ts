@@ -70,11 +70,11 @@ import { signObject, verifyObject } from "../lib/mcp-oauth/state.js";
 import {
   completeAgentCoreUserOAuth,
   getAgentCoreUserOAuth,
-} from "../lib/harness/agentcore-user-oauth.js";
+} from "../lib/agentcore-identity/agentcore-user-oauth.js";
 import {
   agentCoreOAuthPrincipalMatches,
   agentCoreOAuthSessionUri,
-} from "../lib/harness/agentcore-oauth-callback.js";
+} from "../lib/agentcore-identity/agentcore-oauth-callback.js";
 
 export { loadTenantBuiltinTools };
 
