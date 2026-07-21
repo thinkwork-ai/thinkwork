@@ -1222,12 +1222,34 @@ export interface HandlerDependencies {
   onHandlerComplete?: (bundle: InvocationResourceBundle) => void;
 }
 
+// THINK-324 C4 — memoize the default SDK clients at module scope so warm
+// containers reuse credential chains + keep-alive socket pools across
+// invocations instead of building 4+ fresh clients per turn. Tests inject
+// their own factories via HandlerDependencies and never hit this cache.
+const memoized = <K, V>(create: (key: K) => V) => {
+  const cache = new Map<K, V>();
+  return (key: K): V => {
+    let value = cache.get(key);
+    if (value === undefined) {
+      value = create(key);
+      cache.set(key, value);
+    }
+    return value;
+  };
+};
+
+let defaultAgentCoreClient: BedrockAgentCoreClient | undefined;
+
 const defaultDependencies: HandlerDependencies = {
-  agentCoreClientFactory: () => new BedrockAgentCoreClient({}),
-  s3ClientFactory: (region: string) => new S3Client({ region }),
-  lambdaClientFactory: (region: string) => new LambdaClient({ region }),
-  bedrockRuntimeClientFactory: (region: string) =>
-    new BedrockRuntimeClient({ region }),
+  agentCoreClientFactory: () =>
+    (defaultAgentCoreClient ??= new BedrockAgentCoreClient({})),
+  s3ClientFactory: memoized((region: string) => new S3Client({ region })),
+  lambdaClientFactory: memoized(
+    (region: string) => new LambdaClient({ region }),
+  ),
+  bedrockRuntimeClientFactory: memoized(
+    (region: string) => new BedrockRuntimeClient({ region }),
+  ),
 };
 
 // ---------------------------------------------------------------------------
@@ -3468,6 +3490,31 @@ export async function handleInvocation(
     ...(threadTurnId ? { thread_turn_id: threadTurnId } : {}),
     ...(identity.traceId ? { trace_id: identity.traceId } : {}),
   };
+  // THINK-324 C4 — attachment staging (S3 downloads to /tmp) is independent
+  // of tool assembly (MCP connects), so run both concurrently. The failure
+  // path below awaits this promise and removes any staged turn dir, keeping
+  // the "no leaked /tmp attachments" invariant on every exit.
+  const stageAttachments =
+    deps.stageMessageAttachmentsImpl ?? stageMessageAttachments;
+  const stagedAttachmentsPromise = stageAttachments({
+    attachments: args.payload.message_attachments,
+    workspaceBucket,
+    expectedTenantId: identity.tenantId,
+    expectedThreadId: identity.threadId,
+    s3Client: deps.s3ClientFactory(env.awsRegion),
+    logger: (event, details) =>
+      logStructured({
+        level: "warn",
+        event,
+        tenantId: identity.tenantId,
+        threadId: identity.threadId,
+        ...details,
+      }),
+  });
+  // Suppress the unhandled-rejection warning for a staging failure that
+  // lands while tool assembly is still in flight — the later await of this
+  // same promise still observes (and rethrows) the rejection.
+  stagedAttachmentsPromise.catch(() => {});
   try {
     bundle = await buildInvocationResources({
       payload: args.payload,
@@ -3563,6 +3610,20 @@ export async function handleInvocation(
       duration_ms: Date.now() - toolAssemblyStart,
       detail: err instanceof Error ? err.message : String(err),
     });
+    // The concurrent staging may have downloaded attachments into /tmp; the
+    // normal cleanup path (post-loop finally) is unreachable from here.
+    try {
+      const staged = await stagedAttachmentsPromise;
+      await cleanupMessageAttachments(staged.turnDir);
+    } catch (stagingErr) {
+      logStructured({
+        level: "warn",
+        event: "message_attachment_cleanup_failed",
+        tenantId: identity.tenantId,
+        error:
+          stagingErr instanceof Error ? stagingErr.message : String(stagingErr),
+      });
+    }
     return {
       statusCode: 500,
       body: {
@@ -3577,23 +3638,7 @@ export async function handleInvocation(
   let runResult: RunAgentLoopResult | undefined;
   let runError: unknown;
   let runLoopStart = 0;
-  const stageAttachments =
-    deps.stageMessageAttachmentsImpl ?? stageMessageAttachments;
-  const stagedAttachments = await stageAttachments({
-    attachments: args.payload.message_attachments,
-    workspaceBucket,
-    expectedTenantId: identity.tenantId,
-    expectedThreadId: identity.threadId,
-    s3Client: deps.s3ClientFactory(env.awsRegion),
-    logger: (event, details) =>
-      logStructured({
-        level: "warn",
-        event,
-        tenantId: identity.tenantId,
-        threadId: identity.threadId,
-        ...details,
-      }),
-  });
+  const stagedAttachments = await stagedAttachmentsPromise;
   const attachmentPreamble = formatMessageAttachmentsPreamble(
     stagedAttachments.staged,
   );
