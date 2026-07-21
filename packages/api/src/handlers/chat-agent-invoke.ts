@@ -99,6 +99,7 @@ import {
 } from "../lib/goal-mode.js";
 import type { RuntimeSkillCreatorCommandPayload } from "../lib/skill-creator/command-metadata.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
+import { mintTurnAssertion } from "../lib/turn-assertion.js";
 import { mintCapabilityCallerContext } from "../lib/capabilities/caller-context.js";
 import { memberSpacesForDispatch } from "../lib/member-spaces.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
@@ -1871,6 +1872,11 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             ? renderedWorkspace.capabilities?.fingerprint
             : undefined,
         capabilityCallerContext: capabilityCallerContext ?? undefined,
+        turnAssertion: await mintTurnAssertion({
+          tenant_id: tenantId,
+          thread_id: threadId ?? "",
+          turn_id: turnId ?? "",
+        }),
         configFingerprint: computeConfigFingerprint(
           {
             tenantId,

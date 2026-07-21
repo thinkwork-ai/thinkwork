@@ -51,6 +51,12 @@ vi.mock("drizzle-orm", () => ({
   eq: (..._args: unknown[]) => ({ _eq: _args }),
 }));
 
+const { mockVerdict } = vi.hoisted(() => ({ mockVerdict: vi.fn() }));
+vi.mock("../lib/turn-assertion.js", () => ({
+  TURN_ASSERTION_HEADER: "x-thinkwork-turn-assertion",
+  verifyTurnAssertion: (token: string) => Promise.resolve(mockVerdict(token)),
+}));
+
 // eslint-disable-next-line import/first
 import { handler } from "../handlers/tool-executions.js";
 
@@ -225,6 +231,72 @@ describe("POST /api/runtime/tool-executions", () => {
     mockTenantRow.mockReturnValue(null);
     const res = await handler(ev(body()));
     expect(res.statusCode).toBe(404);
+  });
+
+  it("accepts a valid matching turn assertion", async () => {
+    mockVerdict.mockReturnValue({
+      status: "valid",
+      binding: { tenant_id: TENANT_A, thread_id: THREAD_A, turn_id: TURN_A },
+    });
+    const res = await handler(
+      ev(body(), {
+        headers: {
+          authorization: "Bearer secret",
+          "x-thinkwork-turn-assertion": "twta1.x.y",
+        },
+      }),
+    );
+    expect(res.statusCode).toBe(200);
+    expect(mockVerdict).toHaveBeenCalledWith("twta1.x.y");
+  });
+
+  it("rejects an invalid assertion and a binding mismatch", async () => {
+    mockVerdict.mockReturnValue({ status: "invalid", reason: "bad signature" });
+    const invalid = await handler(
+      ev(body(), {
+        headers: {
+          authorization: "Bearer secret",
+          "x-thinkwork-turn-assertion": "twta1.x.y",
+        },
+      }),
+    );
+    expect(invalid.statusCode).toBe(401);
+
+    mockVerdict.mockReturnValue({
+      status: "valid",
+      binding: {
+        tenant_id: TENANT_A,
+        thread_id: THREAD_A,
+        turn_id: "99999999-9999-9999-9999-999999999999",
+      },
+    });
+    const mismatch = await handler(
+      ev(body(), {
+        headers: {
+          authorization: "Bearer secret",
+          "x-thinkwork-turn-assertion": "twta1.x.y",
+        },
+      }),
+    );
+    expect(mismatch.statusCode).toBe(401);
+  });
+
+  it("tolerates verifier unavailability and assertion absence", async () => {
+    mockVerdict.mockReturnValue({ status: "unavailable", reason: "no key" });
+    const unavailable = await handler(
+      ev(body(), {
+        headers: {
+          authorization: "Bearer secret",
+          "x-thinkwork-turn-assertion": "twta1.x.y",
+        },
+      }),
+    );
+    expect(unavailable.statusCode).toBe(200);
+
+    mockVerdict.mockClear();
+    const absent = await handler(ev(body()));
+    expect(absent.statusCode).toBe(200);
+    expect(mockVerdict).not.toHaveBeenCalled();
   });
 
   it("405 / 404 route hygiene", async () => {

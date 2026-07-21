@@ -50,6 +50,7 @@ export const REQUIRED_DISPATCH_FIELDS = [
   "member_spaces",
   "capability_private_session",
   "capability_caller_context",
+  "turn_assertion",
 ] as const;
 
 export type RequiredDispatchField = (typeof REQUIRED_DISPATCH_FIELDS)[number];
@@ -220,6 +221,13 @@ export interface AgentDispatchControlFieldArgs {
    * folder-mode signal above.
    */
   capabilityCallerContext?: string;
+  /**
+   * THINK-324 C18 — KMS-signed turn identity (`lib/turn-assertion.ts`). The
+   * runtime echoes it on callbacks so verifiers can bind evidence writes to
+   * the minted {tenant, thread, turn}. Undefined when the assertion plane is
+   * unconfigured or minting failed (fail-open by contract).
+   */
+  turnAssertion?: string | null;
 }
 
 export function buildAgentDispatchControlFields(
@@ -310,5 +318,8 @@ export function buildAgentDispatchControlFields(
     // Absent on non-capability agents and when platform signing is
     // unavailable; the runtime then registers no capability tools.
     capability_caller_context: args.capabilityCallerContext || undefined,
+    // THINK-324 C18 — signed turn identity, echoed by the runtime on its
+    // callbacks. Absent when minting is unavailable (fail-open).
+    turn_assertion: args.turnAssertion || undefined,
   };
 }

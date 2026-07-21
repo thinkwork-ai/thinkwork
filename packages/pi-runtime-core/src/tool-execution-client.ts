@@ -47,6 +47,9 @@ export interface ToolExecutionCallbackConfig {
   principalId: string;
   /** Same-origin guard against the deployed API base. */
   apiUrl: string;
+  /** KMS-signed turn identity (THINK-324 C18), echoed verbatim as the
+   *  x-thinkwork-turn-assertion header. Null when dispatch minted none. */
+  turnAssertion: string | null;
 }
 
 export interface ToolExecutionEmitter {
@@ -82,6 +85,7 @@ export function readToolExecutionCallbackConfig(
     principalType: userId ? "user" : "service",
     principalId: userId || "pi-runtime",
     apiUrl,
+    turnAssertion: asString(payload.turn_assertion) || null,
   };
 }
 
@@ -162,6 +166,9 @@ export function createToolExecutionEmitter(
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${config!.secret}`,
+        ...(config!.turnAssertion
+          ? { "x-thinkwork-turn-assertion": config!.turnAssertion }
+          : {}),
       },
       body,
       signal: AbortSignal.timeout(attemptTimeoutMs),

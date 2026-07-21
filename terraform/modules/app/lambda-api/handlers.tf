@@ -440,6 +440,8 @@ locals {
     # Agent graph access (plan 2026-06-09-004 U8): stage gate for the Pi
     # knowledge_graph_search tool; the per-agent tool policy gates on top.
     "chat-agent-invoke" = {
+      # THINK-324 C18: mint the signed-turn assertion with the active key.
+      AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.turn_assertion_active_key_arn
       KNOWLEDGE_GRAPH_TOOL_ENABLED = tostring(var.knowledge_graph_tool_enabled)
       # THINK-321 U5: stage gate for the Pi identity-resolution tools; the
       # per-agent tool policy gates on top. Mirrored on wakeup-processor so
@@ -455,7 +457,14 @@ locals {
     # gate as chat-agent-invoke (both payload builders emit
     # identity_resolution_enabled).
     "wakeup-processor" = {
+      # THINK-324 C18: wakeup dispatches mint the same signed-turn assertion.
+      AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.turn_assertion_active_key_arn
       IDENTITY_RESOLUTION_ENABLED = tostring(var.identity_resolution_tool_enabled)
+    }
+    # THINK-324 C18: the ledger endpoint verifies presented assertions with
+    # the cached public key of the same active mint key.
+    "tool-executions" = {
+      AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.turn_assertion_active_key_arn
     }
     # THINK-316 U5: the runner reads the server-only attested profile and
     # invokes its named endpoint with a purpose-bound CUSTOM_JWT. It receives
