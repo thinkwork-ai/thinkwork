@@ -5,10 +5,11 @@ import {
   emptyCounters,
   isMissingSourceIdFieldError,
   mirrorDeletions,
+  upsertNotes,
   upsertRecords,
 } from "../load-records";
 import { contentHash } from "../mappers";
-import type { MappedRecord } from "../mappers";
+import type { MappedNote, MappedRecord } from "../mappers";
 import { TwentyGraphqlError, type TwentyClient } from "../twenty-client";
 
 function mapped(
@@ -262,5 +263,113 @@ describe("isMissingSourceIdFieldError", () => {
       false,
     );
     expect(isMissingSourceIdFieldError(new Error("boom"))).toBe(false);
+  });
+});
+
+describe("upsertNotes batches the NoteTarget existence check (perf)", () => {
+  function note(sourceId: string): MappedNote {
+    return {
+      sourceId,
+      title: sourceId,
+      bodyMarkdown: sourceId,
+      targetSourceId: "opportunity:o1",
+      targetKind: "opportunity",
+      isDeleted: false,
+      createdAt: null,
+      authorName: null,
+    };
+  }
+
+  // A note whose id appears here already has a NoteTarget in Twenty.
+  function noteClient(pairedNoteIds: string[]): {
+    client: TwentyClient;
+    lookups: number;
+    createdTargets: Array<Record<string, unknown>>;
+  } {
+    const state = {
+      lookups: 0,
+      createdTargets: [] as Record<string, unknown>[],
+    };
+    const client = {
+      requestWithRetry: vi.fn(
+        async (
+          _path: string,
+          query: string,
+          variables: { filter?: { noteId?: { in?: string[] } } },
+        ) => {
+          if (query.includes("MigrationNoteTargets")) {
+            state.lookups += 1;
+            const ids = variables.filter?.noteId?.in ?? [];
+            return {
+              noteTargets: {
+                edges: ids
+                  .filter((id) => pairedNoteIds.includes(id))
+                  .map((id) => ({ node: { noteId: id } })),
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            };
+          }
+          // Note sourceId existence lookups → nothing exists yet (force create).
+          return { notes: { edges: [] } };
+        },
+      ),
+      requestOnce: vi.fn(
+        async (
+          _path: string,
+          query: string,
+          variables: { data: Array<Record<string, unknown>> },
+        ) => {
+          if (query.includes("createNotes")) {
+            return {
+              createNotes: variables.data.map((row) => ({
+                id: `note-${row.sourceId as string}`,
+                sourceId: row.sourceId,
+              })),
+            };
+          }
+          if (query.includes("createNoteTargets")) {
+            state.createdTargets.push(...variables.data);
+            return {
+              createNoteTargets: variables.data.map((_, i) => ({
+                id: `nt-${i}`,
+              })),
+            };
+          }
+          return { ok: true };
+        },
+      ),
+    } as unknown as TwentyClient;
+    return { client, ...state };
+  }
+
+  it("issues one lookup for many notes and only creates the missing targets", async () => {
+    const notes = [note("task_comment:c1"), note("task_comment:c2")];
+    // c1 already has its target; c2 does not.
+    const harness = noteClient(["note-task_comment:c1"]);
+    const counters = emptyCounters();
+
+    await upsertNotes({
+      client: harness.client,
+      notes,
+      targetIdBySourceId: new Map([["opportunity:o1", "opp1"]]),
+      dryRun: false,
+      counters,
+    });
+
+    // Batched: a single noteTargets query covers both notes (was one per note).
+    const lookupCalls = (
+      harness.client.requestWithRetry as unknown as {
+        mock: { calls: unknown[] };
+      }
+    ).mock.calls.filter((c) =>
+      String((c as unknown[])[1]).includes("MigrationNoteTargets"),
+    ).length;
+    expect(lookupCalls).toBe(1);
+
+    // Only the unpaired note gets a target, and it carries the opportunity FK.
+    expect(harness.createdTargets).toEqual([
+      { noteId: "note-task_comment:c2", targetOpportunityId: "opp1" },
+    ]);
+    expect(counters.failed).toBe(0);
   });
 });
