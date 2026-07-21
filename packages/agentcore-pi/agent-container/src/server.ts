@@ -61,6 +61,7 @@ import {
   createOkfWikiNavigatorExtension,
   createRequestIdentityExtension,
   createSendEmailExtension,
+  buildTurnContextBlock,
   createSystemPromptExtension,
   createTaskStatusExtension,
   createWebExtractExtension,
@@ -3685,12 +3686,22 @@ export async function handleInvocation(
     formatSkillCreatorCommandContext(skillCreatorCommand);
   const withQuestionAnswerContext = (message: string): string =>
     questionAnswerBlock ? `${questionAnswerBlock}\n\n${message}` : message;
-  const withTurnCommandContext = (message: string): string =>
-    withQuestionAnswerContext(
+  // THINK-324 C2b — date + requester context ride the TURN prompt, not the
+  // system prompt, so the cached system prefix stops churning daily and per
+  // requester. Outermost prepend: the block leads the message it describes.
+  // Goal-mode turns carry a synthetic runtime command as the message — the
+  // goal extension parses it verbatim, so those turns get no prefix.
+  const turnContextBlock = goalModeCommand
+    ? ""
+    : buildTurnContextBlock(args.payload);
+  const withTurnCommandContext = (message: string): string => {
+    const wrapped = withQuestionAnswerContext(
       skillCreatorCommandBlock
         ? `${skillCreatorCommandBlock}\n\n${message}`
         : message,
     );
+    return turnContextBlock ? `${turnContextBlock}\n\n${wrapped}` : wrapped;
+  };
   let agentProfiles = normalizeAgentProfiles(args.payload.agent_profiles);
   // Subagent-folders U9/U10: when this dispatch pinned a capabilities
   // manifest, resolve sub-agent profiles from its agent entries + the

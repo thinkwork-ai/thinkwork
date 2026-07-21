@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { toExtensionFactory } from "../src/define-extension.js";
 import {
+  buildTurnContextBlock,
   composeSystemPrompt,
   createSystemPromptExtension,
   type WorkspaceFileReader,
@@ -53,9 +54,10 @@ describe("composeSystemPrompt (moved to pi-extensions, parity preserved)", () =>
       }),
     });
 
-    expect(prompt).toContain("Current date:");
-    expect(prompt).toContain("<current_requester>");
-    expect(prompt).toContain("ada@example.com");
+    // THINK-324 C2b: date + requester moved to the turn prompt
+    // (buildTurnContextBlock) so the cached system prefix stops churning.
+    expect(prompt).not.toContain("Current date:");
+    expect(prompt).not.toContain("<current_requester>");
     expect(prompt).toContain("## Runtime Tool Policy");
     expect(prompt).toContain("`bash` tool is not available");
     expect(prompt).toContain("`execute_code` tool is available");
@@ -470,5 +472,30 @@ describe("createSystemPromptExtension", () => {
     expect(result?.systemPrompt).toMatch(
       /AGENTS BODY[\s\S]*ATTACHMENT PREAMBLE$/,
     );
+  });
+});
+
+describe("buildTurnContextBlock (THINK-324 C2b)", () => {
+  it("carries the date and requester identity for the turn prompt", () => {
+    const block = buildTurnContextBlock(
+      {
+        user_id: "u1",
+        current_user_name: "Ada",
+        current_user_email: "ada@example.com",
+      },
+      new Date("2026-05-05T12:00:00Z"),
+    );
+    expect(block).toContain("Current date:");
+    expect(block).toMatch(/Tuesday, May 5, 2026/);
+    expect(block).toContain("<current_requester>");
+    expect(block).toContain("Name: Ada");
+    expect(block).toContain("Email: ada@example.com");
+    expect(block).toContain('email "me"');
+  });
+
+  it("emits only the date when no requester identity is present", () => {
+    const block = buildTurnContextBlock({}, new Date("2026-05-05T12:00:00Z"));
+    expect(block).toContain("Current date:");
+    expect(block).not.toContain("<current_requester>");
   });
 });

@@ -106,18 +106,22 @@ describe("composeSystemPrompt", () => {
     expect(prompt).not.toContain("USER_BLOCK");
   });
 
-  it("prefixes the prompt with the current date", async () => {
+  it("keeps per-turn churn (date, requester) OUT of the cached system prompt (THINK-324 C2b)", async () => {
     const prompt = await composeSystemPrompt({
-      payload: { user_id: "user-1" },
+      payload: {
+        user_id: "user-1",
+        current_user_email: "eric@thinkwork.ai",
+        current_user_name: "Eric Odom",
+      },
       workspaceDir: "/tmp/workspace",
       now,
       fileReader: readerFor({ "User/USER.md": "X" }),
     });
-    expect(prompt.startsWith("Current date: ")).toBe(true);
-    expect(prompt).toMatch(/Tuesday, May 5, 2026/);
+    expect(prompt).not.toContain("Current date:");
+    expect(prompt).not.toContain("<current_requester>");
   });
 
-  it("pins the current requester email ahead of tool policy and User/USER.md", async () => {
+  it("keeps the requester profile policy ahead of tool policy and User/USER.md", async () => {
     const prompt = await composeSystemPrompt({
       payload: {
         user_id: "user-1",
@@ -129,17 +133,10 @@ describe("composeSystemPrompt", () => {
       fileReader: readerFor({ "User/USER.md": "USER_BLOCK" }),
     });
 
-    expect(prompt).toContain("<current_requester>");
-    expect(prompt).toContain("Name: Eric Odom");
-    expect(prompt).toContain("Email: eric@thinkwork.ai");
-    expect(prompt).toContain('email "me"');
     expect(prompt).toContain("## Requester Profile Policy");
     expect(prompt).toContain("first source of truth");
     expect(prompt).toContain(
       "When the user explicitly asks to search, recall, retrieve, or prove memory, use the memory tools instead of `User/USER.md` or workspace files.",
-    );
-    expect(prompt.indexOf("<current_requester>")).toBeLessThan(
-      prompt.indexOf("## Requester Profile Policy"),
     );
     expect(prompt.indexOf("## Requester Profile Policy")).toBeLessThan(
       prompt.indexOf("## Runtime Tool Policy"),
