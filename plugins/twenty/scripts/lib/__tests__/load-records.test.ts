@@ -3,12 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   COMPANY,
   emptyCounters,
+  isMissingSourceIdFieldError,
   mirrorDeletions,
   upsertRecords,
 } from "../load-records";
 import { contentHash } from "../mappers";
 import type { MappedRecord } from "../mappers";
-import type { TwentyClient } from "../twenty-client";
+import { TwentyGraphqlError, type TwentyClient } from "../twenty-client";
 
 function mapped(
   sourceId: string,
@@ -228,5 +229,38 @@ describe("mirrorDeletions (AE2 / KTD7)", () => {
     expect(counters.plannedMutations).toEqual([
       "soft-delete company account:gone",
     ]);
+  });
+});
+
+describe("isMissingSourceIdFieldError", () => {
+  const gqlError = (message: string) =>
+    new TwentyGraphqlError("wrapped", { errors: [{ message }] });
+
+  it("recognizes a not-yet-created sourceId field", () => {
+    expect(
+      isMissingSourceIdFieldError(
+        gqlError('Object company doesn\'t have any "sourceId" field.'),
+      ),
+    ).toBe(true);
+  });
+
+  it("recognizes a not-yet-created custom object", () => {
+    expect(
+      isMissingSourceIdFieldError(
+        gqlError('Unknown type "OrganizationFilterInput".'),
+      ),
+    ).toBe(true);
+    expect(
+      isMissingSourceIdFieldError(
+        gqlError('Cannot query field "organizations" on type "Query".'),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not swallow unrelated errors", () => {
+    expect(isMissingSourceIdFieldError(gqlError("Rate limit reached"))).toBe(
+      false,
+    );
+    expect(isMissingSourceIdFieldError(new Error("boom"))).toBe(false);
   });
 });

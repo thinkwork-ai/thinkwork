@@ -41,3 +41,13 @@ describe("quoteIdent", () => {
     expect(() => quoteIdent("public")).toThrow(/Refusing/);
   });
 });
+
+describe("hashPassword salts per call", () => {
+  it("never reuses a salt, so rotation does not share hashes across reps", () => {
+    const a = hashPassword("SharedSecret1!", 4);
+    const b = hashPassword("SharedSecret1!", 4);
+    expect(a).not.toBe(b);
+    expect(bcrypt.compareSync("SharedSecret1!", a)).toBe(true);
+    expect(bcrypt.compareSync("SharedSecret1!", b)).toBe(true);
+  });
+});

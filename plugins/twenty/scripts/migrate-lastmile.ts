@@ -5,34 +5,54 @@
  *
  * OPERATOR RUNBOOK
  * ================
+ * PREREQUISITE — Twenty's stock workflow "Create company when adding a new person"
+ * MUST be deactivated (Settings -> Workflows) before any --apply run. It fires on
+ * every person insert, invents a company from the email domain, and repoints the
+ * person at it; it once mislinked 21,989 of 24,028 migrated people. The workspace
+ * API key is forbidden from toggling workflows, so this is a human step.
+ *
+ * NIGHTLY AUTOMATION — during TEI's cutover this runs unattended via
+ * `.github/workflows/tei-lastmile-sync.yml` (scheduled `--apply` delta re-sync).
+ * The run is idempotent (upsert by sourceId + deletion mirror), never provisions
+ * members, and needs no AWS credentials — the ~4 CRM attachments TEI's Twenty
+ * cannot ingest are reported as gaps, not failures. Two invariants the workflow
+ * cannot enforce and that a human owns: (1) the person->company workflow above
+ * stays deactivated, and (2) the shared TWENTY_REP_PASSWORD is rotated once the
+ * validation window closes (see step 5 below).
+ *
  * Environment (all required unless noted):
  *   TWENTY_PUBLIC_URL      TEI's Twenty base URL, e.g. https://crm.tei.thinkwork.ai
- *   TWENTY_API_KEY         Workspace API key (Settings → API & Webhooks)
+ *   TWENTY_API_KEY         Workspace API key (Settings -> API & Webhooks)
  *   LASTMILE_DATABASE_URL  LastMile dispatch Postgres connection string (read access)
- *   TWENTY_ADMIN_EMAIL     Admin user email — required only when --apply provisions members
- *   TWENTY_ADMIN_PASSWORD  Admin user password — same
- *   TWENTY_REP_PASSWORD    Shared test password for provisioned reps (R5; value lives
- *                          outside the repo). ROTATE OR DEACTIVATE every rep account at
- *                          cutover, on abort, or if the validation window drags on.
- *   TWENTY_WORKSPACE_ID    Optional override; otherwise resolved from the admin session
- *   TWENTY_REP_EMAIL_DOMAIN  Domain for reps with no LastMile email
+ *   TWENTY_REP_EMAIL_DOMAIN  Optional; domain for reps with no LastMile email
  *                          (default texasenterprises.com; <first-initial><lastname>@)
  *   AWS_PROFILE / AWS_REGION  Needed for attachment binaries (LastMile S3 bucket)
+ *   NODE_EXTRA_CA_CERTS    RDS CA bundle, when the DB rejects the system trust store
+ *
+ * Members are NOT provisioned by this script: TEI's Twenty does not serve the auth
+ * GraphQL schema, so `scripts/provision-twenty-members.ts` writes them directly to
+ * Twenty's Postgres (see that file's header). Run it FIRST, then this script, so
+ * every record resolves its owner. Reps without a member load ownerless and heal
+ * on the next run once their member exists.
  *
  * Invocations (dry-run is the default; nothing is written without --apply):
- *   npx tsx scripts/migrate-lastmile.ts                 # full dry-run + planned mutations
- *   npx tsx scripts/migrate-lastmile.ts --apply         # seed (or delta re-sync — same command)
- *   npx tsx scripts/migrate-lastmile.ts --rollback      # list the sourceId-owned record set
- *   npx tsx scripts/migrate-lastmile.ts --rollback --apply  # soft-delete that set (restorable)
- *   --skip-invites        with --apply: load schema+records but provision no new
- *                         members (owners heal on a later re-run once members exist)
+ *   npx tsx scripts/migrate-lastmile.ts                        # dry-run + planned mutations
+ *   npx tsx scripts/migrate-lastmile.ts --apply                # seed / delta re-sync
+ *   npx tsx scripts/migrate-lastmile.ts --rollback             # list the sourceId-owned set
+ *   npx tsx scripts/migrate-lastmile.ts --rollback --apply     # soft-delete it (restorable)
+ *
+ * To start over from an empty workspace: `scripts/purge-lastmile-import.ts --apply`
+ * hard-deletes every sourceId-owned record plus workflow-created domain companies.
  *
  * Cutover day, in order:
- *   1. Freeze LastMile CRM edits.
- *   2. Re-run with --apply (delta re-sync; upserts by sourceId, mirrors deletions).
- *   3. Check the parity report + spot checks (this script's stdout JSON).
- *   4. Rotate every rep password / enforce resets — the shared test password must not
- *      outlive the validation phase.
+ *   1. Confirm the person-to-company workflow is still deactivated.
+ *   2. Freeze LastMile CRM edits.
+ *   3. Re-run with --apply (delta re-sync; upserts by sourceId,
+ *      mirrors deletions via an id-set diff -- LastMile has no dead-mark columns).
+ *   4. Check the parity report + spot checks (this script's stdout JSON).
+ *   5. ROTATE every rep password. The shared TWENTY_REP_PASSWORD is set on 89
+ *      accounts and must not outlive the validation phase -- rotate on cutover, on
+ *      abort, and on an over-long validation window alike (R5).
  *
  * The parity report prints to stdout as JSON; all other logging goes to stderr.
  * Secrets are never logged. One invocation at a time (KTD3).
@@ -53,7 +73,9 @@ import {
   NOTE,
   OPPORTUNITY,
   OPPORTUNITY_PRODUCT,
+  ORGANIZATION,
   PERSON,
+  PRODUCT,
   rollbackEntity,
   upsertNotes,
   upsertOpportunityProducts,
@@ -62,24 +84,26 @@ import {
 } from "./lib/load-records";
 import {
   buildOwnerIndex,
+  dedupeContactEmails,
   deriveRepEmail,
   mapAccount,
   mapContact,
   mapCrmComment,
   mapCustomerNote,
-  mapLead,
-  mapOpportunity,
-  mapOpportunityProduct,
+  mapCrmTask,
+  mapOrganization,
+  mapProduct,
+  mapTaskProducts,
+  mapTaskStatusActivity,
+  PRODUCT_CATALOG,
+  productSourceId,
   sourceId,
 } from "./lib/mappers";
-import {
-  adminSignIn,
-  ensureMembers,
-  type RepToProvision,
-} from "./lib/members-ensure";
+import { ensureMembers, type RepToProvision } from "./lib/members-ensure";
 import {
   applySchemaEnsure,
   ensureOpportunityProductObject,
+  ensureOrganizationObject,
   fetchObjectMetadata,
   planSchemaEnsure,
 } from "./lib/schema-ensure";
@@ -88,19 +112,17 @@ import { TwentyClient, normalizeBaseUrl } from "./lib/twenty-client";
 interface CliArgs {
   apply: boolean;
   rollback: boolean;
-  /** Provision no new members this run: match existing members only. Owner
-   * refs for unprovisioned reps stay null and heal on a later re-run once the
-   * members exist (content hash changes when ownerId resolves). */
-  skipInvites: boolean;
 }
 
 function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { apply: false, rollback: false, skipInvites: false };
+  const args: CliArgs = { apply: false, rollback: false };
   for (const arg of argv) {
     if (arg === "--apply") args.apply = true;
     else if (arg === "--dry-run") args.apply = false;
     else if (arg === "--rollback") args.rollback = true;
-    else if (arg === "--skip-invites") args.skipInvites = true;
+    // Accepted and ignored: this script never provisions members, so the flag
+    // that once suppressed it is a no-op. Kept so an old invocation still runs.
+    else if (arg === "--skip-invites") continue;
     else throw new Error(`Unknown argument: ${arg}`);
   }
   return args;
@@ -125,7 +147,6 @@ async function main(): Promise<void> {
   const baseUrl = normalizeBaseUrl(requireEnv("TWENTY_PUBLIC_URL"));
   const apiKey = requireEnv("TWENTY_API_KEY");
   const lastmileUrl = requireEnv("LASTMILE_DATABASE_URL");
-  const repPassword = process.env.TWENTY_REP_PASSWORD ?? "";
 
   const client = new TwentyClient({ baseUrl, authToken: apiKey });
   const reader = createLastmileReader(lastmileUrl);
@@ -146,15 +167,7 @@ async function main(): Promise<void> {
       await runRollback(client, report, dryRun);
       return;
     }
-    await runMigration({
-      client,
-      reader,
-      baseUrl,
-      repPassword,
-      report,
-      dryRun,
-      skipInvites: args.skipInvites,
-    });
+    await runMigration({ client, reader, baseUrl, report, dryRun });
   } finally {
     await reader.close();
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
@@ -172,6 +185,7 @@ async function runRollback(
     { entity: OPPORTUNITY, prefixes: ["lead:", "opportunity:"] },
     { entity: PERSON, prefixes: ["contact:"] },
     { entity: COMPANY, prefixes: ["account:"] },
+    { entity: ORGANIZATION, prefixes: ["organization:"] },
   ];
   for (const { entity, prefixes } of entities) {
     const counters = emptyCounters();
@@ -196,13 +210,10 @@ async function runMigration(options: {
   client: TwentyClient;
   reader: LastmileReader;
   baseUrl: string;
-  repPassword: string;
   report: Record<string, unknown>;
   dryRun: boolean;
-  skipInvites: boolean;
 }): Promise<void> {
-  const { client, reader, baseUrl, repPassword, report, dryRun, skipInvites } =
-    options;
+  const { client, reader, baseUrl, report, dryRun } = options;
 
   // Phase A: preflight ------------------------------------------------------
   log("preflight: connecting to LastMile and Twenty...");
@@ -216,16 +227,34 @@ async function runMigration(options: {
   // Phase B: schema ensure --------------------------------------------------
   log("schema: ensuring custom fields and stage options...");
   let objects = await fetchObjectMetadata(client);
-  const objectEnsure = await ensureOpportunityProductObject(
+  const productObjectEnsure = await ensureOpportunityProductObject(
     client,
     objects,
     dryRun,
   );
-  if (!dryRun && (objectEnsure.created || objectEnsure.relationCreated)) {
-    // Re-read metadata so the field plan addresses the real object id.
+  if (
+    !dryRun &&
+    (productObjectEnsure.created || productObjectEnsure.relationCreated)
+  ) {
     objects = await fetchObjectMetadata(client);
   }
-  report.opportunityProductObject = objectEnsure;
+  const organizationObjectEnsure = await ensureOrganizationObject(
+    client,
+    objects,
+    dryRun,
+  );
+  if (
+    !dryRun &&
+    (organizationObjectEnsure.created ||
+      organizationObjectEnsure.relationCreated)
+  ) {
+    // Re-read metadata so the field plan addresses the real object ids.
+    objects = await fetchObjectMetadata(client);
+  }
+  report.customObjects = {
+    opportunityProduct: productObjectEnsure,
+    organization: organizationObjectEnsure,
+  };
   const schemaPlan = planSchemaEnsure(objects);
   if (dryRun) {
     report.schema = {
@@ -268,74 +297,25 @@ async function runMigration(options: {
     sample: derivedEmails.slice(0, 20),
   };
 
-  let adminClient: TwentyClient | null = null;
-  let workspaceId = process.env.TWENTY_WORKSPACE_ID ?? null;
-  if (!dryRun) {
-    const adminEmail = process.env.TWENTY_ADMIN_EMAIL;
-    const adminPassword = process.env.TWENTY_ADMIN_PASSWORD;
-    if (adminEmail && adminPassword) {
-      if (!repPassword)
-        throw new Error(
-          "Missing required environment variable: TWENTY_REP_PASSWORD",
-        );
-      const session = await adminSignIn({
-        baseUrl,
-        email: adminEmail,
-        password: adminPassword,
-      });
-      adminClient = new TwentyClient({
-        baseUrl,
-        authToken: session.accessToken,
-      });
-      workspaceId = workspaceId ?? session.workspaceId;
-    }
-  }
   const members = await ensureMembers({
     dataClient: client,
-    adminClient,
     reps: repsToProvision,
-    repPassword,
-    workspaceId,
-    // --skip-invites: match existing members only, invite nobody this run.
-    dryRun: dryRun || skipInvites,
   });
-  if (skipInvites) {
-    report.membersMode =
-      "skip-invites (existing members matched; no invitations sent)";
+  if (members.missingMembers > 0) {
+    log(
+      `members: ${members.missingMembers} rep(s) have no Twenty member — run ` +
+        `scripts/provision-twenty-members.ts, then re-run to attach their owners`,
+    );
   }
   report.members = {
     report: members.report,
-    provisionable: members.ownerMap.size,
-    hadFailures: members.hadFailures,
+    resolved: members.ownerMap.size,
+    missingMembers: members.missingMembers,
   };
   // Archived reps still resolve for historical ownership when a member with a
   // matching email already exists; unprovisioned owners map to null and are
   // flagged per record (U5 edge case).
-  const ownerMap = new Map(members.ownerMap);
-  if (dryRun) {
-    // Planned members don't have ids yet; placeholders keep the dry-run's
-    // owner resolution (and its planned-mutation list) representative. Apply
-    // runs always resolve real member ids.
-    for (const row of members.report) {
-      if (row.action === "planned" && row.email && !ownerMap.has(row.repId)) {
-        ownerMap.set(row.repId, `planned-member:${row.email}`);
-      }
-    }
-    for (const row of members.report) {
-      if (
-        row.action === "merged-duplicate-email" &&
-        row.email &&
-        !ownerMap.has(row.repId)
-      ) {
-        const primary = ownerMap.get(
-          members.report.find(
-            (r) => r.email === row.email && r.repId !== row.repId,
-          )?.repId ?? "",
-        );
-        if (primary) ownerMap.set(row.repId, primary);
-      }
-    }
-  }
+  const ownerMap = members.ownerMap;
 
   // Owner refs in LastMile mix rep ids, aliases, and display names; the index
   // adds unique alias/name keys on top of the provisioned rep→member map.
@@ -364,8 +344,21 @@ async function runMigration(options: {
   report.companies = "pending";
 
   log("records: loading people...");
-  const contacts = await reader.readContacts();
+  const rawContacts = await reader.readContacts();
+  // Twenty requires a unique person email; LastMile does not. Give the address
+  // to the first contact by id and migrate the rest without one, rather than
+  // losing them to a duplicate-key error (29 people failed this way on the
+  // first seed).
+  const contacts = dedupeContactEmails(rawContacts);
   const personCounters = emptyCounters();
+  const keptById = new Map(contacts.map((contact) => [contact.id, contact]));
+  for (const contact of rawContacts) {
+    if (contact.email && !keptById.get(contact.id)?.email) {
+      personCounters.warnings.push(
+        `duplicate email ${contact.email} dropped from contact ${contact.id}`,
+      );
+    }
+  }
   await upsertRecords({
     client,
     entity: PERSON,
@@ -375,18 +368,40 @@ async function runMigration(options: {
   });
   report.people = "pending";
 
-  log("records: loading opportunities (leads + opportunities)...");
-  const [leads, opportunities] = await Promise.all([
-    reader.readLeads(),
-    reader.readOpportunities(),
-  ]);
+  // Organizations (LastMile branches, e.g. "GWO 300") — opportunities link to
+  // them, so they load before the CRM tasks.
+  log("records: loading organizations...");
+  const organizations = await reader.readOrganizations();
+  const organizationCounters = emptyCounters();
+  const mappedOrganizations = organizations.map(mapOrganization);
+  const organizationIdBySourceId = await upsertRecords({
+    client,
+    entity: ORGANIZATION,
+    mapped: mappedOrganizations,
+    dryRun,
+    counters: organizationCounters,
+  });
+  if (dryRun) {
+    for (const record of mappedOrganizations) {
+      if (!organizationIdBySourceId.has(record.sourceId)) {
+        organizationIdBySourceId.set(
+          record.sourceId,
+          `planned:${record.sourceId}`,
+        );
+      }
+    }
+  }
+  report.organizations = summarizeCounters(organizationCounters);
+
+  // The `task` table is the CRM: status, owner, organization, and products all
+  // come from it. The `opportunity`/`lead` tables' own stage columns are stale
+  // (they disagree with the task status on 889 of 950 opportunities).
+  log("records: loading CRM tasks (leads + opportunities)...");
+  const crmTasks = await reader.readCrmTasks();
   const opportunityCounters = emptyCounters();
-  const mappedOpportunities = [
-    ...leads.map((lead) => mapLead(lead, ownerIndex)),
-    ...opportunities.map((opportunity) =>
-      mapOpportunity(opportunity, ownerIndex, companyIdBySourceId),
-    ),
-  ];
+  const mappedOpportunities = crmTasks.map((task) =>
+    mapCrmTask(task, ownerIndex, companyIdBySourceId, organizationIdBySourceId),
+  );
   const opportunityIdBySourceId = await upsertRecords({
     client,
     entity: OPPORTUNITY,
@@ -406,13 +421,34 @@ async function runMigration(options: {
   }
   report.opportunities = "pending";
 
+  // The product catalog (7 rows) must exist before the lines that point at it.
+  log("records: ensuring the product catalog...");
+  const catalogCounters = emptyCounters();
+  const productIdBySourceId = await upsertRecords({
+    client,
+    entity: PRODUCT,
+    mapped: PRODUCT_CATALOG.map(mapProduct),
+    dryRun,
+    counters: catalogCounters,
+  });
+  if (dryRun) {
+    for (const name of PRODUCT_CATALOG) {
+      const id = productSourceId(name);
+      if (!productIdBySourceId.has(id)) {
+        productIdBySourceId.set(id, `planned:${id}`);
+      }
+    }
+  }
+  report.productCatalog = summarizeCounters(catalogCounters);
+
   log("records: loading opportunity product lines...");
-  const items = await reader.readOpportunityItems();
   const productCounters = emptyCounters();
+  const mappedProducts = crmTasks.flatMap(mapTaskProducts);
   await upsertOpportunityProducts({
     client,
-    products: items.map(mapOpportunityProduct),
+    products: mappedProducts,
     opportunityIdBySourceId,
+    productIdBySourceId,
     dryRun,
     counters: productCounters,
   });
@@ -420,9 +456,10 @@ async function runMigration(options: {
 
   // Phase E: notes + attachments -------------------------------------------
   log("annexes: loading notes...");
-  const [comments, customerNotes] = await Promise.all([
+  const [comments, customerNotes, statusChanges] = await Promise.all([
     reader.readCrmComments(),
     reader.readCustomerNotes(),
+    reader.readTaskStatusChanges(),
   ]);
   const noteCounters = emptyCounters();
   const noteTargets = new Map<string, string>([
@@ -431,6 +468,10 @@ async function runMigration(options: {
   ]);
   const mappedNotes = [
     ...comments.map(mapCrmComment),
+    ...statusChanges.flatMap((change) => {
+      const mapped = mapTaskStatusActivity(change);
+      return mapped ? [mapped] : [];
+    }),
     ...customerNotes.flatMap((note) => {
       const mapped = mapCustomerNote(note);
       if (!mapped) {
@@ -492,12 +533,9 @@ async function runMigration(options: {
   await mirrorDeletions({
     client,
     entity: OPPORTUNITY,
-    liveSourceIds: new Set([
-      ...leads.map((lead) => sourceId("lead", lead.id)),
-      ...opportunities.map((opportunity) =>
-        sourceId("opportunity", opportunity.id),
-      ),
-    ]),
+    liveSourceIds: new Set(
+      crmTasks.map((task) => sourceId(task.entityType, task.entityId)),
+    ),
     ownedPrefixes: ["lead:", "opportunity:"],
     dryRun,
     counters: opportunityCounters,
@@ -510,12 +548,7 @@ async function runMigration(options: {
   await mirrorDeletions({
     client,
     entity: OPPORTUNITY_PRODUCT,
-    liveSourceIds: new Set(
-      items.map(
-        (item) =>
-          `${sourceId("opportunity_item", item.opportunityId)}#${item.index}`,
-      ),
-    ),
+    liveSourceIds: new Set(mappedProducts.map((product) => product.sourceId)),
     ownedPrefixes: ["opportunity_item:"],
     dryRun,
     counters: productCounters,
@@ -537,16 +570,15 @@ async function runMigration(options: {
     opportunities: opportunityCounters,
   });
 
-  const anyFailures =
-    members.hadFailures ||
-    [
-      companyCounters,
-      personCounters,
-      opportunityCounters,
-      productCounters,
-      noteCounters,
-      attachmentCounters,
-    ].some((counters) => counters.failed > 0);
+  const anyFailures = [
+    organizationCounters,
+    companyCounters,
+    personCounters,
+    opportunityCounters,
+    productCounters,
+    noteCounters,
+    attachmentCounters,
+  ].some((counters) => counters.failed > 0);
   report.ok = !anyFailures;
   if (anyFailures) process.exitCode = 2;
 }

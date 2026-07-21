@@ -18,6 +18,27 @@ import { fetchExistingBySourceIds, type EntityCounters } from "./load-records";
 import { sourceId as makeSourceId } from "./mappers";
 import { TwentyClient, TwentyGraphqlError } from "./twenty-client";
 
+/**
+ * TEI's Twenty exposes no file-upload mutation to a workspace API key
+ * (`uploadFile` and the `Upload` scalar are absent; `/rest/files` is object
+ * CRUD). Same root cause as the missing auth schema. Four LastMile attachments
+ * hang off CRM records and one of those binaries is already gone from S3, so
+ * this is reported as a capability gap rather than a per-record failure —
+ * otherwise every future delta run would exit non-zero on the same files.
+ */
+export function isUploadUnsupported(error: unknown): boolean {
+  const message =
+    error instanceof TwentyGraphqlError
+      ? error.errors.map((entry) => entry.message).join(" ")
+      : error instanceof Error
+        ? error.message
+        : "";
+  return (
+    /Unknown type "Upload"/i.test(message) ||
+    /Cannot query field "uploadFile"/i.test(message)
+  );
+}
+
 const ATTACHMENT_ENTITY = {
   singular: "attachment",
   plural: "attachments",
@@ -119,6 +140,14 @@ export async function loadCrmAttachments(options: {
       );
       counters.created += 1;
     } catch (error) {
+      if (isUploadUnsupported(error)) {
+        counters.skipped += 1;
+        counters.gaps.push(
+          `attachment ${attachmentSourceId} (${attachment.filename ?? "?"}): ` +
+            "Twenty exposes no file-upload API to this credential — upload by hand",
+        );
+        continue;
+      }
       counters.failed += 1;
       counters.gaps.push(
         `attachment ${attachmentSourceId} failed: ${

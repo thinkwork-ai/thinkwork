@@ -18,10 +18,19 @@
  *   npx tsx scripts/provision-twenty-members.ts --apply         # create them
  *   npx tsx scripts/provision-twenty-members.ts --apply --only me@x.com   # one rep, for proof
  *
+ * ROTATION (plan R5) — required at cutover, on abort, and on an over-long
+ * validation window. The shared TWENTY_REP_PASSWORD must not outlive the phase
+ * that needed it:
+ *   npx tsx scripts/provision-twenty-members.ts --rotate           # dry-run: who rotates
+ *   npx tsx scripts/provision-twenty-members.ts --rotate --apply   # unique random password each
+ * Each rep gets an independent random password, printed once to stdout. Hand
+ * them out, or have reps use Twenty's password reset.
+ *
  * After provisioning, re-run migrate-lastmile.ts --apply so every company and
  * opportunity picks up its owner.
  */
 
+import { randomBytes } from "node:crypto";
 import process from "node:process";
 
 import pg from "pg";
@@ -30,6 +39,7 @@ import { createLastmileReader } from "./lib/lastmile-reader";
 import { deriveRepEmail } from "./lib/mappers";
 import {
   provisionMembers,
+  rotateMemberPasswords,
   type ProvisionRep,
 } from "./lib/provision-members-db";
 
@@ -114,10 +124,12 @@ async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   let apply = false;
   let only: string | null = null;
+  let rotate = false;
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--apply") apply = true;
     else if (arg === "--dry-run") apply = false;
+    else if (arg === "--rotate") rotate = true;
     else if (arg === "--only") {
       only = argv[++index] ?? null;
       if (!only) throw new Error("--only requires an email");
@@ -127,7 +139,8 @@ async function main(): Promise<void> {
 
   const twentyDbUrl = requireEnv("TWENTY_DATABASE_URL");
   const lastmileUrl = requireEnv("LASTMILE_DATABASE_URL");
-  const password = requireEnv("TWENTY_REP_PASSWORD");
+  // Rotation mints its own passwords; provisioning uses the shared one.
+  const password = rotate ? "" : requireEnv("TWENTY_REP_PASSWORD");
   const emailDomain =
     process.env.TWENTY_REP_EMAIL_DOMAIN ?? "texasenterprises.com";
 
@@ -175,6 +188,36 @@ async function main(): Promise<void> {
     const target = only.toLowerCase();
     reps = reps.filter((rep) => rep.email.toLowerCase() === target);
     if (reps.length === 0) throw new Error(`--only ${only} matched no rep`);
+  }
+
+  if (rotate) {
+    const minted = new Map<string, string>();
+    const result = await rotateMemberPasswords({
+      databaseUrl: twentyDbUrl,
+      emails: reps.map((rep) => rep.email),
+      passwordFor: (email: string) => {
+        // 18 bytes of base64url ~= 24 chars, well inside bcrypt's 72-byte limit.
+        const secret = randomBytes(18).toString("base64url");
+        minted.set(email, secret);
+        return secret;
+      },
+      dryRun,
+      log,
+    });
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          mode: dryRun ? "rotate-dry-run" : "rotate",
+          rotated: result.rotated,
+          notFound: result.notFound,
+          // Printed once, never persisted. Hand these out, then discard.
+          passwords: dryRun ? undefined : Object.fromEntries(minted),
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    return;
   }
 
   const result = await provisionMembers({
