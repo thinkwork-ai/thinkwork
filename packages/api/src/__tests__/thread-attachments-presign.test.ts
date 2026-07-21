@@ -4,7 +4,7 @@
  * Mocks: cognito-auth + email-fallback tenant resolver + drizzle `db` +
  * aws-sdk S3 client + presigner. Exercises route matching, tenant
  * pinning (cross-tenant probe → 404), filename sanitization rejection,
- * MIME allowlist, size cap, and the staging-key composition shape.
+ * MIME shape validation, size cap, and the staging-key composition shape.
  */
 
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
@@ -191,15 +191,27 @@ describe("POST /api/threads/{threadId}/attachments/presign", () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it("rejects disallowed declared MIME type with 415", async () => {
-    const res = await handler(
-      event({
-        name: "financials.xlsx",
-        mimeType: "application/x-msdownload",
-        sizeBytes: 50_000,
-      }),
-    );
-    expect(res.statusCode).toBe(415);
+  it("accepts any well-formed declared MIME type", async () => {
+    for (const mimeType of [
+      "image/png",
+      "application/zip",
+      "application/octet-stream",
+      "application/x-msdownload",
+    ]) {
+      const res = await handler(
+        event({ name: "anyfile.png", mimeType, sizeBytes: 50_000 }),
+      );
+      expect(res.statusCode).toBe(200);
+    }
+  });
+
+  it("rejects a malformed declared MIME string with 415", async () => {
+    for (const mimeType of ["", "not-a-mime", "a/b/c", "text/ csv"]) {
+      const res = await handler(
+        event({ name: "financials.xlsx", mimeType, sizeBytes: 50_000 }),
+      );
+      expect(res.statusCode).toBe(415);
+    }
   });
 
   it("rejects oversized declared size with 413", async () => {
@@ -233,8 +245,12 @@ describe("POST /api/threads/{threadId}/attachments/presign", () => {
         sizeBytes: 50_000,
       }),
     );
-    // Newline + "INSTRUCTIONS" string strips to an invalid extension
-    // after sanitization — should reject at the filename layer.
-    expect(res.statusCode).toBe(400);
+    // Any extension is accepted now, but the injection payload's
+    // newlines must be stripped before the name reaches the stagingKey
+    // (and later the system-prompt preamble).
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body ?? "{}");
+    expect(body.name).not.toMatch(/[\r\n]/);
+    expect(body.stagingKey).not.toMatch(/[\r\n]/);
   });
 });

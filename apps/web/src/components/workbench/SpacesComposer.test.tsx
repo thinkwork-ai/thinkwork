@@ -778,6 +778,54 @@ describe("SpacesComposer", () => {
       );
     });
   });
+
+  describe("file paste", () => {
+    it("turns a pasted file into an attachment chip instead of pasted text", async () => {
+      // jsdom has no createObjectURL; the attachment chip uses it for the
+      // image-thumbnail preview URL.
+      vi.stubGlobal("URL", {
+        ...URL,
+        createObjectURL: vi.fn(() => "blob:mock"),
+        revokeObjectURL: vi.fn(),
+      });
+      render(
+        <SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />,
+      );
+      const editor = screen.getByLabelText("Send message");
+      const pasted = new File(["png-bytes"], "screenshot.png", {
+        type: "image/png",
+      });
+      fireEvent.paste(editor, {
+        clipboardData: {
+          items: [{ kind: "file", getAsFile: () => pasted }],
+          getData: () => "",
+        },
+      });
+      await waitFor(() =>
+        expect(screen.getByText("screenshot.png")).toBeTruthy(),
+      );
+      expect(composerText()).toBe("");
+    });
+
+    it("still pastes plain text when the clipboard has no files", () => {
+      // jsdom has no execCommand — stub it to capture the inserted text.
+      const execCommand = vi.fn();
+      document.execCommand =
+        execCommand as unknown as typeof document.execCommand;
+      render(
+        <SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />,
+      );
+      const editor = screen.getByLabelText("Send message");
+      fireEvent.paste(editor, {
+        clipboardData: {
+          items: [],
+          getData: (type: string) => (type === "text/plain" ? "hello" : ""),
+        },
+      });
+      expect(execCommand).toHaveBeenCalledWith("insertText", false, "hello");
+      expect(document.querySelector("[data-slot=input-group] img")).toBeNull();
+    });
+  });
 });
 
 function ControlledComposer({

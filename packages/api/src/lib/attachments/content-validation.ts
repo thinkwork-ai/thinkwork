@@ -24,10 +24,14 @@
 import { inspectZipBuffer } from "../zip-safety.js";
 
 /**
- * Magic-byte prefixes for the pilot's allowed file types. Verified
+ * Magic-byte prefixes for file types we know how to verify. Checked
  * against the first N bytes of the uploaded body to catch
  * extension-rename attacks (an `.exe` returned as declared MIME `.xlsx`
- * would sniff to a PE/MZ header, not OOXML).
+ * would sniff to a PE/MZ header, not OOXML). Extensions NOT in this
+ * table pass through un-sniffed — attachments accept any file type, and
+ * the filename-sanitization blocklist plus the download handler's
+ * forced `Content-Disposition: attachment` are the gates for unknown
+ * formats.
  */
 const MAGIC_BYTES: Record<string, ReadonlyArray<readonly number[]>> = {
   // OOXML containers are ZIP archives — `PK\x03\x04` is the local file
@@ -49,11 +53,21 @@ const MAGIC_BYTES: Record<string, ReadonlyArray<readonly number[]>> = {
     [0xef, 0xbb, 0xbf], // UTF-8 BOM
   ],
   ".pdf": [[0x25, 0x50, 0x44, 0x46]], // %PDF
+  ".png": [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]],
+  ".jpg": [[0xff, 0xd8, 0xff]],
+  ".jpeg": [[0xff, 0xd8, 0xff]],
+  ".gif": [
+    [0x47, 0x49, 0x46, 0x38, 0x37, 0x61], // GIF87a
+    [0x47, 0x49, 0x46, 0x38, 0x39, 0x61], // GIF89a
+  ],
+  // WEBP/HEIC live inside RIFF/ISO-BMFF containers whose type marker
+  // sits past byte 4; a prefix table can't express them, so they fall
+  // through to the pass-through path like other unknown extensions.
 };
 
 export interface MagicByteFailure {
   ok: false;
-  reason: "magic_byte_mismatch" | "buffer_too_short" | "unsupported_extension";
+  reason: "magic_byte_mismatch" | "buffer_too_short";
   expectedFor?: string;
 }
 
@@ -78,7 +92,9 @@ export function verifyMagicBytes(
   const ext = declaredExtension.toLowerCase();
   const expectedPrefixes = MAGIC_BYTES[ext];
   if (!expectedPrefixes) {
-    return { ok: false, reason: "unsupported_extension" };
+    // Unknown or missing extension — no sniff available; accept and rely
+    // on the blocklist + forced-download disposition.
+    return { ok: true };
   }
   if (TEXT_EXTENSIONS.has(ext)) {
     // Text — accept the registered BOM OR printable-ASCII prefix.

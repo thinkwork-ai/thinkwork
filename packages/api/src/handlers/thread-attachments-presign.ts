@@ -15,7 +15,8 @@
  *  1. Resolve caller tenant via the email-fallback helper.
  *  2. Look up the thread; assert it belongs to the caller's tenant.
  *  3. Sanitize the requested filename (path traversal + prompt-injection).
- *  4. Validate the declared MIME extension is in the pilot allowlist.
+ *  4. Validate the declared MIME is a well-formed media type (any type
+ *     is allowed; content gates live in the sanitizer + finalize sniff).
  *  5. Validate the declared size is ≤ the pilot cap (25 MB initially).
  *  6. Mint a UUID `attachmentId` (the durable identifier across S3, DB,
  *     GraphQL, audit).
@@ -66,16 +67,14 @@ const s3 = new S3Client({});
 const PRESIGN_EXPIRES_SECONDS = 300;
 const MAX_DECLARED_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB initial pilot cap
 
-const ALLOWED_DECLARED_MIME_TYPES = new Set([
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-  "application/vnd.ms-excel", // .xls
-  "text/csv",
-  "text/markdown",
-  "text/plain",
-  "application/pdf",
-  "application/csv", // some browsers
-  "application/octet-stream", // tolerated — magic-byte sniff at finalize is the real gate
-]);
+/**
+ * Any type/subtype-shaped MIME string is accepted — attachments take
+ * any file type. The declared MIME is advisory (stored + used as the
+ * S3 ContentType); the real gates are the filename-extension blocklist
+ * (sanitizer), the magic-byte sniff at finalize for formats we know,
+ * and the download handler's forced `Content-Disposition: attachment`.
+ */
+const MIME_TYPE_SHAPE = /^[\w!#$&^.+-]{1,127}\/[\w!#$&^.+-]{1,127}$/;
 
 function workspaceBucket(): string {
   return getConfig("WORKSPACE_BUCKET") || "";
@@ -139,8 +138,11 @@ export async function handler(
 
   const declaredMimeType =
     typeof body.mimeType === "string" ? body.mimeType : "";
-  if (!ALLOWED_DECLARED_MIME_TYPES.has(declaredMimeType)) {
-    return error(`mimeType not in allowlist: ${declaredMimeType}`, 415);
+  if (!MIME_TYPE_SHAPE.test(declaredMimeType)) {
+    return error(
+      `mimeType is not a valid media type: ${declaredMimeType}`,
+      415,
+    );
   }
 
   const declaredSizeBytes =
