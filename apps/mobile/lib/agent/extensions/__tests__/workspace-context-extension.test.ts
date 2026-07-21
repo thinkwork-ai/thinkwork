@@ -78,6 +78,9 @@ describe("workspaceContextExtension", () => {
       toolNames: ["bash", "execute_code"],
     });
 
+    // THINK-324 C2b: the shared composer no longer emits date/requester;
+    // the mobile extension re-adds them via buildTurnContextBlock (no
+    // turn-prompt seam / no prompt caching on the mobile Converse proxy).
     expect(composed.systemPrompt).toContain("Current date:");
     expect(composed.systemPrompt).toContain("<current_requester>");
     expect(composed.systemPrompt).toContain("eric@example.com");

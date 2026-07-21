@@ -1,5 +1,6 @@
 import {
   PROMPT_FILES,
+  buildTurnContextBlock,
   composeSystemPromptFromFiles,
   type PromptFileName,
 } from "../../../../../packages/pi-extensions/src/system-prompt-compose";
@@ -145,16 +146,25 @@ export function workspaceContextExtension(
     register(pi) {
       pi.on("before_agent_start", async (event) => {
         const files = await loadWorkspaceContext(options);
+        const payload = payloadFor(event, options);
         const systemPrompt = await composeSystemPromptFromFiles({
-          payload: payloadFor(event, options),
+          payload,
           availableToolNames: options.availableToolNames ?? event.toolNames,
           workspaceSkillsBlock: options.workspaceSkillsBlock ?? undefined,
           now: options.now,
           readPromptFile: async (filename) => files[filename] ?? null,
         });
 
+        // THINK-324 C2b: the shared composer no longer emits date/requester
+        // (they ride the cloud runtime's turn prompt for cache stability).
+        // The mobile harness has no turn-prompt seam and no Bedrock prompt
+        // caching on its Converse proxy, so keep the block in the system
+        // prompt here.
+        const turnContext = buildTurnContextBlock(payload, options.now);
         return {
-          systemPrompt: `${systemPrompt}\n\n---\n\n${MOBILE_HOST_GUIDANCE}`,
+          systemPrompt: [turnContext, systemPrompt, MOBILE_HOST_GUIDANCE]
+            .filter(Boolean)
+            .join("\n\n---\n\n"),
         };
       });
     },
