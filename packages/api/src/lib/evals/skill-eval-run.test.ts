@@ -204,36 +204,6 @@ describe("launchSkillEvalRun", () => {
     });
   });
 
-  it("fails closed before creating an AgentCore skill run without an exact requester", async () => {
-    mockResolveDatasetForLaunch.mockResolvedValueOnce({
-      id: "ds-1",
-      version: 1,
-    });
-    selectQueue.push([{ enabledCount: 3 }]);
-    vi.mocked(getOrCreateDefaultEvalProfile).mockResolvedValueOnce({
-      id: "profile-agentcore",
-      tenant_id: "tenant-1",
-      name: "AgentCore",
-      model: DEFAULT_EVAL_MODEL_ID,
-      runtime_type: "agentcore",
-      judge_model: null,
-      trials: 1,
-      is_default: true,
-      archived_at: null,
-      created_at: new Date("2026-07-01T00:00:00Z"),
-      updated_at: new Date("2026-07-01T00:00:00Z"),
-    });
-
-    await expect(
-      launchSkillEvalRun({ tenantId: "tenant-1", skillSlug: "x" }),
-    ).resolves.toEqual({
-      status: "skipped",
-      reason:
-        "AgentCore Harness skill evaluations require an exact requester user identity",
-    });
-    expect(insertValues).toHaveLength(0);
-  });
-
   it("launches: inserts a pending run, claims the baseline, fires the runner", async () => {
     mockResolveDatasetForLaunch.mockResolvedValueOnce({
       id: "ds-1",

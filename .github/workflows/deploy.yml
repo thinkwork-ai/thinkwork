@@ -1577,22 +1577,6 @@ jobs:
               -target=module.thinkwork.module.capability_broker.aws_lambda_function.broker
               -target=module.thinkwork.module.agentcore_admin.aws_lambda_function.admin
             )
-            if [ "${{ vars.ENABLE_AGENTCORE_MULTIPLAYER_PROOF || 'false' }}" = "true" ]; then
-              # The Harness lifecycle and exact-user Identity/Gateway plane
-              # sit outside the blanket API Lambda target. Keep the pilot
-              # recoverable after a cancelled Terraform-bearing deploy.
-              TF_TARGET_ARGS+=(
-                -target=module.thinkwork.module.agentcore_harness
-                -target=module.thinkwork.module.agentcore_proof_identity
-                -target=module.thinkwork.module.agentcore_proof_gateway
-                -target=module.thinkwork.aws_ssm_parameter.agentcore_harness_proof_profile
-                -target=module.thinkwork.module.api.aws_kms_key.agentcore_turn_assertion
-                -target=module.thinkwork.module.api.aws_kms_alias.agentcore_turn_assertion
-                -target=module.thinkwork.module.api.aws_iam_role.turn_assertion_mint
-                -target=module.thinkwork.module.api.aws_iam_role_policy.turn_assertion_mint_kms
-                -target=module.thinkwork.module.api.aws_iam_role_policy.turn_assertion_jwks_kms
-              )
-            fi
           fi
           # Always materialize and inspect the exact plan that will be
           # applied. A push to main must never auto-approve a delete or
@@ -1619,9 +1603,6 @@ jobs:
           # replacement is not a destructive infrastructure action. Keep the
           # allowlist exact; stable identity resources remain protected.
           reconcile_only_addresses='[
-            "module.thinkwork.module.agentcore_harness.terraform_data.managed_multiplayer_harness_configuration[0]",
-            "module.thinkwork.module.agentcore_proof_gateway.terraform_data.gateway_configuration[0]",
-            "module.thinkwork.terraform_data.agentcore_harness_endpoint_retention[0]",
             "module.thinkwork.module.agentcore_proof_identity.terraform_data.twenty_identity_reconciliation[0]"
           ]'
           destructive_count=$(jq --argjson safe "$reconcile_only_addresses" '[

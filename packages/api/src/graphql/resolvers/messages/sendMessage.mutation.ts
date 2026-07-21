@@ -26,7 +26,7 @@ import {
   dispatchMentionedAgentChatTurn,
 } from "../../../lib/mentions/default-agent-routing.js";
 import { InvalidRequestedRuntimeError } from "../../../lib/turn-runtime-selection.js";
-import { requestedRuntimeForTurn } from "../../../lib/harness/thread-runtime-policy.js";
+import { requestedRuntimeForTurn } from "../../../lib/thread-runtime-policy.js";
 import { consumePendingQuestions } from "../../../lib/user-questions/consume.js";
 import type { PendingQuestionAnswersPayload } from "../../../lib/user-questions/runtime-payload.js";
 import { markSenderParticipantRead } from "../../../lib/threads/thread-unread-state.js";

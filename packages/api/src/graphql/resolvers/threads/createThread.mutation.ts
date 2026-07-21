@@ -15,7 +15,6 @@ import {
   threadTurns,
   threadTurnEvents,
   threadParticipants,
-  harnessManagedThreadEnrollments,
   threadToCamel,
 } from "../../utils.js";
 import { notifyThreadUpdate } from "../../notify.js";
@@ -43,7 +42,7 @@ import {
 import {
   defaultThreadRuntimeFromConfig,
   pinThreadRuntimeMetadata,
-} from "../../../lib/harness/thread-runtime-policy.js";
+} from "../../../lib/thread-runtime-policy.js";
 import {
   CUSTOMER_ONBOARDING_TEMPLATE_KEY,
   CustomerOnboardingWorkflowError,

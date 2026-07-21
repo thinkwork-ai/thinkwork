@@ -471,27 +471,6 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     );
   });
 
-  it("routes automation wakeups through the selected AgentCore runtime without Pi fallback", () => {
-    const wakeupSource = handlerSource("wakeup-processor.ts");
-
-    expect(wakeupSource).not.toContain('options.channel !== "question_answer"');
-    expect(wakeupSource).toContain(
-      'normalizeAgentRuntimeType(runtimeType) === "agentcore"',
-    );
-    expect(wakeupSource).toContain("finishHarnessWakeup({");
-    expect(wakeupSource).toMatch(
-      /trustedActingUserId:\s*normalizeAgentRuntimeType\(runtimeType\) === "agentcore"\s*\? \(invokerUserId \?\? null\)/,
-    );
-    expect(wakeupSource).toContain(
-      "triggering_message_id: syntheticMessage.id",
-    );
-    expect(wakeupSource).toContain("ensureHarnessWakeupEnrollment({");
-    expect(wakeupSource).toContain(
-      "AgentCore automation requires a canonical thread and exact requester user identity",
-    );
-    expect(wakeupSource).toContain("harnessManagedThreadEnrollments");
-  });
-
   // THINK-136 U6/KTD3: the durable turn→triggering-message link is the SAME
   // three-time-recurring parity seam — a field that must land on BOTH the
   // direct-invoke turn insert (chat-agent-invoke) and the wakeup turn insert

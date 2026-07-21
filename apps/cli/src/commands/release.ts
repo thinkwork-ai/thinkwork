@@ -48,9 +48,6 @@ interface DeployOptions {
   yes?: boolean;
   wait?: boolean;
   webOnly?: boolean;
-  enableAgentcoreHarness?: boolean;
-  agentcoreTenantSlug?: string;
-  agentcoreOwnerAllowlist?: string;
 }
 
 export function registerReleaseCommand(
@@ -71,18 +68,6 @@ export function registerReleaseCommand(
     .option("-s, --stage <name>", "Deployment stage")
     .option("-y, --yes", "Skip the confirmation prompt")
     .option("--web-only", "Sync only the web application static bundle")
-    .option(
-      "--enable-agentcore-harness",
-      "Provision the managed AgentCore Harness plane through Terraform",
-    )
-    .option(
-      "--agentcore-tenant-slug <slug>",
-      "Tenant slug admitted by the managed AgentCore Harness profile",
-    )
-    .option(
-      "--agentcore-owner-allowlist <subjects>",
-      "Comma-separated admitted subjects for the proof-only owner probes",
-    )
     .option(
       "--no-wait",
       "Start the controller execution and return immediately",
@@ -110,18 +95,6 @@ export function registerReleaseCommand(
     .option("-s, --stage <name>", "Deployment stage")
     .option("-y, --yes", "Skip the confirmation prompt")
     .option("--web-only", "Sync only the web application static bundle")
-    .option(
-      "--enable-agentcore-harness",
-      "Provision the managed AgentCore Harness plane through Terraform",
-    )
-    .option(
-      "--agentcore-tenant-slug <slug>",
-      "Tenant slug admitted by the managed AgentCore Harness profile",
-    )
-    .option(
-      "--agentcore-owner-allowlist <subjects>",
-      "Comma-separated admitted subjects for the proof-only owner probes",
-    )
     .option(
       "--no-wait",
       "Start the controller execution and return immediately",
@@ -204,11 +177,6 @@ async function deployRelease(
     prior,
     release: resolved,
     webOnly: opts.webOnly,
-    agentCoreHarness: {
-      enabled: opts.enableAgentcoreHarness,
-      tenantSlug: opts.agentcoreTenantSlug,
-      ownerAllowlist: opts.agentcoreOwnerAllowlist,
-    },
   });
 
   console.log("");

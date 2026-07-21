@@ -1,4 +1,4 @@
-import { requestedRuntimeFromMetadata } from "../turn-runtime-selection.js";
+import { requestedRuntimeFromMetadata } from "./turn-runtime-selection.js";
 
 // THINK-324: Pi is the only runtime; legacy "agentcore"/"harness" values in
 // tenant runtime_config or thread metadata normalize to "pi".

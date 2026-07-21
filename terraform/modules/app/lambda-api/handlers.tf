@@ -43,15 +43,6 @@ locals {
       "msteams-install-complete",
       "msteams-account-link-complete",
     ],
-    var.enable_agentcore_multiplayer_proof ? [] : [
-      "turn-assertion-mint",
-      "agentcore-proof-oauth-provider",
-      "agentcore-identity-boundary-target",
-      "harness-capability-mcp",
-      "harness-code-interpreter-target",
-      "harness-builtin-tools-target",
-      "harness-platform-tools-target",
-    ],
   )
 
   # Config-class configuration shared by all API handlers. As of plan
@@ -264,20 +255,7 @@ locals {
   # THINK-316 U1: the assertion mint runs on a sibling role and receives only
   # the database connection plus immutable stage identity. In particular it
   # does not inherit API_AUTH_SECRET or APPSYNC_API_KEY from common_env.
-  turn_assertion_mint_env = {
-    STAGE          = var.stage
-    DATABASE_URL   = "postgresql://${var.db_username}:${urlencode(var.db_password)}@${var.db_cluster_endpoint}:5432/${var.database_name}?sslmode=no-verify"
-    AWS_ACCOUNT_ID = var.account_id
-    NODE_OPTIONS   = "--enable-source-maps"
-  }
 
-  # THINK-316 U1: the synthetic provider/target are proof-only public
-  # boundaries. They receive no database URL, platform bearer, or AppSync key.
-  agentcore_proof_boundary_env = {
-    STAGE          = var.stage
-    AWS_ACCOUNT_ID = var.account_id
-    NODE_OPTIONS   = "--enable-source-maps"
-  }
 
   # Per-handler env-var overrides. ARNs are constructed from the naming
   # pattern (same trick as the api-cross-function-invoke statement in
@@ -292,69 +270,11 @@ locals {
   }
 
   handler_extra_env = {
-    # THINK-316 U1: short-lived, server-minted identity assertions for
-    # AgentCore Harness and Gateway. The public mcp-oauth handler receives the
-    # key id only to publish GetPublicKey-derived JWKS; its role cannot Sign.
-    "mcp-oauth" = {
-      AGENTCORE_TURN_ASSERTION_ISSUER = local.agentcore_turn_assertion_issuer
-      AGENTCORE_TURN_ASSERTION_JWKS_KEYS = jsonencode([
-        for key in values(local.agentcore_turn_assertion_keys) : {
-          keyId = key.key_id
-          kid   = key.kid
-        }
-      ])
-    }
     "skills" = {
       AGENTCORE_IDENTITY_WORKLOAD_NAME          = "thinkwork-${var.stage}-multiplayer-proof"
       AGENTCORE_TWENTY_CREDENTIAL_PROVIDER_NAME = "thinkwork-${var.stage}-twenty-crm"
       AGENTCORE_USER_OAUTH_RETURN_URL           = "${local.mcp_oauth_api_base_url}/api/skills/mcp-oauth/agentcore/complete"
       AGENTCORE_TWENTY_OAUTH_RESOURCE           = "https://crm.thinkwork.ai/mcp"
-    }
-    "turn-assertion-mint" = {
-      AGENTCORE_TURN_ASSERTION_ISSUER     = local.agentcore_turn_assertion_issuer
-      AGENTCORE_HARNESS_AUDIENCE          = local.agentcore_harness_audience
-      AGENTCORE_GATEWAY_AUDIENCE          = local.agentcore_gateway_audience
-      AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.agentcore_turn_assertion_active_key.key_id
-      AGENTCORE_TURN_ASSERTION_KID        = local.agentcore_turn_assertion_active_key.kid
-    }
-    "agentcore-proof-oauth-provider" = {
-      AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
-      AGENTCORE_PROOF_OAUTH_CLIENT_ID     = var.agentcore_proof_oauth_client_id
-      AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
-      AGENTCORE_ASSERTION_ISSUER          = local.agentcore_turn_assertion_issuer
-      AGENTCORE_HARNESS_AUDIENCE          = local.agentcore_harness_audience
-      AGENTCORE_GATEWAY_AUDIENCE          = local.agentcore_gateway_audience
-      AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.agentcore_turn_assertion_active_key.key_id
-      AGENTCORE_TURN_ASSERTION_KID        = local.agentcore_turn_assertion_active_key.kid
-      AGENTCORE_PROOF_OWNER_ALLOWLIST     = var.agentcore_proof_owner_allowlist
-    }
-    "agentcore-identity-boundary-target" = {
-      AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
-      AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
-      AGENTCORE_PROOF_OWNER_ALLOWLIST     = var.agentcore_proof_owner_allowlist
-    }
-    "harness-capability-mcp" = {
-      AGENTCORE_PROOF_OAUTH_ISSUER              = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
-      AGENTCORE_PROOF_OAUTH_CLIENT_SECRET       = var.agentcore_proof_oauth_client_secret
-      AGENTCORE_GATEWAY_POLICY_REVISION         = "mcp-list-call-v2-tenant-admission"
-      AGENTCORE_IDENTITY_WORKLOAD_NAME          = "thinkwork-${var.stage}-multiplayer-proof"
-      AGENTCORE_TWENTY_CREDENTIAL_PROVIDER_NAME = "thinkwork-${var.stage}-twenty-crm"
-      AGENTCORE_TWENTY_OAUTH_RESOURCE           = "https://crm.thinkwork.ai/mcp"
-    }
-    "harness-code-interpreter-target" = {
-      AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
-      AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
-      AGENTCORE_GATEWAY_POLICY_REVISION   = "sandbox-execute-v1-tenant-admission"
-    }
-    "harness-builtin-tools-target" = {
-      AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
-      AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
-      AGENTCORE_GATEWAY_POLICY_REVISION   = "builtin-web-v1-tenant-admission"
-    }
-    "harness-platform-tools-target" = {
-      AGENTCORE_PROOF_OAUTH_ISSUER        = "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth"
-      AGENTCORE_PROOF_OAUTH_CLIENT_SECRET = var.agentcore_proof_oauth_client_secret
-      AGENTCORE_GATEWAY_POLICY_REVISION   = "platform-tools-v4-user-questions"
     }
     "workos-auth" = {
       # During cutover/soak the callback, bridge, and logout paths remain for
@@ -540,7 +460,6 @@ locals {
     # THINK-316 U5: the runner reads the server-only attested profile and
     # invokes its named endpoint with a purpose-bound CUSTOM_JWT. It receives
     # no Harness control-plane inputs or permissions.
-    "harness-runner" = {}
     # 240s: sync Hindsight retain (LLM extraction + auto-consolidation) can
     # exceed 60s; the client timeout must stay below the Lambda timeout (300s)
     # and below the Hindsight ALB idle_timeout (300s) so failures classify as
@@ -754,23 +673,14 @@ resource "aws_lambda_function" "handler" {
     # Bearer API_AUTH_SECRET. Idempotent on thread_turns.finalized_at
     # (migration 0123). Plan: 2026-05-22-006.
     "chat-agent-finalize",
-    # harness-runner — THINK-311 U5: Event-mode target for harness-flagged
     # agents. The chat dispatch selector (resolveRuntimeFunctionName) routes
     # a trial agent's turn here instead of the Pi container Lambda; the
     # runner projects the payload into an AWS AgentCore Harness config,
     # drives InvokeHarness, fulfills emit_document, and finalizes the turn
     # via processFinalize. No API route — direct Event invoke only.
-    "harness-runner",
     # THINK-316 U1: direct-invoke-only assertion mint. It derives all identity
     # claims from the persisted turn tuple and signs with a dedicated KMS key;
     # there is intentionally no public API Gateway route.
-    "turn-assertion-mint",
-    "agentcore-proof-oauth-provider",
-    "agentcore-identity-boundary-target",
-    "harness-capability-mcp",
-    "harness-code-interpreter-target",
-    "harness-builtin-tools-target",
-    "harness-platform-tools-target",
     # canvas-refresh — headless Living Artifacts data-refresh (THINK-145 U6).
     # Invoked RequestResponse by the refreshCanvasData mutation (graphql-http)
     # and by job-trigger's canvas_refresh branch (U7). Re-runs the saved
@@ -1080,7 +990,7 @@ resource "aws_lambda_function" "handler" {
   # so its destructive evidence-snapshot S3 capability (version enumeration +
   # bulk version deletion) never leaks into the 90+ handlers on the shared
   # role. Everything else keeps the shared role.
-  role    = each.key == "memory-retraction-drainer" ? aws_iam_role.memory_retraction_drainer.arn : each.key == "turn-assertion-mint" ? aws_iam_role.turn_assertion_mint[0].arn : each.key == "agentcore-proof-oauth-provider" ? aws_iam_role.agentcore_proof_provider[0].arn : each.key == "agentcore-identity-boundary-target" ? aws_iam_role.agentcore_proof_boundary[0].arn : aws_iam_role.lambda.arn
+  role    = each.key == "memory-retraction-drainer" ? aws_iam_role.memory_retraction_drainer.arn : aws_iam_role.lambda.arn
   handler = "index.handler"
   runtime = local.runtime
   # Parameters and Secrets extension: container-local cache for the SSM
@@ -1107,11 +1017,10 @@ resource "aws_lambda_function" "handler" {
   # validates the agent, builds the AgentCore invoke payload, dispatches
   # Event-mode, and returns. Setup is ~5s in practice; 60s gives 12×
   # headroom for transient slowness.
-  # harness-runner holds the Lambda open for the full Harness turn (the
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "harness-runner" ? 900 : each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
-  memory_size = each.key == "harness-runner" ? 512 : each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
@@ -1140,10 +1049,7 @@ resource "aws_lambda_function" "handler" {
 
   environment {
     variables = merge(
-      each.key == "turn-assertion-mint" ? local.turn_assertion_mint_env : contains([
-        "agentcore-proof-oauth-provider",
-        "agentcore-identity-boundary-target",
-      ], each.key) ? local.agentcore_proof_boundary_env : local.common_env,
+      local.common_env,
       { FUNCTION_NAME = each.key },
       lookup(local.handler_extra_env, each.key, {}),
     )
@@ -1236,20 +1142,6 @@ resource "aws_sqs_queue" "wiki_compile_dlq" {
 resource "aws_lambda_function_event_invoke_config" "chat_agent_invoke" {
   count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["chat-agent-invoke"].function_name
-  maximum_retry_attempts       = 0
-  maximum_event_age_in_seconds = 3600
-}
-
-# harness-runner retry-0 (THINK-311 U5, async-retry idempotency): an AWS
-# async retry would re-execute a whole agent turn. Failures finalize the
-# turn in-process (finalize-through-failure); a hard crash is reconciled
-# by the stall monitor (timed_out + checkout release, no retry enqueue
-# for harness turns). No DLQ destination for the same reason as
-# chat-agent-invoke above: the shared role's inline policy budget is at
-# the AWS cap, and the stall monitor is the operational surface.
-resource "aws_lambda_function_event_invoke_config" "harness_runner" {
-  count                        = local.deploy_lambda_handlers ? 1 : 0
-  function_name                = aws_lambda_function.handler["harness-runner"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
 }
@@ -1761,34 +1653,6 @@ locals {
       # under /agentcore so the existing user-memory OAuth issuer is unchanged.
       "GET /agentcore/.well-known/openid-configuration" = "mcp-oauth"
       "GET /agentcore/oauth/jwks"                       = "mcp-oauth"
-      # THINK-316 U1 proof-only provider and downstream HTTPS target. Both
-      # handlers validate their own credentials; the route filter removes all
-      # five when enable_agentcore_multiplayer_proof is false.
-      "GET /agentcore-proof/oauth/.well-known/openid-configuration" = "agentcore-proof-oauth-provider"
-      "GET /agentcore-proof/oauth/authorize"                        = "agentcore-proof-oauth-provider"
-      "POST /agentcore-proof/oauth/token"                           = "agentcore-proof-oauth-provider"
-      "GET /agentcore-proof/target/owner"                           = "agentcore-identity-boundary-target"
-      "GET /agentcore-proof/target/mixed"                           = "agentcore-identity-boundary-target"
-      "POST /agentcore/capabilities/mcp/tools/list"                 = "harness-capability-mcp"
-      "POST /agentcore/capabilities/mcp/tools/call"                 = "harness-capability-mcp"
-      "POST /agentcore/capabilities/sandbox/execute"                = "harness-code-interpreter-target"
-      "POST /agentcore/capabilities/web/search"                     = "harness-builtin-tools-target"
-      "POST /agentcore/capabilities/web/extract"                    = "harness-builtin-tools-target"
-      "POST /agentcore/capabilities/brain/query"                    = "harness-platform-tools-target"
-      "POST /agentcore/capabilities/workspace/skills/list"          = "harness-platform-tools-target"
-      "POST /agentcore/capabilities/workspace/skills/load"          = "harness-platform-tools-target"
-      "POST /agentcore/capabilities/message/attachments/list"       = "harness-platform-tools-target"
-      "POST /agentcore/capabilities/message/attachments/read"       = "harness-platform-tools-target"
-      "POST /agentcore/capabilities/user/questions/ask"             = "harness-platform-tools-target"
-      "POST /agentcore/capabilities/email/send"                     = "harness-platform-tools-target"
-      "POST /mcp/oauth/register"                                    = "mcp-oauth"
-      "GET /mcp/oauth/authorize"                                    = "mcp-oauth"
-      "GET /mcp/oauth/callback"                                     = "mcp-oauth"
-      "POST /mcp/oauth/token"                                       = "mcp-oauth"
-      "POST /mcp/oauth/revoke"                                      = "mcp-oauth"
-      "ANY /mcp/user-memory"                                        = "mcp-user-memory"
-      "ANY /mcp/context-engine"                                     = "mcp-context-engine"
-      "ANY /mcp/open-engine"                                        = "mcp-open-engine"
       # THINK-280 U8: scoped external capability search facade. The handler is
       # inert unless CAPABILITY_EXTERNAL_SEARCH_ENABLED (gated on
       # enable_capability_broker) is on — routing it while disabled returns an
@@ -2060,7 +1924,7 @@ locals {
       "OPTIONS /api/runtime/capability-catalog" = "capability-catalog-list"
     } : route_key => handler_name
     if !contains(local.optional_integration_handler_names, handler_name) && (
-      var.enable_agentcore_multiplayer_proof || !startswith(route_key, "GET /agentcore/")
+      !startswith(route_key, "GET /agentcore/")
     )
   } : {}
 }

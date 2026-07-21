@@ -26,8 +26,6 @@ fi
 node "$runtime_dir/preflight.js" |
   jq -e '.package == "@aws-sdk/client-bedrock-agentcore-control" and .version == "3.1089.0"' \
     >/dev/null
-node "$runtime_dir/harness-lifecycle.js" --runtime-preflight |
-  jq -e '.sdkImportReady == true' >/dev/null
 node "$runtime_dir/reconcile_twenty_provider.js" --runtime-preflight |
   jq -e '.sdkImportReady == true' >/dev/null
 

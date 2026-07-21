@@ -1461,66 +1461,6 @@ output "analyst_egress_ip" {
   value       = module.thinkwork.analyst_egress_ip
 }
 
-output "agentcore_harness_proof_arn" {
-  description = "Deprecated: use agentcore_harness_arn."
-  value       = module.thinkwork.agentcore_harness_proof_arn
-}
-
-output "agentcore_harness_arn" {
-  description = "Managed tenant/profile AgentCore Harness ARN."
-  value       = module.thinkwork.agentcore_harness_arn
-}
-
-output "agentcore_harness_endpoint_name" {
-  description = "Named version-pinned managed AgentCore Harness qualifier."
-  value       = module.thinkwork.agentcore_harness_endpoint_name
-}
-
-output "agentcore_harness_version" {
-  description = "Attested immutable managed AgentCore Harness version."
-  value       = module.thinkwork.agentcore_harness_version
-}
-
-output "agentcore_harness_status" {
-  description = "Safe managed AgentCore Harness readiness state."
-  value       = module.thinkwork.agentcore_harness_status
-}
-
-output "agentcore_harness_proof_endpoint_name" {
-  description = "Deprecated: use agentcore_harness_endpoint_name."
-  value       = module.thinkwork.agentcore_harness_proof_endpoint_name
-}
-
-output "agentcore_harness_proof_version" {
-  description = "Deprecated: use agentcore_harness_version."
-  value       = module.thinkwork.agentcore_harness_proof_version
-}
-
-output "agentcore_harness_proof_status" {
-  description = "Deprecated: use agentcore_harness_status."
-  value       = module.thinkwork.agentcore_harness_proof_status
-}
-
-output "agentcore_turn_assertion_issuer" {
-  description = "Proof CUSTOM_JWT issuer used by deployed operator probes."
-  value       = module.thinkwork.agentcore_turn_assertion_issuer
-}
-
-output "agentcore_harness_audience" {
-  description = "Purpose-bound proof Harness audience."
-  value       = module.thinkwork.agentcore_harness_audience
-}
-
-output "agentcore_turn_assertion_active_key_arn" {
-  description = "Operator-only active proof signing key ARN."
-  value       = module.thinkwork.agentcore_turn_assertion_active_key_arn
-}
-
-output "agentcore_turn_assertion_active_kid" {
-  description = "Public JWKS key identifier for the active proof signing key."
-  value       = module.thinkwork.agentcore_turn_assertion_active_kid
-}
-
 # The original AgentCore Twenty reconciliation marker never owned external
 # cleanup, but an interrupted local-exec may have left it tainted. Forget it
 # from state without refresh or destroy provisioners — the child module owns

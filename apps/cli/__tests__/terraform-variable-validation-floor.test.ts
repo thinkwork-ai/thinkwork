@@ -26,7 +26,6 @@ function tfFiles(dir: string): string[] {
  * validation") — the failure surfaces at init in the customer deployment
  * runner, which pins Terraform 1.8.5. Cross-variable invariants belong in
  * resource lifecycle preconditions instead. TEI's v0.1.0-canary.368 update
- * failed on exactly this (agentcore_turn_assertion_active_key_version).
  */
 describe("terraform variable validation repo-floor compatibility", () => {
   it("no variable validation condition references another variable", () => {
@@ -68,16 +67,6 @@ describe("terraform variable validation repo-floor compatibility", () => {
     );
     expect(src).toMatch(
       /microsoft_oauth_tenant must be an Entra directory GUID or one of the Cognito-supported aliases/,
-    );
-  });
-
-  it("active turn-assertion key membership is enforced by a resource precondition", () => {
-    const mcpOauth = readFileSync(
-      resolve(REPO_ROOT, "terraform/modules/app/lambda-api/mcp-oauth.tf"),
-      "utf8",
-    );
-    expect(mcpOauth).toMatch(
-      /precondition\s*\{\s*condition\s*=\s*contains\(var\.agentcore_turn_assertion_key_versions,\s*var\.agentcore_turn_assertion_active_key_version\)/,
     );
   });
 });

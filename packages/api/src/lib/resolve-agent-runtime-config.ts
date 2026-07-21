@@ -60,7 +60,7 @@ import {
   piExtensionSources,
   piExtensionVersions,
 } from "@thinkwork/database-pg/schema";
-import { defaultThreadRuntimeFromConfig } from "./harness/thread-runtime-policy.js";
+import { defaultThreadRuntimeFromConfig } from "./thread-runtime-policy.js";
 import { buildSkillEnvOverrides } from "./oauth-token.js";
 import {
   readSkillAssignmentStates,

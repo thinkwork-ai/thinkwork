@@ -12,9 +12,6 @@ export interface FinalizeClaimRequirements {
   invocation_source?: string;
   status?: string;
   context_owner?: string;
-  /** Harness-only publication fence, derived from persisted turn state. */
-  harness_session_id?: string;
-  harness_participant_user_id?: string;
 }
 
 export interface FinalizeModelRoutedToolCall {

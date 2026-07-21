@@ -33,15 +33,7 @@ describe("release command registration", () => {
     for (const cmd of [release, deploy]) {
       const longs = cmd.options.map((o) => o.long);
       expect(longs).toEqual(
-        expect.arrayContaining([
-          "--stage",
-          "--yes",
-          "--web-only",
-          "--no-wait",
-          "--enable-agentcore-harness",
-          "--agentcore-tenant-slug",
-          "--agentcore-owner-allowlist",
-        ]),
+        expect.arrayContaining(["--stage", "--yes", "--web-only", "--no-wait"]),
       );
     }
   });
@@ -84,33 +76,6 @@ describe("release flag parsing", () => {
     expect(version).toBeUndefined();
     expect(opts.stage).toBe("tei-e2e");
     expect(opts.wait).toBe(false);
-  });
-
-  it("delivers AgentCore provisioning flags to the handler", async () => {
-    const deploySpy = vi.fn().mockResolvedValue(undefined);
-    const program = new Command();
-    registerReleaseCommand(program, deploySpy);
-
-    await program.parseAsync(
-      [
-        "release",
-        "deploy",
-        "v0.1.0-canary.368",
-        "--enable-agentcore-harness",
-        "--agentcore-tenant-slug",
-        "tei",
-        "--agentcore-owner-allowlist",
-        "owner-a,owner-b",
-      ],
-      { from: "user" },
-    );
-
-    const [, opts] = deploySpy.mock.calls[0];
-    expect(opts).toMatchObject({
-      enableAgentcoreHarness: true,
-      agentcoreTenantSlug: "tei",
-      agentcoreOwnerAllowlist: "owner-a,owner-b",
-    });
   });
 });
 

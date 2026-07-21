@@ -89,14 +89,14 @@ const runtimeConfig: AgentRuntimeConfig = {
 };
 
 describe("direct AgentCore eval payload", () => {
-  it("honors the platform agent's selected default thread runtime", () => {
+  it("resolves every stored runtime shape to Pi (THINK-324)", () => {
     expect(
       effectiveEvalRuntimeConfig({
         ...runtimeConfig,
         runtimeType: "pi",
         defaultThreadRuntime: "agentcore",
       }).runtimeType,
-    ).toBe("agentcore");
+    ).toBe("pi");
     expect(
       effectiveEvalRuntimeConfig({
         ...runtimeConfig,
@@ -106,7 +106,7 @@ describe("direct AgentCore eval payload", () => {
     ).toBe("pi");
   });
 
-  it("lets the immutable eval-profile runtime override the platform default", () => {
+  it("resolves legacy agentcore eval-profile pins to Pi (THINK-324)", () => {
     expect(
       effectiveEvalRuntimeConfig(
         {
@@ -116,7 +116,7 @@ describe("direct AgentCore eval payload", () => {
         },
         "agentcore",
       ).runtimeType,
-    ).toBe("agentcore");
+    ).toBe("pi");
     expect(
       effectiveEvalRuntimeConfig(
         {
@@ -558,81 +558,6 @@ describe("direct AgentCore eval empty-response in-process retry", () => {
     resolveCurrentCapabilitiesManifestMock.mockResolvedValue(undefined);
     createCanonicalHarnessEvalTurnMock.mockReset();
     loadCanonicalHarnessEvalResultMock.mockReset();
-  });
-
-  it("runs an AgentCore-pinned eval profile through a canonical exact-user turn", async () => {
-    vi.mocked(resolveAgentRuntimeConfig).mockResolvedValueOnce({
-      ...runtimeConfig,
-      runtimeType: "pi",
-      defaultThreadRuntime: "pi",
-    });
-    createCanonicalHarnessEvalTurnMock.mockResolvedValueOnce({
-      threadId: "hidden-eval-thread",
-      threadTurnId: "hidden-eval-turn",
-      triggeringMessageId: "hidden-eval-message",
-    });
-    loadCanonicalHarnessEvalResultMock.mockResolvedValueOnce({
-      output: "Harness answer",
-      composedSystemPrompt: "Harness composed prompt",
-      usage: { input_tokens: 25, output_tokens: 7 },
-    });
-    lambdaSendMock.mockResolvedValueOnce({
-      Payload: new TextEncoder().encode(JSON.stringify({ ok: true })),
-    });
-
-    const result = await invokeAgentCoreForEval({
-      tenantId: "tenant-1",
-      agentId: "agent-1",
-      sessionId: "session-1",
-      message: "Evaluate this",
-      model: null,
-      requesterUserId: "operator-user-1",
-      runtimeType: "agentcore",
-    });
-
-    expect(createCanonicalHarnessEvalTurnMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        requesterUserId: "operator-user-1",
-        message: "Evaluate this",
-      }),
-    );
-    const command = lambdaSendMock.mock.calls[0][0] as {
-      input: { Payload: Uint8Array };
-    };
-    const event = JSON.parse(new TextDecoder().decode(command.input.Payload));
-    const body = JSON.parse(event.body);
-    expect(body).toMatchObject({
-      thread_id: "hidden-eval-thread",
-      thread_turn_id: "hidden-eval-turn",
-      user_id: "operator-user-1",
-      cost_owner_user_id: "operator-user-1",
-      eval_mode: true,
-      use_memory: false,
-    });
-    expect(result).toMatchObject({
-      output: "Harness answer",
-      composedSystemPrompt: "Harness composed prompt",
-      usage: { inputTokens: 25, outputTokens: 7 },
-      threadTurnId: "hidden-eval-turn",
-    });
-  });
-
-  it("refuses a Harness eval without an exact requester identity", async () => {
-    vi.mocked(resolveAgentRuntimeConfig).mockResolvedValueOnce({
-      ...runtimeConfig,
-      runtimeType: "agentcore",
-    });
-
-    await expect(
-      invokeAgentCoreForEval({
-        tenantId: "tenant-1",
-        agentId: "agent-1",
-        sessionId: "session-1",
-        message: "Evaluate this",
-        model: null,
-      }),
-    ).rejects.toThrow(/exact requester user identity/);
-    expect(lambdaSendMock).not.toHaveBeenCalled();
   });
 
   it("folder-dispatch agents resolve as folder-AWARE callers — the current manifest reaches runtime-config resolution (THINK-179)", async () => {
