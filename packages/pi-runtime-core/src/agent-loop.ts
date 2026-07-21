@@ -1,4 +1,4 @@
-import { lstat, mkdir, readlink } from "node:fs/promises";
+import { lstat, mkdir, readFile, readlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
@@ -715,6 +715,38 @@ async function defaultOpenSession(
   };
 }
 
+/**
+ * THINK-324 C8 — proactive session compaction. The SDK's default compaction
+ * reserve (16K) only triggers within ~8% of a 200K context window, so long
+ * threads carried ~180K of history into every model call before compacting.
+ * Reserving 90K triggers compaction at ~55% of a 200K window (~65% of 256K),
+ * trading an occasional summarization call for a much smaller steady-state
+ * prompt. Written into <agentDir>/settings.json, which SettingsManager reads.
+ */
+export const PROACTIVE_COMPACTION_RESERVE_TOKENS = 90_000;
+
+async function ensureProactiveCompactionSettings(
+  agentDir: string,
+): Promise<void> {
+  const settingsPath = path.join(agentDir, "settings.json");
+  let settings: Record<string, unknown> = {};
+  try {
+    settings = JSON.parse(await readFile(settingsPath, "utf8")) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    // Missing or malformed — start fresh; the SDK tolerates a rewritten file.
+  }
+  const compaction = (settings.compaction ?? {}) as Record<string, unknown>;
+  if (typeof compaction.reserveTokens === "number") return; // operator-set: respect it
+  settings.compaction = {
+    ...compaction,
+    reserveTokens: PROACTIVE_COMPACTION_RESERVE_TOKENS,
+  };
+  await writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+}
+
 export async function preparePiAgentDirectory(
   cwd: string,
   agentDir = path.join(cwd, PI_AGENT_DIR),
@@ -729,6 +761,7 @@ export async function preparePiAgentDirectory(
     ? agentDir
     : path.resolve(cwd, agentDir);
   await mkdir(resolvedAgentDir, { recursive: true });
+  await ensureProactiveCompactionSettings(resolvedAgentDir);
   return resolvedAgentDir;
 }
 

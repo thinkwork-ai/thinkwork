@@ -382,6 +382,34 @@ describe("preparePiAgentDirectory", () => {
     }
   });
 
+  it("seeds proactive compaction settings and respects operator overrides (THINK-324 C8)", async () => {
+    const { readFile, writeFile } = await import("node:fs/promises");
+    const root = await mkdtemp(path.join(tmpdir(), "pi-agent-dir-"));
+    const workspace = path.join(root, "workspace");
+
+    try {
+      const agentDir = await preparePiAgentDirectory(workspace);
+      const settings = JSON.parse(
+        await readFile(path.join(agentDir, "settings.json"), "utf8"),
+      ) as { compaction?: { reserveTokens?: number } };
+      expect(settings.compaction?.reserveTokens).toBe(90_000);
+
+      // An operator-set reserve is respected on subsequent prepares.
+      await writeFile(
+        path.join(agentDir, "settings.json"),
+        JSON.stringify({ compaction: { reserveTokens: 12345 }, other: true }),
+      );
+      await preparePiAgentDirectory(workspace);
+      const kept = JSON.parse(
+        await readFile(path.join(agentDir, "settings.json"), "utf8"),
+      ) as { compaction?: { reserveTokens?: number }; other?: boolean };
+      expect(kept.compaction?.reserveTokens).toBe(12345);
+      expect(kept.other).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("supports keeping the Pi agent dir outside the rendered workspace", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "pi-agent-dir-"));
     const workspace = path.join(root, "workspace");
