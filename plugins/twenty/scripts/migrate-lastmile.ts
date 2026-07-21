@@ -140,9 +140,18 @@ function log(message: string): void {
   process.stderr.write(`${message}\n`);
 }
 
-async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
-  const dryRun = !args.apply;
+/**
+ * Env-driven entry point shared by the CLI (`main`) and the Lambda handler
+ * (`scripts/lambda-handler.ts`). Reads the three required env vars, runs the
+ * migration or rollback, and RETURNS the parity report rather than printing it
+ * — the caller decides where the report goes (stdout for the CLI, the Lambda
+ * response for n8n). Never provisions members; safe to invoke unattended.
+ */
+export async function executeMigration(
+  opts: { apply: boolean; rollback?: boolean } = { apply: false },
+): Promise<Record<string, unknown>> {
+  const dryRun = !opts.apply;
+  const rollback = Boolean(opts.rollback);
 
   const baseUrl = normalizeBaseUrl(requireEnv("TWENTY_PUBLIC_URL"));
   const apiKey = requireEnv("TWENTY_API_KEY");
@@ -152,7 +161,7 @@ async function main(): Promise<void> {
   const reader = createLastmileReader(lastmileUrl);
 
   const report: Record<string, unknown> = {
-    mode: args.rollback
+    mode: rollback
       ? dryRun
         ? "rollback-dry-run"
         : "rollback"
@@ -163,15 +172,25 @@ async function main(): Promise<void> {
   };
 
   try {
-    if (args.rollback) {
+    if (rollback) {
       await runRollback(client, report, dryRun);
-      return;
+    } else {
+      await runMigration({ client, reader, baseUrl, report, dryRun });
     }
-    await runMigration({ client, reader, baseUrl, report, dryRun });
   } finally {
     await reader.close();
-    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    report.finishedAt = new Date().toISOString();
   }
+  return report;
+}
+
+async function main(): Promise<void> {
+  const args = parseArgs(process.argv.slice(2));
+  const report = await executeMigration({
+    apply: args.apply,
+    rollback: args.rollback,
+  });
+  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
 
 async function runRollback(
