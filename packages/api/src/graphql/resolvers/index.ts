@@ -125,7 +125,7 @@ import { customizeQueries, customizeMutations } from "./customize/index.js";
 import { complianceQueries, complianceMutations } from "./compliance/index.js";
 import { slackQueries, slackMutations } from "./slack/index.js";
 import { ontologyQueries, ontologyMutations } from "./ontology/index.js";
-import { twinQueries } from "./twin/index.js";
+import { twinQueries, twinMutations } from "./twin/index.js";
 import { observabilityQueries } from "./observability/index.js";
 import {
   linkedTaskMutations,
@@ -265,6 +265,7 @@ export const mutationResolvers: Record<string, any> = {
   ...complianceMutations,
   ...slackMutations,
   ...ontologyMutations,
+  ...twinMutations,
   ...spaceMutations,
   ...linkedTaskMutations,
   ...workItemMutations,

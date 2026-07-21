@@ -4713,6 +4713,7 @@ export type Mutation = {
   detachCapability: CapabilityMutationResult;
   disableWorkflow: Scalars['Boolean']['output'];
   disableWorkflowTemplate: Scalars['Boolean']['output'];
+  dismissTwinMaterializationSuggestion: Scalars['Boolean']['output'];
   duplicateEvalProfile: EvalProfile;
   enableWorkflow: WorkflowBinding;
   enableWorkflowTemplate: WorkflowTemplateBinding;
@@ -4822,6 +4823,11 @@ export type Mutation = {
   rebuildSkillCatalogIndex: Array<SkillCatalogRebuildResult>;
   recordOpenEngineHumanAction: WorkItemEvent;
   recordOpenEngineWorkItemReceipt: WorkItemEvent;
+  /**
+   * Record a cohort gap on a limited facet (R8). Service/turn-bound callers
+   * (the agent names a gap) and admins. Deduped by (entity type, facet).
+   */
+  recordTwinMaterializationSuggestion: Scalars['AWSJSON']['output'];
   /**
    * Tenant-admin: redeem a ThinkWork-provided premium plugin install key into a
    * persistent tenant entitlement.
@@ -5763,6 +5769,12 @@ export type MutationDisableWorkflowTemplateArgs = {
 };
 
 
+export type MutationDismissTwinMaterializationSuggestionArgs = {
+  suggestionId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type MutationDuplicateEvalProfileArgs = {
   id: Scalars['ID']['input'];
   name?: InputMaybe<Scalars['String']['input']>;
@@ -6096,6 +6108,14 @@ export type MutationRecordOpenEngineHumanActionArgs = {
 
 export type MutationRecordOpenEngineWorkItemReceiptArgs = {
   input: RecordOpenEngineWorkItemReceiptInput;
+};
+
+
+export type MutationRecordTwinMaterializationSuggestionArgs = {
+  entityTypeSlug: Scalars['String']['input'];
+  facetSlug: Scalars['String']['input'];
+  question?: InputMaybe<Scalars['String']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -8297,6 +8317,16 @@ export type Query = {
   turnInvocationLogs: Array<ModelInvocation>;
   twinCohort: Scalars['AWSJSON']['output'];
   twinEntity: Scalars['AWSJSON']['output'];
+  /**
+   * Projected entity page (U8 / KTD-8): the entity's operator-declared
+   * sections, each resolved independently to OK/STALE/TIMEOUT/ERROR with age
+   * and provenance — or { projected: false, reason } when the tenant/type
+   * hasn't flipped (AE8 dual-read; the caller renders the compiled page).
+   * Visibility scopes apply server-side.
+   */
+  twinEntityPage: Scalars['AWSJSON']['output'];
+  /** Open materialization suggestions (R8) — operator surface (ontology tab). */
+  twinMaterializationSuggestions: Scalars['AWSJSON']['output'];
   twinNeighbors: Scalars['AWSJSON']['output'];
   twinSystemEdges: Scalars['AWSJSON']['output'];
   unreadThreadCount: Scalars['Int']['output'];
@@ -9602,6 +9632,18 @@ export type QueryTwinCohortArgs = {
 
 export type QueryTwinEntityArgs = {
   canonicalId: Scalars['ID']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryTwinEntityPageArgs = {
+  canonicalId: Scalars['ID']['input'];
+  entityType: Scalars['String']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryTwinMaterializationSuggestionsArgs = {
   tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 

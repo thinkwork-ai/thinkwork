@@ -21,4 +21,33 @@ extend type Query {
     filter: AWSJSON!
     limit: Int = 25
   ): AWSJSON!
+  """
+  Projected entity page (U8 / KTD-8): the entity's operator-declared
+  sections, each resolved independently to OK/STALE/TIMEOUT/ERROR with age
+  and provenance — or { projected: false, reason } when the tenant/type
+  hasn't flipped (AE8 dual-read; the caller renders the compiled page).
+  Visibility scopes apply server-side.
+  """
+  twinEntityPage(tenantId: ID, entityType: String!, canonicalId: ID!): AWSJSON!
+  """
+  Open materialization suggestions (R8) — operator surface (ontology tab).
+  """
+  twinMaterializationSuggestions(tenantId: ID): AWSJSON!
+}
+
+extend type Mutation {
+  """
+  Record a cohort gap on a limited facet (R8). Service/turn-bound callers
+  (the agent names a gap) and admins. Deduped by (entity type, facet).
+  """
+  recordTwinMaterializationSuggestion(
+    tenantId: ID
+    entityTypeSlug: String!
+    facetSlug: String!
+    question: String
+  ): AWSJSON!
+  dismissTwinMaterializationSuggestion(
+    tenantId: ID
+    suggestionId: ID!
+  ): Boolean!
 }
