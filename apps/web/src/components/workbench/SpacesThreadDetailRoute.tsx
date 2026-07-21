@@ -144,6 +144,14 @@ interface OptimisticAttachmentPreview {
 }
 
 interface OptimisticMessage {
+  /**
+   * Thread the message was sent on. The route component is reused across
+   * thread navigations, so the optimistic bubble must only render while
+   * the matching thread is on screen — without this, a follow-up sent on
+   * thread A ghost-renders on any thread visited while the send is in
+   * flight.
+   */
+  threadId: string;
   content: string;
   expectAssistantResponse: boolean;
   startedAt?: string | null;
@@ -1005,7 +1013,8 @@ export function SpacesThreadDetailRoute({
 
   useEffect(() => {
     if (
-      optimisticMessage?.expectAssistantResponse === false &&
+      optimisticMessage?.threadId === threadId &&
+      optimisticMessage.expectAssistantResponse === false &&
       hasPersistedUserMessage(
         routeThread?.messages?.edges,
         optimisticMessage.content,
@@ -1013,7 +1022,7 @@ export function SpacesThreadDetailRoute({
     ) {
       setOptimisticMessage(null);
     }
-  }, [routeThread?.messages?.edges, optimisticMessage]);
+  }, [routeThread?.messages?.edges, optimisticMessage, threadId]);
 
   useEffect(() => {
     function handleRunbookDecision() {
@@ -1107,7 +1116,9 @@ export function SpacesThreadDetailRoute({
         }
       : null;
   const effectiveOptimisticMessage =
-    optimisticMessage ?? routeStateOptimisticMessage;
+    (optimisticMessage && optimisticMessage.threadId === threadId
+      ? optimisticMessage
+      : null) ?? routeStateOptimisticMessage;
   const visibleThread = effectiveOptimisticMessage
     ? withOptimisticUserTurn(thread, effectiveOptimisticMessage.content, {
         expectAssistantResponse:
@@ -1277,9 +1288,12 @@ export function SpacesThreadDetailRoute({
   );
 
   useEffect(() => {
-    if (!optimisticMessage || !hasDurableAssistant) return;
+    // hasDurableAssistant reflects the thread currently on screen — only
+    // let it clear an optimistic message that belongs to this thread.
+    if (optimisticMessage?.threadId !== threadId || !hasDurableAssistant)
+      return;
     setOptimisticMessage(null);
-  }, [hasDurableAssistant, optimisticMessage]);
+  }, [hasDurableAssistant, optimisticMessage, threadId]);
 
   useEffect(() => {
     if (!shouldPollActiveAgentResult) return;
@@ -1901,7 +1915,8 @@ export function SpacesThreadDetailRoute({
           agentDispatch === "FORCE_ON" ||
           (agentDispatch === "AUTO" &&
             (draftMentionsAgent || routeThreadMode !== "MULTIPLAYER"));
-        setOptimisticMessage({
+        const optimistic: OptimisticMessage = {
+          threadId,
           content: normalizedContent,
           expectAssistantResponse,
           startedAt: new Date().toISOString(),
@@ -1921,7 +1936,15 @@ export function SpacesThreadDetailRoute({
             displayName: mention.displayName,
             rawText: mention.rawText,
           })),
-        });
+        };
+        setOptimisticMessage(optimistic);
+        // The send keeps running after a navigation away; only clear the
+        // exact message this send created so a late settle can't wipe a
+        // newer optimistic message on another thread.
+        const clearOptimistic = () =>
+          setOptimisticMessage((current) =>
+            current === optimistic ? null : current,
+          );
         resetStreamingChunks();
 
         // Upload attached files before sendMessage so persisted messages only
@@ -1932,12 +1955,12 @@ export function SpacesThreadDetailRoute({
         let attachmentRefs: { attachmentId: string }[] = [];
         if (files && files.length > 0) {
           if (!apiUrl) {
-            setOptimisticMessage(null);
+            clearOptimistic();
             throw new Error("Attachment upload endpoint is not configured");
           }
           const token = await getIdToken();
           if (!token) {
-            setOptimisticMessage(null);
+            clearOptimistic();
             throw new Error("Sign-in required to upload attachments");
           }
           const result = await uploadThreadAttachments({
@@ -1949,7 +1972,7 @@ export function SpacesThreadDetailRoute({
             attachmentId: a.attachmentId,
           }));
           if (attachmentRefs.length === 0 && result.failures.length > 0) {
-            setOptimisticMessage(null);
+            clearOptimistic();
             const first = result.failures[0]!;
             throw new Error(
               `Upload failed for ${first.file.name}: ${first.message}`,
@@ -2008,7 +2031,7 @@ export function SpacesThreadDetailRoute({
         }
         const result = await sendMessage({ input: sendInput });
         if (result.error) {
-          setOptimisticMessage(null);
+          clearOptimistic();
           if (attachmentRefs.length > 0) {
             toast.error(
               describeSendMessageError(result.error, { filesUploaded: true }),
@@ -2023,7 +2046,7 @@ export function SpacesThreadDetailRoute({
           sentMessage?.metadata,
         );
         if (customerOnboardingHandled) {
-          setOptimisticMessage(null);
+          clearOptimistic();
         }
         reexecuteQuery({ requestPolicy: "network-only" });
         reexecuteTasksQuery({ requestPolicy: "network-only" });

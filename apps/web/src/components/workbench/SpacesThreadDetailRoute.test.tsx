@@ -1522,6 +1522,83 @@ describe("SpacesThreadDetailRoute", () => {
     expect(screen.getByText("Working…")).toBeTruthy();
   });
 
+  it("does not leak an in-flight optimistic follow-up onto another thread", async () => {
+    taskData = { computerTasks: [] };
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Thread A",
+        lifecycleStatus: "COMPLETED",
+        messages: { edges: [] },
+      },
+    };
+    // Keep the send in flight so the optimistic message stays active while
+    // the user navigates away.
+    let resolveSend!: (value: unknown) => void;
+    sendMessage.mockImplementation(
+      () => new Promise((resolve) => (resolveSend = resolve)),
+    );
+
+    const { rerender } = render(
+      <SpacesThreadDetailRoute threadId="thread-1" />,
+    );
+    setFollowUpText("only for thread A");
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    await waitFor(() => {
+      expect(screen.getByText("only for thread A")).toBeTruthy();
+    });
+
+    // Navigate to another thread: the route component is reused with a new
+    // threadId. Thread B must not show thread A's pending bubble or its
+    // Working row.
+    threadData = {
+      thread: {
+        id: "thread-2",
+        computerId: "computer-1",
+        title: "Thread B",
+        lifecycleStatus: "COMPLETED",
+        messages: {
+          edges: [
+            {
+              node: {
+                id: "b-user-1",
+                role: "USER",
+                content: "thread B question",
+                createdAt: "2026-06-02T19:00:00.000Z",
+              },
+            },
+            {
+              node: {
+                id: "b-assistant-1",
+                role: "ASSISTANT",
+                content: "thread B answer",
+                createdAt: "2026-06-02T19:01:00.000Z",
+              },
+            },
+          ],
+        },
+      },
+    };
+    rerender(<SpacesThreadDetailRoute threadId="thread-2" />);
+    expect(screen.queryByText("only for thread A")).toBeNull();
+    expect(screen.queryByText("Working…")).toBeNull();
+
+    // Navigating back before the send settles shows the bubble again.
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Thread A",
+        lifecycleStatus: "COMPLETED",
+        messages: { edges: [] },
+      },
+    };
+    rerender(<SpacesThreadDetailRoute threadId="thread-1" />);
+    expect(screen.getByText("only for thread A")).toBeTruthy();
+    resolveSend({});
+  });
+
   it("continues polling while a real turn is running and the latest user has no assistant", async () => {
     vi.useFakeTimers();
     try {

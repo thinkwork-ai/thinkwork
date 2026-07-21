@@ -627,6 +627,65 @@ describe("TaskThreadView", () => {
     expect(cards.map((card) => card.id)).toEqual(["artifact-saved"]);
   });
 
+  it("clears the composer immediately on submit, before the send resolves", async () => {
+    let resolveSend!: () => void;
+    const onSendFollowUp = vi.fn(
+      () => new Promise<void>((resolve) => (resolveSend = resolve)),
+    );
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Optimistic reset",
+          lifecycleStatus: "RUNNING",
+          messages: [{ id: "message-1", role: "USER", content: "hi" }],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    const followUp = screen.getByLabelText("Follow up");
+    setFollowUpText(followUp, "still uploading");
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    // The draft must clear while the send promise is still pending — the
+    // optimistic message bubble is the only place the text should render.
+    await waitFor(() => {
+      expect(onSendFollowUp).toHaveBeenCalled();
+      expect(followUpValue(followUp)).toBe("");
+    });
+    resolveSend();
+  });
+
+  it("restores the draft and shows the error when the send fails", async () => {
+    let rejectSend!: (err: Error) => void;
+    const onSendFollowUp = vi.fn(
+      () => new Promise<void>((_, reject) => (rejectSend = reject)),
+    );
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Failed send restore",
+          lifecycleStatus: "RUNNING",
+          messages: [{ id: "message-1", role: "USER", content: "hi" }],
+        }}
+        onSendFollowUp={onSendFollowUp}
+      />,
+    );
+
+    const followUp = screen.getByLabelText("Follow up");
+    setFollowUpText(followUp, "doomed message");
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(followUpValue(followUp)).toBe(""));
+
+    rejectSend(new Error("Upload failed for x.png: 415"));
+    await waitFor(() => {
+      expect(screen.getByText("Upload failed for x.png: 415")).toBeTruthy();
+      expect(followUpValue(followUp)).toBe("doomed message");
+    });
+  });
+
   it("passes the selected approved model through follow-up submit", async () => {
     const onSendFollowUp = vi.fn();
     render(
