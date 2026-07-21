@@ -525,6 +525,9 @@ locals {
           # Event-invoke this as a post-commit nudge; the rebuild command is
           # a RequestResponse invoke. Cursor makes missed nudges harmless.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-identity-graph-projector",
+          # twin-query (Company Brain U6): graphql-http's twin read queries
+          # RequestResponse-invoke the VPC graph-query Lambda.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-twin-query",
           # knowledge-graph-observations-ingest: graphql-http's
           # startKnowledgeGraphObservationsIngest mutation invokes this with
           # RequestResponse, and memory-stage-worker's graph stage (THINK-193
