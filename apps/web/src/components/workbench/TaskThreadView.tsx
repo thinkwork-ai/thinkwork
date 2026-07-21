@@ -3621,6 +3621,7 @@ function FollowUpComposer({
     if (!canSubmit || !onSubmit) return;
     composer.setError(null);
     composer.setSubmitting(true);
+    let files: File[];
     try {
       if (goalModeSubmission.requested && !goalModeSubmission.goalMode) {
         throw new Error("Goal mode needs an objective.");
@@ -3631,68 +3632,95 @@ function FollowUpComposer({
       // PromptInput emits FileUIPart entries with blob URLs. Fetch the
       // blob and rebuild File objects so the route's upload helper can
       // POST the bytes through presign + PUT + finalize.
-      const files = await fileUiPartsToFiles(message.files);
-      const content = goalModeSubmission.content;
-      const submittedMentions = mentions.filter((mention) =>
-        content.includes(mention.rawText),
-      );
-      const pinnedSkills = extractPinnedSkillSlugs(content, skillCatalog);
-      const submittedGoalMode = goalModeSubmission.goalMode;
-      // KTD2 tri-state: goal mode requires dispatch (FORCE_ON); otherwise the
-      // toggle maps untouched -> AUTO (server decides from Thread Mode),
-      // manually ON -> FORCE_ON, manually OFF -> FORCE_OFF.
-      const submittedDispatch: AgentDispatchRequestValue = submittedGoalMode
-        ? "FORCE_ON"
-        : deriveAgentDispatch({
-            overridden: agentOverriddenRef.current,
-            enabled: effectiveAgentEnabled,
-          });
-      if (selectedModelId && submittedGoalMode) {
-        await onSubmit(
-          content,
-          files,
-          submittedMentions,
-          submittedDispatch,
-          pinnedSkills,
-          selectedModelId,
-          submittedGoalMode,
-        );
-      } else if (selectedModelId) {
-        await onSubmit(
-          content,
-          files,
-          submittedMentions,
-          submittedDispatch,
-          pinnedSkills,
-          selectedModelId,
-        );
-      } else if (submittedGoalMode) {
-        await onSubmit(
-          content,
-          files,
-          submittedMentions,
-          submittedDispatch,
-          pinnedSkills,
-          undefined,
-          submittedGoalMode,
-        );
-      } else {
-        await onSubmit(
-          content,
-          files,
-          submittedMentions,
-          submittedDispatch,
-          pinnedSkills,
-        );
-      }
-      composer.clear();
-      setMentions([]);
-      setGoalModeEnabled(false);
+      files = await fileUiPartsToFiles(message.files);
     } catch (err) {
       composer.setError(err instanceof Error ? err.message : "Failed to send");
-    } finally {
       composer.setSubmitting(false);
+      return;
     }
+    const content = goalModeSubmission.content;
+    const submittedMentions = mentions.filter((mention) =>
+      content.includes(mention.rawText),
+    );
+    const pinnedSkills = extractPinnedSkillSlugs(content, skillCatalog);
+    const submittedGoalMode = goalModeSubmission.goalMode;
+    // KTD2 tri-state: goal mode requires dispatch (FORCE_ON); otherwise the
+    // toggle maps untouched -> AUTO (server decides from Thread Mode),
+    // manually ON -> FORCE_ON, manually OFF -> FORCE_OFF.
+    const submittedDispatch: AgentDispatchRequestValue = submittedGoalMode
+      ? "FORCE_ON"
+      : deriveAgentDispatch({
+          overridden: agentOverriddenRef.current,
+          enabled: effectiveAgentEnabled,
+        });
+
+    // Reset the composer BEFORE the upload + sendMessage round-trip. The
+    // route renders the optimistic user bubble as soon as onSubmit starts,
+    // so leaving the draft in the composer shows the same message twice
+    // for the multi-second attachment upload. Returning from this handler
+    // immediately also lets <PromptInput> drop its attachment chips now.
+    // On failure, the captured draft is restored.
+    const draftText = composer.text;
+    const draftMentions = mentions;
+    composer.clear();
+    setMentions([]);
+    setGoalModeEnabled(false);
+
+    void (async () => {
+      try {
+        if (selectedModelId && submittedGoalMode) {
+          await onSubmit(
+            content,
+            files,
+            submittedMentions,
+            submittedDispatch,
+            pinnedSkills,
+            selectedModelId,
+            submittedGoalMode,
+          );
+        } else if (selectedModelId) {
+          await onSubmit(
+            content,
+            files,
+            submittedMentions,
+            submittedDispatch,
+            pinnedSkills,
+            selectedModelId,
+          );
+        } else if (submittedGoalMode) {
+          await onSubmit(
+            content,
+            files,
+            submittedMentions,
+            submittedDispatch,
+            pinnedSkills,
+            undefined,
+            submittedGoalMode,
+          );
+        } else {
+          await onSubmit(
+            content,
+            files,
+            submittedMentions,
+            submittedDispatch,
+            pinnedSkills,
+          );
+        }
+      } catch (err) {
+        // Restore the draft so the user can retry without retyping.
+        // Attachment chips are gone (PromptInput cleared them on our
+        // early return — same behavior as before this optimistic reset);
+        // the error banner names the failed file when uploads break.
+        composer.setText(draftText);
+        setMentions(draftMentions);
+        if (submittedGoalMode) setGoalModeEnabled(true);
+        composer.setError(
+          err instanceof Error ? err.message : "Failed to send",
+        );
+      } finally {
+        composer.setSubmitting(false);
+      }
+    })();
   }
 
   const hasTaskQueue = Boolean(taskQueue);
