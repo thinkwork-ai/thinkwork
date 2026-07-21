@@ -29,7 +29,7 @@ import {
   type ExternalUserOAuthResolver,
   type McpServerConfig,
 } from "../lib/mcp-configs.js";
-import { getAgentCoreUserOAuth } from "../lib/harness/agentcore-user-oauth.js";
+import { getAgentCoreUserOAuth } from "../lib/agentcore-identity/agentcore-user-oauth.js";
 import {
   mcpCallTool,
   mcpListTools,
