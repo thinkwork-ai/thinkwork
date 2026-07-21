@@ -880,6 +880,82 @@ describe("runHarnessTurn — happy path", () => {
     );
   });
 
+  it("composes from retained evidence when manual-chat discovery hits the iteration cap", async () => {
+    // Observed live (TEI thread 61b29fa7): a manual-chat QBR whose connector
+    // calls all failed burned the discovery cap on retries and hard-failed
+    // with max_iterations_exceeded instead of entering composition. The
+    // fallback must cover manual chat, not only Goal mode.
+    const deps = makeDeps([
+      stream(
+        textEvents(
+          "Gathered what evidence was reachable.",
+          "max_iterations_exceeded",
+        ),
+      ),
+      stream(
+        textEvents(
+          JSON.stringify({
+            genre: "qbr",
+            title: "Bounded manual QBR",
+            abstract: "Composed after capped discovery.",
+            digest_markdown:
+              "## Summary\n\nEvidence retained.\n\n## Verdict\n\nReady.",
+            status: "draft",
+          }),
+        ),
+      ),
+    ]);
+
+    const result = await runHarnessTurn(
+      {
+        ...basePayload(),
+        message: "Create an HTML artifact using the QBR plate.",
+      },
+      deps,
+    );
+
+    expect(result.status).toBe("completed");
+    expect(deps.invocations).toHaveLength(2);
+    expect(deps.invocations[0]?.maxIterations).toBe(8);
+    expect(deps.invocations[1]?.maxIterations).toBe(2);
+    expect(deps.invocations[1]?.allowedTools).toEqual([
+      "__thinkwork_document_envelope__",
+    ]);
+    expect(deps.emissions).toHaveLength(1);
+    expect(
+      deps.finalizePayloads[0].response?.diagnostics?.harness,
+    ).toMatchObject({
+      document_composition_transition: "max_iterations_exceeded",
+    });
+  });
+
+  it("sanitizes Kimi-style toolUseIds consistently across the continuation pairing", async () => {
+    // Kimi emits OpenAI-style ids ("functions.<name>:<index>") which the
+    // managed Harness rejects on toolResult blocks (^[a-zA-Z0-9_-]+$).
+    const kimiId = "functions.ThinkworkTeiE2E___emit_document:0";
+    const sanitized = "functions_ThinkworkTeiE2E___emit_document_0";
+    const deps = makeDeps([
+      stream(toolUseEvents("emit_document", kimiId, EMIT_INPUT)),
+      stream(textEvents("Here is the QBR.")),
+    ]);
+
+    const result = await runHarnessTurn(basePayload(), deps);
+
+    expect(result.status).toBe("completed");
+    const followUp = deps.invocations[1].messages as Array<{
+      role: string;
+      content: Array<Record<string, unknown>>;
+    }>;
+    expect(followUp[0].content[0].toolUse).toMatchObject({
+      toolUseId: sanitized,
+      name: "emit_document",
+    });
+    expect(followUp[1].content[0].toolResult).toMatchObject({
+      toolUseId: sanitized,
+      status: "success",
+    });
+  });
+
   it("fulfills emit_document and finalizes completed with the evidence triple", async () => {
     const deps = makeDeps([
       stream(toolUseEvents("emit_document", "tool-1", EMIT_INPUT)),

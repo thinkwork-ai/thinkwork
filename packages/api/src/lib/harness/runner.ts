@@ -671,6 +671,21 @@ async function fetchProjectedWorkspaceText(args: {
 // Stream assembly
 // ---------------------------------------------------------------------------
 
+/**
+ * Kimi-family models emit OpenAI-style tool-call ids such as
+ * "functions.<gateway-tool-name>:<index>". The managed Harness streams those
+ * ids to the caller but rejects them on the continuation's toolResult blocks
+ * (HarnessToolResultBlockStart enforces ^[a-zA-Z0-9_-]+$). The harness does
+ * not persist the stream-ending assistant message — the caller resends both
+ * sides of the toolUse/toolResult pairing — so rewriting the id consistently
+ * at stream ingestion keeps the pairing valid without any server-side state
+ * to disagree with.
+ */
+function sanitizeToolUseId(id: string | undefined): string | undefined {
+  if (id == null) return id;
+  return id.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
 interface AssembledToolUse {
   toolUseId: string;
   name: string;
@@ -797,7 +812,7 @@ async function assembleStream(
         blocks.set(contentBlockIndex, {
           kind: "toolUse",
           text: "",
-          toolUseId: start.toolUse.toolUseId,
+          toolUseId: sanitizeToolUseId(start.toolUse.toolUseId),
           name: start.toolUse.name,
           inputJson: "",
         });
@@ -805,7 +820,7 @@ async function assembleStream(
         blocks.set(contentBlockIndex, {
           kind: "toolResult",
           text: "",
-          toolUseId: start.toolResult.toolUseId,
+          toolUseId: sanitizeToolUseId(start.toolResult.toolUseId),
           toolResultStatus: start.toolResult.status,
           inputJson: "",
         });
@@ -2137,14 +2152,16 @@ export async function runHarnessTurn(
 
       if (
         segment.stopReason === "max_iterations_exceeded" &&
-        goalExecution &&
         documentEmissionRequired &&
         !documentCompositionPhase
       ) {
-        // A goal run has a hard ThinkWork token budget, while Harness only
-        // exposes a per-invocation iteration limit. Treat the bounded
-        // discovery cutoff as the phase boundary and compose from evidence
-        // already retained in this fresh turn's Harness session.
+        // The runner itself capped this discovery invocation
+        // (DOCUMENT_DISCOVERY_MAX_ITERATIONS), so hitting the cap is a phase
+        // boundary, not a failure: compose from the evidence already retained
+        // in this turn's Harness session — for manual chat and goal runs
+        // alike, mirroring the natural_end_turn fallback below. (Observed
+        // live: a manual-chat QBR whose connector calls all 502'd burned the
+        // cap on retries and hard-failed instead of composing.)
         enterDocumentComposition("max_iterations_exceeded");
         continue;
       }
