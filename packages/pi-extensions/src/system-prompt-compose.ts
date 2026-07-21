@@ -322,13 +322,32 @@ function buildRequesterProfilePolicy(includeUserMd: boolean): string {
   ].join("\n");
 }
 
+/**
+ * THINK-324 C2b — per-turn context that must NOT live in the system prompt.
+ * The system block sits ahead of the Bedrock cache point, so anything that
+ * changes per day (the date) or per requester (shared threads) busted every
+ * thread's cached prefix. This block is prepended to the TURN prompt instead
+ * (same pattern as the ask_user_question answer context), so it persists in
+ * the durable session next to the message it describes and each historical
+ * turn keeps an accurate requester attribution.
+ */
+export function buildTurnContextBlock(
+  payload: PiInvocationPayload,
+  now: Date = new Date(),
+): string {
+  const requesterContext = buildCurrentRequesterContext(payload);
+  return [`Current date: ${formatDate(now)}`, requesterContext]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export async function composeSystemPromptFromFiles(
   args: ComposeSystemPromptFromFilesArgs,
 ): Promise<string> {
-  const now = args.now ?? new Date();
-  const parts: string[] = [`Current date: ${formatDate(now)}`];
-  const requesterContext = buildCurrentRequesterContext(args.payload);
-  if (requesterContext) parts.push(requesterContext);
+  // THINK-324 C2b: no date line and no <current_requester> here — both are
+  // per-turn churn that would invalidate the cached system prefix; they ride
+  // the turn prompt via buildTurnContextBlock instead.
+  const parts: string[] = [];
   const includeUserMd =
     typeof args.payload.user_id === "string" &&
     args.payload.user_id.trim().length > 0;

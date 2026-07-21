@@ -10,6 +10,7 @@ import {
   type PiInvocationPayload,
 } from "./system-prompt-compose.js";
 export type { PiInvocationPayload } from "./system-prompt-compose.js";
+export { buildTurnContextBlock } from "./system-prompt-compose.js";
 
 /**
  * System-prompt composition (plan §004 U6). Moved here from

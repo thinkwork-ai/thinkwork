@@ -1055,12 +1055,13 @@ describe("handleInvocation — happy path", () => {
       });
 
       expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
-      expect(calls).toEqual([
-        {
-          modelId: "anthropic/claude-sonnet-4-5",
-          message,
-        },
-      ]);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toMatchObject({
+        modelId: "anthropic/claude-sonnet-4-5",
+      });
+      // THINK-324 C2b: the turn-context block precedes the user content.
+      expect(String(calls[0]!.message).startsWith("Current date:")).toBe(true);
+      expect(String(calls[0]!.message).endsWith(message)).toBe(true);
       const body = result.body as Record<string, unknown>;
       expect(body.agent_profile_runs).toEqual([]);
       expect(body.tool_invocations).toEqual([]);
@@ -1168,12 +1169,13 @@ describe("handleInvocation — happy path", () => {
     });
 
     expect(result.statusCode, JSON.stringify(result.body)).toBe(200);
-    expect(calls).toEqual([
-      {
-        modelId: "anthropic/claude-sonnet-4-5",
-        message: "Please @Reviewer double-check the summary wording",
-      },
-    ]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ modelId: "anthropic/claude-sonnet-4-5" });
+    expect(
+      String(calls[0]!.message).endsWith(
+        "Please @Reviewer double-check the summary wording",
+      ),
+    ).toBe(true);
     const body = result.body as Record<string, unknown>;
     expect(body.agent_profile_runs).toEqual([]);
     expect(body.tool_invocations).toEqual([]);
@@ -4857,7 +4859,10 @@ describe("handleInvocation — pending question answer context", () => {
 
     expect(result.statusCode).toBe(200);
     // The block leads the turn prompt…
-    expect(seen.message.startsWith("[USER_QUESTION_ANSWERS_START]")).toBe(true);
+    // THINK-324 C2b: turn context leads; the answers block follows it and
+    // still precedes the user content.
+    expect(seen.message.startsWith("Current date:")).toBe(true);
+    expect(seen.message).toContain("[USER_QUESTION_ANSWERS_START]");
     expect(seen.message).toContain(
       "Question 1 — Environment: Which environment should I deploy to?",
     );
@@ -4908,7 +4913,8 @@ describe("handleInvocation — pending question answer context", () => {
     });
 
     expect(result.statusCode).toBe(200);
-    expect(seen.message).toBe("Hello pi");
+    expect(seen.message.startsWith("Current date:")).toBe(true);
+    expect(seen.message.endsWith("Hello pi")).toBe(true);
   });
 
   it("tolerates a malformed field — no block, turn unaffected", async () => {
@@ -4921,7 +4927,8 @@ describe("handleInvocation — pending question answer context", () => {
     });
 
     expect(result.statusCode).toBe(200);
-    expect(seen.message).toBe("Hello pi");
+    expect(seen.message.startsWith("Current date:")).toBe(true);
+    expect(seen.message.endsWith("Hello pi")).toBe(true);
     expect(seen.message).not.toContain("[USER_QUESTION_ANSWERS_START]");
   });
 });
