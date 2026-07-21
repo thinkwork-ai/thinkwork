@@ -41,7 +41,10 @@ import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { readRuntimeEnv } from "@/lib/runtime-config";
 import { useAssignedComputerSelection } from "@/lib/use-assigned-computer-selection";
-import { setPendingThreadStart } from "@/lib/pending-thread-starts";
+import {
+  clearPendingThreadStart,
+  setPendingThreadStart,
+} from "@/lib/pending-thread-starts";
 import {
   chooseApprovedModelId,
   writeStoredModelId,
@@ -354,11 +357,14 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       }
       setError(message);
     };
+    let threadId: string;
+    const title = titleFromPromptWithAttachments(trimmed, files);
     try {
-      // Create the thread first, then persist the first message before
-      // routing. Upload/send failures after an eager route leave an empty
-      // in-progress thread with no user message or agent turn.
-      const title = titleFromPromptWithAttachments(trimmed, files);
+      // Only thread creation blocks navigation — it mints the id the route
+      // needs. Upload + first-message persist run AFTER routing so the user
+      // lands on the optimistic thread scaffold immediately instead of
+      // watching a frozen composer for the whole presign/PUT/finalize
+      // round-trip (15s+ for a large attachment).
       const created = await createThread({
         input: {
           tenantId,
@@ -372,107 +378,33 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
         setError(created.error.message ?? "Failed to start work");
         return false;
       }
-      const threadId = created.data?.createThread?.id;
-      if (!threadId) {
+      const createdId = created.data?.createThread?.id;
+      if (!createdId) {
         setError("Thread created but no id returned");
         return false;
       }
-      let attachmentRefs: { attachmentId: string }[] = [];
-      if (files.length > 0) {
-        const apiUrl = readRuntimeEnv("VITE_API_URL");
-        const token = await getIdToken();
-        if (!apiUrl || !token) {
-          surfaceError("Sign-in required to upload attachments");
-          return false;
-        }
-        const uploadResult = await uploadThreadAttachments({
-          endpoints: { apiUrl, token },
-          threadId,
-          files,
-        });
-        if (
-          uploadResult.uploaded.length === 0 &&
-          uploadResult.failures.length > 0
-        ) {
-          const first = uploadResult.failures[0]!;
-          surfaceError(`Upload failed (${first.stage}): ${first.message}`);
-          return false;
-        }
-        if (uploadResult.failures.length > 0) {
-          toast.warning(
-            `${uploadResult.failures.length} attachment${uploadResult.failures.length === 1 ? "" : "s"} could not be uploaded. Sending the files that finished.`,
-          );
-        }
-
-        attachmentRefs = uploadResult.uploaded.map((a) => ({
-          attachmentId: a.attachmentId,
-        }));
-      }
-      const sendInput: SendMessageVars["input"] = {
+      threadId = createdId;
+      setPendingThreadStart({
         threadId,
-        role: "USER",
+        title,
         content: trimmed,
-        mentions,
-      };
-      let metadata: Record<string, unknown> = {};
-      if (attachmentRefs.length > 0) metadata.attachments = attachmentRefs;
-      if (pinnedSkills.length > 0) {
-        metadata.skills = pinnedSkills.map((slug) => ({ slug }));
-      }
-      if (skillCreatorCommand.command) {
-        metadata.command = skillCreatorCommand.command;
-      }
-      const turnModelId = requestedModelId ?? selectedModelId;
-      if (turnModelId) {
-        sendInput.modelId = turnModelId;
-        metadata.requestedModelId = turnModelId;
-      }
-      metadata = appendGoalModeMetadata(metadata, goalMode);
-      if (Object.keys(metadata).length > 0) {
-        sendInput.metadata = JSON.stringify(metadata);
-      }
-      // KTD2 tri-state at the new-thread boundary: this composer's toggle
-      // derives from the draft only (no thread exists yet), so a toggle-off
-      // maps to an explicit FORCE_OFF and everything else rides as AUTO —
-      // the server derives the mode from the just-created participant set.
-      if (agentRequested === false) {
-        sendInput.agentDispatch = "FORCE_OFF";
-      }
-      const sent = await sendMessage({
-        input: sendInput,
+        expectAssistantResponse: agentRequested !== false,
+        startedAt: new Date().toISOString(),
+        mentions: mentions.map((mention) => ({
+          targetType: mention.targetType,
+          targetId: mention.targetId,
+          displayName: mention.displayName,
+          rawText: mention.rawText,
+        })),
+        attachments:
+          files.length > 0
+            ? files.map((file) => ({
+                name: file.name,
+                sizeBytes: file.size,
+                mimeType: file.type,
+              }))
+            : undefined,
       });
-      if (sent.error) {
-        surfaceError(
-          describeSendMessageError(sent.error, {
-            filesUploaded: attachmentRefs.length > 0,
-            firstMessage: true,
-          }),
-        );
-        return false;
-      }
-      if (trimmed) {
-        setPendingThreadStart({
-          threadId,
-          title,
-          content: trimmed,
-          expectAssistantResponse: agentRequested !== false,
-          startedAt: new Date().toISOString(),
-          mentions: mentions.map((mention) => ({
-            targetType: mention.targetType,
-            targetId: mention.targetId,
-            displayName: mention.displayName,
-            rawText: mention.rawText,
-          })),
-          attachments:
-            files.length > 0
-              ? files.map((file) => ({
-                  name: file.name,
-                  sizeBytes: file.size,
-                  mimeType: file.type,
-                }))
-              : undefined,
-        });
-      }
       navigateToCreatedThread(
         navigate,
         threadId,
@@ -482,9 +414,99 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
       routed = true;
     } catch (err) {
       surfaceError(err instanceof Error ? err.message : "Failed to start work");
+      return false;
     } finally {
       setBusy(false);
     }
+
+    // Detached: upload + persist the first message behind the optimistic
+    // scaffold. Failures clear the scaffold (so the thread doesn't show a
+    // message that never persisted) and surface as toasts on the routed
+    // page.
+    void (async () => {
+      try {
+        let attachmentRefs: { attachmentId: string }[] = [];
+        if (files.length > 0) {
+          const apiUrl = readRuntimeEnv("VITE_API_URL");
+          const token = await getIdToken();
+          if (!apiUrl || !token) {
+            clearPendingThreadStart(threadId);
+            surfaceError("Sign-in required to upload attachments");
+            return;
+          }
+          const uploadResult = await uploadThreadAttachments({
+            endpoints: { apiUrl, token },
+            threadId,
+            files,
+          });
+          if (
+            uploadResult.uploaded.length === 0 &&
+            uploadResult.failures.length > 0
+          ) {
+            const first = uploadResult.failures[0]!;
+            clearPendingThreadStart(threadId);
+            surfaceError(`Upload failed (${first.stage}): ${first.message}`);
+            return;
+          }
+          if (uploadResult.failures.length > 0) {
+            toast.warning(
+              `${uploadResult.failures.length} attachment${uploadResult.failures.length === 1 ? "" : "s"} could not be uploaded. Sending the files that finished.`,
+            );
+          }
+
+          attachmentRefs = uploadResult.uploaded.map((a) => ({
+            attachmentId: a.attachmentId,
+          }));
+        }
+        const sendInput: SendMessageVars["input"] = {
+          threadId,
+          role: "USER",
+          content: trimmed,
+          mentions,
+        };
+        let metadata: Record<string, unknown> = {};
+        if (attachmentRefs.length > 0) metadata.attachments = attachmentRefs;
+        if (pinnedSkills.length > 0) {
+          metadata.skills = pinnedSkills.map((slug) => ({ slug }));
+        }
+        if (skillCreatorCommand.command) {
+          metadata.command = skillCreatorCommand.command;
+        }
+        const turnModelId = requestedModelId ?? selectedModelId;
+        if (turnModelId) {
+          sendInput.modelId = turnModelId;
+          metadata.requestedModelId = turnModelId;
+        }
+        metadata = appendGoalModeMetadata(metadata, goalMode);
+        if (Object.keys(metadata).length > 0) {
+          sendInput.metadata = JSON.stringify(metadata);
+        }
+        // KTD2 tri-state at the new-thread boundary: this composer's toggle
+        // derives from the draft only (no thread exists yet), so a toggle-off
+        // maps to an explicit FORCE_OFF and everything else rides as AUTO —
+        // the server derives the mode from the just-created participant set.
+        if (agentRequested === false) {
+          sendInput.agentDispatch = "FORCE_OFF";
+        }
+        const sent = await sendMessage({
+          input: sendInput,
+        });
+        if (sent.error) {
+          clearPendingThreadStart(threadId);
+          surfaceError(
+            describeSendMessageError(sent.error, {
+              filesUploaded: attachmentRefs.length > 0,
+              firstMessage: true,
+            }),
+          );
+        }
+      } catch (err) {
+        clearPendingThreadStart(threadId);
+        surfaceError(
+          err instanceof Error ? err.message : "Failed to start work",
+        );
+      }
+    })();
     return routed;
   }
 
