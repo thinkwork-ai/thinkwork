@@ -32,6 +32,9 @@ export interface ActivityCallbackConfig {
   agentId?: string | null;
   /** Same-origin guard against the deployed API base. */
   apiUrl: string;
+  /** KMS-signed turn identity (THINK-324 C19), echoed verbatim as the
+   *  x-thinkwork-turn-assertion header. Null when dispatch minted none. */
+  turnAssertion?: string | null;
 }
 
 export interface ActivityEmitter {
@@ -63,6 +66,7 @@ export function readActivityCallbackConfig(
     threadId,
     agentId: asString(payload.agent_id) || null,
     apiUrl: asString(payload.thinkwork_api_url),
+    turnAssertion: asString(payload.turn_assertion) || null,
   };
 }
 
@@ -135,6 +139,9 @@ export function createActivityEmitter(
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${config!.secret}`,
+        ...(config!.turnAssertion
+          ? { "x-thinkwork-turn-assertion": config!.turnAssertion }
+          : {}),
       },
       body,
       signal: AbortSignal.timeout(attemptTimeoutMs),

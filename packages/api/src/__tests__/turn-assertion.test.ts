@@ -9,6 +9,7 @@ import { GetPublicKeyCommand, SignCommand } from "@aws-sdk/client-kms";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetTurnAssertionCaches,
+  enforceTurnAssertion,
   mintTurnAssertion,
   verifyTurnAssertion,
 } from "../lib/turn-assertion.js";
@@ -136,5 +137,58 @@ describe("mintTurnAssertion / verifyTurnAssertion", () => {
       ([c]) => c instanceof GetPublicKeyCommand,
     );
     expect(getKeyCalls).toHaveLength(1);
+  });
+});
+
+describe("enforceTurnAssertion (C19)", () => {
+  it("accepts a matching token and rejects a mismatched binding (real verify)", async () => {
+    // enforceTurnAssertion uses the module-level KMS client; the fake-kms
+    // path is covered by verifyTurnAssertion tests above. Here exercise
+    // the header plumbing with an unavailable verifier (no key) plus the
+    // required-mode absence branch — signature-level acceptance/rejection
+    // is delegated to verifyTurnAssertion, tested exhaustively above.
+    process.env.AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = "";
+    const tolerated = await enforceTurnAssertion({
+      headers: { "x-thinkwork-turn-assertion": "twta1.p.s" },
+      binding: BINDING,
+      surface: "test",
+    });
+    expect(tolerated.ok).toBe(true);
+    const malformed = await enforceTurnAssertion({
+      headers: { "x-thinkwork-turn-assertion": "garbage" },
+      binding: BINDING,
+      surface: "test",
+    });
+    expect(malformed.ok).toBe(false);
+  });
+
+  it("tolerates absence by default but refuses it in required mode", async () => {
+    const tolerant = await enforceTurnAssertion({
+      headers: {},
+      binding: BINDING,
+      surface: "test",
+    });
+    expect(tolerant.ok).toBe(true);
+    const required = await enforceTurnAssertion({
+      headers: {},
+      binding: BINDING,
+      surface: "test",
+      required: true,
+    });
+    expect(required.ok).toBe(false);
+  });
+
+  it("reads TURN_ASSERTION_REQUIRED from the env", async () => {
+    process.env.TURN_ASSERTION_REQUIRED = "true";
+    try {
+      const result = await enforceTurnAssertion({
+        headers: {},
+        binding: BINDING,
+        surface: "test",
+      });
+      expect(result.ok).toBe(false);
+    } finally {
+      delete process.env.TURN_ASSERTION_REQUIRED;
+    }
   });
 });

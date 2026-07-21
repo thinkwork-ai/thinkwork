@@ -461,9 +461,22 @@ locals {
       AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.turn_assertion_active_key_arn
       IDENTITY_RESOLUTION_ENABLED = tostring(var.identity_resolution_tool_enabled)
     }
-    # THINK-324 C18: the ledger endpoint verifies presented assertions with
-    # the cached public key of the same active mint key.
+    # THINK-324 C18/C19: the ledger endpoint verifies presented assertions
+    # with the cached public key of the same active mint key. Required mode:
+    # its only producer (the Pi tool-execution emitter) echoes the assertion
+    # since C18, so assertion-less ledger writes are refused. Verifier
+    # unavailability still degrades to bearer-only (never a write outage);
+    # a mint failure at dispatch costs that turn's evidence, logged loudly.
     "tool-executions" = {
+      AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.turn_assertion_active_key_arn
+      TURN_ASSERTION_REQUIRED             = "true"
+    }
+    # THINK-324 C19: activity + finalize verify presented assertions
+    # (tolerant posture — legacy/desktop producers don't echo yet).
+    "chat-agent-activity" = {
+      AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.turn_assertion_active_key_arn
+    }
+    "chat-agent-finalize" = {
       AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.turn_assertion_active_key_arn
     }
     # THINK-316 U5: the runner reads the server-only attested profile and

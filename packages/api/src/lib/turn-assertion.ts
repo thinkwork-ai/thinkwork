@@ -201,3 +201,68 @@ export async function verifyTurnAssertion(
     },
   };
 }
+
+/**
+ * Handler-side enforcement wrapper (THINK-324 C19). Reads the assertion
+ * header, verifies it, and checks the binding against the write target.
+ *
+ * Outcomes:
+ *  - `{ ok: true }`  — valid+matching, or tolerated absence/outage.
+ *  - `{ ok: false, reason }` — invalid signature, binding mismatch, or
+ *    (when `required` is set) a missing assertion. Callers respond 401.
+ *
+ * `required` comes from TURN_ASSERTION_REQUIRED=true on the handler env —
+ * flip it per surface once every producer of that surface echoes the
+ * assertion. Verifier unavailability is tolerated even in required mode:
+ * a KMS outage must degrade to bearer-only, never to a write outage.
+ */
+export async function enforceTurnAssertion(args: {
+  headers: Record<string, string | undefined>;
+  binding: TurnAssertionBinding;
+  surface: string;
+  required?: boolean;
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const required =
+    args.required ?? process.env.TURN_ASSERTION_REQUIRED === "true";
+  const token =
+    args.headers[TURN_ASSERTION_HEADER] ??
+    args.headers[TURN_ASSERTION_HEADER.toUpperCase()] ??
+    null;
+  if (!token) {
+    if (required) {
+      console.warn(
+        `[${args.surface}] turn assertion missing (required): turn=${args.binding.turn_id}`,
+      );
+      return { ok: false, reason: "assertion required" };
+    }
+    console.info(
+      `[${args.surface}] no turn assertion presented (tolerated): turn=${args.binding.turn_id}`,
+    );
+    return { ok: true };
+  }
+  const verdict = await verifyTurnAssertion(token);
+  if (verdict.status === "invalid") {
+    console.warn(
+      `[${args.surface}] turn assertion rejected (${verdict.reason}): turn=${args.binding.turn_id}`,
+    );
+    return { ok: false, reason: verdict.reason };
+  }
+  if (verdict.status === "unavailable") {
+    console.warn(
+      `[${args.surface}] turn assertion verifier unavailable (${verdict.reason}); accepting bearer-only`,
+    );
+    return { ok: true };
+  }
+  const b = verdict.binding;
+  if (
+    b.tenant_id !== args.binding.tenant_id ||
+    b.thread_id !== args.binding.thread_id ||
+    b.turn_id !== args.binding.turn_id
+  ) {
+    console.warn(
+      `[${args.surface}] turn assertion binding mismatch: asserted turn=${b.turn_id} target turn=${args.binding.turn_id}`,
+    );
+    return { ok: false, reason: "binding mismatch" };
+  }
+  return { ok: true };
+}
