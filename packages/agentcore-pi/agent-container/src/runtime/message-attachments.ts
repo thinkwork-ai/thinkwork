@@ -47,6 +47,25 @@ interface StageMessageAttachmentsInput {
 const TEXT_PREVIEW_BYTES = 24 * 1024;
 const FILE_READ_LIMIT_BYTES = 512 * 1024;
 
+/**
+ * Image formats the Bedrock Converse image block accepts (pi-ai's
+ * amazon-bedrock provider throws on anything else).
+ */
+const VIEWABLE_IMAGE_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/gif",
+  "image/webp",
+]);
+
+/**
+ * Raw-byte ceiling for returning an image block. Bedrock caps Converse
+ * image payloads at ~3.75 MB; stay under it so an oversized screenshot
+ * degrades to a helpful message instead of failing the turn.
+ */
+const IMAGE_BLOCK_LIMIT_BYTES = 3_500_000;
+
 export async function stageMessageAttachments(
   input: StageMessageAttachmentsInput,
 ): Promise<StageMessageAttachmentsResult> {
@@ -151,7 +170,9 @@ export function formatMessageAttachmentsPreamble(
   }
   lines.push(
     "Use the `file_read` tool with one of the absolute paths above " +
-      "when the user asks about an attached file.",
+      "when the user asks about an attached file. Images are returned " +
+      "visually — ALWAYS read an attached image with `file_read` before " +
+      "describing it; never describe an image from its filename.",
   );
   return lines.join("\n");
 }
@@ -182,6 +203,45 @@ export function buildFileReadTool(
         );
       }
       const bytes = await readFile(entry.localPath);
+      // Images return an actual image block so the model SEES the file.
+      // Without this the model only ever gets "text could not be
+      // extracted" and confabulates a description from the filename.
+      if (VIEWABLE_IMAGE_MIME_TYPES.has(entry.mimeType.toLowerCase())) {
+        if (bytes.byteLength > IMAGE_BLOCK_LIMIT_BYTES) {
+          return {
+            content: [
+              {
+                type: "text",
+                text:
+                  `${entry.name} is a ${entry.mimeType} of ${bytes.byteLength} bytes, ` +
+                  `above the ${IMAGE_BLOCK_LIMIT_BYTES}-byte inline image limit. ` +
+                  "Downscale it first (e.g. with python) and view the smaller copy.",
+              },
+            ],
+            details: {
+              path: entry.localPath,
+              name: entry.name,
+              readable: false,
+              oversizedImage: true,
+            },
+          };
+        }
+        return {
+          content: [
+            {
+              type: "image",
+              data: bytes.toString("base64"),
+              mimeType: entry.mimeType,
+            },
+          ],
+          details: {
+            path: entry.localPath,
+            name: entry.name,
+            kind: "image",
+            readable: true,
+          },
+        };
+      }
       const extracted = await extractAttachmentText({
         name: entry.name,
         mimeType: entry.mimeType,
