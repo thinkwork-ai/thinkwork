@@ -274,7 +274,7 @@ export function buildRecallTool(context: MemoryToolsContext): AgentTool<any> {
         }),
       ),
     }),
-    executionMode: "sequential",
+    executionMode: "parallel",
     execute: async (_toolCallId, params) => {
       requireScope(context);
       const { query, top_k } = params as RecallParams;

@@ -226,7 +226,7 @@ function registerWikiLs(
         }),
       ),
     }),
-    executionMode: "sequential",
+    executionMode: "parallel",
     async execute(_toolCallId, params, signal) {
       const p = params as {
         path?: string;
@@ -309,7 +309,7 @@ function registerWikiRg(
         }),
       ),
     }),
-    executionMode: "sequential",
+    executionMode: "parallel",
     async execute(_toolCallId, params, signal) {
       const p = params as {
         query?: string;
@@ -405,7 +405,7 @@ function registerWikiRead(
         }),
       ),
     }),
-    executionMode: "sequential",
+    executionMode: "parallel",
     async execute(_toolCallId, params, signal) {
       const p = params as {
         path?: string;
@@ -478,7 +478,7 @@ function registerWikiLinks(
         }),
       ),
     }),
-    executionMode: "sequential",
+    executionMode: "parallel",
     async execute(_toolCallId, params, signal) {
       const p = params as {
         path?: string;

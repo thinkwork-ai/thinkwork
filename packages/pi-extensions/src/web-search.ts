@@ -152,7 +152,7 @@ export function createWebSearchExtension(
             }),
           ),
         }),
-        executionMode: "sequential",
+        executionMode: "parallel",
         async execute(_toolCallId, params) {
           const typed = (params ?? {}) as Record<string, unknown>;
           const query = asString(typed.query);

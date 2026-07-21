@@ -54,10 +54,10 @@ describe("buildMemoryTools — composition", () => {
     expect(tools[1]?.label).toBe("Recall");
   });
 
-  it("each tool sets executionMode = sequential", () => {
+  it("remember stays sequential (writer); recall runs parallel (THINK-324 C6)", () => {
     const tools = buildMemoryTools(makeContext());
     expect(tools[0]?.executionMode).toBe("sequential");
-    expect(tools[1]?.executionMode).toBe("sequential");
+    expect(tools[1]?.executionMode).toBe("parallel");
   });
 });
 
