@@ -12,10 +12,10 @@ describe("parseAgentRuntimeInput", () => {
     expect(parseAgentRuntimeInput("PI")).toBe("pi");
   });
 
-  it("accepts the AGENTCORE runtime from the Agent-configuration dropdown (THINK-311)", () => {
-    expect(parseAgentRuntimeInput("AGENTCORE")).toBe("agentcore");
-    expect(parseAgentRuntimeInput("agentcore")).toBe("agentcore");
-    expect(parseAgentRuntimeInput("harness")).toBe("agentcore");
+  it("normalizes legacy AGENTCORE/harness inputs to Pi (THINK-324)", () => {
+    expect(parseAgentRuntimeInput("AGENTCORE")).toBe("pi");
+    expect(parseAgentRuntimeInput("agentcore")).toBe("pi");
+    expect(parseAgentRuntimeInput("harness")).toBe("pi");
   });
 
   it("still rejects unknown runtimes", () => {
@@ -35,8 +35,8 @@ describe("agentRuntimeToGraphqlEnum", () => {
     expect(agentRuntimeToGraphqlEnum("strands")).toBe("FLUE");
   });
 
-  it("serializes internal harness rows as the AGENTCORE enum value (THINK-311)", () => {
-    expect(agentRuntimeToGraphqlEnum("harness")).toBe("AGENTCORE");
-    expect(agentRuntimeToGraphqlEnum("agentcore")).toBe("AGENTCORE");
+  it("serializes legacy harness rows as FLUE — Pi is the only runtime (THINK-324)", () => {
+    expect(agentRuntimeToGraphqlEnum("harness")).toBe("FLUE");
+    expect(agentRuntimeToGraphqlEnum("agentcore")).toBe("FLUE");
   });
 });

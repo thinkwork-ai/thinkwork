@@ -124,7 +124,7 @@ describe("updateTenantAgent", () => {
     expect(result).toMatchObject({ id: "agent-platform" });
   });
 
-  it("treats the legacy Harness runtime field as a new-thread default", async () => {
+  it("normalizes a legacy Harness runtime field to the Pi default (THINK-324)", async () => {
     const { updateTenantAgent } =
       await import("./updateTenantAgent.mutation.js");
 
@@ -145,7 +145,7 @@ describe("updateTenantAgent", () => {
       runtime: "pi",
       runtime_config: {
         defaultSpaceId: "space-1",
-        defaultThreadRuntime: "agentcore",
+        defaultThreadRuntime: "pi",
       },
     });
   });

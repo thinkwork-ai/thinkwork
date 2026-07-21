@@ -485,8 +485,9 @@ def prepare_agentcore_control_runtime():
     if not runtime_files:
         raise RuntimeError("AgentCore control runtime manifest has no files")
     runtime_paths = [str(item.get("path") or "") for item in runtime_files]
+    # THINK-324: the managed harness is retired — harness-lifecycle.js is
+    # absent from new releases but tolerated in legacy bundles.
     required_entrypoints = {
-        "harness-lifecycle.js",
         "preflight.js",
         "reconcile_twenty_provider.js",
     }
@@ -522,10 +523,7 @@ def prepare_agentcore_control_runtime():
                 ]
             )
         )
-        for entrypoint in (
-            "harness-lifecycle.js",
-            "reconcile_twenty_provider.js",
-        )
+        for entrypoint in ("reconcile_twenty_provider.js",)
     ]
     if any(not item.get("sdkImportReady") for item in entrypoint_preflights):
         raise RuntimeError("An AgentCore control runtime entrypoint cannot import its SDK")

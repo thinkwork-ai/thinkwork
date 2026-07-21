@@ -85,21 +85,6 @@ export async function runStallMonitor(
 			`);
     }
 
-    // THINK-311 KTD-9: harness-trial turns are timed out and their thread
-    // checkout released (above — a dead trial turn must never wedge the
-    // thread), but they are NEVER enqueued for retry — the retry
-    // dispatcher re-executes through the wakeup path, which resolves to
-    // Pi, and that re-dispatch would be the silent Pi fallback R4
-    // forbids. The harness runner's keepalive bumps last_activity_at, so
-    // only genuinely dead harness turns land here.
-    if (turn.runtime_type === "agentcore" || turn.runtime_type === "harness") {
-      console.log(
-        `[stall-monitor] harness turn ${turn.id} timed out; retry enqueue skipped (THINK-311 R4)`,
-      );
-      processed++;
-      continue;
-    }
-
     // Insert retry_queue entry with backoff delay
     const nextAttempt = (turn.retry_attempt || 0) + 1;
     const delaySec = getRetryDelay(nextAttempt);

@@ -7,7 +7,6 @@ import {
   loadTenantAgentForGraphql,
   parseJsonInput,
 } from "./shared.js";
-import { readHarnessReadiness } from "../../../lib/harness/managed-profile.js";
 import { GraphQLError } from "graphql";
 
 interface UpdateTenantAgentInput {
@@ -61,7 +60,7 @@ export async function updateTenantAgent(
   if (i.role !== undefined) updates.role = i.role;
   if (i.systemPrompt !== undefined) updates.system_prompt = i.systemPrompt;
   if (i.runtime !== undefined) {
-    const runtime = parseAgentRuntimeInput(i.runtime);
+    parseAgentRuntimeInput(i.runtime); // validates; Pi is the only runtime
     const currentConfig =
       currentAgent?.runtimeConfig &&
       typeof currentAgent.runtimeConfig === "object" &&
@@ -72,25 +71,6 @@ export async function updateTenantAgent(
       i.runtimeConfig !== undefined
         ? parseJsonInput(i.runtimeConfig)
         : currentConfig;
-    if (runtime === "agentcore") {
-      const [tenant] = await db
-        .select({ slug: tenants.slug })
-        .from(tenants)
-        .where(eq(tenants.id, args.tenantId))
-        .limit(1);
-      const readiness = await readHarnessReadiness(tenant?.slug ?? null);
-      if (!readiness.ready) {
-        throw new GraphQLError(
-          `AgentCore Harness is unavailable (${readiness.reasonCode})`,
-          {
-            extensions: {
-              code: "AGENTCORE_HARNESS_NOT_READY",
-              reasonCode: readiness.reasonCode,
-            },
-          },
-        );
-      }
-    }
     // The Settings selector chooses the runtime for NEW Composer threads.
     // Existing threads carry an immutable metadata pin, so changing this
     // default must never replace the platform agent runtime or restore active
@@ -103,7 +83,7 @@ export async function updateTenantAgent(
       !Array.isArray(requestedConfig)
         ? (requestedConfig as Record<string, unknown>)
         : {}),
-      defaultThreadRuntime: runtime === "agentcore" ? "agentcore" : "pi",
+      defaultThreadRuntime: "pi",
     };
   }
   if (i.adapterType !== undefined) updates.adapter_type = i.adapterType;

@@ -722,7 +722,6 @@ def test_packaged_agentcore_control_runtime_is_exact_and_runnable(
     assert int(evidence["nodeVersion"].removeprefix("v").split(".", 1)[0]) >= 22
     assert evidence["bundledRuntimeVerified"] is True
     assert evidence["bundledEntrypoints"] == [
-        "harness-lifecycle.js",
         "preflight.js",
         "reconcile_twenty_provider.js",
     ]
@@ -895,7 +894,6 @@ def test_packaged_agentcore_control_runtime_rebuild_removes_stale_files(
     assert "stale-chunk.js" not in generated
     assert paths == generated
     assert {path for path in paths if "/" not in path} == {
-        "harness-lifecycle.js",
         "package.json",
         "preflight.js",
         "reconcile_twenty_provider.js",

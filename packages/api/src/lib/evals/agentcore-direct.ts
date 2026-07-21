@@ -7,12 +7,6 @@ import {
 } from "../resolve-agent-runtime-config.js";
 import { resolveRuntimeFunctionName } from "../resolve-runtime-function-name.js";
 import { resolveCurrentCapabilitiesManifest } from "../capabilities/current-manifest.js";
-import {
-  canonicalHarnessEvalTraceId,
-  createCanonicalHarnessEvalTurn,
-  loadCanonicalHarnessEvalResult,
-} from "./agentcore-harness-turn.js";
-
 // Import from the leaf module (used internally below) and re-export so
 // callers that only need the id (e.g. skill-eval-run.ts) can import it
 // WITHOUT dragging this module's heavy resolve-agent-runtime-config →
@@ -29,15 +23,12 @@ export function effectiveEvalRuntimeConfig(
   runtimeConfig: AgentRuntimeConfig,
   pinnedRuntimeType?: "pi" | "agentcore" | null,
 ): AgentRuntimeConfig {
-  if (pinnedRuntimeType) {
-    return runtimeConfig.runtimeType === pinnedRuntimeType
-      ? runtimeConfig
-      : { ...runtimeConfig, runtimeType: pinnedRuntimeType };
-  }
-  return runtimeConfig.defaultThreadRuntime === "agentcore" &&
-    runtimeConfig.runtimeType !== "agentcore"
-    ? { ...runtimeConfig, runtimeType: "agentcore" }
-    : runtimeConfig;
+  // THINK-324: Pi is the only runtime — legacy agentcore pins and configs
+  // run Pi. The pin parameter survives for callers passing stored values.
+  void pinnedRuntimeType;
+  return runtimeConfig.runtimeType === "pi"
+    ? runtimeConfig
+    : { ...runtimeConfig, runtimeType: "pi" };
 }
 
 function workspaceBucket(): string {
@@ -487,39 +478,11 @@ async function invokeAgentCoreForEvalOnce(input: {
   const agentcoreFunctionName = resolveRuntimeFunctionName(
     runtimeConfig.runtimeType,
   );
-  let canonicalHarnessTurn:
-    | Awaited<ReturnType<typeof createCanonicalHarnessEvalTurn>>
-    | undefined;
-  if (runtimeConfig.runtimeType === "agentcore") {
-    if (!requesterUserId) {
-      throw new Error(
-        "AgentCore Harness evaluations require an exact requester user identity.",
-      );
-    }
-    canonicalHarnessTurn = await createCanonicalHarnessEvalTurn({
-      tenantId: input.tenantId,
-      tenantSlug: runtimeConfig.tenantSlug,
-      agentId: input.agentId,
-      requesterUserId,
-      sessionId: input.sessionId,
-      message: input.message,
-      messagesHistory: input.messagesHistory,
-    });
-  }
   const invokePayload = buildEvalAgentCorePayload({
     ...input,
     systemPrompt: input.systemPrompt ?? null,
     runtimeConfig,
   });
-  if (canonicalHarnessTurn) {
-    Object.assign(invokePayload, {
-      thread_id: canonicalHarnessTurn.threadId,
-      thread_turn_id: canonicalHarnessTurn.threadTurnId,
-      user_id: requesterUserId,
-      cost_owner_user_id: requesterUserId,
-      trace_id: canonicalHarnessEvalTraceId(input.sessionId),
-    });
-  }
   const lambdaEventPayload = JSON.stringify({
     requestContext: { http: { method: "POST", path: "/invocations" } },
     rawPath: "/invocations",
@@ -558,24 +521,6 @@ async function invokeAgentCoreForEvalOnce(input: {
     throw new Error(
       `AgentCore Lambda ${invokeRes.FunctionError}: ${rawPayload.slice(0, 500)}`,
     );
-  }
-
-  if (canonicalHarnessTurn) {
-    const harnessResult = await loadCanonicalHarnessEvalResult({
-      tenantId: input.tenantId,
-      threadTurnId: canonicalHarnessTurn.threadTurnId,
-    });
-    if (!harnessResult.output || harnessResult.output === "{}") {
-      throw new AgentCoreEvalEmptyResponseError();
-    }
-    const usage = extractAgentCoreUsage(harnessResult.usage ?? undefined);
-    return {
-      output: harnessResult.output,
-      durationMs: Date.now() - startedAt,
-      composedSystemPrompt: harnessResult.composedSystemPrompt,
-      threadTurnId: canonicalHarnessTurn.threadTurnId,
-      ...(usage ? { usage } : {}),
-    };
   }
 
   const adapterResp = JSON.parse(rawPayload) as Record<string, unknown>;

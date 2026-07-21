@@ -43,7 +43,6 @@ import {
   pendingUserQuestions,
   threadAttachments,
   scheduledJobs,
-  harnessManagedThreadEnrollments,
   threadParticipants,
 } from "@thinkwork/database-pg/schema";
 import {
@@ -132,7 +131,6 @@ import {
   resolveDispatchPinnedSkills,
 } from "../lib/skills/message-pinned-skills.js";
 import { loadTrustedCatalogSkillIds } from "../lib/skill-trust/runtime-gate.js";
-import { requireHarnessManagedProfile } from "../lib/harness/managed-profile.js";
 import {
   prependThreadProgressPromptBlock,
   readThreadProgressMarkdown,
@@ -162,7 +160,7 @@ import {
 } from "../lib/goal-mode.js";
 import { normalizeThreadJsonRenderParts } from "../lib/chat-finalize/notify.js";
 import { goalRunProjectionFromFinalizePayload } from "../lib/chat-finalize/process-finalize.js";
-import { goalModeFromQuestionSourceTurn } from "../lib/harness/question-goal-resume.js";
+import { goalModeFromQuestionSourceTurn } from "../lib/question-goal-resume.js";
 import { sendThreadReplySlack } from "../lib/slack/thread-reply.js";
 import { projectWorkflowStepFinalizeSafely } from "../lib/workflows/workflow-step-finalize.js";
 import {
@@ -357,167 +355,6 @@ export async function invokeAgentCore(
   }
   const result = (await resp.json()) as Record<string, unknown>;
   return { ok: true, status: 200, result };
-}
-
-async function finishHarnessWakeup(input: {
-  wakeup: WakeupRow;
-  runId: string;
-  runThreadId: string | null;
-}): Promise<void> {
-  // The Harness runner calls processFinalize itself for every admitted wakeup.
-  // Rewriting the turn or inserting another assistant message here would
-  // race/duplicate the canonical finalize path, so this processor owns only
-  // the wakeup envelope.
-  const [turn] = await db
-    .select({
-      status: threadTurns.status,
-      finalizedAt: threadTurns.finalized_at,
-      error: threadTurns.error,
-    })
-    .from(threadTurns)
-    .where(
-      and(
-        eq(threadTurns.id, input.runId),
-        eq(threadTurns.tenant_id, input.wakeup.tenant_id),
-      ),
-    )
-    .limit(1);
-  if (!turn?.finalizedAt) {
-    throw new Error(
-      "AgentCore Harness returned before the wakeup turn finalized.",
-    );
-  }
-
-  if (turn.status !== "succeeded") {
-    const error =
-      turn.error || `AgentCore Harness question resume ${turn.status}.`;
-    await appendThreadTurnEvent(drizzleThreadTurnEventStore(db), {
-      tenantId: input.wakeup.tenant_id,
-      runId: input.runId,
-      agentId: input.wakeup.agent_id || null,
-      eventType: "error",
-      stream: "system",
-      level: "error",
-      message: "error",
-      payload: { error, owner: "harness_finalize" },
-    }).catch((eventError) => {
-      console.error(
-        "[wakeup-processor] Failed to append Harness resume error event:",
-        eventError,
-      );
-    });
-    await failWakeup(input.wakeup.id, error);
-    if (input.runThreadId) {
-      await releaseThreadCheckout({
-        threadId: input.runThreadId,
-        runId: input.runId,
-      });
-      await promoteNextDeferredWakeup(
-        input.wakeup.tenant_id,
-        input.runThreadId,
-      );
-    }
-    return;
-  }
-
-  await appendThreadTurnEvent(drizzleThreadTurnEventStore(db), {
-    tenantId: input.wakeup.tenant_id,
-    runId: input.runId,
-    agentId: input.wakeup.agent_id || null,
-    eventType: "completed",
-    stream: "system",
-    level: "info",
-    message: "completed",
-    payload: { owner: "harness_finalize" },
-  }).catch((eventError) => {
-    console.error(
-      "[wakeup-processor] Failed to append Harness resume completion event:",
-      eventError,
-    );
-  });
-  await db
-    .update(agentWakeupRequests)
-    .set({ status: "completed", finished_at: new Date() })
-    .where(eq(agentWakeupRequests.id, input.wakeup.id));
-  await db
-    .update(agents)
-    .set({ last_heartbeat_at: new Date() })
-    .where(eq(agents.id, input.wakeup.agent_id));
-  if (input.runThreadId) {
-    await releaseThreadCheckout({
-      threadId: input.runThreadId,
-      runId: input.runId,
-    });
-    await promoteNextDeferredWakeup(input.wakeup.tenant_id, input.runThreadId);
-  }
-}
-
-async function ensureHarnessWakeupEnrollment(input: {
-  tenantId: string;
-  tenantSlug: string;
-  threadId: string;
-  agentId: string;
-  requesterUserId: string;
-}): Promise<void> {
-  const profile = await requireHarnessManagedProfile(input.tenantSlug);
-  const [thread] = await db
-    .select({ spaceId: threads.space_id })
-    .from(threads)
-    .where(
-      and(
-        eq(threads.id, input.threadId),
-        eq(threads.tenant_id, input.tenantId),
-      ),
-    )
-    .limit(1);
-  if (!thread?.spaceId) {
-    throw new Error("AgentCore automation thread is missing a Space");
-  }
-  await db.transaction(async (tx) => {
-    await tx
-      .insert(threadParticipants)
-      .values({
-        tenant_id: input.tenantId,
-        thread_id: input.threadId,
-        space_id: thread.spaceId,
-        participant_type: "user",
-        user_id: input.requesterUserId,
-        role: "requester",
-        source: "automation",
-        notification_preference: "muted",
-      })
-      .onConflictDoNothing();
-    await tx
-      .insert(harnessManagedThreadEnrollments)
-      .values({
-        tenant_id: input.tenantId,
-        thread_id: input.threadId,
-        logical_agent_id: input.agentId,
-        trust_profile: "default",
-        harness_arn: profile.harnessArn,
-        qualifier: profile.endpointName,
-        resolved_version: profile.liveVersion,
-        session_strategy: "fresh",
-        prior_runtime: "pi",
-        status: "active",
-        enrolled_by_user_id: input.requesterUserId,
-      })
-      .onConflictDoUpdate({
-        target: [
-          harnessManagedThreadEnrollments.tenant_id,
-          harnessManagedThreadEnrollments.thread_id,
-        ],
-        set: {
-          logical_agent_id: input.agentId,
-          harness_arn: profile.harnessArn,
-          qualifier: profile.endpointName,
-          resolved_version: profile.liveVersion,
-          status: "active",
-          enrolled_by_user_id: input.requesterUserId,
-          restored_at: null,
-        },
-      });
-  });
 }
 
 interface RenderWorkspaceTupleForWakeupResult {
@@ -1500,21 +1337,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     } catch (err) {
       console.warn("[wakeup-processor] Failed to create fallback thread:", err);
     }
-  }
-
-  if (runtimeType === "agentcore") {
-    if (!runThreadId || !costOwnerUserId) {
-      throw new Error(
-        "AgentCore automation requires a canonical thread and exact requester user identity",
-      );
-    }
-    await ensureHarnessWakeupEnrollment({
-      tenantId: wakeup.tenant_id,
-      tenantSlug,
-      threadId: runThreadId,
-      agentId: wakeup.agent_id,
-      requesterUserId: costOwnerUserId,
-    });
   }
 
   let turnNumber: number | undefined;
@@ -2884,15 +2706,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       throw new Error(
         `AgentCore invoke failed: ${invokeResponse.status} ${JSON.stringify(invokeResponse.result)}`,
       );
-    }
-
-    if (normalizeAgentRuntimeType(runtimeType) === "agentcore") {
-      await finishHarnessWakeup({
-        wakeup,
-        runId: run.id,
-        runThreadId: runThreadId ?? null,
-      });
-      return;
     }
 
     const invokeResult = invokeResponse.result;

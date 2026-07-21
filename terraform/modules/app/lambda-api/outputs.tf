@@ -8,41 +8,6 @@ output "api_endpoint" {
   value       = local.api_base_url
 }
 
-output "agentcore_turn_assertion_issuer" {
-  description = "Proof-only CUSTOM_JWT issuer on the regional HTTP API."
-  value       = var.enable_agentcore_multiplayer_proof ? local.agentcore_turn_assertion_issuer : ""
-}
-
-output "agentcore_harness_audience" {
-  description = "Purpose-bound audience for proof Harness invocations."
-  value       = var.enable_agentcore_multiplayer_proof ? local.agentcore_harness_audience : ""
-}
-
-output "agentcore_gateway_audience" {
-  description = "Purpose-bound audience for proof Gateway operations."
-  value       = var.enable_agentcore_multiplayer_proof ? local.agentcore_gateway_audience : ""
-}
-
-output "agentcore_turn_assertion_active_key_arn" {
-  description = "Operator-only active proof signing key ARN used by deployed verification probes."
-  value       = var.enable_agentcore_multiplayer_proof ? local.agentcore_turn_assertion_active_key.key_id : ""
-}
-
-output "agentcore_turn_assertion_active_kid" {
-  description = "Public JWKS key identifier for the active proof signing key."
-  value       = var.enable_agentcore_multiplayer_proof ? local.agentcore_turn_assertion_active_key.kid : ""
-}
-
-output "agentcore_proof_oauth_issuer" {
-  description = "Synthetic proof OAuth issuer on the regional HTTP API."
-  value       = var.enable_agentcore_multiplayer_proof ? "${local.mcp_oauth_api_base_url}/agentcore-proof/oauth" : ""
-}
-
-output "agentcore_proof_target_base_url" {
-  description = "Regional HTTP API base URL hosting the controlled identity target."
-  value       = var.enable_agentcore_multiplayer_proof ? local.mcp_oauth_api_base_url : ""
-}
-
 output "api_execution_arn" {
   description = "API Gateway V2 execution ARN (for Lambda permissions)"
   value       = aws_apigatewayv2_api.main.execution_arn

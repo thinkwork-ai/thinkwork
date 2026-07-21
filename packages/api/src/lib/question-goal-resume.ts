@@ -1,4 +1,4 @@
-import type { RuntimeGoalMode } from "../goal-mode.js";
+import type { RuntimeGoalMode } from "./goal-mode.js";
 
 /**
  * Carry a paused Goal-mode orchestration record across the governed question

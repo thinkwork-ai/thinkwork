@@ -926,29 +926,15 @@ locals {
       Resource = "*"
     },
     ],
-    # THINK-316 U2 — request path receives data-plane invocation only.
-    # Provisioning/version/endpoint/PassRole rights belong to Terraform's
-    # dedicated Harness lifecycle and never reach a chat Lambda.
-    #
-    # CRITICAL: never grant `bedrock-agentcore:InvokeAgentRuntimeCommand`
-    # anywhere — it bypasses Harness allowedTools enforcement. Invocation goes
-    # through InvokeHarness / InvokeAgentRuntime only.
-    var.enable_agentcore_harness_invocation ? [
+    # THINK-324 — the managed-harness invoke grant is retired. The AgentCore
+    # Identity chain below survives UNCONDITIONALLY: the live Twenty
+    # connector's per-user 3LO (handlers/skills.ts via
+    # lib/agentcore-identity/agentcore-user-oauth.ts) mints workload tokens
+    # against the shared workload identity and reads the twenty-crm
+    # credential provider from the token vault.
+    [
       {
-        # Data plane — invoke a Harness (and its runtime endpoints) directly.
-        Sid    = "AgentCoreHarnessInvoke"
-        Effect = "Allow"
-        Action = [
-          "bedrock-agentcore:InvokeHarness",
-          "bedrock-agentcore:InvokeAgentRuntime",
-        ]
-        Resource = ["arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:harness/*"]
-      },
-      {
-        # The deterministic report adapter uses the same AgentCore Identity
-        # chain as Harness Gateway outbound auth: turn JWT -> workload token
-        # -> OBO Gateway token. No provider client secret enters Lambda.
-        Sid    = "AgentCoreHarnessGatewayIdentity"
+        Sid    = "AgentCoreTwentyIdentity"
         Effect = "Allow"
         Action = [
           "bedrock-agentcore:GetWorkloadAccessTokenForJWT",
@@ -960,11 +946,10 @@ locals {
           "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:workload-identity-directory/default",
           "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:workload-identity-directory/default/workload-identity/thinkwork-${var.stage}-multiplayer-proof",
           "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:token-vault/default",
-          "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:token-vault/default/oauth2credentialprovider/thinkwork-${var.stage}-proof-oauth",
           "arn:aws:bedrock-agentcore:${var.region}:${var.account_id}:token-vault/default/oauth2credentialprovider/thinkwork-${var.stage}-twenty-crm",
         ]
       },
-    ] : [],
+    ],
   )
 
   # ---------------------------------------------------------------------------

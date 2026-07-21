@@ -989,23 +989,6 @@ resource "tls_private_key" "capability_signing" {
   algorithm = "ED25519"
 }
 
-resource "random_password" "agentcore_proof_oauth_client_secret" {
-  count   = var.enable_agentcore_multiplayer_proof ? 1 : 0
-  length  = 48
-  special = false
-}
-
-check "agentcore_multiplayer_proof_requires_harness" {
-  assert {
-    condition = !var.enable_agentcore_multiplayer_proof || (
-      var.enable_agentcore_harness &&
-      can(regex("^[a-z0-9][a-z0-9-]{0,47}$", var.agentcore_multiplayer_proof_tenant_slug)) &&
-      length(distinct(compact([for owner in split(",", var.agentcore_multiplayer_proof_owner_allowlist) : trimspace(owner)]))) >= 2
-    )
-    error_message = "enable_agentcore_multiplayer_proof requires enable_agentcore_harness, an explicit lowercase tenant slug, and at least two explicit distinct proof owner subjects."
-  }
-}
-
 resource "aws_secretsmanager_secret" "capability_signing_key" {
   name        = "thinkwork/${var.stage}/capability-signing-key"
   description = "Ed25519 private key (PKCS8 PEM) signing capability sidecars and manifests (THINK-173)."
@@ -1111,17 +1094,10 @@ module "api" {
   # THINK-316 U2 — request path receives only Harness invocation. Terraform
   # owns provisioning/version/endpoint control, avoiding a module cycle and
   # keeping PassRole/create/update/list out of chat Lambdas.
-  enable_agentcore_harness_invocation = var.enable_agentcore_multiplayer_proof
-
-  # THINK-316 U1 — proof-only assertion/provider handlers remain absent unless
-  # explicitly enabled. The generated secret stays in Terraform sensitive
-  # state and is passed only to the two narrow boundary Lambdas and Identity.
-  enable_agentcore_multiplayer_proof          = var.enable_agentcore_multiplayer_proof
-  agentcore_turn_assertion_key_versions       = var.agentcore_turn_assertion_key_versions
-  agentcore_turn_assertion_active_key_version = var.agentcore_turn_assertion_active_key_version
-  agentcore_proof_oauth_client_id             = "thinkwork-${var.stage}-agentcore-proof"
-  agentcore_proof_oauth_client_secret         = var.enable_agentcore_multiplayer_proof ? random_password.agentcore_proof_oauth_client_secret[0].result : ""
-  agentcore_proof_owner_allowlist             = var.agentcore_multiplayer_proof_owner_allowlist
+  # THINK-324: the managed-harness/proof plane is retired; its handlers,
+  # KMS plane, and Gateway are gone. The proof flag survives only as a
+  # declared variable so existing -var passthroughs stay valid.
+  enable_agentcore_multiplayer_proof = false
 
   # Phase 3 U8b — KMS key + Object Lock mode forwarded as
   # COMPLIANCE_ANCHOR_KMS_KEY_ARN and COMPLIANCE_ANCHOR_OBJECT_LOCK_MODE
@@ -1315,153 +1291,17 @@ module "agentcore_pi" {
   okf_efs_read_access_point_arn = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_pi_read[0].arn : ""
 }
 
-# AgentCore Harness execution role and managed tenant/profile runtime. The
-# public root inputs retain their rollout-era names until the example-stack
-# compatibility window closes; this module boundary uses managed semantics.
-module "agentcore_harness" {
-  source = "../app/agentcore-harness"
-
-  enabled                       = var.enable_agentcore_harness
-  managed_runtime_enabled       = var.enable_agentcore_multiplayer_proof
-  stage                         = var.stage
-  region                        = var.region
-  account_id                    = var.account_id
-  bucket_name                   = module.s3.bucket_name
-  tenant_slug                   = var.agentcore_multiplayer_proof_tenant_slug
-  discovery_url                 = "${module.api.agentcore_turn_assertion_issuer}/.well-known/openid-configuration"
-  harness_audience              = module.api.agentcore_harness_audience
-  gateway_arn                   = module.agentcore_proof_gateway.gateway_arn
-  oauth_credential_provider_arn = module.agentcore_proof_identity.credential_provider_arn
-  oauth_credential_secret_arn   = module.agentcore_proof_identity.credential_secret_arn
-  oauth_return_url              = module.agentcore_proof_identity.oauth_return_url
-}
-
-# The Harness depends on the public issuer/API, so feeding its generated ARN
-# back into the api module would create a Terraform cycle. Publish the
-# non-secret, attested readiness contract under deterministic SSM keys; the
-# runner and DeploymentStatus resolver read it server-side. No browser token,
-# participant id, credential, prompt, or private result is stored here. Keep
-# the original address during the migration so deployed runners never lose
-# their profile between releases.
-locals {
-  agentcore_harness_profile_value = jsonencode({
-    tenantSlug                     = var.agentcore_multiplayer_proof_tenant_slug
-    trustProfile                   = "default"
-    harnessArn                     = module.agentcore_harness.managed_harness_arn
-    endpointArn                    = module.agentcore_harness.managed_endpoint_arn
-    endpointName                   = module.agentcore_harness.managed_endpoint_name
-    expectedVersion                = module.agentcore_harness.managed_target_version
-    liveVersion                    = module.agentcore_harness.managed_live_version
-    modelId                        = module.agentcore_harness.managed_model_id
-    status                         = module.agentcore_harness.managed_status
-    configurationFingerprint       = module.agentcore_harness.managed_configuration_fingerprint
-    authorizerAudience             = module.api.agentcore_harness_audience
-    sessionStrategy                = "fresh"
-    gatewayArn                     = module.agentcore_proof_gateway.gateway_arn
-    gatewayUrl                     = module.agentcore_proof_gateway.gateway_url
-    gatewayTargetName              = module.agentcore_proof_gateway.target_name
-    identityWorkloadName           = module.agentcore_proof_identity.workload_identity_name
-    identityCredentialProviderName = module.agentcore_proof_identity.credential_provider_name
-    identityCredentialProviderArn  = module.agentcore_proof_identity.credential_provider_arn
-    invocationToolsContract        = "control-plane-attested-full-override-v1"
-    invocationToolsFingerprint     = module.agentcore_harness.managed_invocation_tools_fingerprint
-    invocationTools                = jsondecode(module.agentcore_harness.managed_invocation_tools_json)
-    strategyDecisionRule           = "reuse_only_if_correct_and_20_percent_benefit"
-    capacityEnvelope = {
-      activeSessions       = 100
-      newSessionsPerSecond = 10
-      minimumHeadroom      = 0.50
-    }
-  })
-}
-
-resource "aws_ssm_parameter" "agentcore_harness_proof_profile" {
-  count = var.enable_agentcore_multiplayer_proof ? 1 : 0
-
-  name = "/thinkwork/${var.stage}/agentcore-harness-proof-profile"
-  type = "String"
-  # The exact immutable Harness tool schemas sit close to Standard's 4 KiB
-  # ceiling. Intelligent-Tiering stays Standard while possible and safely
-  # promotes only when a legitimate governed schema requires more room.
-  tier  = "Intelligent-Tiering"
-  value = local.agentcore_harness_profile_value
-
-  lifecycle {
-    precondition {
-      # Base64 expands every three UTF-8 bytes to four ASCII characters. A
-      # conservative 10,920-character ceiling admits at most 8,190 bytes and
-      # cannot cross SSM's 8 KiB Advanced parameter limit.
-      condition     = length(base64encode(local.agentcore_harness_profile_value)) <= 10920
-      error_message = "The AgentCore Harness managed profile exceeds SSM's 8 KiB parameter limit."
-    }
-  }
-
-  tags = {
-    Name                   = "thinkwork-${var.stage}-agentcore-harness-proof-profile"
-    "thinkwork:proof"      = "THINK-316"
-    "thinkwork:tenant"     = var.agentcore_multiplayer_proof_tenant_slug
-    "thinkwork:profile"    = "default"
-    "thinkwork:visibility" = "server-only-nonsecret"
-  }
-}
-
-# Managed per-tenant profile address. Runtime lookup reads this first and only
-# falls back to the original single-tenant key during the migration window.
-# Adding the scoped key is non-destructive and lets later tenants receive their
-# own attested profile without changing Lambda configuration or hot-path
-# control-plane resources.
-resource "aws_ssm_parameter" "agentcore_harness_profile" {
-  count = var.enable_agentcore_multiplayer_proof ? 1 : 0
-
-  name  = "/thinkwork/${var.stage}/agentcore-harness-profiles/${var.agentcore_multiplayer_proof_tenant_slug}"
-  type  = aws_ssm_parameter.agentcore_harness_proof_profile[0].type
-  tier  = "Intelligent-Tiering"
-  value = aws_ssm_parameter.agentcore_harness_proof_profile[0].value
-
-  tags = {
-    Name                   = "thinkwork-${var.stage}-agentcore-harness-profile-${var.agentcore_multiplayer_proof_tenant_slug}"
-    "thinkwork:managed-by" = "terraform"
-    "thinkwork:tenant"     = var.agentcore_multiplayer_proof_tenant_slug
-    "thinkwork:profile"    = "default"
-    "thinkwork:visibility" = "server-only-nonsecret"
-  }
-}
-
-# Publish the new immutable endpoint/profile first, then reclaim older
-# endpoint versions. Retain the active endpoint plus exactly one prior endpoint
-# for guarded rollback; the dedicated Harness owns no unrelated endpoints.
-resource "terraform_data" "agentcore_harness_endpoint_retention" {
-  count = var.enable_agentcore_multiplayer_proof ? 1 : 0
-
-  triggers_replace = {
-    active_endpoint = module.agentcore_harness.managed_endpoint_name
-    profile_digest  = module.agentcore_harness.managed_configuration_fingerprint
-  }
-
-  provisioner "local-exec" {
-    command = "bash ${path.module}/../app/agentcore-harness/scripts/prune_harness.sh"
-    environment = {
-      AWS_REGION           = var.region
-      HARNESS_ID           = module.agentcore_harness.managed_harness_id
-      ACTIVE_ENDPOINT_NAME = module.agentcore_harness.managed_endpoint_name
-      ENDPOINT_PREFIX      = "ThinkworkProofV"
-      LEGACY_ENDPOINT_NAME = "ThinkworkProof"
-    }
-  }
-
-  depends_on = [
-    aws_ssm_parameter.agentcore_harness_proof_profile,
-    aws_ssm_parameter.agentcore_harness_profile,
-  ]
-}
-
 # THINK-316 U1 proof-only Identity and Gateway plane. These resources use the
 # regional execute-api URL because the dev account rejects public Lambda
 # Function URLs and a custom domain may be unavailable in a fresh stage.
 module "agentcore_proof_identity" {
   source = "../app/agentcore-identity"
 
-  enabled = var.enable_agentcore_multiplayer_proof
+  # THINK-324: the proof plane is retired — permanently off. The module's
+  # proof half (workload-identity lifecycle + proof credential provider) no
+  # longer reconciles; delete_identity.sh retains the shared workload
+  # identity for the Twenty half below.
+  enabled = false
   # THINK-324 — the Twenty user-federation identity (shared workload
   # identity + twenty-crm credential provider + DCR client secret) survives
   # the proof plane's retirement: it stays enabled wherever a Twenty
@@ -1473,9 +1313,9 @@ module "agentcore_proof_identity" {
   stage               = var.stage
   region              = var.region
   account_id          = var.account_id
-  oauth_issuer        = module.api.agentcore_proof_oauth_issuer
+  oauth_issuer        = ""
   oauth_client_id     = "thinkwork-${var.stage}-agentcore-proof"
-  oauth_client_secret = var.enable_agentcore_multiplayer_proof ? random_password.agentcore_proof_oauth_client_secret[0].result : ""
+  oauth_client_secret = ""
   user_federation_return_urls = [
     "${module.api.api_endpoint}/api/skills/mcp-oauth/agentcore/complete",
   ]
@@ -1485,22 +1325,6 @@ module "agentcore_proof_identity" {
   # Connect-AgentCore 404'd against crm.thinkwork.ai).
   twenty_oauth_issuer   = local.twenty_public_url != "" ? trimsuffix(local.twenty_public_url, "/") : "https://crm.thinkwork.ai"
   twenty_oauth_resource = local.twenty_public_url != "" ? "${trimsuffix(local.twenty_public_url, "/")}/mcp" : "https://crm.thinkwork.ai/mcp"
-}
-
-module "agentcore_proof_gateway" {
-  source = "../app/agentcore-gateway"
-
-  enabled                       = var.enable_agentcore_multiplayer_proof
-  stage                         = var.stage
-  region                        = var.region
-  account_id                    = var.account_id
-  discovery_url                 = "${module.api.agentcore_turn_assertion_issuer}/.well-known/openid-configuration"
-  gateway_audience              = module.api.agentcore_gateway_audience
-  target_base_url               = module.api.agentcore_proof_target_base_url
-  oauth_credential_provider_arn = module.agentcore_proof_identity.credential_provider_arn
-  oauth_credential_secret_arn   = module.agentcore_proof_identity.credential_secret_arn
-  oauth_return_url              = module.agentcore_proof_identity.oauth_return_url
-  proof_owner_allowlist         = var.agentcore_multiplayer_proof_owner_allowlist
 }
 
 # Capability Broker (THINK-280 U3) — ship-inert, gated by

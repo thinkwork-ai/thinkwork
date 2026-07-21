@@ -78,43 +78,4 @@ describe("stall monitor", () => {
     );
     expect(statements.some((s) => s.includes("retry_queue"))).toBe(true);
   });
-
-  it("times out a stalled harness turn WITHOUT enqueueing a retry (THINK-311 KTD-9/R4)", async () => {
-    mocks.execute
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            id: "turn-h",
-            tenant_id: "tenant-1",
-            agent_id: "agent-1",
-            thread_id: "thread-1",
-            runtime_type: "agentcore",
-            retry_attempt: 0,
-          },
-        ],
-      })
-      .mockResolvedValue({ rows: [] });
-    const { runStallMonitor } = await import("./stall-monitor.js");
-
-    const result = await runStallMonitor({
-      processMobileHandoffs: vi.fn(async () => ({
-        scanned: 0,
-        claimed: 0,
-        dispatched: 0,
-        failed: 0,
-        skipped: 0,
-      })),
-    });
-
-    // Still processed: timed_out + checkout release happen (a dead trial
-    // turn must never wedge the thread) — but NO retry_queue insert (the
-    // retry dispatcher re-runs through the wakeup path, which is Pi).
-    expect(result.stalled).toBe(1);
-    expect(mocks.execute).toHaveBeenCalledTimes(3);
-    const statements = mocks.execute.mock.calls.map((call) =>
-      JSON.stringify(call[0]),
-    );
-    expect(statements.some((s) => s.includes("retry_queue"))).toBe(false);
-    expect(statements.some((s) => s.includes("timed_out"))).toBe(true);
-  });
 });

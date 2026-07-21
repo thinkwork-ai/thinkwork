@@ -1,20 +1,22 @@
 import { GraphQLError } from "graphql";
 
-export function parseAgentRuntimeInput(
-  value: unknown,
-): "strands" | "pi" | "agentcore" {
+/**
+ * THINK-324: Pi is the only runtime. Legacy "agentcore"/"harness" inputs
+ * (old clients, stored rows from the retired managed-harness trial)
+ * normalize to Pi; anything else is a bad input.
+ */
+export function parseAgentRuntimeInput(value: unknown): "strands" | "pi" {
   if (value == null) return "pi";
   const normalized = String(value).toLowerCase();
-  if (normalized === "strands" || normalized === "pi" || normalized === "flue")
+  if (
+    normalized === "strands" ||
+    normalized === "pi" ||
+    normalized === "flue" ||
+    normalized === "agentcore" ||
+    normalized === "harness"
+  ) {
     return "pi";
-  // THINK-311: the Agent-configuration Runtime dropdown is the tenant-wide
-  // AgentCore switch. While it is on, ALL of this agent's chat turns run
-  // on the AWS AgentCore Harness path and non-chat dispatch (wakeups,
-  // evals, skill runs) fails loudly (trial is chat-only). Internally the
-  // `harness` remains a legacy read/input alias for rows created by the proof.
-  // All new application state uses the product runtime identifier `agentcore`.
-  if (normalized === "agentcore" || normalized === "harness")
-    return "agentcore";
+  }
   throw new GraphQLError("Invalid agent runtime", {
     extensions: { code: "BAD_USER_INPUT" },
   });
@@ -23,13 +25,15 @@ export function parseAgentRuntimeInput(
 export function agentRuntimeToGraphqlEnum(value: unknown): unknown {
   if (typeof value !== "string") return value;
   const normalized = value.toLowerCase();
-  // THINK-311: AGENTCORE is a first-class AgentRuntime enum value so the
-  // Agent-configuration dropdown can select and display it. Internal rows
-  // `harness` is retained as a legacy read alias. The AWS implementation is
-  // displayed as "AgentCore Harness", while the application token is agentcore.
-  if (normalized === "harness" || normalized === "agentcore")
-    return "AGENTCORE";
-  if (normalized === "pi" || normalized === "flue" || normalized === "strands")
+  if (
+    normalized === "pi" ||
+    normalized === "flue" ||
+    normalized === "strands" ||
+    // Legacy managed-harness rows read as the Pi runtime (THINK-324).
+    normalized === "harness" ||
+    normalized === "agentcore"
+  ) {
     return "FLUE";
+  }
   return value.toUpperCase();
 }
