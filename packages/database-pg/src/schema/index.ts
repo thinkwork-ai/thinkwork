@@ -84,7 +84,6 @@ export * from "./goals";
 export * from "./deployments";
 export * from "./pending-user-questions";
 export * from "./pending-tool-approvals";
-export * from "./harness-multiplayer";
 export * from "./tool-execution-events";
 export * from "./plugins";
 export * from "./auth";
