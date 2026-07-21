@@ -671,6 +671,21 @@ async function fetchProjectedWorkspaceText(args: {
 // Stream assembly
 // ---------------------------------------------------------------------------
 
+/**
+ * Kimi-family models emit OpenAI-style tool-call ids such as
+ * "functions.<gateway-tool-name>:<index>". The managed Harness streams those
+ * ids to the caller but rejects them on the continuation's toolResult blocks
+ * (HarnessToolResultBlockStart enforces ^[a-zA-Z0-9_-]+$). The harness does
+ * not persist the stream-ending assistant message — the caller resends both
+ * sides of the toolUse/toolResult pairing — so rewriting the id consistently
+ * at stream ingestion keeps the pairing valid without any server-side state
+ * to disagree with.
+ */
+function sanitizeToolUseId(id: string | undefined): string | undefined {
+  if (id == null) return id;
+  return id.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
 interface AssembledToolUse {
   toolUseId: string;
   name: string;
@@ -797,7 +812,7 @@ async function assembleStream(
         blocks.set(contentBlockIndex, {
           kind: "toolUse",
           text: "",
-          toolUseId: start.toolUse.toolUseId,
+          toolUseId: sanitizeToolUseId(start.toolUse.toolUseId),
           name: start.toolUse.name,
           inputJson: "",
         });
@@ -805,7 +820,7 @@ async function assembleStream(
         blocks.set(contentBlockIndex, {
           kind: "toolResult",
           text: "",
-          toolUseId: start.toolResult.toolUseId,
+          toolUseId: sanitizeToolUseId(start.toolResult.toolUseId),
           toolResultStatus: start.toolResult.status,
           inputJson: "",
         });

@@ -880,6 +880,33 @@ describe("runHarnessTurn — happy path", () => {
     );
   });
 
+  it("sanitizes Kimi-style toolUseIds consistently across the continuation pairing", async () => {
+    // Kimi emits OpenAI-style ids ("functions.<name>:<index>") which the
+    // managed Harness rejects on toolResult blocks (^[a-zA-Z0-9_-]+$).
+    const kimiId = "functions.ThinkworkTeiE2E___emit_document:0";
+    const sanitized = "functions_ThinkworkTeiE2E___emit_document_0";
+    const deps = makeDeps([
+      stream(toolUseEvents("emit_document", kimiId, EMIT_INPUT)),
+      stream(textEvents("Here is the QBR.")),
+    ]);
+
+    const result = await runHarnessTurn(basePayload(), deps);
+
+    expect(result.status).toBe("completed");
+    const followUp = deps.invocations[1].messages as Array<{
+      role: string;
+      content: Array<Record<string, unknown>>;
+    }>;
+    expect(followUp[0].content[0].toolUse).toMatchObject({
+      toolUseId: sanitized,
+      name: "emit_document",
+    });
+    expect(followUp[1].content[0].toolResult).toMatchObject({
+      toolUseId: sanitized,
+      status: "success",
+    });
+  });
+
   it("fulfills emit_document and finalizes completed with the evidence triple", async () => {
     const deps = makeDeps([
       stream(toolUseEvents("emit_document", "tool-1", EMIT_INPUT)),
