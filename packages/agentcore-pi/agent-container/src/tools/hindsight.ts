@@ -264,7 +264,7 @@ export function buildRecallTool(
         description: "Question or topic to recall from long-term memory.",
       }),
     }),
-    executionMode: "sequential",
+    executionMode: "parallel",
     execute: async (_toolCallId, params, signal) => {
       requireScope(context);
       const { query } = params as RecallParams;
@@ -319,7 +319,7 @@ export function buildReflectTool(
           "previously passed to hindsight_recall.",
       }),
     }),
-    executionMode: "sequential",
+    executionMode: "parallel",
     execute: async (_toolCallId, params, signal) => {
       requireScope(context);
       const { query } = params as ReflectParams;

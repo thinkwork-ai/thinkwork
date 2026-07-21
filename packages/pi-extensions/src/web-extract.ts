@@ -193,7 +193,7 @@ export function createWebExtractExtension(
             }),
           ),
         }),
-        executionMode: "sequential",
+        executionMode: "parallel",
         async execute(_toolCallId, params) {
           const typed = (params ?? {}) as Record<string, unknown>;
           const rawUrl = asString(typed.url);

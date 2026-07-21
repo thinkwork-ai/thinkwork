@@ -160,7 +160,7 @@ export function createMemoryExtension(
             }),
           ),
         }),
-        executionMode: "sequential",
+        executionMode: "parallel",
         async execute(_toolCallId, params, signal) {
           const { query, limit, queryTimestamp } = params as {
             query: string;
@@ -223,7 +223,7 @@ export function createMemoryExtension(
             }),
           ),
         }),
-        executionMode: "sequential",
+        executionMode: "parallel",
         async execute(_toolCallId, params, signal) {
           options.onReflectInvoked?.();
           const { query, context } = params as {

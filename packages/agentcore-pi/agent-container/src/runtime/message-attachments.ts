@@ -193,7 +193,7 @@ export function buildFileReadTool(
         description: "Absolute path of an attached file from the prompt.",
       }),
     }),
-    executionMode: "sequential",
+    executionMode: "parallel",
     execute: async (_toolCallId, params) => {
       const requestedPath = String((params as { path?: unknown }).path ?? "");
       const entry = byPath.get(requestedPath);

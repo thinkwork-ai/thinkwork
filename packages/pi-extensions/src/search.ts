@@ -106,7 +106,7 @@ export function createSearchExtension(
             }),
           ),
         }),
-        executionMode: "sequential",
+        executionMode: "parallel",
         async execute(_toolCallId, params, signal) {
           const { query, sources, limit } = params as {
             query: string;

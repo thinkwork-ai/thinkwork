@@ -147,7 +147,7 @@ export function createKnowledgeGraphExtension(
             }),
           ),
         }),
-        executionMode: "sequential",
+        executionMode: "parallel",
         async execute(_toolCallId, params, signal) {
           const { query, limit } = params as { query: string; limit?: number };
           const trimmed = (query ?? "").trim();
@@ -205,7 +205,7 @@ export function createKnowledgeGraphExtension(
               "Entity id from a prior knowledge_graph_search or knowledge_graph_neighbors result.",
           }),
         }),
-        executionMode: "sequential",
+        executionMode: "parallel",
         async execute(_toolCallId, params, signal) {
           const { entity_id: entityId } = params as { entity_id: string };
           const trimmed = (entityId ?? "").trim();
@@ -265,7 +265,7 @@ export function createKnowledgeGraphExtension(
             }),
           ),
         }),
-        executionMode: "sequential",
+        executionMode: "parallel",
         async execute(_toolCallId, params, signal) {
           const { entity_id: entityId, depth } = params as {
             entity_id: string;
