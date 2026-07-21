@@ -251,7 +251,6 @@ export interface TaskThread {
   status?: string | null;
   lifecycleStatus?: string | null;
   costSummary?: number | null;
-  agentcoreManaged?: boolean;
   messages: TaskThreadMessage[];
   turns?: TaskThreadTurn[];
 }
@@ -790,14 +789,6 @@ export function TaskThreadView({
                   data-testid="thread-conversation-column"
                   className="mx-auto grid w-full max-w-[750px] gap-3 px-3"
                 >
-                  {thread.agentcoreManaged ? (
-                    <div
-                      className="w-fit rounded-full border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-200"
-                      data-testid="agentcore-thread-badge"
-                    >
-                      AgentCore
-                    </div>
-                  ) : null}
                   {transcriptMessages.length === 0 ? (
                     <ThinkingRow
                       title="Working…"

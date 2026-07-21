@@ -632,17 +632,19 @@ export function resolveChatInvocationRuntimeType(args: {
   computerTaskId?: string | null;
 }): AgentRuntimeType {
   const requested = (args.requestedRuntime ?? "").toLowerCase();
-  if (requested === "pi") {
+  if (requested === "agentcore" || requested === "harness") {
+    // THINK-324: the managed harness is retired — legacy pins and stale
+    // clients run Pi. Loud enough for CloudWatch, invisible to the user.
+    console.warn(
+      "[chat-agent-invoke] Legacy harness runtime request resolved to Pi (harness retired)",
+    );
     return "pi";
   }
-  if (requested === "agentcore" || requested === "harness") {
-    return "agentcore";
-  }
   if (requested && requested !== "pi") {
-    // Mistyped runtime request → loud failure, never a silent Pi run (R4).
+    // Mistyped runtime request → loud failure, never a silent wrong run.
     throw new UnknownAgentRuntimeTypeError(requested);
   }
-  return args.configuredRuntimeType;
+  return "pi";
 }
 
 export async function resolveChatInvokeIdentity(

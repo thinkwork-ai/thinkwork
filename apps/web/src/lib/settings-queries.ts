@@ -58,17 +58,6 @@ export const SettingsDeploymentStatusQuery = graphql(`
       appsyncRealtimeUrl
       hindsightEndpoint
       agentcoreStatus
-      agentcoreHarness {
-        state
-        ready
-        reasonCode
-        endpointName
-        expectedVersion
-        liveVersion
-        sessionStrategy
-        activeThreadId
-        checkedAt
-      }
       hindsightEnabled
       managedMemoryEnabled
       twentyProvisioned

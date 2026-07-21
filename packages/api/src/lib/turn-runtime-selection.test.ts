@@ -13,23 +13,19 @@ describe("requestedRuntimeFromMetadata", () => {
   });
 
   it("returns an explicit Pi pin", () => {
-    expect(requestedRuntimeFromMetadata({ requestedRuntime: "pi" })).toBe(
-      "pi",
-    );
-    expect(requestedRuntimeFromMetadata({ requestedRuntime: "PI" })).toBe(
-      "pi",
-    );
+    expect(requestedRuntimeFromMetadata({ requestedRuntime: "pi" })).toBe("pi");
+    expect(requestedRuntimeFromMetadata({ requestedRuntime: "PI" })).toBe("pi");
   });
 
-  it("returns agentcore for the trial selector (harness accepted as alias)", () => {
+  it("normalizes legacy harness selectors to Pi (THINK-324)", () => {
     expect(
       requestedRuntimeFromMetadata({ requestedRuntime: "agentcore" }),
-    ).toBe("agentcore");
+    ).toBe("pi");
     expect(
       requestedRuntimeFromMetadata({ requestedRuntime: "AgentCore" }),
-    ).toBe("agentcore");
+    ).toBe("pi");
     expect(requestedRuntimeFromMetadata({ requestedRuntime: "harness" })).toBe(
-      "agentcore",
+      "pi",
     );
   });
 

@@ -20,9 +20,7 @@ export class InvalidRequestedRuntimeError extends Error {
  * thread even when the tenant's future-thread default changes. Anything else
  * throws — a mistyped runtime request must never silently run Pi (R4).
  */
-export function requestedRuntimeFromMetadata(
-  metadata: unknown,
-): "pi" | "agentcore" | null {
+export function requestedRuntimeFromMetadata(metadata: unknown): "pi" | null {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return null;
   }
@@ -31,8 +29,9 @@ export function requestedRuntimeFromMetadata(
   if (typeof value === "string") {
     const normalized = value.toLowerCase();
     if (normalized === "pi") return "pi";
-    if (normalized === "agentcore" || normalized === "harness")
-      return "agentcore";
+    // THINK-324: the managed harness is retired — a legacy harness pin on
+    // an old message resolves to Pi instead of erroring the send.
+    if (normalized === "agentcore" || normalized === "harness") return "pi";
   }
   throw new InvalidRequestedRuntimeError(String(value));
 }

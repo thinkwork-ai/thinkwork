@@ -60,12 +60,10 @@ export interface DispatchDefaultAgentTurnInput {
   content?: string | null;
   requestedModelId?: string | null;
   /**
-   * THINK-311 U5b: per-turn runtime selection from the composer's runtime
-   * picker (metadata.requestedRuntime). Honored only by the direct chat
-   * dispatch — the wakeup fallback resolves the runtime from the agent
-   * row (Pi), so an agentcore-requested turn must never ride it (R4).
+   * Per-turn runtime hint from message metadata. Pi is the only runtime
+   * (THINK-324); legacy harness pins normalize to "pi" upstream.
    */
-  requestedRuntime?: "pi" | "agentcore" | null;
+  requestedRuntime?: "pi" | null;
   /**
    * Explicit agent selected by an @mention. This keeps interactive mention
    * turns on the same direct-invoke path as default-agent chat without
@@ -131,7 +129,7 @@ export interface DefaultAgentChatInvoke {
   pendingQuestionAnswers?: PendingQuestionAnswersPayload;
   requestedModelId?: string;
   /** THINK-311 U5b: per-turn AgentCore trial selection (chat path only). */
-  requestedRuntime?: "pi" | "agentcore";
+  requestedRuntime?: "pi";
   requestedProfileSlug?: string;
   goalMode?: RuntimeGoalMode;
   skillCreatorCommand?: RuntimeSkillCreatorCommandPayload;
@@ -271,16 +269,6 @@ export async function dispatchDefaultAgentChatTurn(
       enqueued: false,
       wakeupRequestId: null,
     };
-  }
-
-  // THINK-311 U5b (R4/KTD-7): an agentcore-requested turn must never ride the
-  // wakeup fallback — the wakeup processor resolves the runtime from the
-  // agent row and would silently run Pi. Fail the dispatch loudly instead;
-  // sendMessage stamps a visible failed state so the sender can retry.
-  if (input.requestedRuntime === "agentcore") {
-    throw new Error(
-      "AgentCore trial turn could not be dispatched directly; refusing the wakeup fallback (it would run Pi).",
-    );
   }
 
   const wakeup = buildDefaultAgentTurnWakeup({

@@ -137,10 +137,6 @@ type DeploymentStatus {
   appsyncRealtimeUrl: String
   hindsightEndpoint: String
   agentcoreStatus: String
-  agentcoreHarness: AgentCoreHarnessStatus!
-  "Legacy read alias retained during the managed-runtime rollout."
-  agentcoreHarnessProof: AgentCoreHarnessStatus!
-    @deprecated(reason: "Use agentcoreHarness")
   hindsightEnabled: Boolean!
   managedMemoryEnabled: Boolean!
   twentyProvisioned: Boolean!
@@ -154,18 +150,6 @@ type DeploymentStatus {
   twentyAlbArn: String
   twentyTargetGroupArn: String
   managedApplications: [ManagedApplicationDeployment!]!
-}
-
-type AgentCoreHarnessStatus {
-  state: String!
-  ready: Boolean!
-  reasonCode: String!
-  endpointName: String
-  expectedVersion: String
-  liveVersion: String
-  sessionStrategy: String
-  activeThreadId: ID
-  checkedAt: AWSDateTime!
 }
 
 type ManagedApplicationDeployment {

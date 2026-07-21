@@ -1,14 +1,16 @@
 import { deriveFunctionName, getConfig } from "@thinkwork/runtime-config";
 
+/**
+ * THINK-324: the managed-harness runtime is retired — "pi" is the only
+ * dispatchable runtime. "agentcore" survives in the union solely so legacy
+ * readers (historical thread_turns rows, old thread pins) type-check while
+ * they normalize to Pi; nothing may dispatch it.
+ */
 export type AgentRuntimeType = "strands" | "pi" | "agentcore";
 
 export class RuntimeNotProvisionedError extends Error {
   constructor(public readonly runtimeType: AgentRuntimeType) {
-    super(
-      runtimeType === "agentcore"
-        ? "AgentCore Harness runtime not yet provisioned in this stage."
-        : "Pi runtime not yet provisioned in this stage.",
-    );
+    super("Pi runtime not yet provisioned in this stage.");
     this.name = "RuntimeNotProvisionedError";
   }
 }
@@ -22,23 +24,9 @@ export class RuntimeNotProvisionedError extends Error {
 export class UnknownAgentRuntimeTypeError extends Error {
   constructor(public readonly value: string) {
     super(
-      `Unknown agent runtime selector "${value}". Expected "pi" (or legacy "strands"/"flue") or "agentcore".`,
+      `Unknown agent runtime selector "${value}". Expected "pi" (or legacy "strands"/"flue"/"agentcore").`,
     );
     this.name = "UnknownAgentRuntimeTypeError";
-  }
-}
-
-/**
- * THINK-311 (KTD-7): the Harness trial covers chat-originated turns only.
- * Wakeup, retry, eval, and skill-run dispatch of a harness-flagged agent
- * is a declared explicit failure, never a silent Pi run.
- */
-export class HarnessChatDispatchOnlyError extends Error {
-  constructor(public readonly channel: string) {
-    super(
-      `Agent runtime "agentcore" is trial-scoped to chat dispatch; ${channel} dispatch is not supported.`,
-    );
-    this.name = "HarnessChatDispatchOnlyError";
   }
 }
 
@@ -49,10 +37,10 @@ const LEGACY_PI_RUNTIME_VALUES = new Set(["pi", "strands", "flue", ""]);
 export function normalizeAgentRuntimeType(value: unknown): AgentRuntimeType {
   if (value == null) return "pi";
   const normalized = String(value).toLowerCase();
-  // `harness` was persisted by the dev proof. Keep it as a read alias while
-  // returning the canonical application identifier for every caller.
-  if (normalized === "agentcore" || normalized === "harness")
-    return "agentcore";
+  // THINK-324: the managed harness is retired. Legacy "agentcore"/"harness"
+  // values (historical rows, stale thread pins, old tenant defaults)
+  // normalize to Pi — the loud-failure rationale (R4) died with the trial.
+  if (normalized === "agentcore" || normalized === "harness") return "pi";
   if (LEGACY_PI_RUNTIME_VALUES.has(normalized)) return "pi";
   throw new UnknownAgentRuntimeTypeError(String(value));
 }
@@ -62,32 +50,11 @@ export function resolveRuntimeFunctionName(
   env: Partial<
     Pick<
       NodeJS.ProcessEnv,
-      | "AGENTCORE_FUNCTION_NAME"
-      | "AGENTCORE_PI_FUNCTION_NAME"
-      | "HARNESS_RUNNER_FUNCTION_NAME"
+      "AGENTCORE_FUNCTION_NAME" | "AGENTCORE_PI_FUNCTION_NAME"
     >
   > = process.env,
 ): string {
   const normalizedRuntimeType = normalizeAgentRuntimeType(runtimeType);
-
-  if (normalizedRuntimeType === "agentcore") {
-    // THINK-311 (KTD-4): the harness runner is the only function this
-    // branch can resolve — the Pi function below is structurally
-    // unreachable for a harness-flagged agent. An explicit env/config
-    // override wins; otherwise the name derives from stage identity
-    // (R1/R10: derivable thinkwork-<stage>-api-* names never ride env),
-    // mirroring workspace-renderer. With no override and no STAGE this
-    // throws and the turn fails setup loudly.
-    const harnessFunctionName =
-      env.HARNESS_RUNNER_FUNCTION_NAME ??
-      getConfig("HARNESS_RUNNER_FUNCTION_NAME");
-    if (harnessFunctionName) return harnessFunctionName;
-    try {
-      return deriveFunctionName("harness-runner");
-    } catch {
-      throw new RuntimeNotProvisionedError("agentcore");
-    }
-  }
 
   const functionName =
     env.AGENTCORE_PI_FUNCTION_NAME ?? getConfig("AGENTCORE_PI_FUNCTION_NAME");

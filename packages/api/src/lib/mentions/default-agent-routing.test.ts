@@ -8,7 +8,7 @@ import {
 } from "./default-agent-routing.js";
 
 describe("default agent routing", () => {
-  it("direct-invokes an explicitly mentioned Harness agent without changing the thread default", async () => {
+  it("direct-invokes an explicitly mentioned agent without changing the thread default", async () => {
     const repository = makeRepository({ agentId: "default-agent" });
     const invoked: unknown[] = [];
 
@@ -19,7 +19,6 @@ describe("default agent routing", () => {
         messageId: "message-1",
         agentId: "mentioned-agent",
         content: "@agent who am I?",
-        requestedRuntime: "agentcore",
         sender: { type: "user", id: "user-1" },
       },
       repository,
@@ -36,7 +35,6 @@ describe("default agent routing", () => {
     expect(invoked).toEqual([
       expect.objectContaining({
         agentId: "mentioned-agent",
-        requestedRuntime: "agentcore",
       }),
     ]);
     expect(repository.assignments).toEqual([]);
@@ -458,57 +456,6 @@ describe("default agent routing", () => {
 
     expect(repository.wakeups).toEqual([]);
     expect(result).toMatchObject({ directInvoked: false, enqueued: false });
-  });
-
-  it("forwards a per-turn agentcore request to direct chat invoke and REFUSES the wakeup fallback (THINK-311 U5b)", async () => {
-    const repository = makeRepository({ agentId: "agent-1" });
-    const invoked: unknown[] = [];
-
-    await dispatchDefaultAgentChatTurn(
-      {
-        tenantId: "tenant-1",
-        threadId: "thread-1",
-        messageId: "message-1",
-        content: "run this on agentcore",
-        requestedRuntime: "agentcore",
-        sender: { type: "user", id: "user-1" },
-      },
-      repository,
-      {
-        async invokeChatAgent(input) {
-          invoked.push(input);
-          return true;
-        },
-      },
-      async () => [],
-      async () => [],
-    );
-    expect(invoked[0]).toMatchObject({ requestedRuntime: "agentcore" });
-
-    // Direct invoke unavailable → the wakeup fallback would run Pi
-    // (silent fallback, R4) — the dispatch must throw, never enqueue.
-    const failingRepository = makeRepository({ agentId: "agent-1" });
-    await expect(
-      dispatchDefaultAgentChatTurn(
-        {
-          tenantId: "tenant-1",
-          threadId: "thread-1",
-          messageId: "message-2",
-          content: "run this on agentcore",
-          requestedRuntime: "agentcore",
-          sender: { type: "user", id: "user-1" },
-        },
-        failingRepository,
-        {
-          async invokeChatAgent() {
-            return false;
-          },
-        },
-        async () => [],
-        async () => [],
-      ),
-    ).rejects.toThrow("refusing the wakeup fallback");
-    expect(failingRepository.wakeups).toEqual([]);
   });
 
   it("forwards the selected parent model to direct chat invoke", async () => {

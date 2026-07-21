@@ -935,7 +935,7 @@ describe("resolveAgentRuntimeConfig", () => {
     ).rejects.toThrow('Unknown agent runtime selector "unknown"');
   });
 
-  it("resolves the harness trial selector (THINK-311 U2)", async () => {
+  it("resolves a legacy agentcore agent row to Pi (THINK-324)", async () => {
     stageAgentRow({ runtime: "agentcore" });
     stageTemplateRow({ runtime: "pi" });
     stageTenantSlug("acme");
@@ -946,9 +946,7 @@ describe("resolveAgentRuntimeConfig", () => {
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
     });
-    expect(cfg.runtimeType).toBe("agentcore");
-    // The harness trial value must not flip the dormant strands-only
-    // context-engine gate on.
+    expect(cfg.runtimeType).toBe("pi");
     expect(cfg.contextEngineEnabled).toBe(false);
   });
 

@@ -12,25 +12,26 @@ describe("Harness thread runtime policy", () => {
     expect(defaultThreadRuntimeFromConfig({})).toBe("pi");
   });
 
-  it("selects Harness only for a stored future-thread preference", () => {
+  it("normalizes legacy harness future-thread preferences to Pi (THINK-324)", () => {
     expect(
       defaultThreadRuntimeFromConfig({ defaultThreadRuntime: "harness" }),
-    ).toBe("agentcore");
+    ).toBe("pi");
     expect(
       defaultThreadRuntimeFromConfig({ defaultThreadRuntime: "agentcore" }),
-    ).toBe("agentcore");
+    ).toBe("pi");
   });
 
   it("pins each normal thread without discarding caller metadata", () => {
-    expect(
-      pinThreadRuntimeMetadata({ source: "composer" }, "agentcore"),
-    ).toEqual({ source: "composer", requestedRuntime: "agentcore" });
+    expect(pinThreadRuntimeMetadata({ source: "composer" }, "pi")).toEqual({
+      source: "composer",
+      requestedRuntime: "pi",
+    });
     expect(pinThreadRuntimeMetadata(undefined, "pi")).toEqual({
       requestedRuntime: "pi",
     });
   });
 
-  it("prefers an explicit turn override, then the immutable thread pin", () => {
+  it("prefers an explicit turn override; legacy harness pins resolve to Pi", () => {
     expect(
       requestedRuntimeForTurn(
         { requestedRuntime: "pi" },
@@ -39,7 +40,7 @@ describe("Harness thread runtime policy", () => {
     ).toBe("pi");
     expect(
       requestedRuntimeForTurn(undefined, { requestedRuntime: "agentcore" }),
-    ).toBe("agentcore");
+    ).toBe("pi");
     expect(requestedRuntimeForTurn(undefined, undefined)).toBeNull();
   });
 });
