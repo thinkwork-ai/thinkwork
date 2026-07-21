@@ -58,15 +58,6 @@ export const ANALYST_DENYLISTED_TABLES: ReadonlySet<string> = new Set([
   "capability_external_clients", // client_secret_hash bearer material
   "connect_providers", // OAuth provider config (may embed client secrets)
   "credentials", // encrypted_value — raw encrypted credentials
-  // Managed Harness proof/control ledgers carry participant/session
-  // correlation, policy evidence, credential-owner aliases, or projection
-  // digests. They are operational security records, not tenant analytics.
-  "harness_disclosure_decisions",
-  "harness_governed_tool_executions",
-  "harness_managed_thread_enrollments",
-  "harness_participant_session_events",
-  "harness_participant_sessions",
-  "thread_public_events",
   "pending_tool_approvals", // encrypted parked-call execution payload (THINK-302)
   "customer_deployment_sessions", // client_token_hash bearer material
   "email_provider_installs", // credential/webhook secret refs
@@ -108,9 +99,6 @@ export const ANALYST_DENYLISTED_COLUMNS: Readonly<
   // Full normalized claim value can embed note/email bodies from source
   // records — same content boundary as evidence snapshots.
   memory_claims: ["value"],
-  // Correlates a runtime tool invocation with the principal whose private
-  // credential was used. Keep this audit evidence out of analyst queries.
-  harness_tool_execution_events: ["credential_owner_alias"],
   // Pi tool-execution ledger (THINK-324 C17) — same audit-evidence boundary
   // as its retired harness predecessor above.
   tool_execution_events: ["credential_owner_alias"],

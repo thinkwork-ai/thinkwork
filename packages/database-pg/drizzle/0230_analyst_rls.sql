@@ -668,15 +668,6 @@ BEGIN
   ELSE
     missing := missing || 'guardrails'::text;
   END IF;
-  IF to_regclass('public.harness_tool_execution_events') IS NOT NULL THEN
-    ALTER TABLE public.harness_tool_execution_events ENABLE ROW LEVEL SECURITY;
-    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.harness_tool_execution_events;
-    CREATE POLICY analyst_tenant_isolation ON public.harness_tool_execution_events
-      FOR SELECT TO analyst_reader
-      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
-  ELSE
-    missing := missing || 'harness_tool_execution_events'::text;
-  END IF;
   IF to_regclass('public.inbox_item_comments') IS NOT NULL THEN
     ALTER TABLE public.inbox_item_comments ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS analyst_tenant_isolation ON public.inbox_item_comments;
