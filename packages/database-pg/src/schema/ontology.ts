@@ -179,6 +179,38 @@ export const ontologyEntityTypes = ontology.table(
       .notNull()
       .default(sql`'[]'::jsonb`),
     system_map_version: integer("system_map_version").notNull().default(0),
+    /**
+     * Twin facet declarations (Company Brain U3 / KTD-3 / R2, R4). Array of
+     * `{ slug, clonePolicy: 'deep_clone'|'limited', cadence?,
+     *    sourceSystem, sourceDataset?, attributes?: [{ sourceField,
+     *    attribute, filterType? }], note? }` entries declaring which facets
+     * of this type deep-clone into the twin graph, on what sync cadence,
+     * and how source fields map onto facet attributes (the cohort-filter
+     * grammar's typing source). Edited only through `facet_declaration`
+     * change-set items or the operator set-mutation — the ETL projection
+     * consumes these via the compiled twin mapping export, never the rows.
+     */
+    twin_facets: jsonb("twin_facets")
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    twin_facets_version: integer("twin_facets_version").notNull().default(0),
+    /**
+     * Entity-page section declarations (Company Brain U3 / KTD-8 / R10,
+     * R14). Array of `{ slug, heading, kind:
+     * 'facet_backed'|'live_routed'|'knowledge', facetSlug?, sourceSystem?,
+     * visibility: 'all_members'|'operators_only', position }` entries — the
+     * page projection renders exactly these sections for instances of this
+     * type. Edited only through `page_section` change-set items or the
+     * operator set-mutation.
+     */
+    page_sections: jsonb("page_sections")
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    page_sections_version: integer("page_sections_version")
+      .notNull()
+      .default(0),
     guidance_notes: text("guidance_notes"),
     lifecycle_status: text("lifecycle_status").notNull().default("proposed"),
     proposed_by_user_id: uuid("proposed_by_user_id").references(
@@ -256,6 +288,22 @@ export const ontologyRelationshipTypes = ontology.table(
       .array()
       .notNull()
       .default(sql`ARRAY[]::text[]`),
+    /**
+     * Twin edge source binding (Company Brain U3 / KTD-3 / R3). Object
+     * `{ sourceSystem, sourceDataset, sourceKeyFields: string[],
+     *    targetKeyFields: string[], note? }` declaring which source
+     * dataset's foreign keys deterministically populate edge instances of
+     * this type in the twin graph — never LLM-inferred. Empty object means
+     * "no binding declared" (no edges project). Edited only through
+     * `relationship_binding` change-set items or the operator set-mutation.
+     */
+    source_binding: jsonb("source_binding")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    source_binding_version: integer("source_binding_version")
+      .notNull()
+      .default(0),
     guidance_notes: text("guidance_notes"),
     lifecycle_status: text("lifecycle_status").notNull().default("proposed"),
     proposed_by_user_id: uuid("proposed_by_user_id").references(
@@ -487,7 +535,7 @@ export const ontologyChangeSetItems = ontology.table(
     ),
     check(
       "ontology_change_set_items_type_allowed",
-      sql`${table.item_type} IN ('entity_type','relationship_type','facet_template','external_mapping','identity_map')`,
+      sql`${table.item_type} IN ('entity_type','relationship_type','facet_template','external_mapping','identity_map','facet_declaration','relationship_binding','page_section')`,
     ),
     check(
       "ontology_change_set_items_action_allowed",

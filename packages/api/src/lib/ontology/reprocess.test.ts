@@ -6,6 +6,7 @@ import {
   dispatchObservationsReingestForOntologyApproval,
   enqueueObservationsReingestForOntologyApproval,
   refreshRoutingMapProjectionForApply,
+  regenerateTwinExportForApply,
 } from "./reprocess.js";
 import { rejectOntologyChangeSet } from "./repository.js";
 import { ontologyEntityTypes } from "@thinkwork/database-pg/schema";
@@ -513,5 +514,257 @@ describe("refreshRoutingMapProjectionForApply (THINK-321 U4)", () => {
       approvedItems: 1,
       routingMapProjection: { error: "s3 unavailable" },
     });
+  });
+});
+
+describe("applyOntologyChangeSetItems (Company Brain U3 twin declarations)", () => {
+  it("applies a facet_declaration item onto the entity type with a version bump", async () => {
+    const db = new FakeApplyDb();
+
+    await applyOntologyChangeSetItems({
+      tenantId: "tenant-1",
+      ontologyVersionId: "version-1",
+      items: [
+        {
+          item_type: "facet_declaration",
+          action: "update",
+          status: "approved",
+          target_slug: "customer",
+          proposed_value: {
+            entityTypeSlug: "customer",
+            facets: [
+              {
+                slug: "aging",
+                clonePolicy: "deep_clone",
+                sourceSystem: "lastmile",
+                attributes: [
+                  {
+                    sourceField: "days_past_due",
+                    attribute: "daysPastDue",
+                    filterType: "number",
+                  },
+                ],
+              },
+              // Malformed entry (no sourceSystem) drops on tolerant parse.
+              { slug: "broken" },
+            ],
+          },
+        },
+      ],
+      db: db as any,
+    });
+
+    expect(db.updates).toHaveLength(1);
+    expect(db.updates[0].table).toBe(ontologyEntityTypes);
+    const facets = db.updates[0].patch.twin_facets as Array<
+      Record<string, unknown>
+    >;
+    expect(facets).toHaveLength(1);
+    expect(facets[0]).toMatchObject({
+      slug: "aging",
+      clonePolicy: "deep_clone",
+      sourceSystem: "lastmile",
+    });
+    expect(db.updates[0].patch.twin_facets_version).toBeDefined();
+    expect(typeof db.updates[0].patch.twin_facets_version).not.toBe("number");
+  });
+
+  it("applies a page_section item, dropping facet-backed sections without a facet ref", async () => {
+    const db = new FakeApplyDb();
+
+    await applyOntologyChangeSetItems({
+      tenantId: "tenant-1",
+      ontologyVersionId: "version-1",
+      items: [
+        {
+          item_type: "page_section",
+          action: "update",
+          status: "approved",
+          target_slug: "customer",
+          proposed_value: {
+            entityTypeSlug: "customer",
+            sections: [
+              {
+                slug: "aging",
+                heading: "Aging",
+                kind: "facet_backed",
+                facetSlug: "aging",
+                visibility: "all_members",
+                position: 0,
+              },
+              {
+                slug: "activity",
+                heading: "Activity",
+                kind: "live_routed",
+                sourceSystem: "twenty",
+                visibility: "operators_only",
+                position: 1,
+              },
+              // facet_backed with no facetSlug renders nothing — dropped.
+              { slug: "ghost", heading: "Ghost", kind: "facet_backed" },
+            ],
+          },
+        },
+      ],
+      db: db as any,
+    });
+
+    const sections = db.updates[0].patch.page_sections as Array<
+      Record<string, unknown>
+    >;
+    expect(sections.map((s) => s.slug)).toEqual(["aging", "activity"]);
+    expect(sections[1]).toMatchObject({ visibility: "operators_only" });
+  });
+
+  it("applies a relationship_binding item; an incomplete binding clears to {}", async () => {
+    const db = new FakeApplyDb();
+
+    await applyOntologyChangeSetItems({
+      tenantId: "tenant-1",
+      ontologyVersionId: "version-1",
+      items: [
+        {
+          item_type: "relationship_binding",
+          action: "update",
+          status: "approved",
+          target_slug: "customer_has_ship_to",
+          proposed_value: {
+            relationshipTypeSlug: "customer_has_ship_to",
+            binding: {
+              sourceSystem: "lastmile",
+              sourceDataset: "ship_tos",
+              sourceKeyFields: ["customer_id"],
+              targetKeyFields: ["ship_to_id"],
+            },
+          },
+        },
+        {
+          item_type: "relationship_binding",
+          action: "update",
+          status: "approved",
+          target_slug: "ship_to_has_tank",
+          proposed_value: {
+            relationshipTypeSlug: "ship_to_has_tank",
+            // Missing key fields — parses to null, clears the binding.
+            binding: { sourceSystem: "xfluid" },
+          },
+        },
+      ],
+      db: db as any,
+    });
+
+    expect(db.updates).toHaveLength(2);
+    expect(db.updates[0].patch.source_binding).toMatchObject({
+      sourceSystem: "lastmile",
+      sourceDataset: "ship_tos",
+    });
+    expect(db.updates[1].patch.source_binding).toEqual({});
+  });
+
+  it("dispatches a mixed change set with a twin item targeting a same-set minted type", async () => {
+    const db = new FakeApplyDb();
+
+    await applyOntologyChangeSetItems({
+      tenantId: "tenant-1",
+      ontologyVersionId: "version-1",
+      items: [
+        {
+          item_type: "facet_declaration",
+          action: "update",
+          status: "approved",
+          target_slug: "tank",
+          proposed_value: {
+            facets: [
+              {
+                slug: "level",
+                clonePolicy: "deep_clone",
+                sourceSystem: "xfluid",
+              },
+            ],
+          },
+        },
+        {
+          item_type: "entity_type",
+          action: "create",
+          status: "approved",
+          target_slug: "tank",
+          proposed_value: { slug: "tank", name: "Tank" },
+        },
+      ],
+      db: db as any,
+    });
+
+    // Entity insert happens before the facet declaration update — the
+    // declaration can target the freshly minted type.
+    expect(db.inserts).toHaveLength(1);
+    expect(db.updates).toHaveLength(1);
+    expect(
+      (db.updates[0].patch.twin_facets as Array<Record<string, unknown>>)[0],
+    ).toMatchObject({ slug: "level" });
+  });
+});
+
+describe("regenerateTwinExportForApply (Company Brain U3)", () => {
+  it("no-ops for change sets without twin-relevant items", async () => {
+    const regenerate = vi.fn();
+    const metrics = await regenerateTwinExportForApply({
+      tenantId: "tenant-1",
+      items: [
+        {
+          item_type: "external_mapping",
+          action: "update",
+          status: "approved",
+          target_slug: "customer",
+          proposed_value: {},
+        },
+      ] as any,
+      baseMetrics: { base: true },
+      regenerate: regenerate as any,
+    });
+    expect(regenerate).not.toHaveBeenCalled();
+    expect(metrics).toEqual({ base: true });
+  });
+
+  it("regenerates for facet_declaration items and records the outcome", async () => {
+    const regenerate = vi
+      .fn()
+      .mockResolvedValue({ state: "uploaded", sequence: 7 });
+    const metrics = await regenerateTwinExportForApply({
+      tenantId: "tenant-1",
+      items: [
+        {
+          item_type: "facet_declaration",
+          action: "update",
+          status: "approved",
+          target_slug: "customer",
+          proposed_value: {},
+        },
+      ] as any,
+      baseMetrics: {},
+      regenerate: regenerate as any,
+    });
+    expect(regenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "tenant-1" }),
+    );
+    expect(metrics.twinExport).toEqual({ state: "uploaded", sequence: 7 });
+  });
+
+  it("regenerates for entity_type items too (approval state gates the export)", async () => {
+    const regenerate = vi.fn().mockResolvedValue({ state: "skipped_empty" });
+    const metrics = await regenerateTwinExportForApply({
+      tenantId: "tenant-1",
+      items: [
+        {
+          item_type: "entity_type",
+          action: "create",
+          status: "approved",
+          target_slug: "tank",
+          proposed_value: { slug: "tank" },
+        },
+      ] as any,
+      baseMetrics: {},
+      regenerate: regenerate as any,
+    });
+    expect(metrics.twinExport).toEqual({ state: "skipped_empty" });
   });
 });

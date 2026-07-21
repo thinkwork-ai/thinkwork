@@ -15,6 +15,9 @@ import { updateOntologyEntityTypeMutation } from "./updateOntologyEntityType.mut
 import { updateOntologyRelationshipTypeMutation } from "./updateOntologyRelationshipType.mutation.js";
 import { setOntologyEntityTypeIdentityRulesMutation } from "./setOntologyEntityTypeIdentityRules.mutation.js";
 import { setOntologyEntityTypeSystemMapMutation } from "./setOntologyEntityTypeSystemMap.mutation.js";
+import { setOntologyEntityTypeTwinFacetsMutation } from "./setOntologyEntityTypeTwinFacets.mutation.js";
+import { setOntologyEntityTypePageSectionsMutation } from "./setOntologyEntityTypePageSections.mutation.js";
+import { setOntologyRelationshipTypeSourceBindingMutation } from "./setOntologyRelationshipTypeSourceBinding.mutation.js";
 
 export const ontologyQueries = {
   ontologyDefinitions,
@@ -38,4 +41,8 @@ export const ontologyMutations = {
   setOntologyEntityTypeIdentityRules:
     setOntologyEntityTypeIdentityRulesMutation,
   setOntologyEntityTypeSystemMap: setOntologyEntityTypeSystemMapMutation,
+  setOntologyEntityTypeTwinFacets: setOntologyEntityTypeTwinFacetsMutation,
+  setOntologyEntityTypePageSections: setOntologyEntityTypePageSectionsMutation,
+  setOntologyRelationshipTypeSourceBinding:
+    setOntologyRelationshipTypeSourceBindingMutation,
 };

@@ -5011,6 +5011,12 @@ export type Mutation = {
    */
   setOntologyEntityTypeIdentityRules: OntologyEntityType;
   /**
+   * Stage an entity-page section-declaration edit (Company Brain U3 / R10,
+   * R14): creates or merges a DRAFT page_section change-set item carrying
+   * { entityTypeSlug, sections }. Tenant-admin gated.
+   */
+  setOntologyEntityTypePageSections: CreateOntologyChangeSetPayload;
+  /**
    * Stage a type-level system-map edit (THINK-321 U3 / R6): creates or
    * updates a DRAFT identity_map change-set item carrying
    * { entityTypeSlug, systemMap: [{ facet, sourceSystem, note? }] }. Never a
@@ -5018,6 +5024,20 @@ export type Mutation = {
    * is approved and applied. Tenant-admin gated.
    */
   setOntologyEntityTypeSystemMap: CreateOntologyChangeSetPayload;
+  /**
+   * Stage a twin facet-declaration edit (Company Brain U3 / R2, R4): creates
+   * or merges a DRAFT facet_declaration change-set item carrying
+   * { entityTypeSlug, facets }. Never a direct write — declarations land on
+   * approval/apply, which also regenerates the compiled twin mapping export.
+   * Tenant-admin gated.
+   */
+  setOntologyEntityTypeTwinFacets: CreateOntologyChangeSetPayload;
+  /**
+   * Stage a twin edge source-binding edit (Company Brain U3 / R3): creates or
+   * merges a DRAFT relationship_binding change-set item carrying
+   * { relationshipTypeSlug, binding }. Tenant-admin gated.
+   */
+  setOntologyRelationshipTypeSourceBinding: CreateOntologyChangeSetPayload;
   /**
    * Owner-only: set/clear the caller's personal memory automation schedule.
    * enabled=true requires a rate(...)/cron(...) scheduleExpression; false
@@ -6517,9 +6537,30 @@ export type MutationSetOntologyEntityTypeIdentityRulesArgs = {
 };
 
 
+export type MutationSetOntologyEntityTypePageSectionsArgs = {
+  entityTypeSlug: Scalars['String']['input'];
+  sections: Scalars['AWSJSON']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type MutationSetOntologyEntityTypeSystemMapArgs = {
   entityTypeSlug: Scalars['String']['input'];
   systemMap: Scalars['AWSJSON']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type MutationSetOntologyEntityTypeTwinFacetsArgs = {
+  entityTypeSlug: Scalars['String']['input'];
+  facets: Scalars['AWSJSON']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type MutationSetOntologyRelationshipTypeSourceBindingArgs = {
+  binding: Scalars['AWSJSON']['input'];
+  relationshipTypeSlug: Scalars['String']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
@@ -7097,12 +7138,24 @@ export enum OntologyChangeAction {
  * IDENTITY_MAP (THINK-321 U3): a type-level system-map edit — value carries
  * { entityTypeSlug, systemMap: [{ facet, sourceSystem, note? }] }. Operator
  * authored only; the suggestion pipeline never proposes it.
+ *
+ * Twin declaration items (Company Brain U3 — operator authored only, never
+ * LLM-proposed):
+ * FACET_DECLARATION — value carries { entityTypeSlug, facets: [{ slug,
+ * clonePolicy, cadence?, sourceSystem, sourceDataset?, attributes?, note? }] }.
+ * RELATIONSHIP_BINDING — value carries { relationshipTypeSlug, binding:
+ * { sourceSystem, sourceDataset, sourceKeyFields, targetKeyFields, note? } }.
+ * PAGE_SECTION — value carries { entityTypeSlug, sections: [{ slug, heading,
+ * kind, facetSlug?, sourceSystem?, visibility, position }] }.
  */
 export enum OntologyChangeItemType {
   EntityType = 'ENTITY_TYPE',
   ExternalMapping = 'EXTERNAL_MAPPING',
+  FacetDeclaration = 'FACET_DECLARATION',
   FacetTemplate = 'FACET_TEMPLATE',
   IdentityMap = 'IDENTITY_MAP',
+  PageSection = 'PAGE_SECTION',
+  RelationshipBinding = 'RELATIONSHIP_BINDING',
   RelationshipType = 'RELATIONSHIP_TYPE'
 }
 
@@ -7217,6 +7270,13 @@ export type OntologyEntityType = {
   identityRulesVersion: Scalars['Int']['output'];
   lifecycleStatus: OntologyLifecycleStatus;
   name: Scalars['String']['output'];
+  /**
+   * Entity-page section declarations (Company Brain U3 / R10, R14): array of
+   * { slug, heading, kind, facetSlug?, sourceSystem?, visibility, position }.
+   * Edited only through page_section change-set items.
+   */
+  pageSections: Scalars['AWSJSON']['output'];
+  pageSectionsVersion: Scalars['Int']['output'];
   propertiesSchema: Scalars['AWSJSON']['output'];
   rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   slug: Scalars['String']['output'];
@@ -7229,6 +7289,14 @@ export type OntologyEntityType = {
   systemMap: Scalars['AWSJSON']['output'];
   systemMapVersion: Scalars['Int']['output'];
   tenantId: Scalars['ID']['output'];
+  /**
+   * Twin facet declarations (Company Brain U3 / R2, R4): array of
+   * { slug, clonePolicy, cadence?, sourceSystem, sourceDataset?,
+   *   attributes?, note? }. Edited only through facet_declaration
+   * change-set items; the ETL projection consumes the compiled export.
+   */
+  twinFacets: Scalars['AWSJSON']['output'];
+  twinFacetsVersion: Scalars['Int']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   versionId?: Maybe<Scalars['ID']['output']>;
 };
@@ -7360,6 +7428,15 @@ export type OntologyRelationshipType = {
   name: Scalars['String']['output'];
   rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   slug: Scalars['String']['output'];
+  /**
+   * Twin edge source binding (Company Brain U3 / R3):
+   * { sourceSystem, sourceDataset, sourceKeyFields, targetKeyFields, note? }
+   * or {} when unbound. Edge instances populate deterministically from these
+   * source foreign keys — never LLM-inferred. Edited only through
+   * relationship_binding change-set items.
+   */
+  sourceBinding: Scalars['AWSJSON']['output'];
+  sourceBindingVersion: Scalars['Int']['output'];
   sourceEntityTypeId?: Maybe<Scalars['ID']['output']>;
   sourceTypeSlugs: Array<Scalars['String']['output']>;
   targetEntityTypeId?: Maybe<Scalars['ID']['output']>;

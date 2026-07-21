@@ -55,7 +55,10 @@ export type OntologyChangeItemKind =
   | "relationship_type"
   | "facet_template"
   | "external_mapping"
-  | "identity_map";
+  | "identity_map"
+  | "facet_declaration"
+  | "relationship_binding"
+  | "page_section";
 
 /**
  * Concurrency/settlement conflict on a change-set item (THINK-320 R16):
@@ -543,6 +546,117 @@ export async function setOntologyEntityTypeIdentityRules(args: {
     tenantId: args.tenantId,
     entityTypeId: updated.id,
     db,
+  });
+}
+
+/**
+ * Stage a twin facet-declaration edit as a DRAFT `facet_declaration`
+ * change-set item (Company Brain U3 / R2, R4). Never writes entity_types
+ * directly — declarations land via applyFacetDeclarationItem when the
+ * change set is approved and applied, and the compiled twin mapping export
+ * regenerates behind that apply (KTD-3). Mirrors the system-map staging
+ * pattern below.
+ */
+export async function stageOntologyEntityTypeTwinFacets(args: {
+  tenantId: string;
+  entityTypeSlug: string;
+  facets: unknown;
+  actorUserId: string | null;
+  db?: DbLike;
+}) {
+  const slug = normalizeOntologySlug(args.entityTypeSlug);
+  if (!slug) throw new Error("Entity type slug required");
+  const { parseTwinFacetDeclarations } = await import("./twin-declarations.js");
+  const facets = parseTwinFacetDeclarations(args.facets);
+  return createOntologyChangeSet({
+    tenantId: args.tenantId,
+    actorUserId: args.actorUserId,
+    items: [
+      {
+        itemType: "facet_declaration",
+        action: "update",
+        slug,
+        title: `Twin facets for ${slug.replace(/_/g, " ")}`,
+        proposedValue: {
+          entityTypeSlug: slug,
+          facets: facets as unknown as Array<Record<string, unknown>>,
+        },
+      },
+    ],
+    db: args.db,
+  });
+}
+
+/**
+ * Stage a page-section declaration edit as a DRAFT `page_section`
+ * change-set item (Company Brain U3 / R10, R14). Same contract as the
+ * twin-facets staging above.
+ */
+export async function stageOntologyEntityTypePageSections(args: {
+  tenantId: string;
+  entityTypeSlug: string;
+  sections: unknown;
+  actorUserId: string | null;
+  db?: DbLike;
+}) {
+  const slug = normalizeOntologySlug(args.entityTypeSlug);
+  if (!slug) throw new Error("Entity type slug required");
+  const { parsePageSectionDeclarations } =
+    await import("./twin-declarations.js");
+  const sections = parsePageSectionDeclarations(args.sections);
+  return createOntologyChangeSet({
+    tenantId: args.tenantId,
+    actorUserId: args.actorUserId,
+    items: [
+      {
+        itemType: "page_section",
+        action: "update",
+        slug,
+        title: `Page sections for ${slug.replace(/_/g, " ")}`,
+        proposedValue: {
+          entityTypeSlug: slug,
+          sections: sections as unknown as Array<Record<string, unknown>>,
+        },
+      },
+    ],
+    db: args.db,
+  });
+}
+
+/**
+ * Stage a relationship source-binding edit as a DRAFT
+ * `relationship_binding` change-set item (Company Brain U3 / R3). An
+ * invalid/incomplete binding stages an empty value, which clears the
+ * binding on apply (edges stop projecting).
+ */
+export async function stageOntologyRelationshipTypeSourceBinding(args: {
+  tenantId: string;
+  relationshipTypeSlug: string;
+  binding: unknown;
+  actorUserId: string | null;
+  db?: DbLike;
+}) {
+  const slug = normalizeOntologySlug(args.relationshipTypeSlug);
+  if (!slug) throw new Error("Relationship type slug required");
+  const { parseRelationshipSourceBinding } =
+    await import("./twin-declarations.js");
+  const binding = parseRelationshipSourceBinding(args.binding);
+  return createOntologyChangeSet({
+    tenantId: args.tenantId,
+    actorUserId: args.actorUserId,
+    items: [
+      {
+        itemType: "relationship_binding",
+        action: "update",
+        slug,
+        title: `Twin edge binding for ${slug.replace(/_/g, " ")}`,
+        proposedValue: {
+          relationshipTypeSlug: slug,
+          binding: (binding ?? null) as unknown as Record<string, unknown>,
+        },
+      },
+    ],
+    db: args.db,
   });
 }
 
