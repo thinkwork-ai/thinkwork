@@ -1386,6 +1386,12 @@ jobs:
             -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}"
             -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}"
             -var "analyst_policy_source=${{ vars.ANALYST_POLICY_SOURCE || 'row' }}"
+            # Company Brain twin (plan 2026-07-21-001 U5): Neptune wiring for
+            # the identity-graph-projector. Values come from the etl-platform
+            # neptune stack's outputs (repo vars; empty = twin disabled).
+            -var "neptune_endpoint=${{ vars.NEPTUNE_ENDPOINT || '' }}"
+            -var "neptune_cluster_resource_id=${{ vars.NEPTUNE_CLUSTER_RESOURCE_ID || '' }}"
+            -var "neptune_client_security_group_id=${{ vars.NEPTUNE_CLIENT_SG_ID || '' }}"
             # Governed autonomy — per-tenant self-extension opt-in allowlist.
             # Empty (default) = NO tenant enabled; the two autonomous actions
             # stay inert and fail-closed. Set via the repo variable so the

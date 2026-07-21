@@ -248,6 +248,21 @@ export async function createCanonicalEntity(
     identityKeys: input.identityKeys,
     visibility: input.visibility ?? "tenant",
   });
+  // Company Brain U5 (KTD-4): rule/backfill creates must reach the event
+  // stream too — the twin graph projector's cursor is driven by it. Actor
+  // NULL marks a system-driven event.
+  await appendResolutionEvent(db, {
+    tenantId: input.tenantId,
+    caseId: null,
+    canonicalEntityId,
+    eventType: "create",
+    actorUserId: null,
+    payload: {
+      createdBy: input.createdBy,
+      entityTypeSlug: input.entityTypeSlug,
+      sourceKeyCount: input.sourceKeys?.length ?? 0,
+    },
+  });
   return { canonicalEntityId };
 }
 
@@ -268,7 +283,7 @@ export async function attachIdentityEvidence(
   },
 ): Promise<void> {
   for (const key of args.sourceKeys ?? []) {
-    await db
+    const [inserted] = await db
       .insert(entitySourceMappings)
       .values({
         tenant_id: args.tenantId,
@@ -279,7 +294,27 @@ export async function attachIdentityEvidence(
         visibility: args.visibility ?? "tenant",
         created_by: args.createdBy,
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ id: entitySourceMappings.id });
+    // Company Brain U5 (KTD-4): a NEWLY inserted mapping reaches the event
+    // stream so the twin graph projector's cursor sees it (auto-link and
+    // backfill paths included). Conflict no-ops append nothing.
+    if (inserted) {
+      await appendResolutionEvent(db, {
+        tenantId: args.tenantId,
+        caseId: null,
+        canonicalEntityId: args.canonicalEntityId,
+        eventType: "link",
+        actorUserId: null,
+        payload: {
+          mappingId: inserted.id,
+          sourceSystem: key.sourceSystem,
+          namespace: key.namespace ?? "",
+          externalId: key.externalId,
+          createdBy: args.createdBy,
+        },
+      });
+    }
   }
   for (const key of args.identityKeys ?? []) {
     const existing = await db

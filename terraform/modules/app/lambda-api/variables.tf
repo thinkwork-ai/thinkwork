@@ -1003,3 +1003,33 @@ variable "capability_broker_vpce_dns" {
   type        = string
   default     = ""
 }
+
+# ---------------------------------------------------------------------------
+# Company Brain twin (plan 2026-07-21-001 U5): Neptune wiring for the
+# identity-graph-projector. All default-empty — the projector deploys inert
+# (no VPC, no endpoint) until the stage's neptune outputs are supplied.
+# ---------------------------------------------------------------------------
+
+variable "neptune_endpoint" {
+  type        = string
+  default     = ""
+  description = "Neptune twin cluster writer endpoint (from the etl-platform neptune stack; empty = twin disabled)"
+}
+
+variable "neptune_cluster_resource_id" {
+  type        = string
+  default     = ""
+  description = "Neptune cluster resource id for neptune-db IAM ARNs (empty = no data-access grant)"
+}
+
+variable "neptune_subnet_ids" {
+  type        = list(string)
+  default     = []
+  description = "Private subnets for the identity-graph-projector's vpc_config (Neptune is VPC-only)"
+}
+
+variable "neptune_security_group_ids" {
+  type        = list(string)
+  default     = []
+  description = "SGs for the projector (the etl neptune stack's neptune-client SG)"
+}

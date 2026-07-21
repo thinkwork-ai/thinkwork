@@ -521,6 +521,10 @@ locals {
           # retainTurn when the tenant's wiki_compile_enabled flag is on.
           # compileWikiNow admin mutation also Event-invokes.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile",
+          # identity-graph-projector (Company Brain U5): identity mutations
+          # Event-invoke this as a post-commit nudge; the rebuild command is
+          # a RequestResponse invoke. Cursor makes missed nudges harmless.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-identity-graph-projector",
           # knowledge-graph-observations-ingest: graphql-http's
           # startKnowledgeGraphObservationsIngest mutation invokes this with
           # RequestResponse, and memory-stage-worker's graph stage (THINK-193
@@ -1303,4 +1307,47 @@ moved {
 moved {
   from = aws_iam_role_policy_attachment.lambda_bedrock_knowledge_base
   to   = aws_iam_role_policy_attachment.api_ai
+}
+
+
+# ---------------------------------------------------------------------------
+# Company Brain U5: Neptune twin data access for the identity-graph-projector.
+#
+# Attached to the SHARED handler role (the projector runs under it), gated on
+# the cluster resource id being configured. DEVIATION from the plan's strict
+# writer/reader IAM split (KTD-9): a dedicated projector role would isolate
+# the write grant from the other shared-role handlers — deferred; recorded on
+# the arc's Linear issue. Data actions are condition-pinned to openCypher,
+# mirroring the etl-side policies.
+# ---------------------------------------------------------------------------
+
+resource "aws_iam_role_policy" "lambda_neptune_twin" {
+  count = var.neptune_cluster_resource_id == "" ? 0 : 1
+  name  = "thinkwork-${var.stage}-api-neptune-twin"
+  role  = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "TwinProjectorWrite"
+        Effect = "Allow"
+        Action = [
+          "neptune-db:ReadDataViaQuery",
+          "neptune-db:WriteDataViaQuery",
+          "neptune-db:DeleteDataViaQuery",
+        ]
+        Resource = "arn:aws:neptune-db:${var.region}:${var.account_id}:${var.neptune_cluster_resource_id}/*"
+        Condition = {
+          StringEquals = { "neptune-db:QueryLanguage" = "OpenCypher" }
+        }
+      },
+      {
+        Sid      = "TwinEngineStatus"
+        Effect   = "Allow"
+        Action   = ["neptune-db:GetEngineStatus", "neptune-db:GetGraphSummary"]
+        Resource = "arn:aws:neptune-db:${var.region}:${var.account_id}:${var.neptune_cluster_resource_id}/*"
+      },
+    ]
+  })
 }
