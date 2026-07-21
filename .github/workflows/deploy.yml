@@ -1621,7 +1621,8 @@ jobs:
           reconcile_only_addresses='[
             "module.thinkwork.module.agentcore_harness.terraform_data.managed_multiplayer_harness_configuration[0]",
             "module.thinkwork.module.agentcore_proof_gateway.terraform_data.gateway_configuration[0]",
-            "module.thinkwork.terraform_data.agentcore_harness_endpoint_retention[0]"
+            "module.thinkwork.terraform_data.agentcore_harness_endpoint_retention[0]",
+            "module.thinkwork.module.agentcore_proof_identity.terraform_data.twenty_identity_reconciliation[0]"
           ]'
           destructive_count=$(jq --argjson safe "$reconcile_only_addresses" '[
             .resource_changes[]?
