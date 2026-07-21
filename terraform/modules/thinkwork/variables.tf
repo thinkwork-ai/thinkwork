@@ -1517,3 +1517,9 @@ variable "neptune_client_security_group_id" {
   default     = ""
   description = "neptune-client SG id (etl-platform neptune stack output) attached to the identity-graph-projector"
 }
+
+variable "company_brain_enabled" {
+  type        = bool
+  default     = false
+  description = "Company Brain twin tool seam — enables the twin_* Pi tools (plan 2026-07-21-001 U7)"
+}

@@ -1150,10 +1150,12 @@ module "api" {
   analyst_egress_security_group_ids     = var.analyst_lambda_vpc_egress ? [aws_security_group.analyst_egress_lambda[0].id] : []
   # Company Brain U5: projector VPC attach only when the neptune-client SG
   # is configured (the twin's Neptune cluster lives in this same VPC).
-  neptune_endpoint                 = var.neptune_endpoint
-  neptune_cluster_resource_id      = var.neptune_cluster_resource_id
-  neptune_subnet_ids               = var.neptune_client_security_group_id != "" ? module.vpc.private_subnet_ids : []
-  neptune_security_group_ids       = var.neptune_client_security_group_id != "" ? [var.neptune_client_security_group_id] : []
+  neptune_endpoint            = var.neptune_endpoint
+  neptune_cluster_resource_id = var.neptune_cluster_resource_id
+  neptune_subnet_ids          = var.neptune_client_security_group_id != "" ? module.vpc.private_subnet_ids : []
+  neptune_security_group_ids  = var.neptune_client_security_group_id != "" ? [var.neptune_client_security_group_id] : []
+  # Company Brain U7: twin tool seam flag (KTD-5 rollout posture).
+  company_brain_enabled            = var.company_brain_enabled
   okf_efs_mount_target_ids         = var.okf_wiki_efs_enabled ? aws_efs_mount_target.okf_wiki[*].id : []
   okf_efs_file_system_arn          = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
   okf_efs_refresh_access_point_arn = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_refresh[0].arn : ""
