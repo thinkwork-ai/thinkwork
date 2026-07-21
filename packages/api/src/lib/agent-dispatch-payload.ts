@@ -155,16 +155,25 @@ export interface AgentDispatchControlFieldArgs {
     slug: string;
     displayName: string;
     useFor: string;
+    /** Plate-wide operator authoring instructions (untruncated). */
+    authoringInstructions?: string;
     /** THINK-183 KTD8: enforced manifest sections (id + expected title). */
     sections?: Array<{
       id: string;
       title: string;
       tier: "required" | "required-if-material";
-      /** Operator-authored section instructions (bounded at projection). */
+      /** Operator-authored section instructions (untruncated). */
       guidance?: string;
+      /** Plate-suggested visualizations for this section. */
+      suggestedDirectives?: Array<{ kind: string; chartType?: string }>;
     }>;
     /** THINK-183 KTD8: declared analyses with op input-shape hints. */
-    analyses?: Array<{ key: string; op: string; inputHint: string }>;
+    analyses?: Array<{
+      key: string;
+      op: string;
+      inputHint: string;
+      guidance?: string;
+    }>;
   }>;
   /**
    * Resolved-config fingerprint (capability-mapping plan U12, KTD-3):

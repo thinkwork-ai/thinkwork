@@ -29,6 +29,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  Textarea,
 } from "@thinkwork/ui";
 import type { DocumentPlateDiagnostic } from "@/gql/graphql";
 import {
@@ -66,6 +67,8 @@ interface PlateFormState {
   paletteDark: Record<string, string>;
   directives: Set<PlateDirectiveKind>;
   hidden: boolean;
+  /** Plate-wide authoring instructions (the plate's "system prompt"). */
+  authoringInstructions: string;
   /** Content contract rows (THINK-188): floor + additions, editor order. */
   sections: SectionRowState[];
   analysesRows: AnalysisRowState[];
@@ -84,6 +87,7 @@ function seedForm(mode: PlateEditMode): PlateFormState {
       paletteDark: {},
       directives: allDirectives,
       hidden: false,
+      authoringInstructions: "",
       sections: [],
       analysesRows: [],
     };
@@ -107,6 +111,7 @@ function seedForm(mode: PlateEditMode): PlateFormState {
       paletteDark: { ...source.tokensDark },
       directives,
       hidden: false,
+      authoringInstructions: source.authoringInstructions,
       sections: sectionRowsFromContract(source.sections, true),
       analysesRows: analysisRowsFromContract(source.analyses, true),
     };
@@ -123,6 +128,7 @@ function seedForm(mode: PlateEditMode): PlateFormState {
     paletteDark: { ...(source.overrides?.paletteDark ?? {}) },
     directives,
     hidden: source.hidden,
+    authoringInstructions: source.authoringInstructions,
     // Full ownership on edit: every contract row is editable — renamable,
     // reorderable, removable — regardless of origin. Saving a platform plate
     // sends the whole contract with ownContract: true; Reset restores the
@@ -299,6 +305,7 @@ export function PlateEditDialog({
       false,
     );
 
+    const authoringInstructions = form.authoringInstructions.trim();
     const input = isPlatform
       ? {
           tenantId,
@@ -307,6 +314,7 @@ export function PlateEditDialog({
           paletteDark,
           hidden: form.hidden,
           ownContract: true,
+          authoringInstructions,
           ...contract,
         }
       : {
@@ -320,6 +328,7 @@ export function PlateEditDialog({
           paletteDark,
           allowedDirectives,
           hidden: form.hidden,
+          authoringInstructions,
           ...contract,
         };
 
@@ -536,7 +545,25 @@ export function PlateEditDialog({
                   Hidden (agents can&apos;t pick this plate)
                 </label>
               </TabsContent>
-              <TabsContent value="content" className="mt-4">
+              <TabsContent value="content" className="mt-4 space-y-4">
+                <div className="space-y-1.5">
+                  <div className="text-sm font-medium">Plate instructions</div>
+                  <p className="text-xs text-muted-foreground">
+                    Overall guidance the agent reads before authoring any
+                    document on this plate — tone, structure, enrichment
+                    expectations. Section instructions below are minimums; use
+                    this to steer the whole document.
+                  </p>
+                  <Textarea
+                    value={form.authoringInstructions}
+                    onChange={(e) =>
+                      setField("authoringInstructions", e.target.value)
+                    }
+                    placeholder="e.g. Write for a sales leadership audience. Lead with a summary, include AR aging and stale-customer breakdowns when data exists, and visualize trends with charts."
+                    className="min-h-20 text-sm"
+                    data-testid="plate-field-authoring-instructions"
+                  />
+                </div>
                 <PlateContentTab
                   sections={form.sections}
                   analyses={form.analysesRows}

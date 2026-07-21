@@ -303,12 +303,15 @@ describe("plate content contracts on the tool surface (THINK-183 U6)", () => {
     slug: "sales-rep-review",
     displayName: "Sales Rep Review",
     useFor: "A sales rep performance review.",
+    authoringInstructions:
+      "Write for sales leadership; lead with a summary and visualize trends.",
     sections: [
       {
         id: "pipeline-health",
         title: "Pipeline Health",
         tier: "required-if-material" as const,
         guidance: "Funnel stages with conversion rates vs the team median.",
+        suggestedDirectives: [{ kind: "chart", chartType: "funnel" }],
       },
       { id: "summary", title: "Summary", tier: "required" as const },
     ],
@@ -322,7 +325,7 @@ describe("plate content contracts on the tool surface (THINK-183 U6)", () => {
     ],
   };
 
-  it("normalizeDocumentPlates preserves contract fields", () => {
+  it("normalizeDocumentPlates preserves contract fields (incl. instructions + chart hints)", () => {
     const plates = normalizeDocumentPlates([CONTRACT_PLATE]);
     expect(plates).toEqual([CONTRACT_PLATE]);
   });
@@ -369,6 +372,17 @@ describe("plate content contracts on the tool surface (THINK-183 U6)", () => {
     expect(genreDesc).toContain(
       "Use pipeline stages from the CRM, current quarter only.",
     );
+    // Round 2 (regression fix): the contract must read as a FLOOR — the
+    // "follow each section's instructions" framing made models author
+    // manifest-only minimal documents with no charts.
+    expect(genreDesc).toContain("a floor, NOT the full outline");
+    expect(genreDesc).toContain("must cover — Funnel stages");
+    expect(genreDesc).toContain("suggested visualization: chart funnel");
+    expect(genreDesc).toContain(
+      "operator authoring instructions for this genre: Write for sales leadership",
+    );
+    expect(tool.description).toContain("The contract is a FLOOR");
+    expect(tool.description).toContain("tw:stats / tw:chart");
     // The contract authoring rules land in the tool description once any
     // plate carries a contract.
     expect(tool.description).toContain("tw:waiver");

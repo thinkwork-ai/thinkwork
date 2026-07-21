@@ -31,6 +31,8 @@ export interface DocumentPlateSummary {
   slug: string;
   displayName: string;
   useFor: string;
+  /** Plate-wide operator authoring instructions — shown pre-emission. */
+  authoringInstructions?: string;
   /**
    * THINK-183 KTD8: enforced content contract, when the plate declares one.
    * Sections are required (or required-if-material — waive with tw:waiver
@@ -43,6 +45,8 @@ export interface DocumentPlateSummary {
     tier: "required" | "required-if-material";
     /** Operator-authored section instructions — shown pre-emission. */
     guidance?: string;
+    /** Plate-suggested visualizations for this section. */
+    suggestedDirectives?: Array<{ kind: string; chartType?: string }>;
   }>;
   analyses?: Array<{
     key: string;
@@ -112,7 +116,26 @@ function normalizePlateSections(
     }
     const guidance =
       typeof rec.guidance === "string" ? rec.guidance.trim() : "";
-    sections.push({ id, title, tier, ...(guidance ? { guidance } : {}) });
+    const suggestedDirectives = Array.isArray(rec.suggestedDirectives)
+      ? rec.suggestedDirectives.flatMap((d) => {
+          if (d === null || typeof d !== "object" || Array.isArray(d)) {
+            return [];
+          }
+          const dr = d as Record<string, unknown>;
+          const kind = typeof dr.kind === "string" ? dr.kind.trim() : "";
+          if (!kind) return [];
+          const chartType =
+            typeof dr.chartType === "string" ? dr.chartType.trim() : "";
+          return [{ kind, ...(chartType ? { chartType } : {}) }];
+        })
+      : [];
+    sections.push({
+      id,
+      title,
+      tier,
+      ...(guidance ? { guidance } : {}),
+      ...(suggestedDirectives.length > 0 ? { suggestedDirectives } : {}),
+    });
   }
   return sections.length > 0 ? sections : undefined;
 }
@@ -157,6 +180,10 @@ export function normalizeDocumentPlates(
     if (!PLATE_SLUG_RE.test(slug)) continue;
     const sections = normalizePlateSections(rec.sections);
     const analyses = normalizePlateAnalyses(rec.analyses);
+    const authoringInstructions =
+      typeof rec.authoringInstructions === "string"
+        ? rec.authoringInstructions.trim()
+        : "";
     plates.push({
       slug,
       displayName:
@@ -164,6 +191,7 @@ export function normalizeDocumentPlates(
           ? rec.displayName.trim()
           : slug,
       useFor: typeof rec.useFor === "string" ? rec.useFor.trim() : "",
+      ...(authoringInstructions ? { authoringInstructions } : {}),
       ...(sections ? { sections } : {}),
       ...(analyses ? { analyses } : {}),
     });
@@ -246,23 +274,37 @@ export function createDocumentComposerExtension(
       }
       // THINK-183 KTD8 (R14 floor): each contract-bearing plate's line names
       // its enforced sections (expected heading titles + the operator's
-      // section instructions) and declared analyses (key + op + input-shape
-      // hint) — enough to author a contract-satisfying emission first-pass.
-      // Guidance rides up front: operators write section instructions
-      // expecting first-pass adherence, not rejection-loop discovery.
+      // section instructions + suggested visualizations) and declared
+      // analyses. Framing matters (plates feedback 2026-07-21, round 2):
+      // section instructions are a FLOOR — an earlier "follow each
+      // section's instructions" framing made the model author ONLY the
+      // manifest sections with minimal literal compliance, dropping the
+      // charts/tables/extra sections it used to add. The wording below
+      // states minimums and explicitly licenses enrichment.
       const genreLines = plates
         .map((p) => {
           let line = `\`${p.slug}\`${p.useFor ? ` — ${p.useFor}` : ""}`;
+          if (p.authoringInstructions) {
+            line += ` [operator authoring instructions for this genre: ${p.authoringInstructions}]`;
+          }
           if (p.sections?.length) {
             const parts = p.sections.map((s) => {
               const waiveNote =
                 s.tier === "required-if-material"
                   ? " (waive via tw:waiver if data is unavailable)"
                   : "";
-              const guidanceNote = s.guidance ? `: ${s.guidance}` : "";
-              return `"## ${s.title}"${waiveNote}${guidanceNote}`;
+              const suggested = (s.suggestedDirectives ?? [])
+                .map((d) => (d.chartType ? `${d.kind} ${d.chartType}` : d.kind))
+                .join(", ");
+              const suggestedNote = suggested
+                ? ` (suggested visualization: ${suggested})`
+                : "";
+              const guidanceNote = s.guidance
+                ? `: must cover — ${s.guidance}`
+                : "";
+              return `"## ${s.title}"${waiveNote}${suggestedNote}${guidanceNote}`;
             });
-            line += ` [required sections — follow each section's instructions: ${parts.join("; ")}]`;
+            line += ` [sections this genre must include (a floor, NOT the full outline): ${parts.join("; ")}]`;
           }
           if (p.analyses?.length) {
             const parts = p.analyses.map(
@@ -296,7 +338,12 @@ export function createDocumentComposerExtension(
               "its exact listed title, satisfy declared analyses with ```tw:analysis blocks (analysis: <key> " +
               "plus the op's raw inputs — the server computes the numbers), and when a required section's " +
               "data is genuinely unavailable, waive it explicitly with a ```tw:waiver block (section: <id>, " +
-              "reason: <why>) instead of omitting it. "
+              "reason: <why>) instead of omitting it. " +
+              "The contract is a FLOOR, not an outline: section instructions state what must appear, not " +
+              "all that may. Beyond satisfying them, author the rich document the data deserves — add " +
+              "further sections where the data supports them (aging breakdowns, risk callouts, a closing " +
+              "summary), tables, and tw:stats / tw:chart visualizations wherever they make the evidence " +
+              "clearer. A contract-minimum document with no visualizations is an underdelivery. "
             : "") +
           "Emitting again with the same document_id revises the document (always pass the document_id " +
           "returned by a prior call when revising). status 'final' pins an immutable version; drafts stay " +

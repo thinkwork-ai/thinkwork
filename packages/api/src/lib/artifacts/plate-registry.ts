@@ -151,6 +151,8 @@ export interface ResolvedPlate {
   sections?: readonly PlateSectionSpec[];
   /** Content contract: declared analyses (THINK-183; absent = none). */
   analyses?: readonly PlateAnalysisSpec[];
+  /** Plate-wide operator authoring instructions (absent = none). */
+  authoringInstructions?: string;
   /** "platform" (code-defined, possibly overridden) or "tenant" (row-owned). */
   origin: "platform" | "tenant";
   hidden: boolean;
@@ -523,6 +525,9 @@ function resolveFromLayers(input: {
         normalizeAllowedDirectives(c.allowedDirectives) ?? "all",
       sections: normalizeSections(c.sections),
       analyses: normalizeAnalyses(c.analyses),
+      ...(str(c.authoringInstructions)
+        ? { authoringInstructions: str(c.authoringInstructions) }
+        : {}),
       origin: "tenant",
       hidden: row.hidden,
       customized: false,
@@ -551,6 +556,12 @@ function resolveFromLayers(input: {
     allowedDirectives:
       normalizeAllowedDirectives(c.allowedDirectives) ??
       platform.allowedDirectives,
+    ...((str(c.authoringInstructions) ?? platform.authoringInstructions)
+      ? {
+          authoringInstructions:
+            str(c.authoringInstructions) ?? platform.authoringInstructions,
+        }
+      : {}),
     // Floor-model layered merge (THINK-188 KTD1/R7): the platform contract is
     // a floor — config `sections`/`analyses` are tenant ADDITIONS and
     // `sectionOverrides` patches floor sections (tier raise-only) — so
@@ -730,12 +741,16 @@ export interface PlateDispatchSummary {
   slug: string;
   displayName: string;
   useFor: string;
+  /** Plate-wide operator authoring instructions, untruncated. */
+  authoringInstructions?: string;
   sections?: Array<{
     id: string;
     title: string;
     tier: "required" | "required-if-material";
     /** Operator-authored section instructions, untruncated. */
     guidance?: string;
+    /** Plate-suggested visualizations for this section (chart/stats hints). */
+    suggestedDirectives?: Array<{ kind: string; chartType?: string }>;
   }>;
   analyses?: Array<{
     key: string;
@@ -756,11 +771,16 @@ export function visiblePlateSummaries(
         .filter((s) => s.tier !== "suggested")
         .map((s) => {
           const guidance = s.guidance?.trim();
+          const suggested = (s.suggestedDirectives ?? []).map((d) => ({
+            kind: d.kind,
+            ...(d.chartType ? { chartType: d.chartType } : {}),
+          }));
           return {
             id: s.id,
             title: s.title,
             tier: s.tier as "required" | "required-if-material",
             ...(guidance ? { guidance } : {}),
+            ...(suggested.length > 0 ? { suggestedDirectives: suggested } : {}),
           };
         });
       const analyses = (p.analyses ?? []).map((a) => {
@@ -772,10 +792,12 @@ export function visiblePlateSummaries(
           ...(guidance ? { guidance } : {}),
         };
       });
+      const authoringInstructions = p.authoringInstructions?.trim();
       return {
         slug: p.slug,
         displayName: p.displayName,
         useFor: p.useFor,
+        ...(authoringInstructions ? { authoringInstructions } : {}),
         ...(sections.length > 0 ? { sections } : {}),
         ...(analyses.length > 0 ? { analyses } : {}),
       };

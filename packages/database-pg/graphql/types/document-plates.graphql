@@ -24,6 +24,9 @@ type DocumentPlate {
   tokensDark: AWSJSON!
   # Directive kinds documents in this plate may use; null = all.
   allowedDirectives: [String!]
+  # Operator-authored plate-wide authoring instructions (the plate's
+  # "system prompt" for the agent); null = none.
+  authoringInstructions: String
   origin: DocumentPlateOrigin!
   hidden: Boolean!
   # True when a platform plate has a tenant delta row.
@@ -81,6 +84,7 @@ type DocumentPlateDiagnostic {
 input DocumentPlateDraftConfigInput {
   displayName: String
   useFor: String
+  authoringInstructions: String
   eyebrow: String
   titleSuffix: String
   # Token-name → CSS-value maps, plate vocabulary only (R7).
@@ -105,6 +109,8 @@ input SaveDocumentPlateInput {
   # displayName + useFor are required when creating a tenant plate.
   displayName: String
   useFor: String
+  # Plate-wide authoring instructions; editable on platform AND tenant plates.
+  authoringInstructions: String
   eyebrow: String
   titleSuffix: String
   paletteLight: AWSJSON

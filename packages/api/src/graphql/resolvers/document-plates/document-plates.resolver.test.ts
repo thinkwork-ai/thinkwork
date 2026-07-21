@@ -131,6 +131,7 @@ vi.mock("@thinkwork/database-pg", async (importOriginal) => ({
 
 import {
   boundedAnalyses,
+  boundedAuthoringInstructions,
   boundedSections,
   boundedSectionOverrides,
   parseDraftConfig,
@@ -493,6 +494,17 @@ describe("content contract save gates (THINK-183 U2)", () => {
     expect(boundedAnalyses([goodAnalysis])).toEqual([
       { ...goodAnalysis, params: undefined, source: "model-supplied" },
     ]);
+  });
+
+  it("bounds plate authoring instructions", () => {
+    expect(boundedAuthoringInstructions("  Lead with a summary.  ")).toBe(
+      "Lead with a summary.",
+    );
+    expect(boundedAuthoringInstructions("")).toBeUndefined();
+    expect(boundedAuthoringInstructions(null)).toBeUndefined();
+    expect(() => boundedAuthoringInstructions("x".repeat(4001))).toThrow(
+      /≤4000 characters/,
+    );
   });
 
   it("accepts analysis guidance, bounds it, and rejects junk", () => {

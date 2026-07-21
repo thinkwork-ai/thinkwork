@@ -82,6 +82,12 @@ export interface DocumentPlateSectionOverrideConfig {
  *   definition by deleting the row.
  */
 export interface DocumentPlateConfig {
+  /**
+   * Operator-authored plate-wide authoring instructions (the plate's
+   * "system prompt"): tone, structure, enrichment expectations. Rides the
+   * emit_document tool surface ahead of the section contract.
+   */
+  authoringInstructions?: string;
   displayName?: string;
   useFor?: string;
   eyebrow?: string;

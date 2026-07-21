@@ -10,9 +10,9 @@ Prose with **bold**, _em_, `code`, and a [link](#section-one).
 - item one
 - item two
 
-| A | B |
+| A   | B   |
 | --- | --- |
-| 1 | 2 |
+| 1   | 2   |
 
 ```tw:stats
 items:
