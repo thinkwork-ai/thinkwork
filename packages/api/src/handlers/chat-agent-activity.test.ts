@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   appendThreadTurnEvent: vi.fn(),
   notifyThreadTurnStep: vi.fn(),
   upsertDraftCanvasFromActivityEvent: vi.fn(),
+  updateWhere: vi.fn(async () => undefined),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -27,6 +28,12 @@ vi.mock("@thinkwork/database-pg", () => ({
         where: () => ({
           limit: async () => mocks.selectResult,
         }),
+      }),
+    }),
+    // Stall-monitor liveness bump (THINK-324) — best-effort update chain.
+    update: () => ({
+      set: () => ({
+        where: mocks.updateWhere,
       }),
     }),
   }),
@@ -84,7 +91,10 @@ vi.mock("../lib/artifacts/born-artifact.js", () => ({
   upsertDraftCanvasFromActivityEvent: mocks.upsertDraftCanvasFromActivityEvent,
 }));
 
-import { handler } from "./chat-agent-activity.js";
+import {
+  handler,
+  __resetTurnActivityBumpThrottle,
+} from "./chat-agent-activity.js";
 import { ThreadTurnEventError } from "../lib/thread-turn-events.js";
 
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
@@ -97,6 +107,7 @@ let seqCounter = 0;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  __resetTurnActivityBumpThrottle();
   process.env.API_AUTH_SECRET = VALID_SECRET;
   seqCounter = 0;
   mocks.selectResult = [
@@ -319,7 +330,9 @@ describe("chat-agent-activity — append + publish", () => {
     });
     // Born-as-artifact: the json-render event drives the draft-canvas upsert.
     expect(mocks.upsertDraftCanvasFromActivityEvent).toHaveBeenCalledTimes(1);
-    expect(mocks.upsertDraftCanvasFromActivityEvent.mock.calls[0][0]).toMatchObject({
+    expect(
+      mocks.upsertDraftCanvasFromActivityEvent.mock.calls[0][0],
+    ).toMatchObject({
       tenantId: TENANT_ID,
       threadId: THREAD_ID,
       payload: {
@@ -396,5 +409,25 @@ describe("chat-agent-activity — failure isolation (G4)", () => {
     const body = JSON.parse(res.body as string);
     expect(body.appended).toBe(1);
     expect(body.skipped).toEqual([{ index: 0, reason: "PAYLOAD_TOO_LARGE" }]);
+  });
+});
+
+describe("chat-agent-activity — stall-monitor liveness bump (THINK-324)", () => {
+  it("bumps last_activity_at once per interval, not per POST", async () => {
+    const first = await handler(mockEvent());
+    expect(first.statusCode).toBe(200);
+    expect(mocks.updateWhere).toHaveBeenCalledTimes(1);
+
+    // Second POST for the same turn inside the throttle window: no new bump.
+    const second = await handler(mockEvent());
+    expect(second.statusCode).toBe(200);
+    expect(mocks.updateWhere).toHaveBeenCalledTimes(1);
+  });
+
+  it("a bump failure never fails the durable append (best-effort)", async () => {
+    mocks.updateWhere.mockRejectedValueOnce(new Error("db down"));
+    const res = await handler(mockEvent());
+    expect(res.statusCode).toBe(200);
+    expect(mocks.appendThreadTurnEvent).toHaveBeenCalled();
   });
 });

@@ -411,6 +411,10 @@ resource "aws_lambda_function" "agentcore_pi" {
       # provider (patches/@earendil-works__pi-ai). SigV4 signing and endpoint
       # selection both follow the override.
       PI_BEDROCK_MODEL_REGIONS = jsonencode(var.pi_bedrock_model_regions)
+      # THINK-324: 1-hour Bedrock prompt-cache TTL (pi-ai resolveCacheRetention).
+      # The default 5-minute TTL made any thread idle >5 min pay full uncached
+      # input on its next turn.
+      PI_CACHE_RETENTION = "long"
     }
   }
 
