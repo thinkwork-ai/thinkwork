@@ -528,41 +528,106 @@ export async function upsertNotes(options: {
 
   // NoteTarget is ensured UNCONDITIONALLY — including for hash-skipped notes —
   // so a crash between the Note write and the NoteTarget write heals on
-  // re-run (plan U6).
-  for (const note of resolvable) {
-    if (dryRun) continue; // note creates already planned; target ensure follows them
-    const noteId = noteIdBySourceId.get(note.sourceId);
-    const targetId = targetIdBySourceId.get(note.targetSourceId);
-    if (!noteId || !targetId) continue;
-    try {
-      const existing = await client.requestWithRetry<{
-        noteTargets: { edges: Array<{ node: { id: string } }> };
-      }>(
-        "/graphql",
-        `query MigrationNoteTargets($filter: NoteTargetFilterInput) {
-          noteTargets(filter: $filter, first: 1) { edges { node { id } } }
-        }`,
-        { filter: { noteId: { eq: noteId } } },
+  // re-run (plan U6). The existence check is BATCHED: one paginated
+  // `noteTargets` query per QUERY_PAGE notes rather than one query per note.
+  // The per-note form dominated a steady-state run — every already-paired note
+  // (thousands of them) cost a round-trip at the API rate limit, ~20 min of a
+  // 26 min run. Batched, the same phase is a handful of queries.
+  if (!dryRun) {
+    const pairs = resolvable
+      .map((note) => ({
+        note,
+        noteId: noteIdBySourceId.get(note.sourceId),
+        targetId: targetIdBySourceId.get(note.targetSourceId),
+      }))
+      .filter(
+        (p): p is { note: MappedNote; noteId: string; targetId: string } =>
+          Boolean(p.noteId) && Boolean(p.targetId),
       );
-      if (existing.noteTargets.edges.length > 0) continue;
-      const targetField =
-        note.targetKind === "company"
+
+    // Which noteIds already have a target? Paginate within each chunk so a
+    // multi-target note can never be truncated into a false "unpaired".
+    type NoteTargetPage = {
+      noteTargets: {
+        edges: Array<{ node: { noteId: string } }>;
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+      };
+    };
+    const alreadyPaired = new Set<string>();
+    const noteIds = [...new Set(pairs.map((p) => p.noteId))];
+    for (const page of chunk(noteIds, QUERY_PAGE)) {
+      let after: string | null = null;
+      try {
+        do {
+          const data: NoteTargetPage =
+            await client.requestWithRetry<NoteTargetPage>(
+              "/graphql",
+              `query MigrationNoteTargets($filter: NoteTargetFilterInput, $after: String) {
+              noteTargets(filter: $filter, first: ${QUERY_PAGE}, after: $after) {
+                edges { node { noteId } }
+                pageInfo { hasNextPage endCursor }
+              }
+            }`,
+              { filter: { noteId: { in: [...page] } }, after },
+            );
+          for (const { node } of data.noteTargets.edges)
+            alreadyPaired.add(node.noteId);
+          after = data.noteTargets.pageInfo.hasNextPage
+            ? data.noteTargets.pageInfo.endCursor
+            : null;
+        } while (after);
+      } catch (error) {
+        counters.failed += page.length;
+        counters.gaps.push(
+          `noteTarget lookup batch failed: ${
+            error instanceof Error ? error.message.slice(0, 300) : String(error)
+          }`,
+        );
+      }
+    }
+
+    // Create the missing targets, grouped by FK field, in BATCH_LIMIT chunks
+    // (createNoteTargets takes an array).
+    const toCreate = new Map<
+      string,
+      Array<{ noteId: string; targetId: string }>
+    >();
+    for (const p of pairs) {
+      if (alreadyPaired.has(p.noteId)) continue;
+      const field =
+        p.note.targetKind === "company"
           ? "targetCompanyId"
           : "targetOpportunityId";
-      await client.requestOnce(
-        "/graphql",
-        `mutation MigrationCreateNoteTargets($data: [NoteTargetCreateInput!]!) {
-          createNoteTargets(data: $data) { id }
-        }`,
-        { data: [{ noteId, [targetField]: targetId }] },
-      );
-    } catch (error) {
-      counters.failed += 1;
-      counters.gaps.push(
-        `noteTarget for ${note.sourceId} failed: ${
-          error instanceof Error ? error.message.slice(0, 300) : String(error)
-        }`,
-      );
+      const list = toCreate.get(field) ?? [];
+      list.push({ noteId: p.noteId, targetId: p.targetId });
+      toCreate.set(field, list);
+    }
+    for (const [field, list] of toCreate) {
+      for (const batch of chunk(list, BATCH_LIMIT)) {
+        try {
+          await client.requestOnce(
+            "/graphql",
+            `mutation MigrationCreateNoteTargets($data: [NoteTargetCreateInput!]!) {
+              createNoteTargets(data: $data) { id }
+            }`,
+            {
+              data: batch.map((p) => ({
+                noteId: p.noteId,
+                [field]: p.targetId,
+              })),
+            },
+          );
+        } catch (error) {
+          counters.failed += batch.length;
+          counters.gaps.push(
+            `noteTarget create batch (${field}) failed: ${
+              error instanceof Error
+                ? error.message.slice(0, 300)
+                : String(error)
+            }`,
+          );
+        }
+      }
     }
   }
 
