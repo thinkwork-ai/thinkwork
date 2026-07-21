@@ -1461,7 +1461,15 @@ resource "terraform_data" "agentcore_harness_endpoint_retention" {
 module "agentcore_proof_identity" {
   source = "../app/agentcore-identity"
 
-  enabled             = var.enable_agentcore_multiplayer_proof
+  enabled = var.enable_agentcore_multiplayer_proof
+  # THINK-324 — the Twenty user-federation identity (shared workload
+  # identity + twenty-crm credential provider + DCR client secret) survives
+  # the proof plane's retirement: it stays enabled wherever a Twenty
+  # instance is provisioned, and — while the proof flag is still on — on
+  # proof stages too, so flipping the proof flag off later destroys only
+  # proof resources. After the harness retirement removes the proof flag,
+  # this reduces to twenty_provisioned alone.
+  twenty_enabled      = local.twenty_provisioned || var.enable_agentcore_multiplayer_proof
   stage               = var.stage
   region              = var.region
   account_id          = var.account_id
