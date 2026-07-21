@@ -52,6 +52,52 @@ const UUID_RE =
 /** Cap a single POST so a pathological turn can't flood AppSync in one shot. */
 const MAX_EVENTS_PER_REQUEST = 100;
 
+/**
+ * Stall-monitor liveness (THINK-324): the chat path writes
+ * `thread_turns.last_activity_at` only at dispatch, so the stall sweep's
+ * 5-minute `COALESCE(last_activity_at, started_at)` window falsely flagged any
+ * legitimately long turn as timed_out (duplicate-turn retry rows). Activity
+ * POSTs are the runtime's proof of life — bump the column here, throttled per
+ * container so a chatty turn costs at most one UPDATE per interval. Genuinely
+ * hung turns emit no activity and still trip the sweep. Best-effort: a bump
+ * failure must never fail the durable event append.
+ */
+const TURN_ACTIVITY_BUMP_INTERVAL_MS = 60_000;
+const turnActivityLastBumpMs = new Map<string, number>();
+
+/** Test-only: clears the per-container bump throttle between test cases. */
+export function __resetTurnActivityBumpThrottle(): void {
+  turnActivityLastBumpMs.clear();
+}
+
+function maybeBumpTurnActivity(turnId: string): void {
+  try {
+    const now = Date.now();
+    const last = turnActivityLastBumpMs.get(turnId) ?? 0;
+    if (now - last < TURN_ACTIVITY_BUMP_INTERVAL_MS) return;
+    // Bounded memory across container lifetime; a rare full clear only means
+    // one extra bump per in-flight turn.
+    if (turnActivityLastBumpMs.size > 500) turnActivityLastBumpMs.clear();
+    turnActivityLastBumpMs.set(turnId, now);
+    void Promise.resolve(
+      db
+        .update(threadTurns)
+        .set({ last_activity_at: new Date() })
+        .where(eq(threadTurns.id, turnId)),
+    ).catch((err) => {
+      console.warn(
+        `[chat-agent-activity] last_activity_at bump failed (best-effort): turn=${turnId}`,
+        err instanceof Error ? err.message : err,
+      );
+    });
+  } catch (err) {
+    console.warn(
+      `[chat-agent-activity] last_activity_at bump failed (best-effort): turn=${turnId}`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 interface ActivityEventInput {
   event_type: string;
   stream?: string;
@@ -237,6 +283,9 @@ export async function handler(
       "thread_turn_id is not in the tenant/thread named in the body",
     );
   }
+
+  // ---- Stall-monitor liveness bump (throttled, best-effort) -----------
+  maybeBumpTurnActivity(turn.id);
 
   // ---- Append each event (durable, seq-ordered) + best-effort publish --
   const store = drizzleThreadTurnEventStore();
