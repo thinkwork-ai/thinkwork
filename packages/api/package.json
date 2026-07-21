@@ -36,6 +36,7 @@
     "@aws-sdk/client-iam": "^3.1034.0",
     "@aws-sdk/client-kms": "^3.1088.0",
     "@aws-sdk/client-lambda": "^3.917.0",
+    "@aws-sdk/client-neptunedata": "^3.1092.0",
     "@aws-sdk/client-pricing": "^3.1028.0",
     "@aws-sdk/client-rds": "^3.1043.0",
     "@aws-sdk/client-s3": "^3.1018.0",
@@ -82,8 +83,8 @@
     "stripe": "^17.5.0",
     "sucrase": "^3.35.1",
     "svix": "^1.95.2",
-    "uuidv7": "^1.2.1",
     "unpdf": "^0.12.1",
+    "uuidv7": "^1.2.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

@@ -1493,3 +1493,27 @@ variable "compliance_anchor_retention_days" {
     error_message = "compliance_anchor_retention_days must be greater than 0."
   }
 }
+
+# ---------------------------------------------------------------------------
+# Company Brain twin (plan 2026-07-21-001): Neptune wiring for the
+# identity-graph-projector. Values come from the etl-platform neptune stack's
+# outputs; all default-empty so stages without the twin deploy unchanged.
+# ---------------------------------------------------------------------------
+
+variable "neptune_endpoint" {
+  type        = string
+  default     = ""
+  description = "Neptune twin cluster writer endpoint (etl-platform neptune stack output; empty = twin disabled)"
+}
+
+variable "neptune_cluster_resource_id" {
+  type        = string
+  default     = ""
+  description = "Neptune cluster resource id (etl-platform neptune stack output) for neptune-db IAM ARNs"
+}
+
+variable "neptune_client_security_group_id" {
+  type        = string
+  default     = ""
+  description = "neptune-client SG id (etl-platform neptune stack output) attached to the identity-graph-projector"
+}

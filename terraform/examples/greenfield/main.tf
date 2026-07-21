@@ -141,6 +141,24 @@ variable "agentcore_turn_assertion_active_key_version" {
   default     = "v1"
 }
 
+variable "neptune_endpoint" {
+  type        = string
+  default     = ""
+  description = "Company Brain twin: Neptune writer endpoint (etl-platform neptune stack output; empty = twin disabled)"
+}
+
+variable "neptune_cluster_resource_id" {
+  type        = string
+  default     = ""
+  description = "Company Brain twin: Neptune cluster resource id for IAM ARNs"
+}
+
+variable "neptune_client_security_group_id" {
+  type        = string
+  default     = ""
+  description = "Company Brain twin: neptune-client SG id for the identity-graph-projector"
+}
+
 variable "analyst_lambda_vpc_egress" {
   description = "VPC-attach the analyst data-path Lambdas so their egress rides the NAT gateway's stable EIP — required when an external analyst data source sits behind an IP allowlist. See the thinkwork module's analyst_egress_ip output for the IP to allowlist."
   type        = bool
@@ -870,6 +888,9 @@ module "thinkwork" {
   agentcore_turn_assertion_key_versions       = var.agentcore_turn_assertion_key_versions
   agentcore_turn_assertion_active_key_version = var.agentcore_turn_assertion_active_key_version
   analyst_lambda_vpc_egress                   = var.analyst_lambda_vpc_egress
+  neptune_endpoint                            = var.neptune_endpoint
+  neptune_cluster_resource_id                 = var.neptune_cluster_resource_id
+  neptune_client_security_group_id            = var.neptune_client_security_group_id
   hindsight_database_name                     = var.hindsight_database_name
   memory_engine                               = var.memory_engine
   twenty_provisioned                          = var.twenty_provisioned

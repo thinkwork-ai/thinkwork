@@ -1148,25 +1148,31 @@ module "api" {
   okf_efs_security_group_ids            = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
   analyst_egress_subnet_ids             = var.analyst_lambda_vpc_egress ? module.vpc.private_subnet_ids : []
   analyst_egress_security_group_ids     = var.analyst_lambda_vpc_egress ? [aws_security_group.analyst_egress_lambda[0].id] : []
-  okf_efs_mount_target_ids              = var.okf_wiki_efs_enabled ? aws_efs_mount_target.okf_wiki[*].id : []
-  okf_efs_file_system_arn               = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
-  okf_efs_refresh_access_point_arn      = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_refresh[0].arn : ""
-  twenty_provisioned                    = local.twenty_provisioned
-  twenty_runtime_enabled                = local.twenty_runtime_enabled
-  twenty_url                            = local.twenty_provisioned ? module.twenty[0].twenty_url : ""
-  twenty_alb_arn                        = local.twenty_provisioned ? module.twenty[0].twenty_alb_arn : ""
-  twenty_target_group_arn               = local.twenty_provisioned ? module.twenty[0].twenty_target_group_arn : ""
-  twenty_cluster_arn                    = local.twenty_provisioned ? module.twenty[0].twenty_cluster_arn : ""
-  twenty_server_service_name            = local.twenty_provisioned ? module.twenty[0].twenty_server_service_name : ""
-  twenty_worker_service_name            = local.twenty_provisioned ? module.twenty[0].twenty_worker_service_name : ""
-  twenty_server_log_group_name          = local.twenty_provisioned ? module.twenty[0].twenty_server_log_group_name : ""
-  twenty_worker_log_group_name          = local.twenty_provisioned ? module.twenty[0].twenty_worker_log_group_name : ""
-  admin_url                             = local.end_user_app_url
-  docs_url                              = "https://${module.docs_site.distribution_domain}"
-  www_url                               = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
-  stripe_price_ids_json                 = var.stripe_price_ids_json
-  appsync_realtime_url                  = module.appsync.graphql_realtime_url
-  ecr_repository_url                    = module.agentcore_platform.ecr_repository_url
+  # Company Brain U5: projector VPC attach only when the neptune-client SG
+  # is configured (the twin's Neptune cluster lives in this same VPC).
+  neptune_endpoint                 = var.neptune_endpoint
+  neptune_cluster_resource_id      = var.neptune_cluster_resource_id
+  neptune_subnet_ids               = var.neptune_client_security_group_id != "" ? module.vpc.private_subnet_ids : []
+  neptune_security_group_ids       = var.neptune_client_security_group_id != "" ? [var.neptune_client_security_group_id] : []
+  okf_efs_mount_target_ids         = var.okf_wiki_efs_enabled ? aws_efs_mount_target.okf_wiki[*].id : []
+  okf_efs_file_system_arn          = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
+  okf_efs_refresh_access_point_arn = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_refresh[0].arn : ""
+  twenty_provisioned               = local.twenty_provisioned
+  twenty_runtime_enabled           = local.twenty_runtime_enabled
+  twenty_url                       = local.twenty_provisioned ? module.twenty[0].twenty_url : ""
+  twenty_alb_arn                   = local.twenty_provisioned ? module.twenty[0].twenty_alb_arn : ""
+  twenty_target_group_arn          = local.twenty_provisioned ? module.twenty[0].twenty_target_group_arn : ""
+  twenty_cluster_arn               = local.twenty_provisioned ? module.twenty[0].twenty_cluster_arn : ""
+  twenty_server_service_name       = local.twenty_provisioned ? module.twenty[0].twenty_server_service_name : ""
+  twenty_worker_service_name       = local.twenty_provisioned ? module.twenty[0].twenty_worker_service_name : ""
+  twenty_server_log_group_name     = local.twenty_provisioned ? module.twenty[0].twenty_server_log_group_name : ""
+  twenty_worker_log_group_name     = local.twenty_provisioned ? module.twenty[0].twenty_worker_log_group_name : ""
+  admin_url                        = local.end_user_app_url
+  docs_url                         = "https://${module.docs_site.distribution_domain}"
+  www_url                          = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
+  stripe_price_ids_json            = var.stripe_price_ids_json
+  appsync_realtime_url             = module.appsync.graphql_realtime_url
+  ecr_repository_url               = module.agentcore_platform.ecr_repository_url
   # Static truth for count gating: agentcore_platform's ECR repo is
   # unconditional, but its URL attribute is unknown until apply. The runner
   # additionally needs its image tag seeded (CI does this for repo-managed

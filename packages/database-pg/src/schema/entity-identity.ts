@@ -429,6 +429,39 @@ export const entityResolutionEvents = identity.table(
 );
 
 // ---------------------------------------------------------------------------
+// identity.graph_projection_cursors — twin projector consumer state
+// (Company Brain U5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-tenant cursor over identity.entity_resolution_events for the twin
+ * graph projector (Company Brain U5 / KTD-4). The projector is a durable,
+ * replayable consumer: a nudge invoke is only a latency optimization — the
+ * cursor is the source of truth, so missed nudges are harmless and a full
+ * replay from a zeroed cursor converges (graph state derives from current
+ * relational rows, not event payloads).
+ */
+export const identityGraphProjectionCursors = identity.table(
+  "graph_projection_cursors",
+  {
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .primaryKey(),
+    /** created_at of the last processed event. */
+    last_event_created_at: timestamp("last_event_created_at", {
+      withTimezone: true,
+    }),
+    /** Tie-breaker id of the last processed event at that timestamp. */
+    last_event_id: uuid("last_event_id"),
+    /** Snapshot cursor string published with the identity-mapping snapshot. */
+    last_snapshot_cursor: text("last_snapshot_cursor"),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+);
+
+// ---------------------------------------------------------------------------
 // identity.mapping_rejections — negative evidence (KTD-6)
 // ---------------------------------------------------------------------------
 
