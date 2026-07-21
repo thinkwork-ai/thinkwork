@@ -1752,6 +1752,50 @@ describe("handleInvocation — happy path", () => {
     expect(composed).toContain("Revenue grew 12%.");
   });
 
+  it("removes staged attachments when tool assembly fails (THINK-324 C4 concurrent staging)", async () => {
+    // Staging now runs concurrently with tool assembly; a tool-assembly
+    // failure exits before the post-loop cleanup, so the failure path must
+    // await the staging promise and remove the staged turn dir itself.
+    const root = await mkdtemp(path.join(tmpdir(), "agentcore-pi-att-"));
+    const turnDir = path.join(root, `pi-turn-cleanup-test`, "attachments");
+    await mkdir(turnDir, { recursive: true });
+    await writeFile(path.join(turnDir, "brief.md"), "# Brief");
+
+    try {
+      const result = await handleInvocation({
+        payload: VALID_PAYLOAD(),
+        deps: {
+          ...makeDeps({
+            stageMessageAttachmentsImpl: async () => ({
+              turnDir,
+              staged: [
+                {
+                  attachmentId: "att-1",
+                  localPath: path.join(turnDir, "brief.md"),
+                  name: "brief.md",
+                  mimeType: "text/markdown",
+                  sizeBytes: 7,
+                  textPreview: "# Brief",
+                },
+              ],
+            }),
+          }),
+          // Invoked inside the tool-assembly try block — throwing here is the
+          // structured 500 path that skips the post-loop attachment cleanup.
+          bedrockRuntimeClientFactory: () => {
+            throw new Error("bedrock client construction failed");
+          },
+        },
+      });
+
+      expect(result.statusCode).toBe(500);
+      expect(result.body).toMatchObject({ runtime: "pi" });
+      await expect(access(path.dirname(turnDir))).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("skill_run invocation fires the completion callback exactly once with the camelCase shape + HMAC header", async () => {
     const fetchCalls: Array<[unknown, RequestInit | undefined]> = [];
     const fetchImpl: typeof fetch = (async (
