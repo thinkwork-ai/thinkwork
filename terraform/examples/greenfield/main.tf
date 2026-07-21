@@ -1520,3 +1520,18 @@ output "agentcore_turn_assertion_active_kid" {
   description = "Public JWKS key identifier for the active proof signing key."
   value       = module.thinkwork.agentcore_turn_assertion_active_kid
 }
+
+# The original AgentCore Twenty reconciliation marker never owned external
+# cleanup, but an interrupted local-exec may have left it tainted. Forget it
+# from state without refresh or destroy provisioners — the child module owns
+# the replacement idempotent reconciliation marker under a new address. The
+# managed customer-update root (deployment-control-plane runner) carries the
+# same block; without it here, a dev push plans a delete the destructive-apply
+# guard rightly refuses.
+removed {
+  from = module.thinkwork.module.agentcore_proof_identity.terraform_data.twenty_identity_lifecycle
+
+  lifecycle {
+    destroy = false
+  }
+}
