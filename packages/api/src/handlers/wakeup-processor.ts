@@ -15,7 +15,7 @@ import {
   getConfig,
   getApiAuthSecret,
 } from "@thinkwork/runtime-config";
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
 import { jsonSafePreview } from "../lib/json-safe-text.js";
 import { publishAppSyncMutation } from "../lib/appsync-iam-publisher.js";
 import { eq, and, sql, asc, desc, inArray } from "drizzle-orm";
@@ -82,7 +82,14 @@ import {
   isThreadBlocked,
   checkConcurrencyLimits,
 } from "../lib/thread-dispatch.js";
-import { promoteNextDeferredWakeup } from "../lib/wakeup-defer.js";
+import {
+  promoteNextDeferredWakeup,
+  promoteStaleDeferredWakeups,
+} from "../lib/wakeup-defer.js";
+import {
+  claimThreadCheckout,
+  releaseThreadCheckout,
+} from "../lib/thread-checkout.js";
 import {
   isWorkspaceProjectionManifestLike,
   recordDispatchWorkspaceProjectionSnapshot,
@@ -300,9 +307,8 @@ export async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -402,6 +408,10 @@ async function finishHarnessWakeup(input: {
     });
     await failWakeup(input.wakeup.id, error);
     if (input.runThreadId) {
+      await releaseThreadCheckout({
+        threadId: input.runThreadId,
+        runId: input.runId,
+      });
       await promoteNextDeferredWakeup(
         input.wakeup.tenant_id,
         input.runThreadId,
@@ -434,6 +444,10 @@ async function finishHarnessWakeup(input: {
     .set({ last_heartbeat_at: new Date() })
     .where(eq(agents.id, input.wakeup.agent_id));
   if (input.runThreadId) {
+    await releaseThreadCheckout({
+      threadId: input.runThreadId,
+      runId: input.runId,
+    });
     await promoteNextDeferredWakeup(input.wakeup.tenant_id, input.runThreadId);
   }
 }
@@ -572,9 +586,8 @@ export async function renderWorkspaceTupleForWakeup(input: {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({
     region: process.env.AWS_REGION || "us-east-1",
   });
@@ -776,6 +789,12 @@ export async function handler(): Promise<{
 }> {
   let processed = 0;
   let errors = 0;
+
+  // THINK-324 C5 — starvation backstop: re-queue deferred wakeups whose
+  // thread checkout is free or held by a dead turn. Normal promotion is the
+  // finalize path of the holding turn; this sweep rescues wakeups stranded
+  // by a runtime that died without finalizing. Best-effort, never throws.
+  await promoteStaleDeferredWakeups();
 
   // 1. Fetch queued wakeup requests (oldest first)
   const queued = await db
@@ -1625,15 +1644,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } = await import(
-          "../lib/orchestration/process-parser.js"
-        );
-        const { materializeProcess } = await import(
-          "../lib/orchestration/process-materializer.js"
-        );
-        const { S3Client, GetObjectCommand } = await import(
-          "@aws-sdk/client-s3"
-        );
+        const { parseProcessTemplate } =
+          await import("../lib/orchestration/process-parser.js");
+        const { materializeProcess } =
+          await import("../lib/orchestration/process-materializer.js");
+        const { S3Client, GetObjectCommand } =
+          await import("@aws-sdk/client-s3");
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -1714,9 +1730,44 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       .replace("{agentSlug}", agentSlug);
   }
 
+  // THINK-324 C5 — pre-dispatch thread checkout, mirroring chat-agent-invoke.
+  // A thread-bound wakeup must not start a turn while a live turn holds the
+  // thread lease; re-defer it instead (finalize promotion or the stale sweep
+  // brings it back). The claim steals from dead holders, so a crashed runtime
+  // can't wedge the thread.
+  const wakeupTurnId = randomUUID();
+  if (runThreadId) {
+    let checkoutClaimed = false;
+    try {
+      checkoutClaimed = await claimThreadCheckout({
+        tenantId: wakeup.tenant_id,
+        threadId: runThreadId,
+        runId: wakeupTurnId,
+      });
+    } catch (claimErr) {
+      // Fail open — claim-infra errors must not strand the wakeup.
+      console.warn(
+        `[wakeup-processor] Thread checkout claim errored (failing open): thread=${runThreadId}`,
+        claimErr,
+      );
+      checkoutClaimed = true;
+    }
+    if (!checkoutClaimed) {
+      console.log(
+        `[wakeup-processor] Thread ${runThreadId} busy — re-deferring wakeup ${wakeup.id}`,
+      );
+      await db
+        .update(agentWakeupRequests)
+        .set({ status: "deferred", claimed_at: null })
+        .where(eq(agentWakeupRequests.id, wakeup.id));
+      return;
+    }
+  }
+
   const [run] = await db
     .insert(threadTurns)
     .values({
+      id: wakeupTurnId,
       tenant_id: wakeup.tenant_id,
       agent_id: wakeup.agent_id,
       trigger_id: triggerId,
@@ -3600,9 +3651,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } = await import(
-          "../lib/push-notifications.js"
-        );
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,
@@ -3629,6 +3679,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     // PRD-09 Batch 4: Promote next deferred wakeup for this thread
     if (runThreadId) {
+      // THINK-324 C5 — release this turn's checkout before promoting so the
+      // promoted wakeup's claim doesn't bounce off the finished turn's lease.
+      await releaseThreadCheckout({
+        threadId: runThreadId,
+        runId: run.id,
+      });
       try {
         await promoteNextDeferredWakeup(wakeup.tenant_id, runThreadId);
       } catch (err) {
@@ -3769,6 +3825,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     // PRD-09 Batch 4: Promote next deferred wakeup even on failure
     if (runThreadId) {
+      // THINK-324 C5 — a failed turn never reaches finalize; release its
+      // checkout here so promotion (and the next claim) can proceed.
+      await releaseThreadCheckout({
+        threadId: runThreadId,
+        runId: run.id,
+      });
       try {
         await promoteNextDeferredWakeup(wakeup.tenant_id, runThreadId);
       } catch (err) {

@@ -62,6 +62,7 @@ import {
   drizzleThreadTurnEventStore,
 } from "../thread-turn-events.js";
 import { promoteNextDeferredWakeup } from "../wakeup-defer.js";
+import { releaseThreadCheckout } from "../thread-checkout.js";
 import {
   buildWorkspaceProjectionReconcileSummary,
   mergeWorkspaceProjectionReconcileSummary,
@@ -538,7 +539,7 @@ export async function processFinalize(
       agentProfileRuns: [],
     });
     await markTurnFinalized(turnId);
-    await promoteDeferredWakeupSafely(tenantId, threadId);
+    await promoteDeferredWakeupSafely(tenantId, threadId, turnId);
     return {
       finalized: true,
       messageId: failedMessageId,
@@ -875,7 +876,7 @@ export async function processFinalize(
   if (!responseText || responseText === "{}") {
     console.warn(`[chat-finalize] Empty response from AgentCore`);
     await markTurnFinalized(turnId);
-    await promoteDeferredWakeupSafely(tenantId, threadId);
+    await promoteDeferredWakeupSafely(tenantId, threadId, turnId);
     return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
@@ -884,7 +885,7 @@ export async function processFinalize(
       `[chat-finalize] Hidden desktop delegation ${turnId} finalized without inserting an assistant message`,
     );
     await markTurnFinalized(turnId);
-    await promoteDeferredWakeupSafely(tenantId, threadId);
+    await promoteDeferredWakeupSafely(tenantId, threadId, turnId);
     return { finalized: true, messageId: null, reconcile: reconcileReport };
   }
 
@@ -1093,7 +1094,7 @@ export async function processFinalize(
   // is stranded when the turn completes via the finalize path. Promotion
   // only flips status 'deferred'→'queued' — the wakeup-processor's
   // 1-minute poll picks the queued row up and runs it.
-  await promoteDeferredWakeupSafely(tenantId, threadId);
+  await promoteDeferredWakeupSafely(tenantId, threadId, turnId);
 
   return {
     finalized: true,
@@ -1149,8 +1150,15 @@ function assistantMessageMetadata(
 async function promoteDeferredWakeupSafely(
   tenantId: string,
   threadId: string,
+  turnId?: string,
 ): Promise<void> {
   if (!threadId) return;
+  // THINK-324 C5 — release this turn's thread checkout BEFORE promoting, so
+  // the promoted wakeup's dispatch-time claim doesn't bounce off the lease
+  // the just-finalized turn still holds. No-op when the turn never claimed.
+  if (turnId) {
+    await releaseThreadCheckout({ threadId, runId: turnId });
+  }
   try {
     await promoteNextDeferredWakeup(tenantId, threadId);
   } catch (err) {

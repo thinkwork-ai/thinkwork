@@ -29,13 +29,18 @@ import { eq, and, ne, sql } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
   agents,
+  agentWakeupRequests,
   messages,
   spaces,
   threads,
   users,
   threadTurns,
 } from "@thinkwork/database-pg/schema";
-import { randomBytes } from "crypto";
+import { randomBytes, randomUUID } from "crypto";
+import {
+  claimThreadCheckout,
+  releaseThreadCheckout,
+} from "../lib/thread-checkout.js";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import {
   applySandboxPayloadFields,
@@ -732,6 +737,12 @@ async function markThreadTurnSetupFailed(input: {
       turnErr,
     );
   }
+  // THINK-324 C5 — a setup-failed turn never reaches finalize, so release
+  // its thread checkout here (no-op when this turn doesn't hold it).
+  await releaseThreadCheckout({
+    threadId: input.threadId,
+    runId: input.turnId,
+  });
 }
 
 export async function handler(event: InvokeEvent): Promise<unknown | void> {
@@ -1029,6 +1040,105 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         );
       }
     } else {
+      // THINK-324 C5 — pre-dispatch thread checkout. Claim the thread's
+      // single-writer lease before creating a competing turn: without it, a
+      // quick double-send raced two runtime turns whose durable-session
+      // writes collided (the loser logged SessionConflictError but still
+      // delivered, silently dropping its exchange from the session). Scope:
+      // plain chat turns only — desktop delegations, ask-mode (must never
+      // ride the wakeup fallback: retention invariant), computer-task turns,
+      // and harness-trial turns keep their existing behavior, as does the
+      // mobile-handoff path above (its turn already owns the thread).
+      const claimEligible =
+        !desktopDelegation &&
+        !event.askMode &&
+        !event.computerId &&
+        !event.computerTaskId &&
+        event.requestedRuntime !== "agentcore" &&
+        Boolean(event.messageId);
+      const candidateTurnId = randomUUID();
+      if (claimEligible) {
+        let claimed = false;
+        try {
+          claimed = await claimThreadCheckout({
+            tenantId,
+            threadId,
+            runId: candidateTurnId,
+          });
+        } catch (claimErr) {
+          // Fail open: a claim-infra error must not block chat. The worst
+          // case is today's status quo (a racing concurrent turn).
+          console.warn(
+            `[chat-agent-invoke] Thread checkout claim errored (failing open): thread=${threadId}`,
+            claimErr,
+          );
+          claimed = true;
+        }
+        if (!claimed) {
+          // A live turn holds the thread. Defer this message as a wakeup:
+          // the holder's finalize promotes it (promoteNextDeferredWakeup),
+          // the stale sweep rescues it if the holder dies, and the promoted
+          // turn sees this message in messages_history.
+          try {
+            await db.insert(agentWakeupRequests).values({
+              tenant_id: tenantId,
+              agent_id: agentId,
+              source: "chat_message",
+              reason: "Thread busy — deferred until the running turn ends",
+              trigger_detail: `thread:${threadId}:message:${event.messageId}`,
+              payload: {
+                // TOP-LEVEL threadId — promoteNextDeferredWakeup() matches
+                // on payload->>'threadId'; do not nest or rename this key.
+                threadId,
+                spaceId: spaceId || null,
+                messageId: event.messageId,
+                userMessage,
+                message: userMessage,
+                ...(event.requestedModelId
+                  ? {
+                      modelId: event.requestedModelId,
+                      requestedModelId: event.requestedModelId,
+                    }
+                  : {}),
+                ...(event.requestedProfileSlug
+                  ? { requestedProfileSlug: event.requestedProfileSlug }
+                  : {}),
+                ...(event.goalMode ? { goalMode: event.goalMode } : {}),
+                ...(event.skillCreatorCommand
+                  ? { skillCreatorCommand: event.skillCreatorCommand }
+                  : {}),
+                ...(event.pendingQuestionAnswers
+                  ? { pendingQuestionAnswers: event.pendingQuestionAnswers }
+                  : {}),
+              },
+              status: "deferred",
+              idempotency_key: `agent-default:${tenantId}:${event.messageId}:${agentId}:deferred-busy`,
+              requested_by_actor_type: "user",
+            });
+            logAgentCorePhase({
+              source: "chat-agent-invoke",
+              phase: "api.thread_turn.deferred",
+              status: "completed",
+              traceId,
+              tenantId,
+              agentId,
+              threadId,
+              detail: "thread_busy",
+            });
+            console.log(
+              `[chat-agent-invoke] Thread busy — deferred message as wakeup: thread=${threadId} message=${event.messageId}`,
+            );
+            return { ok: false, deferred: true, reason: "thread_busy" };
+          } catch (deferErr) {
+            // Defer-insert failure: fall through and dispatch anyway
+            // (status-quo racing beats dropping the message on the floor).
+            console.error(
+              `[chat-agent-invoke] Deferred-wakeup enqueue failed; dispatching concurrently: thread=${threadId}`,
+              deferErr,
+            );
+          }
+        }
+      }
       try {
         const [countRow] = await db
           .select({ count: sql<number>`COUNT(*)::int` })
@@ -1039,6 +1149,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         const [turnRow] = await db
           .insert(threadTurns)
           .values({
+            id: claimEligible ? candidateTurnId : undefined,
             tenant_id: tenantId,
             agent_id: agentId,
             thread_id: threadId,
@@ -1120,6 +1231,11 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           `[chat-agent-invoke] Failed to create thread_turn:`,
           turnErr,
         );
+        // The claim above may be held for a turn row that never landed —
+        // release it so the thread doesn't wait out the stale window.
+        if (claimEligible) {
+          await releaseThreadCheckout({ threadId, runId: candidateTurnId });
+        }
       }
     }
 

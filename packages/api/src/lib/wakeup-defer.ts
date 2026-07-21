@@ -77,3 +77,54 @@ export async function promoteNextDeferredWakeup(
     return null;
   }
 }
+
+/**
+ * THINK-324 C5 — starvation backstop. Deferred wakeups are normally promoted
+ * by the finalize path of the turn that held the thread checkout; a runtime
+ * that dies without finalizing would strand them forever. Each poll cycle
+ * re-queues deferred wakeups whose thread checkout is free or held by a dead
+ * turn (not running / finalized / silent past the stale window — streaming
+ * turns bump last_activity_at every ≤60s). Promoted wakeups still pass
+ * through the dispatch-time checkout claim, so over-promotion is safe: a
+ * busy thread just re-defers them.
+ *
+ * Returns the number of promoted wakeups.
+ */
+export async function promoteStaleDeferredWakeups(
+  limit: number = 20,
+): Promise<number> {
+  try {
+    const result = await db.execute(sql`
+			UPDATE agent_wakeup_requests SET status = 'queued', claimed_at = NULL
+			WHERE id IN (
+				SELECT w.id FROM agent_wakeup_requests w
+				JOIN threads t ON t.id = (w.payload->>'threadId')::uuid
+				WHERE w.status = 'deferred'
+				  AND (
+				    t.checkout_run_id IS NULL
+				    OR NOT EXISTS (
+				      SELECT 1 FROM thread_turns tt
+				      WHERE tt.id = t.checkout_run_id
+				        AND tt.status = 'running'
+				        AND tt.finalized_at IS NULL
+				        AND tt.last_activity_at > NOW() - INTERVAL '10 minutes'
+				    )
+				  )
+				ORDER BY w.created_at ASC
+				LIMIT ${limit}
+				FOR UPDATE SKIP LOCKED
+			)
+			RETURNING id
+		`);
+    const promoted = (result.rows || []).length;
+    if (promoted > 0) {
+      console.log(
+        `[wakeup-defer] Promoted ${promoted} stale-deferred wakeup(s) (dead or released checkout)`,
+      );
+    }
+    return promoted;
+  } catch (err) {
+    console.error(`[wakeup-defer] Stale-deferred sweep failed:`, err);
+    return 0;
+  }
+}
