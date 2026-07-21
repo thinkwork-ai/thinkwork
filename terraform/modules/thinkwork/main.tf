@@ -1471,6 +1471,12 @@ module "agentcore_proof_identity" {
   user_federation_return_urls = [
     "${module.api.api_endpoint}/api/skills/mcp-oauth/agentcore/complete",
   ]
+  # The identity module's issuer/resource defaults are dev's CRM domain;
+  # every stage must point at its own Twenty instance or the credential
+  # provider is reconciled with a foreign issuer (observed live on tei-e2e:
+  # Connect-AgentCore 404'd against crm.thinkwork.ai).
+  twenty_oauth_issuer   = local.twenty_public_url != "" ? trimsuffix(local.twenty_public_url, "/") : "https://crm.thinkwork.ai"
+  twenty_oauth_resource = local.twenty_public_url != "" ? "${trimsuffix(local.twenty_public_url, "/")}/mcp" : "https://crm.thinkwork.ai/mcp"
 }
 
 module "agentcore_proof_gateway" {

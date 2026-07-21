@@ -24,6 +24,23 @@ write_client_record() {
     --secret-string file:///dev/stdin >/dev/null
 }
 
+# Twenty's authorize endpoint is "$issuer/authorize" (NOT /oauth/authorize —
+# observed live on tei-e2e: the previously hard-coded path 404s). Fetch the
+# issuer's discovery document once and take both provider endpoints from it,
+# falling back to the documented paths when discovery is unavailable.
+discovery="$(curl --silent --fail --max-time 15 \
+  "$issuer/.well-known/oauth-authorization-server" 2>/dev/null || printf '')"
+provider_endpoint() {
+  local field="$1" fallback="$2"
+  local discovered
+  discovered="$(jq -r --arg f "$field" '.[$f] // empty' <<<"$discovery" 2>/dev/null)"
+  if [[ -n "$discovered" ]]; then
+    printf '%s' "$discovered"
+  else
+    printf '%s' "$fallback"
+  fi
+}
+
 reconcile_provider() {
   local client_id="$1"
   local runtime_script="$script_dir/reconcile_twenty_provider.mjs"
@@ -38,8 +55,8 @@ reconcile_provider() {
     --arg region "$AWS_REGION" \
     --arg name "$TWENTY_CREDENTIAL_PROVIDER_NAME" \
     --arg issuer "$issuer" \
-    --arg authorizationEndpoint "$issuer/oauth/authorize" \
-    --arg tokenEndpoint "$issuer/oauth/token" \
+    --arg authorizationEndpoint "$(provider_endpoint authorization_endpoint "$issuer/authorize")" \
+    --arg tokenEndpoint "$(provider_endpoint token_endpoint "$issuer/oauth/token")" \
     --arg clientId "$client_id" \
     --arg secretArn "$TWENTY_CLIENT_SECRET_ARN" \
     '{
@@ -128,8 +145,10 @@ if $registered_callback_matches; then
   exit 0
 fi
 
-discovery="$(curl --silent --show-error --fail-with-body \
-  "$issuer/.well-known/oauth-authorization-server")"
+if [[ -z "$discovery" ]]; then
+  printf '%s\n' 'Twenty discovery document is unavailable' >&2
+  exit 1
+fi
 registration_endpoint="$(jq -r '.registration_endpoint // empty' <<<"$discovery")"
 if ! python3 - "$issuer" "$registration_endpoint" <<'PY'
 import sys

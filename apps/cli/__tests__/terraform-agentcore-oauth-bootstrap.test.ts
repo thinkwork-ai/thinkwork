@@ -166,7 +166,12 @@ describe("AgentCore downstream confidential-client bootstrap", () => {
     expect(second.clientId).toBe("twenty-client");
     expect(
       readFileSync(join(root, "curl.log"), "utf8").trim().split("\n"),
-    ).toEqual(["discovery", "registration"]);
+    ).toEqual([
+      "discovery",
+      "registration",
+      // Reuse runs re-resolve provider endpoints from discovery metadata.
+      "discovery",
+    ]);
     expect(
       readFileSync(join(root, "provider-client-ids.log"), "utf8")
         .trim()
@@ -226,7 +231,12 @@ describe("AgentCore downstream confidential-client bootstrap", () => {
     expect(resumed.clientId).toBe("twenty-client");
     expect(
       readFileSync(join(root, "curl.log"), "utf8").trim().split("\n"),
-    ).toEqual(["discovery", "registration"]);
+    ).toEqual([
+      "discovery",
+      "registration",
+      // Resume runs re-resolve provider endpoints from discovery metadata.
+      "discovery",
+    ]);
   });
 
   it("does not persist a public DCR response without a client secret", () => {
