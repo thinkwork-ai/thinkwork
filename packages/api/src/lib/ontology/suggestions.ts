@@ -1790,7 +1790,10 @@ function ontologyItemType(
   const itemType = stringValue(value);
   // `identity_map` is intentionally absent (THINK-321 U3): system-map
   // declarations are operator-authored only, so a model proposal carrying
-  // one is rejected rather than staged.
+  // one is rejected rather than staged. The twin declaration item types
+  // (`facet_declaration`, `relationship_binding`, `page_section` — Company
+  // Brain U3) are absent for the same reason: clone policy, edge bindings,
+  // and page sections are operator-declared, never LLM-proposed.
   if (
     itemType === "entity_type" ||
     itemType === "relationship_type" ||

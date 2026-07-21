@@ -24,6 +24,12 @@ import {
 } from "./impact.js";
 import { materializeOntologyTemplatesForImpact } from "./materializer.js";
 import { refreshRoutingMapFile } from "../entity-identity/routing-map-file.js";
+import { regenerateTwinMappingExport } from "./twin-export.js";
+import {
+  parseRelationshipSourceBinding,
+  parseTwinFacetDeclarations,
+  parsePageSectionDeclarations,
+} from "./twin-declarations.js";
 
 type DbLike = typeof defaultDb;
 
@@ -536,9 +542,63 @@ async function processClaimedOntologyReprocessJob(args: {
     db: args.db,
   });
 
+  // Post-apply hook (Company Brain U3, KTD-3): an applied change set that
+  // touched twin declarations (or the type rows they hang off) regenerates
+  // the compiled twin mapping export the ETL projection consumes. Same
+  // best-effort contract as the hooks above — recorded on metrics, never
+  // thrown.
+  metrics = await regenerateTwinExportForApply({
+    tenantId: args.job.tenant_id,
+    items: applicableItems,
+    baseMetrics: metrics,
+    db: args.db,
+  });
+
   return {
     impact: persistedImpact,
     metrics,
+  };
+}
+
+/**
+ * Item types whose apply changes what the compiled twin mapping export
+ * would contain: the twin declaration items themselves, plus entity /
+ * relationship type items (approval state and slugs gate what the compiler
+ * includes).
+ */
+const TWIN_EXPORT_RELEVANT_ITEM_TYPES = new Set([
+  "facet_declaration",
+  "relationship_binding",
+  "page_section",
+  "entity_type",
+  "relationship_type",
+]);
+
+/**
+ * Regenerate the twin mapping export after a change-set apply that touched
+ * twin-relevant items (Company Brain U3). No-op otherwise. Exported for
+ * tests; failures land on the returned metrics under `twinExport` and are
+ * logged — never thrown (regenerateTwinMappingExport itself never throws).
+ */
+export async function regenerateTwinExportForApply(args: {
+  tenantId: string;
+  items: OntologyImpactItem[];
+  baseMetrics: Record<string, unknown>;
+  db?: DbLike;
+  regenerate?: typeof regenerateTwinMappingExport;
+}): Promise<Record<string, unknown>> {
+  const relevant = args.items.some((item) =>
+    TWIN_EXPORT_RELEVANT_ITEM_TYPES.has(item.item_type),
+  );
+  if (!relevant) return args.baseMetrics;
+  const regenerate = args.regenerate ?? regenerateTwinMappingExport;
+  const result = await regenerate({
+    tenantId: args.tenantId,
+    db: args.db as Parameters<typeof regenerateTwinMappingExport>[0]["db"],
+  });
+  return {
+    ...args.baseMetrics,
+    twinExport: result,
   };
 }
 
@@ -608,6 +668,15 @@ export async function applyOntologyChangeSetItems(args: {
   const identityMapItems = args.items.filter(
     (item) => item.item_type === "identity_map",
   );
+  const facetDeclarationItems = args.items.filter(
+    (item) => item.item_type === "facet_declaration",
+  );
+  const relationshipBindingItems = args.items.filter(
+    (item) => item.item_type === "relationship_binding",
+  );
+  const pageSectionItems = args.items.filter(
+    (item) => item.item_type === "page_section",
+  );
 
   for (const item of entityItems) {
     await applyEntityTypeItem({ ...args, item, db });
@@ -625,6 +694,18 @@ export async function applyOntologyChangeSetItems(args: {
   // entity type minted by that set (THINK-321 U3).
   for (const item of identityMapItems) {
     await applyIdentityMapItem({ ...args, item, db });
+  }
+  // Twin declaration items (Company Brain U3) likewise run after the type
+  // items so a mixed change set can declare facets/sections/bindings on
+  // types it mints itself.
+  for (const item of facetDeclarationItems) {
+    await applyFacetDeclarationItem({ ...args, item, db });
+  }
+  for (const item of relationshipBindingItems) {
+    await applyRelationshipBindingItem({ ...args, item, db });
+  }
+  for (const item of pageSectionItems) {
+    await applyPageSectionItem({ ...args, item, db });
   }
 }
 
@@ -900,6 +981,105 @@ async function applyIdentityMapItem(args: {
     .set({
       system_map: systemMap,
       system_map_version: sql`${ontologyEntityTypes.system_map_version} + 1`,
+      updated_at: new Date(),
+    })
+    .where(
+      and(
+        eq(ontologyEntityTypes.tenant_id, args.tenantId),
+        eq(ontologyEntityTypes.slug, slug),
+      ),
+    );
+}
+
+/**
+ * Land a `facet_declaration` item (Company Brain U3): whole-array replace of
+ * the entity type's twin facet declarations, tolerant-parsed so a malformed
+ * entry is dropped rather than failing the apply, with a version bump the
+ * export sequence and the projection's old-policy guard key off (KTD-3).
+ */
+async function applyFacetDeclarationItem(args: {
+  tenantId: string;
+  ontologyVersionId: string | null;
+  item: OntologyImpactItem;
+  db: DbLike;
+}) {
+  const value = itemValue(args.item);
+  const slug =
+    stringValue(value.entityTypeSlug) || stringValue(args.item.target_slug);
+  if (!slug) return;
+  const facets = parseTwinFacetDeclarations(value.facets);
+
+  await args.db
+    .update(ontologyEntityTypes)
+    .set({
+      twin_facets: facets as unknown as Array<Record<string, unknown>>,
+      twin_facets_version: sql`${ontologyEntityTypes.twin_facets_version} + 1`,
+      updated_at: new Date(),
+    })
+    .where(
+      and(
+        eq(ontologyEntityTypes.tenant_id, args.tenantId),
+        eq(ontologyEntityTypes.slug, slug),
+      ),
+    );
+}
+
+/**
+ * Land a `relationship_binding` item (Company Brain U3): replace the
+ * relationship type's twin source binding. An invalid/incomplete binding
+ * value clears the binding (edges stop projecting) rather than leaving a
+ * half-declared one behind.
+ */
+async function applyRelationshipBindingItem(args: {
+  tenantId: string;
+  ontologyVersionId: string | null;
+  item: OntologyImpactItem;
+  db: DbLike;
+}) {
+  const value = itemValue(args.item);
+  const slug =
+    stringValue(value.relationshipTypeSlug) ||
+    stringValue(args.item.target_slug);
+  if (!slug) return;
+  const binding = parseRelationshipSourceBinding(value.binding);
+
+  await args.db
+    .update(ontologyRelationshipTypes)
+    .set({
+      source_binding: (binding ?? {}) as Record<string, unknown>,
+      source_binding_version: sql`${ontologyRelationshipTypes.source_binding_version} + 1`,
+      updated_at: new Date(),
+    })
+    .where(
+      and(
+        eq(ontologyRelationshipTypes.tenant_id, args.tenantId),
+        eq(ontologyRelationshipTypes.slug, slug),
+      ),
+    );
+}
+
+/**
+ * Land a `page_section` item (Company Brain U3): whole-array replace of the
+ * entity type's page-section declarations (R10/R14 — kind, facet/system
+ * reference, visibility scope, position).
+ */
+async function applyPageSectionItem(args: {
+  tenantId: string;
+  ontologyVersionId: string | null;
+  item: OntologyImpactItem;
+  db: DbLike;
+}) {
+  const value = itemValue(args.item);
+  const slug =
+    stringValue(value.entityTypeSlug) || stringValue(args.item.target_slug);
+  if (!slug) return;
+  const sections = parsePageSectionDeclarations(value.sections);
+
+  await args.db
+    .update(ontologyEntityTypes)
+    .set({
+      page_sections: sections as unknown as Array<Record<string, unknown>>,
+      page_sections_version: sql`${ontologyEntityTypes.page_sections_version} + 1`,
       updated_at: new Date(),
     })
     .where(

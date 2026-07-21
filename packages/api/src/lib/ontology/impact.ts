@@ -141,6 +141,15 @@ export function extractAffectedEntityTypeSlugs(
       addString(slugs, item.target_slug);
       addString(slugs, value.entityTypeSlug);
     }
+    // Twin declaration items (Company Brain U3) target an entity type
+    // (facet/section declarations) whose pages the change may reshape.
+    if (
+      item.item_type === "facet_declaration" ||
+      item.item_type === "page_section"
+    ) {
+      addString(slugs, item.target_slug);
+      addString(slugs, value.entityTypeSlug);
+    }
   }
   return [...slugs].sort();
 }

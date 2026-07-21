@@ -41,6 +41,15 @@ enum OntologyExcludedItemDisposition {
 IDENTITY_MAP (THINK-321 U3): a type-level system-map edit — value carries
 { entityTypeSlug, systemMap: [{ facet, sourceSystem, note? }] }. Operator
 authored only; the suggestion pipeline never proposes it.
+
+Twin declaration items (Company Brain U3 — operator authored only, never
+LLM-proposed):
+FACET_DECLARATION — value carries { entityTypeSlug, facets: [{ slug,
+clonePolicy, cadence?, sourceSystem, sourceDataset?, attributes?, note? }] }.
+RELATIONSHIP_BINDING — value carries { relationshipTypeSlug, binding:
+{ sourceSystem, sourceDataset, sourceKeyFields, targetKeyFields, note? } }.
+PAGE_SECTION — value carries { entityTypeSlug, sections: [{ slug, heading,
+kind, facetSlug?, sourceSystem?, visibility, position }] }.
 """
 enum OntologyChangeItemType {
   ENTITY_TYPE
@@ -48,6 +57,9 @@ enum OntologyChangeItemType {
   FACET_TEMPLATE
   EXTERNAL_MAPPING
   IDENTITY_MAP
+  FACET_DECLARATION
+  RELATIONSHIP_BINDING
+  PAGE_SECTION
 }
 
 enum OntologyChangeAction {
@@ -102,6 +114,21 @@ type OntologyEntityType {
   """
   systemMap: AWSJSON!
   systemMapVersion: Int!
+  """
+  Twin facet declarations (Company Brain U3 / R2, R4): array of
+  { slug, clonePolicy, cadence?, sourceSystem, sourceDataset?,
+    attributes?, note? }. Edited only through facet_declaration
+  change-set items; the ETL projection consumes the compiled export.
+  """
+  twinFacets: AWSJSON!
+  twinFacetsVersion: Int!
+  """
+  Entity-page section declarations (Company Brain U3 / R10, R14): array of
+  { slug, heading, kind, facetSlug?, sourceSystem?, visibility, position }.
+  Edited only through page_section change-set items.
+  """
+  pageSections: AWSJSON!
+  pageSectionsVersion: Int!
   guidanceNotes: String
   lifecycleStatus: OntologyLifecycleStatus!
   approvedAt: AWSDateTime
@@ -126,6 +153,15 @@ type OntologyRelationshipType {
   sourceTypeSlugs: [String!]!
   targetTypeSlugs: [String!]!
   aliases: [String!]!
+  """
+  Twin edge source binding (Company Brain U3 / R3):
+  { sourceSystem, sourceDataset, sourceKeyFields, targetKeyFields, note? }
+  or {} when unbound. Edge instances populate deterministically from these
+  source foreign keys — never LLM-inferred. Edited only through
+  relationship_binding change-set items.
+  """
+  sourceBinding: AWSJSON!
+  sourceBindingVersion: Int!
   guidanceNotes: String
   lifecycleStatus: OntologyLifecycleStatus!
   approvedAt: AWSDateTime
@@ -575,5 +611,37 @@ extend type Mutation {
     tenantId: ID
     entityTypeSlug: String!
     systemMap: AWSJSON!
+  ): CreateOntologyChangeSetPayload!
+  """
+  Stage a twin facet-declaration edit (Company Brain U3 / R2, R4): creates
+  or merges a DRAFT facet_declaration change-set item carrying
+  { entityTypeSlug, facets }. Never a direct write — declarations land on
+  approval/apply, which also regenerates the compiled twin mapping export.
+  Tenant-admin gated.
+  """
+  setOntologyEntityTypeTwinFacets(
+    tenantId: ID
+    entityTypeSlug: String!
+    facets: AWSJSON!
+  ): CreateOntologyChangeSetPayload!
+  """
+  Stage an entity-page section-declaration edit (Company Brain U3 / R10,
+  R14): creates or merges a DRAFT page_section change-set item carrying
+  { entityTypeSlug, sections }. Tenant-admin gated.
+  """
+  setOntologyEntityTypePageSections(
+    tenantId: ID
+    entityTypeSlug: String!
+    sections: AWSJSON!
+  ): CreateOntologyChangeSetPayload!
+  """
+  Stage a twin edge source-binding edit (Company Brain U3 / R3): creates or
+  merges a DRAFT relationship_binding change-set item carrying
+  { relationshipTypeSlug, binding }. Tenant-admin gated.
+  """
+  setOntologyRelationshipTypeSourceBinding(
+    tenantId: ID
+    relationshipTypeSlug: String!
+    binding: AWSJSON!
   ): CreateOntologyChangeSetPayload!
 }
