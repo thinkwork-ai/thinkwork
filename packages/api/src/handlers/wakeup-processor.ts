@@ -123,6 +123,7 @@ import {
   type AgentRuntimePiExtension,
 } from "../lib/resolve-agent-runtime-config.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
+import { mintTurnAssertion } from "../lib/turn-assertion.js";
 import { mintCapabilityCallerContext } from "../lib/capabilities/caller-context.js";
 import { memberSpacesForDispatch } from "../lib/member-spaces.js";
 import { computeConfigFingerprint } from "../lib/capability-fingerprint.js";
@@ -2470,6 +2471,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             ? renderedWorkspace.capabilities?.fingerprint
             : undefined,
         capabilityCallerContext: capabilityCallerContext ?? undefined,
+        turnAssertion: await mintTurnAssertion({
+          tenant_id: wakeup.tenant_id,
+          thread_id: resolvedThreadId || "",
+          turn_id: run.id,
+        }),
         piExtensions,
         modelRoutingPolicy,
         approvedModelIds,
@@ -3245,6 +3251,11 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                   ? renderedWorkspace.capabilities?.fingerprint
                   : undefined,
               capabilityCallerContext: capabilityCallerContext ?? undefined,
+              turnAssertion: await mintTurnAssertion({
+                tenant_id: wakeup.tenant_id,
+                thread_id: resolvedThreadId || "",
+                turn_id: run.id,
+              }),
               piExtensions,
               modelRoutingPolicy,
               approvedModelIds,

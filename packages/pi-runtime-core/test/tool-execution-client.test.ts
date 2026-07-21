@@ -11,6 +11,7 @@ import {
 } from "../src/tool-execution-client.js";
 
 const PAYLOAD = {
+  turn_assertion: "twta1.payload.sig",
   activity_callback_secret: "s3cret",
   thread_turn_id: "turn-1",
   tenant_id: "tenant-1",
@@ -100,6 +101,23 @@ describe("createToolExecutionEmitter", () => {
       string
     >;
     expect(headers.authorization).toBe("Bearer s3cret");
+    expect(headers["x-thinkwork-turn-assertion"]).toBe("twta1.payload.sig");
+  });
+
+  it("omits the assertion header when dispatch minted none", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response("{}"));
+    const { turn_assertion: _drop, ...rest } = PAYLOAD;
+    const emitter = createToolExecutionEmitter(
+      readToolExecutionCallbackConfig(rest),
+      { fetchImpl: fetchImpl as unknown as typeof fetch },
+    );
+    emitter.emit({ eventType: "started", toolUseId: "t", operation: "op" });
+    await emitter.drain();
+    const headers = fetchImpl.mock.calls[0]![1].headers as Record<
+      string,
+      string
+    >;
+    expect(headers["x-thinkwork-turn-assertion"]).toBeUndefined();
   });
 
   it("is a no-op for null config or a cross-origin URL", () => {

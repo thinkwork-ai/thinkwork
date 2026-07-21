@@ -805,6 +805,16 @@ locals {
   # memory / evaluations / code interpreter.
   # ---------------------------------------------------------------------------
   api_ai_statements = concat([
+    # Signed-turn identity (THINK-324 C18): dispatch Lambdas mint with
+    # kms:Sign; verifiers fetch the public key once per container with
+    # kms:GetPublicKey. Scoped to the turn-assertion keys only; the role is
+    # shared, so which handler may mint is code-enforced.
+    {
+      Sid      = "TurnAssertionSigning"
+      Effect   = "Allow"
+      Action   = ["kms:Sign", "kms:GetPublicKey"]
+      Resource = local.turn_assertion_key_arns
+    },
     # (was inline policy "bedrock-invoke")
     # Cross-region inference profiles (us.anthropic.claude-*) require
     # `bedrock:InvokeModel` on the *inference-profile* ARN AND on the
