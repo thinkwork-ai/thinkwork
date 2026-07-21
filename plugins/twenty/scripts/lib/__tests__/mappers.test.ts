@@ -2,74 +2,41 @@ import { describe, expect, it } from "vitest";
 
 import type {
   LastmileContact,
+  LastmileCrmTask,
   LastmileCustomerNote,
-  LastmileLead,
-  LastmileOpportunity,
 } from "../lastmile-reader";
 import {
   buildOwnerIndex,
   contentHash,
+  dedupeContactEmails,
   deriveRepEmail,
   isMobilBrand,
   mapAccount,
   mapContact,
   mapCrmComment,
+  mapCrmTask,
+  mapOrganization,
+  mapProduct,
+  normalizeProductName,
+  PRODUCT_CATALOG,
+  productSourceId,
+  mapTaskProducts,
+  mapTaskStatusActivity,
+  mapTaskStatusToStage,
   mapCustomerNote,
-  mapLead,
-  mapLeadStatusToStage,
-  mapOpportunity,
   mapOpportunityProduct,
-  mapOpportunityStage,
   normalizeEmail,
   normalizePhone,
   resolveOwner,
   sourceId,
   stableStringify,
   toAmountMicros,
+  toIsoTimestamp,
   toQuantity,
 } from "../mappers";
 
 const ownerMap = new Map([["rep_jane", "member-jane-uuid"]]);
 const companyMap = new Map([[sourceId("account", "acct_1"), "company-uuid-1"]]);
-
-function lead(overrides: Partial<LastmileLead> = {}): LastmileLead {
-  return {
-    id: "lead_1",
-    status: "00-New",
-    companyName: "Acme Fuel",
-    firstName: "Ann",
-    lastName: "Lee",
-    email: null,
-    phone: null,
-    source: null,
-    description: null,
-    ownerRepId: null,
-    dateCreated: null,
-    ...overrides,
-  };
-}
-
-function opportunity(
-  overrides: Partial<LastmileOpportunity> = {},
-): LastmileOpportunity {
-  return {
-    id: "opp_1",
-    name: "Bulk diesel contract",
-    stage: "10-Prospect",
-    amount: "1234.56",
-    quantity: "100",
-    productType: "Diesel",
-    brand: "Mobil",
-    closed: null,
-    won: null,
-    accountId: "acct_1",
-    ownerRepId: "rep_jane",
-    expectedCloseDate: "2026-08-01",
-    description: null,
-    dateCreated: null,
-    ...overrides,
-  };
-}
 
 describe("toAmountMicros", () => {
   it("converts $1,234.56 to 1234560000 micros", () => {
@@ -119,63 +86,6 @@ describe("normalizeEmail", () => {
   it("lowercases and validates", () => {
     expect(normalizeEmail(" Jane@TEI.com ")).toBe("jane@tei.com");
     expect(normalizeEmail("not-an-email")).toBeNull();
-  });
-});
-
-describe("stage mapping", () => {
-  it("maps messy lead statuses into the lead band", () => {
-    expect(mapLeadStatusToStage("00-New").stage).toBe("LEAD");
-    expect(mapLeadStatusToStage("new").stage).toBe("LEAD");
-    expect(mapLeadStatusToStage(null).stage).toBe("LEAD");
-    expect(mapLeadStatusToStage("20-Working").stage).toBe("LEAD_WORKING");
-    expect(mapLeadStatusToStage("30-Nurturing").stage).toBe("LEAD_WORKING");
-    expect(mapLeadStatusToStage("50-Qualified").stage).toBe("LEAD_QUALIFIED");
-    expect(mapLeadStatusToStage("90-Unqualified").stage).toBe(
-      "LEAD_UNQUALIFIED",
-    );
-    expect(mapLeadStatusToStage("Converted").stage).toBe("LEAD_QUALIFIED");
-  });
-
-  it("flags unknown lead statuses", () => {
-    expect(mapLeadStatusToStage("13-Mystery")).toEqual({
-      stage: "LEAD",
-      unknown: true,
-    });
-  });
-
-  it("maps opportunity stages including both Negotiate spellings", () => {
-    expect(
-      mapOpportunityStage({ stage: "60-Won", closed: null, won: null }).stage,
-    ).toBe("WON");
-    expect(
-      mapOpportunityStage({ stage: "90-Lost", closed: null, won: null }).stage,
-    ).toBe("LOST");
-    expect(
-      mapOpportunityStage({
-        stage: "40-Negotiate to Close",
-        closed: null,
-        won: null,
-      }).stage,
-    ).toBe("NEGOTIATE");
-    expect(
-      mapOpportunityStage({
-        stage: "40-Negotiation to Close",
-        closed: null,
-        won: null,
-      }).stage,
-    ).toBe("NEGOTIATE");
-  });
-
-  it("falls back to closed/won flags for blank stages", () => {
-    expect(
-      mapOpportunityStage({ stage: null, closed: "true", won: "true" }).stage,
-    ).toBe("WON");
-    expect(
-      mapOpportunityStage({ stage: null, closed: "true", won: "false" }).stage,
-    ).toBe("LOST");
-    expect(
-      mapOpportunityStage({ stage: null, closed: null, won: null }).stage,
-    ).toBe("NEW");
   });
 });
 
@@ -247,59 +157,6 @@ describe("mapContact", () => {
   });
 });
 
-describe("mapOpportunity", () => {
-  it("maps stage, micros, custom fields, links, and owner (AE1 shape)", () => {
-    const mapped = mapOpportunity(opportunity(), ownerMap, companyMap);
-    expect(mapped.input).toMatchObject({
-      name: "Bulk diesel contract",
-      stage: "PROSPECT",
-      amount: { amountMicros: 1_234_560_000, currencyCode: "USD" },
-      ownerId: "member-jane-uuid",
-      companyId: "company-uuid-1",
-      product: "Diesel",
-      quantity: 100,
-      isMobil: true,
-      sourceId: "opportunity:opp_1",
-    });
-  });
-
-  it("is not Mobil when neither product nor brand mentions Mobil", () => {
-    const mapped = mapOpportunity(
-      opportunity({ brand: "Shell", productType: "Unleaded" }),
-      ownerMap,
-      companyMap,
-    );
-    expect(mapped.input.isMobil).toBe(false);
-  });
-
-  it("flags an unresolvable company and unprovisioned owner", () => {
-    const mapped = mapOpportunity(
-      opportunity({ accountId: "acct_missing", ownerRepId: "rep_gone" }),
-      ownerMap,
-      companyMap,
-    );
-    expect(mapped.input).not.toHaveProperty("companyId");
-    expect(mapped.input).not.toHaveProperty("ownerId");
-    expect(mapped.warnings).toHaveLength(2);
-  });
-});
-
-describe("mapLead", () => {
-  it("maps a lead row to the early Lead stage in the opportunity pipeline (AE3)", () => {
-    const mapped = mapLead(lead(), ownerMap);
-    expect(mapped.input).toMatchObject({
-      name: "Acme Fuel",
-      stage: "LEAD",
-      sourceId: "lead:lead_1",
-    });
-  });
-
-  it("names person-only leads by their person name", () => {
-    const mapped = mapLead(lead({ companyName: null }), ownerMap);
-    expect(mapped.input.name).toBe("Ann Lee");
-  });
-});
-
 describe("notes mapping", () => {
   it("maps a CRM comment onto its lead/opportunity target", () => {
     const mapped = mapCrmComment({
@@ -309,6 +166,7 @@ describe("notes mapping", () => {
       content: "Called the buyer.\nFollow up Friday.",
       isDeleted: false,
       createdAt: null,
+      authorName: null,
     });
     expect(mapped).toMatchObject({
       sourceId: "task_comment:tc_1",
@@ -316,6 +174,22 @@ describe("notes mapping", () => {
       targetSourceId: "opportunity:opp_1",
       targetKind: "opportunity",
     });
+  });
+
+  it("carries the LastMile authored-at time and author onto the note", () => {
+    const mapped = mapCrmComment({
+      id: "tc_2",
+      entityType: "opportunity",
+      entityId: "opp_1",
+      content: "Sold them some products on cash account.",
+      isDeleted: false,
+      createdAt: new Date("2026-07-10T02:27:10.507Z"),
+      authorName: "Reyes Valdez",
+    });
+    // Twenty's activity feed sorts on createdAt; without this the whole history
+    // collapses onto the day the import ran.
+    expect(mapped.createdAt).toBe("2026-07-10T02:27:10.507Z");
+    expect(mapped.authorName).toBe("Reyes Valdez");
   });
 
   it("maps a customer note only when the customer uniquely matches an account", () => {
@@ -329,6 +203,72 @@ describe("notes mapping", () => {
     };
     expect(mapCustomerNote(base)?.targetSourceId).toBe("account:acct_1");
     expect(mapCustomerNote({ ...base, matchedAccountId: null })).toBeNull();
+  });
+
+  it("reconstructs a status change as a dated note on its opportunity", () => {
+    const mapped = mapTaskStatusActivity({
+      id: "act_1",
+      entityType: "opportunity",
+      entityId: "opp_1",
+      oldStatusName: "00-New",
+      newStatusName: "10-Prospect",
+      createdAt: new Date("2026-05-14T20:19:03.740Z"),
+      authorName: "Dean Kittel",
+    });
+    expect(mapped).toMatchObject({
+      sourceId: "task_activity:act_1",
+      title: "Stage → 10-Prospect",
+      bodyMarkdown: "00-New → 10-Prospect",
+      targetSourceId: "opportunity:opp_1",
+      targetKind: "opportunity",
+      // True transition time, so the feed sorts correctly against the comments.
+      createdAt: "2026-05-14T20:19:03.740Z",
+      authorName: "Dean Kittel",
+    });
+  });
+
+  it("labels a status change with no prior stage as a plain set", () => {
+    const mapped = mapTaskStatusActivity({
+      id: "act_2",
+      entityType: "lead",
+      entityId: "lead_1",
+      oldStatusName: null,
+      newStatusName: "60-Won",
+      createdAt: null,
+      authorName: null,
+    });
+    expect(mapped?.bodyMarkdown).toBe("Set to 60-Won");
+    expect(mapped?.targetSourceId).toBe("lead:lead_1");
+  });
+
+  it("drops a status event that names no destination stage", () => {
+    expect(
+      mapTaskStatusActivity({
+        id: "act_3",
+        entityType: "opportunity",
+        entityId: "opp_1",
+        oldStatusName: "10-Prospect",
+        newStatusName: null,
+        createdAt: null,
+        authorName: null,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("toIsoTimestamp", () => {
+  it("converts a Date to ISO-8601 and passes through parseable strings", () => {
+    expect(toIsoTimestamp(new Date("2025-07-21T12:00:00Z"))).toBe(
+      "2025-07-21T12:00:00.000Z",
+    );
+    expect(toIsoTimestamp("2026-07-10T02:27:10.507Z")).toBe(
+      "2026-07-10T02:27:10.507Z",
+    );
+  });
+
+  it("returns null for missing or unparseable values", () => {
+    expect(toIsoTimestamp(null)).toBeNull();
+    expect(toIsoTimestamp("not a date")).toBeNull();
   });
 });
 
@@ -443,13 +383,13 @@ describe("mapOpportunityProduct (multiple products per opportunity)", () => {
     expect(mapped.sourceId).toBe("opportunity_item:opp_1#0");
     expect(mapped.opportunitySourceId).toBe("opportunity:opp_1");
     expect(mapped.input).toMatchObject({
-      name: "MOBIL",
-      product: "MOBIL",
+      name: "Mobil",
       quantity: 6500,
       amount: { amountMicros: 50_000_000_000, currencyCode: "USD" },
       isMobil: true,
       lineNumber: 1,
     });
+    expect(mapped.productSourceId).toBe("product:mobil");
   });
 
   it("gives each line on one opportunity a distinct, stable sourceId", () => {
@@ -465,6 +405,11 @@ describe("mapOpportunityProduct (multiple products per opportunity)", () => {
     ]);
     expect(new Set(lines.map((l) => l.opportunitySourceId)).size).toBe(1);
     expect(lines.map((l) => l.input.isMobil)).toEqual([false, false, true]);
+    expect(lines.map((l) => l.productSourceId)).toEqual([
+      "product:def",
+      "product:golden_west",
+      "product:mobil",
+    ]);
     expect(lines.map((l) => l.input.lineNumber)).toEqual([1, 2, 3]);
   });
 
@@ -473,7 +418,7 @@ describe("mapOpportunityProduct (multiple products per opportunity)", () => {
       item({ brand: null, quantity: "n/a", amount: "" }),
     );
     expect(mapped.input.name).toBe("Line 1");
-    expect(mapped.input).not.toHaveProperty("product");
+    expect(mapped.productSourceId).toBeNull();
     expect(mapped.input).not.toHaveProperty("quantity");
     expect(mapped.input).not.toHaveProperty("amount");
     expect(mapped.input.isMobil).toBe(false);
@@ -485,5 +430,281 @@ describe("mapOpportunityProduct (multiple products per opportunity)", () => {
     expect(isMobilBrand("Mobil")).toBe(true);
     expect(isMobilBrand("GOLDEN WEST")).toBe(false);
     expect(isMobilBrand(null)).toBe(false);
+  });
+});
+
+describe("mapTaskStatusToStage", () => {
+  it("maps LastMile status names verbatim to pipeline stages", () => {
+    expect(mapTaskStatusToStage("10-Prospect").stage).toBe("PROSPECT");
+    expect(mapTaskStatusToStage("60-Won").stage).toBe("WON");
+    expect(mapTaskStatusToStage("20-Account Needs").stage).toBe(
+      "ACCOUNT_NEEDS",
+    );
+    expect(mapTaskStatusToStage("Converted").stage).toBe("CONVERTED");
+    expect(mapTaskStatusToStage("90-Unqualified").stage).toBe("UNQUALIFIED");
+  });
+
+  it("flags an unmapped status instead of silently bucketing it", () => {
+    expect(mapTaskStatusToStage("Zz-Unknown")).toEqual({
+      stage: "NEW",
+      unknown: true,
+    });
+    expect(mapTaskStatusToStage(null).unknown).toBe(true);
+  });
+});
+
+describe("mapCrmTask (task table is the CRM authority)", () => {
+  const ownerIndex = new Map([["rep_chad", "member-chad"]]);
+  const companyMap = new Map([["account:acct_reign", "company-reign"]]);
+  const orgMap = new Map([["organization:org_gwo", "org-gwo-300"]]);
+
+  function task(overrides: Partial<LastmileCrmTask> = {}): LastmileCrmTask {
+    return {
+      taskId: "task_xdh6577weuhsc2ttlct1acyl",
+      entityType: "opportunity",
+      entityId: "opp_xdh6577weuhsc2ttlct1acyl",
+      title: "Reign Rentals GW Lubes",
+      description: "start up oilfield rental company with brand new equipment",
+      accountId: "acct_reign",
+      leadCompanyName: null,
+      statusName: "10-Prospect",
+      organizationId: "org_gwo",
+      assigneeRepId: "rep_chad",
+      dueDate: new Date("2026-07-23T00:00:00Z"),
+      createdAt: null,
+      items: [{ brand: "Golden West", amount: 12000, quantity: 40 }],
+      ...overrides,
+    };
+  }
+
+  it("reproduces the reference opportunity exactly", () => {
+    const mapped = mapCrmTask(task(), ownerIndex, companyMap, orgMap);
+    expect(mapped.sourceId).toBe("opportunity:opp_xdh6577weuhsc2ttlct1acyl");
+    expect(mapped.input).toMatchObject({
+      name: "Reign Rentals GW Lubes",
+      stage: "PROSPECT",
+      amount: { amountMicros: 12_000_000_000, currencyCode: "USD" },
+      ownerId: "member-chad",
+      companyId: "company-reign",
+      organizationId: "org-gwo-300",
+      isMobil: false,
+    });
+    expect(mapped.warnings).toEqual([]);
+  });
+
+  it("replays the LastMile creation time onto Twenty's createdAt", () => {
+    const mapped = mapCrmTask(
+      task({ createdAt: new Date("2026-05-13T15:37:15.268Z") }),
+      ownerIndex,
+      companyMap,
+      orgMap,
+    );
+    expect(mapped.input.createdAt).toBe("2026-05-13T15:37:15.268Z");
+  });
+
+  it("omits createdAt when the task has no creation time", () => {
+    const mapped = mapCrmTask(task(), ownerIndex, companyMap, orgMap);
+    expect(mapped.input).not.toHaveProperty("createdAt");
+  });
+
+  it("takes status from the task, not the stale opportunity.stage column", () => {
+    // The opportunity row for this task says "30-Formulate Offer"; the task
+    // says 10-Prospect, and the task wins.
+    expect(mapCrmTask(task(), ownerIndex, companyMap, orgMap).input.stage).toBe(
+      "PROSPECT",
+    );
+  });
+
+  it("sums product lines into the deal amount and rolls up isMobil", () => {
+    const mapped = mapCrmTask(
+      task({
+        items: [
+          { brand: "DEF", amount: 1000, quantity: 1000 },
+          { brand: "GOLDEN WEST", amount: 1000, quantity: 1000 },
+          { brand: "MOBIL", amount: 1000, quantity: 500 },
+        ],
+      }),
+      ownerIndex,
+      companyMap,
+      orgMap,
+    );
+    expect(mapped.input.amount).toEqual({
+      amountMicros: 3_000_000_000,
+      currencyCode: "USD",
+    });
+    expect(mapped.input.isMobil).toBe(true);
+  });
+
+  it("maps a lead with no account to a named opportunity with no company", () => {
+    const mapped = mapCrmTask(
+      task({
+        entityType: "lead",
+        entityId: "lead_1",
+        title: null,
+        accountId: null,
+        leadCompanyName: "Alpine Silica",
+        statusName: "50-Qualified",
+        items: null,
+      }),
+      ownerIndex,
+      companyMap,
+      orgMap,
+    );
+    expect(mapped.sourceId).toBe("lead:lead_1");
+    expect(mapped.input).toMatchObject({
+      name: "Alpine Silica",
+      stage: "QUALIFIED",
+    });
+    expect(mapped.input).not.toHaveProperty("companyId");
+    expect(mapped.input).not.toHaveProperty("amount");
+  });
+
+  it("flags an unassigned task and an unmigrated organization", () => {
+    const mapped = mapCrmTask(
+      task({ assigneeRepId: null, organizationId: "org_missing" }),
+      ownerIndex,
+      companyMap,
+      orgMap,
+    );
+    expect(mapped.input).not.toHaveProperty("ownerId");
+    expect(mapped.input).not.toHaveProperty("organizationId");
+    expect(mapped.warnings).toEqual([
+      "task has no assignee; no owner",
+      "organization org_missing not migrated",
+    ]);
+  });
+
+  it("derives product lines from the task's items array", () => {
+    const lines = mapTaskProducts(task());
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({
+      sourceId: "opportunity_item:opp_xdh6577weuhsc2ttlct1acyl#0",
+      opportunitySourceId: "opportunity:opp_xdh6577weuhsc2ttlct1acyl",
+    });
+    expect(lines[0].input).toMatchObject({
+      name: "Golden West",
+      quantity: 40,
+      amount: { amountMicros: 12_000_000_000, currencyCode: "USD" },
+    });
+    expect(lines[0].productSourceId).toBe("product:golden_west");
+  });
+});
+
+describe("mapOrganization", () => {
+  it("names the record by its abbreviation and keeps the full name", () => {
+    const mapped = mapOrganization({
+      id: "org_x3wdgjtw4x4jqx2a937amutm",
+      name: "Golden West Oil Co..San Antonio (300)",
+      abbv: "GWO 300",
+      archived: false,
+    });
+    expect(mapped.sourceId).toBe("organization:org_x3wdgjtw4x4jqx2a937amutm");
+    expect(mapped.input).toMatchObject({
+      name: "GWO 300",
+      fullName: "Golden West Oil Co..San Antonio (300)",
+    });
+  });
+
+  it("falls back to the full name when there is no abbreviation", () => {
+    const mapped = mapOrganization({
+      id: "org_1",
+      name: "UNKNOWN",
+      abbv: null,
+      archived: false,
+    });
+    expect(mapped.input.name).toBe("UNKNOWN");
+  });
+});
+
+describe("dedupeContactEmails", () => {
+  it("gives a shared address to the first contact by id and clears the rest", () => {
+    const result = dedupeContactEmails([
+      { id: "cont_b", email: "test@test.com" },
+      { id: "cont_a", email: "Test@Test.com" },
+      { id: "cont_c", email: "unique@tei.com" },
+    ]);
+    const byId = new Map(result.map((c) => [c.id, c.email]));
+    expect(byId.get("cont_a")).toBe("Test@Test.com"); // first by id keeps it
+    expect(byId.get("cont_b")).toBeNull();
+    expect(byId.get("cont_c")).toBe("unique@tei.com");
+  });
+
+  it("is deterministic regardless of input order", () => {
+    const rows = [
+      { id: "cont_a", email: "x@y.com" },
+      { id: "cont_b", email: "x@y.com" },
+    ];
+    const forward = dedupeContactEmails(rows);
+    const reversed = dedupeContactEmails([...rows].reverse());
+    expect(forward.map((c) => [c.id, c.email])).toEqual(
+      reversed.map((c) => [c.id, c.email]),
+    );
+  });
+
+  it("leaves invalid and missing emails alone", () => {
+    const result = dedupeContactEmails([
+      { id: "a", email: null },
+      { id: "b", email: "garbage" },
+      { id: "c", email: "garbage" },
+    ]);
+    expect(result.map((c) => c.email)).toEqual([null, "garbage", "garbage"]);
+  });
+});
+
+describe("normalizeProductName (19 LastMile spellings -> 7 catalog products)", () => {
+  it("folds channel suffixes into the parent product", () => {
+    // CVL / PVL / INDUSTRIAL denote the sales channel, not a different product.
+    expect(normalizeProductName("MOBIL - CVL")).toBe("Mobil");
+    expect(normalizeProductName("MOBIL - PVL")).toBe("Mobil");
+    expect(normalizeProductName("MOBIL - INDUSTRIAL")).toBe("Mobil");
+    expect(normalizeProductName("GWO - CVL")).toBe("Golden West");
+    expect(normalizeProductName("GWO - PVL")).toBe("Golden West");
+    expect(normalizeProductName("GWO - INDUSTRIAL")).toBe("Golden West");
+  });
+
+  it("is case-insensitive across every observed spelling", () => {
+    expect(normalizeProductName("MOBIL")).toBe("Mobil");
+    expect(normalizeProductName("Mobil")).toBe("Mobil");
+    expect(normalizeProductName("GOLDEN WEST")).toBe("Golden West");
+    expect(normalizeProductName("Golden West")).toBe("Golden West");
+    expect(normalizeProductName("FUEL")).toBe("Fuel");
+    expect(normalizeProductName("DEF")).toBe("DEF");
+    expect(normalizeProductName("MIGHTY")).toBe("Mighty");
+    expect(normalizeProductName("Mighty")).toBe("Mighty");
+    expect(normalizeProductName("ANCILLARY")).toBe("Ancillary");
+    expect(normalizeProductName("HOTSY")).toBe("Hotsy");
+    expect(normalizeProductName("Hotsy")).toBe("Hotsy");
+  });
+
+  it("every catalog name maps to itself", () => {
+    for (const name of PRODUCT_CATALOG) {
+      expect(normalizeProductName(name)).toBe(name);
+    }
+  });
+
+  it("refuses to guess: UNKNOWN and blanks map to nothing", () => {
+    expect(normalizeProductName("UNKNOWN")).toBeNull();
+    expect(normalizeProductName("")).toBeNull();
+    expect(normalizeProductName("   ")).toBeNull();
+    expect(normalizeProductName(null)).toBeNull();
+    expect(normalizeProductName("Kerosene")).toBeNull();
+  });
+
+  it("isMobil follows the catalog, not the raw string", () => {
+    expect(isMobilBrand("MOBIL - CVL")).toBe(true);
+    expect(isMobilBrand("Mobil")).toBe(true);
+    expect(isMobilBrand("GOLDEN WEST")).toBe(false);
+    expect(isMobilBrand("UNKNOWN")).toBe(false);
+  });
+});
+
+describe("mapProduct", () => {
+  it("gives each catalog product a stable sourceId", () => {
+    expect(mapProduct("Golden West")).toMatchObject({
+      sourceId: "product:golden_west",
+      input: { name: "Golden West", sourceId: "product:golden_west" },
+    });
+    expect(mapProduct("DEF").sourceId).toBe("product:def");
+    expect(productSourceId("Mobil")).toBe("product:mobil");
   });
 });

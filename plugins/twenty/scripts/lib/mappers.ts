@@ -11,9 +11,10 @@ import type {
   LastmileAccount,
   LastmileContact,
   LastmileCrmComment,
+  LastmileCrmTask,
   LastmileCustomerNote,
-  LastmileLead,
-  LastmileOpportunity,
+  LastmileOrganization,
+  LastmileTaskStatusChange,
 } from "./lastmile-reader";
 
 /**
@@ -219,103 +220,93 @@ export function toQuantity(raw: string | null | undefined): number | null {
 
 // --- Stage mapping -------------------------------------------------------
 
-/** Existing TEI options (NEW/SCREENING/MEETING/PROPOSAL/CUSTOMER) are
- * preserved verbatim — the ThinkWork workflow triggers on CUSTOMER. These are
- * the options the migration adds, merged into the live array (full-replace
- * write semantics confirmed by U1). */
+/**
+ * Pipeline stages are LastMile's own status names, verbatim (from the `status`
+ * table, via `task.status_id`). Opportunity statuses and lead statuses share
+ * one Twenty pipeline because leads become early-stage opportunities.
+ *
+ * Existing TEI options (NEW/SCREENING/MEETING/PROPOSAL/CUSTOMER) are preserved
+ * by the merge — the ThinkWork workflow triggers on CUSTOMER — but nothing new
+ * maps onto them.
+ */
 export const MIGRATION_STAGE_OPTIONS: Array<{
   label: string;
   value: string;
   color: string;
 }> = [
-  { label: "Lead", value: "LEAD", color: "gray" },
-  { label: "Lead - Working", value: "LEAD_WORKING", color: "gray" },
-  { label: "Lead - Qualified", value: "LEAD_QUALIFIED", color: "blue" },
-  { label: "Lead - Unqualified", value: "LEAD_UNQUALIFIED", color: "gray" },
-  { label: "Prospect", value: "PROSPECT", color: "sky" },
-  { label: "Qualifying", value: "QUALIFYING", color: "sky" },
-  { label: "Identify Needs", value: "IDENTIFY_NEEDS", color: "turquoise" },
-  { label: "Formulate Offer", value: "FORMULATE_OFFER", color: "turquoise" },
-  { label: "Negotiate to Close", value: "NEGOTIATE", color: "yellow" },
-  {
-    label: "Manage Implementation",
-    value: "MANAGE_IMPLEMENTATION",
-    color: "orange",
-  },
-  { label: "Won", value: "WON", color: "green" },
-  { label: "Lost", value: "LOST", color: "red" },
+  // Lead band
+  { label: "00-New", value: "NEW", color: "gray" },
+  { label: "10-Working", value: "WORKING", color: "gray" },
+  { label: "20-Contacted", value: "CONTACTED", color: "gray" },
+  { label: "30-Nurturing", value: "NURTURING", color: "blue" },
+  { label: "50-Qualified", value: "QUALIFIED", color: "blue" },
+  { label: "90-Unqualified", value: "UNQUALIFIED", color: "gray" },
+  { label: "Converted", value: "CONVERTED", color: "turquoise" },
+  // Opportunity band
+  { label: "10-Prospect", value: "PROSPECT", color: "sky" },
+  { label: "20-Account Needs", value: "ACCOUNT_NEEDS", color: "sky" },
+  { label: "30-Formulate Offer", value: "FORMULATE_OFFER", color: "turquoise" },
+  { label: "40-Negotiation", value: "NEGOTIATION", color: "yellow" },
+  { label: "50-Implementation", value: "IMPLEMENTATION", color: "orange" },
+  { label: "60-Won", value: "WON", color: "green" },
+  { label: "90-Lost", value: "LOST", color: "red" },
 ];
 
-/** Live lead.status values observed 2026-07-09 (case-insensitive, prefix
- * digits vary). Unknown statuses fall back to LEAD and are reported. */
-export function mapLeadStatusToStage(status: string | null): {
+/** Retag map for the one-off `retag-stage-values.ts` migration: the original
+ * import wrote LM_-prefixed values, which surface raw in the API, filters, and
+ * reports. Labels never changed. */
+export const LEGACY_STAGE_VALUE_MAP: Readonly<Record<string, string>> = {
+  LM_00_NEW: "NEW",
+  LM_10_WORKING: "WORKING",
+  LM_20_CONTACTED: "CONTACTED",
+  LM_30_NURTURING: "NURTURING",
+  LM_50_QUALIFIED: "QUALIFIED",
+  LM_90_UNQUALIFIED: "UNQUALIFIED",
+  LM_CONVERTED: "CONVERTED",
+  LM_10_PROSPECT: "PROSPECT",
+  LM_20_ACCOUNT_NEEDS: "ACCOUNT_NEEDS",
+  LM_30_FORMULATE_OFFER: "FORMULATE_OFFER",
+  LM_40_NEGOTIATION: "NEGOTIATION",
+  LM_50_IMPLEMENTATION: "IMPLEMENTATION",
+  LM_60_WON: "WON",
+  LM_90_LOST: "LOST",
+};
+
+/** Options from the abandoned first model, plus TEI's unused defaults, that no
+ * record references. Removed by the retag so the picker is not a graveyard.
+ * CUSTOMER is deliberately kept — the ThinkWork workflow triggers on it. */
+export const OBSOLETE_STAGE_VALUES: readonly string[] = [
+  "LEAD",
+  "LEAD_WORKING",
+  "LEAD_QUALIFIED",
+  "LEAD_UNQUALIFIED",
+  "QUALIFYING",
+  "IDENTIFY_NEEDS",
+  "NEGOTIATE",
+  "MANAGE_IMPLEMENTATION",
+];
+
+const STAGE_VALUE_BY_STATUS_NAME = new Map(
+  MIGRATION_STAGE_OPTIONS.map((option) => [
+    option.label.toLowerCase(),
+    option.value,
+  ]),
+);
+
+/**
+ * `task.status_id` -> status name -> stage value. Lead and opportunity status
+ * names collide only on "00-New", which both bands share intentionally.
+ * An unmapped status is reported rather than silently bucketed.
+ */
+export function mapTaskStatusToStage(statusName: string | null): {
   stage: string;
   unknown: boolean;
 } {
-  const normalized = (status ?? "").toLowerCase().replace(/^\d+-/, "").trim();
-  switch (normalized) {
-    case "":
-    case "new":
-      return { stage: "LEAD", unknown: false };
-    case "working":
-    case "contacted":
-    case "nurturing":
-      return { stage: "LEAD_WORKING", unknown: false };
-    case "qualified":
-      return { stage: "LEAD_QUALIFIED", unknown: false };
-    case "unqualified":
-      return { stage: "LEAD_UNQUALIFIED", unknown: false };
-    case "converted":
-      // Converted leads became opportunities in LastMile; the lead row keeps
-      // its history at the qualified end of the lead band.
-      return { stage: "LEAD_QUALIFIED", unknown: false };
-    default:
-      return { stage: "LEAD", unknown: true };
-  }
-}
-
-export function mapOpportunityStage(opportunity: {
-  stage: string | null;
-  closed: string | null;
-  won: string | null;
-}): { stage: string; unknown: boolean } {
-  const normalized = (opportunity.stage ?? "")
-    .toLowerCase()
-    .replace(/^\d+-/, "")
-    .trim();
-  switch (normalized) {
-    case "new":
-      return { stage: "NEW", unknown: false };
-    case "prospect":
-      return { stage: "PROSPECT", unknown: false };
-    case "qualifying":
-      return { stage: "QUALIFYING", unknown: false };
-    case "identify account needs":
-      return { stage: "IDENTIFY_NEEDS", unknown: false };
-    case "formulate offer":
-      return { stage: "FORMULATE_OFFER", unknown: false };
-    case "negotiate to close":
-    case "negotiation to close":
-      return { stage: "NEGOTIATE", unknown: false };
-    case "manage implementation":
-      return { stage: "MANAGE_IMPLEMENTATION", unknown: false };
-    case "won":
-      return { stage: "WON", unknown: false };
-    case "lost":
-      return { stage: "LOST", unknown: false };
-    case "": {
-      // Blank stage: fall back to the closed/won flags.
-      if (opportunity.closed === "true" && opportunity.won === "true") {
-        return { stage: "WON", unknown: false };
-      }
-      if (opportunity.closed === "true") {
-        return { stage: "LOST", unknown: false };
-      }
-      return { stage: "NEW", unknown: false };
-    }
-    default:
-      return { stage: "NEW", unknown: true };
-  }
+  const value = STAGE_VALUE_BY_STATUS_NAME.get(
+    (statusName ?? "").toLowerCase().trim(),
+  );
+  if (value) return { stage: value, unknown: false };
+  return { stage: "NEW", unknown: true };
 }
 
 // --- Record mappers ------------------------------------------------------
@@ -344,6 +335,28 @@ export function mapAccount(
     sourceId: sourceId("account", account.id),
   };
   return { sourceId: input.sourceId as string, input, warnings };
+}
+
+/**
+ * Twenty enforces a unique primary email on Person, but LastMile does not:
+ * among the scoped contacts, 17 addresses are shared by 2-8 people
+ * ("test@test.com" x8, a rep's own address x8). The first contact by id keeps
+ * the address; the rest migrate without one, so no person is lost to a
+ * duplicate-key error. The caller reports each dropped address.
+ */
+export function dedupeContactEmails<
+  T extends { id: string; email: string | null },
+>(contacts: readonly T[]): T[] {
+  const claimed = new Set<string>();
+  return [...contacts]
+    .sort((left, right) => (left.id < right.id ? -1 : 1))
+    .map((contact) => {
+      const email = normalizeEmail(contact.email);
+      if (!email) return contact;
+      if (claimed.has(email)) return { ...contact, email: null };
+      claimed.add(email);
+      return contact;
+    });
 }
 
 export function mapContact(
@@ -381,15 +394,80 @@ export function mapContact(
   return { sourceId: input.sourceId as string, input, warnings };
 }
 
-/** Mobil-branded products, per line. Brands seen live: MOBIL, MOBIL - CVL,
- * GOLDEN WEST, FUEL, DEF, Hotsy. */
+/**
+ * TEI's seven product lines, exactly as LastMile's "Product Line" picker shows
+ * them. The `items[].brand` free-text field holds 19 variants of these seven
+ * (MOBIL, Mobil, "MOBIL - CVL", "GWO - PVL", ...), which is why products became
+ * a catalog object rather than a text field.
+ */
+export const PRODUCT_CATALOG: readonly string[] = [
+  "Ancillary",
+  "DEF",
+  "Fuel",
+  "Golden West",
+  "Hotsy",
+  "Mighty",
+  "Mobil",
+];
+
+/**
+ * Collapse a LastMile brand string onto a catalog product. Sub-line suffixes
+ * (CVL, PVL, INDUSTRIAL) denote the channel, not the product, so they fold into
+ * the parent. Returns null for "UNKNOWN" and blanks (173 lines): the line still
+ * migrates with its quantity and amount, but carries no product, and every one
+ * is listed in the report rather than silently bucketed.
+ */
+export function normalizeProductName(brand: string | null): string | null {
+  const raw = (brand ?? "").trim();
+  if (!raw) return null;
+  const base = raw.split("-")[0].trim().toLowerCase();
+  switch (base) {
+    case "mobil":
+      return "Mobil";
+    case "golden west":
+    case "gwo":
+      return "Golden West";
+    case "fuel":
+      return "Fuel";
+    case "def":
+      return "DEF";
+    case "mighty":
+      return "Mighty";
+    case "ancillary":
+      return "Ancillary";
+    case "hotsy":
+      return "Hotsy";
+    default:
+      return null;
+  }
+}
+
+/** Mobil-branded products, per line — driven by the catalog name, not the raw
+ * brand string, so "MOBIL - CVL" and "Mobil" agree. */
 export function isMobilBrand(brand: string | null): boolean {
-  return /mobil/i.test(brand ?? "");
+  return normalizeProductName(brand) === "Mobil";
+}
+
+/** A catalog product record. Name is the identity; the sourceId keeps re-runs
+ * idempotent. */
+export function mapProduct(name: string): MappedRecord {
+  const key = name.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+  return {
+    sourceId: sourceId("product", key),
+    input: { name, sourceId: sourceId("product", key) },
+    warnings: [],
+  };
+}
+
+export function productSourceId(name: string): string {
+  return sourceId("product", name.toLowerCase().replace(/[^a-z0-9]+/g, "_"));
 }
 
 export interface MappedOpportunityProduct extends MappedRecord {
   /** sourceId of the owning opportunity, resolved to a Twenty id by the loader. */
   opportunitySourceId: string;
+  /** sourceId of the catalog product, or null when the brand did not map. */
+  productSourceId: string | null;
 }
 
 /**
@@ -413,15 +491,23 @@ export function mapOpportunityProduct(item: {
   if (item.quantity && quantity === null) {
     warnings.push(`unparseable line quantity ${item.quantity} dropped`);
   }
+  const productName = normalizeProductName(item.brand);
+  if (!productName) {
+    warnings.push(
+      `line ${item.index + 1}: brand ${JSON.stringify(item.brand ?? "")} does not map to a product`,
+    );
+  }
+
   const lineSourceId = `${sourceId("opportunity_item", item.opportunityId)}#${item.index}`;
   const input: Record<string, unknown> = {
-    name: item.brand ?? `Line ${item.index + 1}`,
-    ...(item.brand ? { product: item.brand } : {}),
+    // The chip in Twenty's UI reads the name, so an unmapped line says "Line 2",
+    // never "Untitled".
+    name: productName ?? `Line ${item.index + 1}`,
     ...(quantity !== null ? { quantity } : {}),
     ...(amountMicros !== null
       ? { amount: { amountMicros, currencyCode: "USD" } }
       : {}),
-    isMobil: isMobilBrand(item.brand),
+    isMobil: productName === "Mobil",
     lineNumber: item.index + 1,
     sourceId: lineSourceId,
   };
@@ -430,92 +516,147 @@ export function mapOpportunityProduct(item: {
     input,
     warnings,
     opportunitySourceId: sourceId("opportunity", item.opportunityId),
+    productSourceId: productName ? productSourceId(productName) : null,
   };
 }
 
-function isMobilProduct(opportunity: {
-  productType: string | null;
-  brand: string | null;
-}): boolean {
-  return /mobil/i.test(
-    `${opportunity.productType ?? ""} ${opportunity.brand ?? ""}`,
-  );
-}
-
-export function mapOpportunity(
-  opportunity: LastmileOpportunity,
-  ownerMap: ReadonlyMap<string, string>,
+/**
+ * A CRM record as LastMile's `task` table sees it — the authority for status,
+ * owner, organization, and products. Leads and opportunities both land in
+ * Twenty's opportunity pipeline (AE3).
+ */
+export function mapCrmTask(
+  task: LastmileCrmTask,
+  ownerIndex: ReadonlyMap<string, string>,
   companyIdBySourceId: ReadonlyMap<string, string>,
+  organizationIdBySourceId: ReadonlyMap<string, string>,
 ): MappedRecord {
   const warnings: string[] = [];
-  const { stage, unknown } = mapOpportunityStage(opportunity);
-  if (unknown)
-    warnings.push(`unknown stage "${opportunity.stage}" mapped to NEW`);
-  const ownerId = resolveOwner(opportunity.ownerRepId, ownerMap);
-  if (opportunity.ownerRepId && !ownerId) {
-    warnings.push(
-      `owner ${opportunity.ownerRepId} not provisioned; opportunity has no owner`,
-    );
+
+  const { stage, unknown } = mapTaskStatusToStage(task.statusName);
+  if (unknown) {
+    warnings.push(`unknown task status "${task.statusName}" mapped to 00-New`);
   }
+
+  const ownerId = resolveOwner(task.assigneeRepId, ownerIndex);
+  if (task.assigneeRepId && !ownerId) {
+    warnings.push(
+      `assignee rep ${task.assigneeRepId} not provisioned; no owner`,
+    );
+  } else if (!task.assigneeRepId) {
+    warnings.push("task has no assignee; no owner");
+  }
+
+  // Leads pre-date an account: they carry only a typed company name.
   let companyId: string | null = null;
-  if (opportunity.accountId) {
+  if (task.accountId) {
     companyId =
-      companyIdBySourceId.get(sourceId("account", opportunity.accountId)) ??
-      null;
+      companyIdBySourceId.get(sourceId("account", task.accountId)) ?? null;
     if (!companyId) {
-      warnings.push(
-        `account ${opportunity.accountId} not found; opportunity has no company`,
-      );
+      warnings.push(`account ${task.accountId} not migrated; no company link`);
     }
   }
-  const amountMicros = toAmountMicros(opportunity.amount);
+
+  let organizationId: string | null = null;
+  if (task.organizationId) {
+    organizationId =
+      organizationIdBySourceId.get(
+        sourceId("organization", task.organizationId),
+      ) ?? null;
+    if (!organizationId) {
+      warnings.push(`organization ${task.organizationId} not migrated`);
+    }
+  }
+
+  // The deal total is the sum of its product lines when they exist; otherwise
+  // there is no reliable amount on the task.
+  const amountMicros = sumLineAmountsMicros(task.items);
+
+  const name =
+    task.title ??
+    task.leadCompanyName ??
+    `${task.entityType === "lead" ? "Lead" : "Opportunity"} ${task.entityId}`;
+
   const input: Record<string, unknown> = {
-    name: opportunity.name ?? `Opportunity ${opportunity.id}`,
+    name,
     stage,
     ...(amountMicros !== null
       ? { amount: { amountMicros, currencyCode: "USD" } }
       : {}),
-    ...(opportunity.expectedCloseDate
-      ? { closeDate: `${opportunity.expectedCloseDate}T00:00:00.000Z` }
+    ...(task.dueDate
+      ? { closeDate: new Date(task.dueDate).toISOString() }
       : {}),
     ...(ownerId ? { ownerId } : {}),
     ...(companyId ? { companyId } : {}),
-    ...(opportunity.productType ? { product: opportunity.productType } : {}),
-    ...(toQuantity(opportunity.quantity) !== null
-      ? { quantity: toQuantity(opportunity.quantity) }
-      : {}),
-    isMobil: isMobilProduct(opportunity),
-    sourceId: sourceId("opportunity", opportunity.id),
+    ...(organizationId ? { organizationId } : {}),
+    isMobil: (task.items ?? []).some((item) =>
+      isMobilBrand(item.brand ?? null),
+    ),
+    // Replay LastMile's true creation time onto Twenty so "created" reads
+    // correctly and the record sorts by real age, not import time. Twenty
+    // accepts createdAt on create and update (proven by the notes path), so
+    // records seeded before this behaviour existed heal on the next sweep.
+    ...(task.createdAt ? { createdAt: toIsoTimestamp(task.createdAt) } : {}),
+    sourceId: sourceId(task.entityType, task.entityId),
   };
   return { sourceId: input.sourceId as string, input, warnings };
 }
 
-/** Leads land in the same Twenty opportunity pipeline at the lead-band stages
- * (AE3): never as bare person/company records. */
-export function mapLead(
-  lead: LastmileLead,
-  ownerMap: ReadonlyMap<string, string>,
-): MappedRecord {
-  const warnings: string[] = [];
-  const { stage, unknown } = mapLeadStatusToStage(lead.status);
-  if (unknown)
-    warnings.push(`unknown lead status "${lead.status}" mapped to LEAD`);
-  const ownerId = resolveOwner(lead.ownerRepId, ownerMap);
-  if (lead.ownerRepId && !ownerId) {
-    warnings.push(
-      `owner ${lead.ownerRepId} not provisioned; lead has no owner`,
+export function sumLineAmountsMicros(
+  items: LastmileCrmTask["items"],
+): number | null {
+  if (!items || items.length === 0) return null;
+  let total = 0;
+  let sawAny = false;
+  for (const item of items) {
+    const micros = toAmountMicros(
+      item.amount === null || item.amount === undefined
+        ? null
+        : String(item.amount),
     );
+    if (micros !== null) {
+      total += micros;
+      sawAny = true;
+    }
   }
-  const personName = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
-  const name = lead.companyName ?? (personName || `Lead ${lead.id}`);
-  const input: Record<string, unknown> = {
-    name,
-    stage,
-    ...(ownerId ? { ownerId } : {}),
-    isMobil: false,
-    sourceId: sourceId("lead", lead.id),
+  return sawAny ? total : null;
+}
+
+/** LastMile branch/business unit ("Golden West Oil Co..San Antonio (300)",
+ * shown in the UI as its `abbv`, "GWO 300"). */
+export function mapOrganization(
+  organization: LastmileOrganization,
+): MappedRecord {
+  return {
+    sourceId: sourceId("organization", organization.id),
+    input: {
+      name: organization.abbv ?? organization.name ?? organization.id,
+      fullName: organization.name ?? "",
+      sourceId: sourceId("organization", organization.id),
+    },
+    warnings: [],
   };
-  return { sourceId: input.sourceId as string, input, warnings };
+}
+
+/** Product lines belonging to a CRM task, keyed by the task's entity id. */
+export function mapTaskProducts(
+  task: LastmileCrmTask,
+): MappedOpportunityProduct[] {
+  return (task.items ?? []).map((item, index) =>
+    mapOpportunityProduct({
+      opportunityId: task.entityId,
+      index,
+      brand: item.brand ?? null,
+      quantity:
+        item.quantity === null || item.quantity === undefined
+          ? null
+          : String(item.quantity),
+      amount:
+        item.amount === null || item.amount === undefined
+          ? null
+          : String(item.amount),
+    }),
+  );
 }
 
 export interface MappedNote {
@@ -526,6 +667,11 @@ export interface MappedNote {
   targetSourceId: string;
   targetKind: "opportunity" | "company";
   isDeleted: boolean;
+  /** When the note was written in LastMile — replayed onto Twenty's createdAt
+   * so the activity timeline is chronologically correct. */
+  createdAt: string | null;
+  /** LastMile author; Twenty's actor is not settable via the API. */
+  authorName: string | null;
 }
 
 export function mapCrmComment(comment: LastmileCrmComment): MappedNote {
@@ -538,7 +684,44 @@ export function mapCrmComment(comment: LastmileCrmComment): MappedNote {
     targetSourceId: sourceId(comment.entityType, comment.entityId),
     targetKind: "opportunity",
     isDeleted: comment.isDeleted,
+    createdAt: toIsoTimestamp(comment.createdAt),
+    authorName: comment.authorName,
   };
+}
+
+/**
+ * A LastMile pipeline transition ("00-New" -> "10-Prospect") reconstructed as a
+ * dated Note on the Twenty opportunity, so the activity feed shows when each
+ * status change actually happened. Returns null when the event carries no
+ * destination stage name (nothing meaningful to record). Stage names arrive
+ * already clean ("10-Prospect", "60-Won") — the same labels Twenty uses — so no
+ * LM_ stripping is needed. The `task_activity.id` gives a stable sourceId, so
+ * re-runs upsert the same note rather than duplicating it.
+ */
+export function mapTaskStatusActivity(
+  activity: LastmileTaskStatusChange,
+): MappedNote | null {
+  if (!activity.newStatusName) return null;
+  const body = activity.oldStatusName
+    ? `${activity.oldStatusName} → ${activity.newStatusName}`
+    : `Set to ${activity.newStatusName}`;
+  return {
+    sourceId: sourceId("task_activity", activity.id),
+    title: `Stage → ${activity.newStatusName}`,
+    bodyMarkdown: body,
+    targetSourceId: sourceId(activity.entityType, activity.entityId),
+    targetKind: "opportunity",
+    isDeleted: false,
+    createdAt: toIsoTimestamp(activity.createdAt),
+    authorName: activity.authorName,
+  };
+}
+
+/** Twenty wants an ISO-8601 DateTime; LastMile hands us a Date or null. */
+export function toIsoTimestamp(value: Date | string | null): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 /** Customer notes reach Twenty only when their dispatch customer name matches
@@ -555,5 +738,7 @@ export function mapCustomerNote(note: LastmileCustomerNote): MappedNote | null {
     targetSourceId: sourceId("account", note.matchedAccountId),
     targetKind: "company",
     isDeleted: false,
+    createdAt: toIsoTimestamp(note.dateCreated),
+    authorName: null,
   };
 }

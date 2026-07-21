@@ -91,13 +91,76 @@ export interface LastmileOpportunityItem {
   amount: string | null;
 }
 
+/**
+ * The `task` table is LastMile's live CRM. Everything a rep sees hangs off it:
+ * `status_id` (the real pipeline status — the `opportunity.stage` column is
+ * stale and disagrees for 889 of 950 rows), `assignee_id` (the owning rep),
+ * `organization_id` (the branch, e.g. "GWO 300"), and `entity_data` (name,
+ * description, account, and the product `items` array). Task rows only exist
+ * from 2025-07 onward; older opportunity/lead rows are legacy and out of scope.
+ */
+export interface LastmileCrmTask {
+  taskId: string;
+  entityType: "lead" | "opportunity";
+  /** opportunity/lead row id — the stable identity for the Twenty record. */
+  entityId: string;
+  title: string | null;
+  description: string | null;
+  /** Present on opportunity tasks only; leads pre-date an account. */
+  accountId: string | null;
+  /** Company name typed on a lead before an account exists. */
+  leadCompanyName: string | null;
+  statusName: string | null;
+  organizationId: string | null;
+  /** Owning rep, resolved from the task's assignee user. */
+  assigneeRepId: string | null;
+  dueDate: Date | null;
+  createdAt: Date | null;
+  /** Product lines: [{ brand, quantity, amount }, ...] */
+  items: Array<{
+    brand?: string | null;
+    quantity?: string | number | null;
+    amount?: string | number | null;
+  }> | null;
+}
+
+export interface LastmileOrganization {
+  id: string;
+  name: string | null;
+  /** Short code shown in the LastMile UI, e.g. "GWO 300". */
+  abbv: string | null;
+  archived: boolean;
+}
+
 export interface LastmileCrmComment {
   id: string;
   entityType: "lead" | "opportunity";
   entityId: string;
   content: string | null;
   isDeleted: boolean;
+  /** Authored-at time. Carried onto the Twenty note so the activity feed
+   * reflects when the rep actually wrote it, not when the import ran. */
   createdAt: Date | null;
+  authorName: string | null;
+}
+
+/**
+ * A single status-change event from LastMile's `task_activity` log — the row
+ * behind "Dean Kittel changed status to 10-Prospect" in the task activity feed.
+ * The pipeline transition is reconstructed onto the Twenty opportunity as a
+ * dated Note so the activity timeline reads in true order. `activity_data`
+ * carries human-readable stage names (`new_status_name` in every prod row; the
+ * camelCase `newStatusName` variant is coalesced defensively). `created_at` is
+ * the real transition time; `user_id` resolves to the rep who moved it.
+ */
+export interface LastmileTaskStatusChange {
+  id: string;
+  entityType: "lead" | "opportunity";
+  entityId: string;
+  oldStatusName: string | null;
+  newStatusName: string | null;
+  createdAt: Date | null;
+  authorName: string | null;
 }
 
 export interface LastmileCrmAttachment {
@@ -126,12 +189,31 @@ export interface LastmileReader {
   readContacts(): Promise<LastmileContact[]>;
   readLeads(): Promise<LastmileLead[]>;
   readOpportunities(): Promise<LastmileOpportunity[]>;
+  readCrmTasks(): Promise<LastmileCrmTask[]>;
+  readOrganizations(): Promise<LastmileOrganization[]>;
   readOpportunityItems(): Promise<LastmileOpportunityItem[]>;
   readCrmComments(): Promise<LastmileCrmComment[]>;
+  readTaskStatusChanges(): Promise<LastmileTaskStatusChange[]>;
   readCrmAttachments(): Promise<LastmileCrmAttachment[]>;
   readCustomerNotes(): Promise<LastmileCustomerNote[]>;
   close(): Promise<void>;
 }
+
+/**
+ * The accounts TEI actually sells to: those referenced by a CRM task (lead or
+ * opportunity). Companies and contacts are both scoped to this set — LastMile
+ * carries 3,403 accounts and 29,966 contacts, but only 805 accounts have an
+ * opportunity, and 443 contacts sit on them. Everything else is old data that
+ * stays in LastMile (Eric, 2026-07-10).
+ */
+const OPPORTUNITY_ACCOUNTS_CTE = `
+  opportunity_accounts as (
+    select distinct nullif(trim(t.entity_data ->> 'account_id'), '') as account_id
+    from task t
+    where t.entity_type in ('lead', 'opportunity')
+      and nullif(trim(t.entity_data ->> 'account_id'), '') is not null
+  )
+`;
 
 export function createLastmileReader(databaseUrl: string): LastmileReader {
   const pool = new pg.Pool({
@@ -161,12 +243,15 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
       `),
     readAccounts: () =>
       rows<LastmileAccount>(`
+        with ${OPPORTUNITY_ACCOUNTS_CTE}
         select id, nullif(trim(name), '') as "name", nullif(owner, '') as "ownerRepId"
         from account
+        where id in (select account_id from opportunity_accounts)
         order by id
       `),
     readContacts: () =>
       rows<LastmileContact>(`
+        with ${OPPORTUNITY_ACCOUNTS_CTE}
         select id,
                nullif(account_id, '')      as "accountId",
                nullif(trim(first_name), '') as "firstName",
@@ -176,6 +261,7 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
                nullif(trim(phone_cellular), '') as "phoneCellular",
                nullif(trim(title), '')     as "title"
         from contact
+        where account_id in (select account_id from opportunity_accounts)
         order by id
       `),
     readLeads: () =>
@@ -213,6 +299,44 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
         from opportunity
         order by id
       `),
+    readCrmTasks: () =>
+      rows<LastmileCrmTask>(`
+        select t.id                              as "taskId",
+               t.entity_type                     as "entityType",
+               t.entity_id                       as "entityId",
+               coalesce(
+                 nullif(trim(t.entity_data ->> 'opp_name'), ''),
+                 nullif(trim(t.title), '')
+               )                                 as "title",
+               nullif(trim(t.entity_data ->> 'description'), '') as "description",
+               nullif(trim(t.entity_data ->> 'account_id'), '')  as "accountId",
+               nullif(trim(t.entity_data ->> 'company'), '')     as "leadCompanyName",
+               nullif(trim(s.name), '')          as "statusName",
+               nullif(t.organization_id, '')     as "organizationId",
+               nullif(u.sales_rep_id, '')        as "assigneeRepId",
+               t.due_date                        as "dueDate",
+               t.created_at                      as "createdAt",
+               case
+                 when jsonb_typeof(t.entity_data -> 'items') = 'array'
+                 then t.entity_data -> 'items'
+                 else null
+               end                               as "items"
+        from task t
+        left join status s on s.id = t.status_id
+        left join users u  on u.id = t.assignee_id
+        where t.entity_type in ('lead', 'opportunity')
+          and t.entity_id is not null
+        order by t.entity_type, t.entity_id
+      `),
+    readOrganizations: () =>
+      rows<LastmileOrganization>(`
+        select id,
+               nullif(trim(name), '') as "name",
+               nullif(trim(abbv), '') as "abbv",
+               coalesce(archived, false) as "archived"
+        from organization
+        order by id
+      `),
     readOpportunityItems: () =>
       rows<LastmileOpportunityItem>(`
         select t.entity_id                       as "opportunityId",
@@ -236,12 +360,37 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
                t.entity_id   as "entityId",
                nullif(trim(tc.content), '') as "content",
                coalesce(tc.is_deleted, false) as "isDeleted",
-               tc.created_at as "createdAt"
+               tc.created_at as "createdAt",
+               nullif(trim(concat_ws(' ', u.first_name, u.last_name)), '') as "authorName"
         from task_comment tc
         join task t on t.id = tc.task_id
+        left join users u on u.id = tc.user_id
         where t.entity_type in ('lead', 'opportunity')
           and t.entity_id is not null
         order by tc.id
+      `),
+    readTaskStatusChanges: () =>
+      rows<LastmileTaskStatusChange>(`
+        select ta.id,
+               t.entity_type as "entityType",
+               t.entity_id   as "entityId",
+               coalesce(
+                 nullif(trim(ta.activity_data ->> 'old_status_name'), ''),
+                 nullif(trim(ta.activity_data ->> 'oldStatusName'), '')
+               ) as "oldStatusName",
+               coalesce(
+                 nullif(trim(ta.activity_data ->> 'new_status_name'), ''),
+                 nullif(trim(ta.activity_data ->> 'newStatusName'), '')
+               ) as "newStatusName",
+               ta.created_at as "createdAt",
+               nullif(trim(concat_ws(' ', u.first_name, u.last_name)), '') as "authorName"
+        from task_activity ta
+        join task t on t.id = ta.task_id
+        left join users u on u.id = ta.user_id
+        where t.entity_type in ('lead', 'opportunity')
+          and t.entity_id is not null
+          and ta.activity_type in ('status_changed', 'status_change')
+        order by ta.id
       `),
     readCrmAttachments: () =>
       rows<LastmileCrmAttachment>(`
@@ -260,10 +409,13 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
       `),
     readCustomerNotes: () =>
       rows<LastmileCustomerNote>(`
-        with account_names as (
+        with ${OPPORTUNITY_ACCOUNTS_CTE},
+        account_names as (
+          -- Only migrated accounts can host a note.
           select lower(trim(name)) as norm_name, min(id) as account_id, count(*) as n
           from account
           where nullif(trim(name), '') is not null
+            and id in (select account_id from opportunity_accounts)
           group by lower(trim(name))
         )
         select n.id,

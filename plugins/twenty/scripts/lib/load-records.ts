@@ -24,15 +24,24 @@ import {
 
 const QUERY_PAGE = 200;
 
-/** True when Twenty rejects a filter because the sourceId custom field does
- * not exist yet (virgin workspace before schema-ensure applies — the dry-run
- * plans the field but cannot create it). No field ⇒ no record carries it. */
+/**
+ * True when Twenty rejects a query because schema this run would create does
+ * not exist yet: a missing `sourceId` custom field, or a whole missing custom
+ * object (`opportunityProduct`, `organization`). A dry-run plans that schema
+ * but cannot create it, so nothing can carry a sourceId and the honest answer
+ * to "what already exists?" is "nothing".
+ *
+ * Apply runs create objects and fields before any record pass, so this can
+ * only fire in dry-run; a genuine apply-time schema gap aborts in the metadata
+ * phase, before record loading.
+ */
 export function isMissingSourceIdFieldError(error: unknown): boolean {
-  return (
-    error instanceof TwentyGraphqlError &&
-    error.errors.some((entry) =>
-      /doesn't have any .?sourceId.? field/i.test(entry.message),
-    )
+  if (!(error instanceof TwentyGraphqlError)) return false;
+  return error.errors.some(
+    (entry) =>
+      /doesn't have any .?sourceId.? field/i.test(entry.message) ||
+      /Unknown type "\w+FilterInput"/i.test(entry.message) ||
+      /Cannot query field "\w+" on type "Query"/i.test(entry.message),
   );
 }
 
@@ -70,6 +79,18 @@ export const OPPORTUNITY_PRODUCT: EntityShape = {
   plural: "opportunityProducts",
   capSingular: "OpportunityProduct",
   capPlural: "OpportunityProducts",
+};
+export const ORGANIZATION: EntityShape = {
+  singular: "organization",
+  plural: "organizations",
+  capSingular: "Organization",
+  capPlural: "Organizations",
+};
+export const PRODUCT: EntityShape = {
+  singular: "product",
+  plural: "products",
+  capSingular: "Product",
+  capPlural: "Products",
 };
 export const NOTE: EntityShape = {
   singular: "note",
@@ -471,11 +492,19 @@ export async function upsertNotes(options: {
     return false;
   });
 
+  // createdAt is replayed from LastMile so the activity feed reads in the order
+  // reps actually wrote the notes. Twenty accepts it on create AND update, so
+  // notes seeded before this behaviour existed heal on the next run (their
+  // content hash changes when createdAt joins it).
   const mapped: MappedRecord[] = resolvable.map((note) => ({
     sourceId: note.sourceId,
     input: {
       title: note.title,
       bodyV2: { markdown: note.bodyMarkdown },
+      ...(note.createdAt
+        ? { createdAt: note.createdAt, updatedAt: note.createdAt }
+        : {}),
+      ...(note.authorName ? { author: note.authorName } : {}),
       sourceId: note.sourceId,
     },
     warnings: [],
@@ -592,11 +621,19 @@ export async function upsertOpportunityProducts(options: {
   products: MappedOpportunityProduct[];
   /** opportunity sourceId -> Twenty opportunity id. */
   opportunityIdBySourceId: ReadonlyMap<string, string>;
+  /** catalog product sourceId -> Twenty product id. */
+  productIdBySourceId: ReadonlyMap<string, string>;
   dryRun: boolean;
   counters: EntityCounters;
 }): Promise<void> {
-  const { client, products, opportunityIdBySourceId, dryRun, counters } =
-    options;
+  const {
+    client,
+    products,
+    opportunityIdBySourceId,
+    productIdBySourceId,
+    dryRun,
+    counters,
+  } = options;
 
   const resolvable: MappedRecord[] = [];
   for (const product of products) {
@@ -611,9 +648,24 @@ export async function upsertOpportunityProducts(options: {
       );
       continue;
     }
+    // A line whose brand did not map to a catalog product still migrates with
+    // its quantity and amount; it simply has no product. The warning already
+    // rode along from the mapper.
+    const productId = product.productSourceId
+      ? (productIdBySourceId.get(product.productSourceId) ?? null)
+      : null;
+    if (product.productSourceId && !productId) {
+      counters.gaps.push(
+        `line ${product.sourceId}: catalog product ${product.productSourceId} missing`,
+      );
+    }
     resolvable.push({
       sourceId: product.sourceId,
-      input: { ...product.input, opportunityId },
+      input: {
+        ...product.input,
+        opportunityId,
+        ...(productId ? { productId } : {}),
+      },
       warnings: product.warnings,
     });
   }

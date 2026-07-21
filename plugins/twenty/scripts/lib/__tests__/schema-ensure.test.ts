@@ -61,9 +61,9 @@ function bareObjects() {
     opportunity: [stageField],
     note: [],
     attachment: [],
-    // The product-line object exists (ensureOpportunityProductObject ran) but
-    // has none of its fields yet.
+    // Custom objects exist (their ensure* ran) but have none of their fields.
     opportunityProduct: [],
+    organization: [],
   });
 }
 
@@ -115,6 +115,7 @@ function provisionedObjects() {
         options: null,
       },
     ],
+    organization: withAll("organization"),
   });
 }
 
@@ -122,15 +123,18 @@ describe("planSchemaEnsure", () => {
   it("plans every missing field and all stage options on an empty workspace", () => {
     const plan = planSchemaEnsure(bareObjects());
     expect(plan.createFields).toHaveLength(FIELD_SPECS.length);
+    // NEW already exists on the workspace, so it is merged, not duplicated.
     expect(plan.stageOptionsToAdd).toEqual(
-      MIGRATION_STAGE_OPTIONS.map((option) => option.value),
+      MIGRATION_STAGE_OPTIONS.filter((option) => option.value !== "NEW").map(
+        (option) => option.value,
+      ),
     );
     // Full-replace semantics (U1): the merged array keeps existing options first.
     expect(
       plan.mergedStageOptions?.slice(0, 2).map((option) => option.value),
     ).toEqual(["NEW", "CUSTOMER"]);
     expect(plan.mergedStageOptions).toHaveLength(
-      EXISTING_STAGE_OPTIONS.length + MIGRATION_STAGE_OPTIONS.length,
+      EXISTING_STAGE_OPTIONS.length + MIGRATION_STAGE_OPTIONS.length - 1,
     );
   });
 
@@ -143,7 +147,7 @@ describe("planSchemaEnsure", () => {
 
   it("creates only the gap on partial presence", () => {
     const objects = bareObjects();
-    objects.get("opportunity")!.fields.set("product", {
+    objects.get("opportunityProduct")!.fields.set("product", {
       id: "f-product",
       name: "product",
       type: "TEXT",
@@ -153,8 +157,8 @@ describe("planSchemaEnsure", () => {
     const names = plan.createFields.map(
       (field) => `${field.object}.${field.name}`,
     );
-    expect(names).not.toContain("opportunity.product");
-    expect(names).toContain("opportunity.quantity");
+    expect(names).not.toContain("opportunityProduct.product");
+    expect(names).toContain("opportunityProduct.quantity");
   });
 
   it("aborts when the stage field is missing", () => {
@@ -165,6 +169,7 @@ describe("planSchemaEnsure", () => {
       note: [],
       attachment: [],
       opportunityProduct: [],
+      organization: [],
     });
     expect(() => planSchemaEnsure(objects)).toThrow(/stage field/);
   });
@@ -202,7 +207,7 @@ describe("applySchemaEnsure", () => {
     ).toContain("CUSTOMER");
     expect(
       lastCall[2].input.update.options.map((option) => option.value),
-    ).toContain("LEAD");
+    ).toContain("PROSPECT");
   });
 
   it("refuses to create a field against a pending object id", async () => {

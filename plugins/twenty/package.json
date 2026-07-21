@@ -13,7 +13,8 @@
   "scripts": {
     "build": "tsc --build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "migrate:lastmile": "tsx scripts/migrate-lastmile.ts"
   },
   "dependencies": {
     "graphql": "^16.10.0"
