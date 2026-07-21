@@ -317,6 +317,7 @@ describe("plate content contracts on the tool surface (THINK-183 U6)", () => {
         key: "pipeline-conversion",
         op: "funnel_conversion",
         inputHint: "ordered stages: [{ label, count }], >=2 stages",
+        guidance: "Use pipeline stages from the CRM, current quarter only.",
       },
     ],
   };
@@ -363,6 +364,10 @@ describe("plate content contracts on the tool surface (THINK-183 U6)", () => {
     expect(genreDesc).toContain("pipeline-conversion");
     expect(genreDesc).toContain(
       "op funnel_conversion: ordered stages: [{ label, count }], >=2 stages",
+    );
+    // Analysis instructions ride the surface too (plates feedback 2026-07-21).
+    expect(genreDesc).toContain(
+      "Use pipeline stages from the CRM, current quarter only.",
     );
     // The contract authoring rules land in the tool description once any
     // plate carries a contract.

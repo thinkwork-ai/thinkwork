@@ -44,7 +44,13 @@ export interface DocumentPlateSummary {
     /** Operator-authored section instructions — shown pre-emission. */
     guidance?: string;
   }>;
-  analyses?: Array<{ key: string; op: string; inputHint: string }>;
+  analyses?: Array<{
+    key: string;
+    op: string;
+    inputHint: string;
+    /** Operator-authored analysis instructions — shown pre-emission. */
+    guidance?: string;
+  }>;
 }
 
 /**
@@ -125,10 +131,13 @@ function normalizePlateAnalyses(
     const key = typeof rec.key === "string" ? rec.key.trim() : "";
     const op = typeof rec.op === "string" ? rec.op.trim() : "";
     if (!PLATE_SLUG_RE.test(key) || !op) continue;
+    const guidance =
+      typeof rec.guidance === "string" ? rec.guidance.trim() : "";
     analyses.push({
       key,
       op,
       inputHint: typeof rec.inputHint === "string" ? rec.inputHint.trim() : "",
+      ...(guidance ? { guidance } : {}),
     });
   }
   return analyses.length > 0 ? analyses : undefined;
@@ -258,7 +267,7 @@ export function createDocumentComposerExtension(
           if (p.analyses?.length) {
             const parts = p.analyses.map(
               (a) =>
-                `${a.key} (op ${a.op}${a.inputHint ? `: ${a.inputHint}` : ""})`,
+                `${a.key} (op ${a.op}${a.inputHint ? `: ${a.inputHint}` : ""})${a.guidance ? ` — ${a.guidance}` : ""}`,
             );
             line += ` [declared analyses — author a \`\`\`tw:analysis block with \`analysis: <key>\` plus raw inputs; the server computes: ${parts.join(", ")}]`;
           }

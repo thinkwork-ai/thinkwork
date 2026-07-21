@@ -49,6 +49,7 @@ const FLOOR_ANALYSIS: AnalysisRowState = {
   op: "funnel_conversion",
   presentation: { directive: "chart", chartType: "funnel" },
   source: "platform",
+  guidance: "",
 };
 
 describe("PlateContentTab — floor governance (R5 UI half)", () => {
@@ -204,11 +205,16 @@ describe("PlateAnalysisPicker (U6)", () => {
       op: "ratio_pct",
       presentation: { directive: "stats" },
       source: "tenant",
+      guidance: "",
     });
     renderTab(
       <PlateContentTab
         sections={[]}
-        analyses={[FLOOR_ANALYSIS, tenant("a1", "first"), tenant("a2", "second")]}
+        analyses={[
+          FLOOR_ANALYSIS,
+          tenant("a1", "first"),
+          tenant("a2", "second"),
+        ]}
         isPlatform={false}
         allowedDirectives={null}
         onSectionsChange={vi.fn()}

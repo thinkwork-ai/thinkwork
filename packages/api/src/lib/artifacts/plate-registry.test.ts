@@ -637,7 +637,8 @@ describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () =
     ]);
   });
 
-  it("truncates over-long section guidance on the dispatch surface", async () => {
+  it("passes long section guidance through untruncated (operator instructions are load-bearing)", async () => {
+    const longGuidance = "x".repeat(1000);
     const store = fakeStore([
       {
         slug: "report",
@@ -648,7 +649,7 @@ describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () =
               id: "pipeline-health",
               title: "Pipeline Health",
               tier: "required",
-              guidance: "x".repeat(1000),
+              guidance: longGuidance,
             },
           ],
         } as never,
@@ -657,9 +658,33 @@ describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () =
     ]);
     const summaries = visiblePlateSummaries(await listPlates(TENANT, store));
     const srr = summaries.find((s) => s.slug === "report")!;
-    const guidance = srr.sections?.[0]?.guidance ?? "";
-    expect(guidance.length).toBeLessThanOrEqual(320);
-    expect(guidance.endsWith("…")).toBe(true);
+    expect(srr.sections?.[0]?.guidance).toBe(longGuidance);
+  });
+
+  it("dispatch summaries carry analysis guidance", async () => {
+    const store = fakeStore([
+      {
+        slug: "report",
+        origin: "platform_override",
+        config: {
+          analyses: [
+            {
+              key: "discount-rate",
+              op: "ratio_pct",
+              presentation: { directive: "stats" },
+              guidance: "Requested discount vs list price from the CRM quote.",
+            },
+          ],
+        } as never,
+        hidden: false,
+      },
+    ]);
+    const summaries = visiblePlateSummaries(await listPlates(TENANT, store));
+    const srr = summaries.find((s) => s.slug === "report")!;
+    expect(srr.analyses?.[0]).toMatchObject({
+      key: "discount-rate",
+      guidance: "Requested discount vs list price from the CRM quote.",
+    });
   });
 
   it("a contract-less plate's summary keeps the original three-field shape", async () => {

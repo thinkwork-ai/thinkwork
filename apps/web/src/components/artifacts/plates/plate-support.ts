@@ -276,6 +276,8 @@ export interface PlateContractAnalysis {
   op: string;
   presentation: { directive: string; chartType?: string };
   source: "platform" | "tenant";
+  /** Operator-authored instructions the agent reads when authoring. */
+  guidance?: string;
 }
 
 function isTier(v: unknown): v is PlateSectionTier {
@@ -353,6 +355,9 @@ export function parseContractAnalyses(value: unknown): PlateContractAnalysis[] {
               : undefined,
         },
         source: rec.source === "tenant" ? "tenant" : "platform",
+        ...(typeof rec.guidance === "string" && rec.guidance.trim()
+          ? { guidance: rec.guidance.trim() }
+          : {}),
       });
     }
     return out;
@@ -450,6 +455,8 @@ export interface AnalysisRowState {
   op: string;
   presentation: { directive: string; chartType?: string };
   source: "platform" | "tenant";
+  /** Operator-authored instructions the agent reads when authoring. */
+  guidance: string;
 }
 
 export function analysisRowsFromContract(
@@ -462,6 +469,7 @@ export function analysisRowsFromContract(
     op: a.op,
     presentation: a.presentation,
     source: ownAll ? "tenant" : a.source,
+    guidance: a.guidance ?? "",
   }));
 }
 
@@ -512,6 +520,7 @@ export function buildContractPayload(
           key: a.key,
           op: a.op,
           presentation: a.presentation,
+          ...(a.guidance.trim() ? { guidance: a.guidance.trim() } : {}),
         })),
       ),
     };
@@ -540,6 +549,7 @@ export function buildContractPayload(
         key: a.key,
         op: a.op,
         presentation: a.presentation,
+        ...(a.guidance.trim() ? { guidance: a.guidance.trim() } : {}),
       })),
     ),
     sectionOverrides: JSON.stringify(overrides),

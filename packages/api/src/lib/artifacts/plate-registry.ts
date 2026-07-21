@@ -473,6 +473,10 @@ function normalizeAnalyses(raw: unknown): PlateAnalysisSpec[] | undefined {
         ? (rec.params as Record<string, unknown>)
         : undefined;
     seen.add(key);
+    const guidance =
+      typeof rec.guidance === "string" && rec.guidance.trim() !== ""
+        ? rec.guidance.trim()
+        : undefined;
     out.push({
       key,
       op,
@@ -483,6 +487,7 @@ function normalizeAnalyses(raw: unknown): PlateAnalysisSpec[] | undefined {
           ? { directive, chartType }
           : { directive },
       source: "model-supplied",
+      ...(guidance ? { guidance } : {}),
     });
   }
   return out.length > 0 ? out : undefined;
@@ -712,7 +717,9 @@ export async function listPlates(
 /**
  * The agent-facing plate summary (R10 + THINK-183 KTD8/R14): discovery
  * fields plus a terse contract projection — enforced section ids with their
- * expected titles, tier, AND the operator-authored guidance (bounded).
+ * expected titles, tier, AND the operator-authored guidance (untruncated —
+ * operators may write long instructions and every word must reach the
+ * model).
  * Guidance rides pre-emission because rejection-diagnostics-only delivery
  * left the model authoring from section titles alone — operators write
  * instructions expecting the agent to follow them on the first pass, and
@@ -727,25 +734,16 @@ export interface PlateDispatchSummary {
     id: string;
     title: string;
     tier: "required" | "required-if-material";
-    /** Operator-authored section instructions, truncated to the dispatch cap. */
+    /** Operator-authored section instructions, untruncated. */
     guidance?: string;
   }>;
-  analyses?: Array<{ key: string; op: string; inputHint: string }>;
-}
-
-/**
- * Per-section guidance ceiling on the dispatch surface. Bounds token cost
- * as plate count grows; the untruncated text still reaches the model in
- * rejection diagnostics at point of use.
- */
-const DISPATCH_GUIDANCE_MAX_CHARS = 320;
-
-function boundedGuidance(guidance: string | undefined): string | undefined {
-  const trimmed = guidance?.trim();
-  if (!trimmed) return undefined;
-  return trimmed.length > DISPATCH_GUIDANCE_MAX_CHARS
-    ? `${trimmed.slice(0, DISPATCH_GUIDANCE_MAX_CHARS - 1)}…`
-    : trimmed;
+  analyses?: Array<{
+    key: string;
+    op: string;
+    inputHint: string;
+    /** Operator-authored analysis instructions, untruncated. */
+    guidance?: string;
+  }>;
 }
 
 export function visiblePlateSummaries(
@@ -757,7 +755,7 @@ export function visiblePlateSummaries(
       const sections = (p.sections ?? [])
         .filter((s) => s.tier !== "suggested")
         .map((s) => {
-          const guidance = boundedGuidance(s.guidance);
+          const guidance = s.guidance?.trim();
           return {
             id: s.id,
             title: s.title,
@@ -765,11 +763,15 @@ export function visiblePlateSummaries(
             ...(guidance ? { guidance } : {}),
           };
         });
-      const analyses = (p.analyses ?? []).map((a) => ({
-        key: a.key,
-        op: a.op,
-        inputHint: getAnalysisOp(a.op)?.inputHint ?? "",
-      }));
+      const analyses = (p.analyses ?? []).map((a) => {
+        const guidance = a.guidance?.trim();
+        return {
+          key: a.key,
+          op: a.op,
+          inputHint: getAnalysisOp(a.op)?.inputHint ?? "",
+          ...(guidance ? { guidance } : {}),
+        };
+      });
       return {
         slug: p.slug,
         displayName: p.displayName,
