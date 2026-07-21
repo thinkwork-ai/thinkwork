@@ -1894,7 +1894,6 @@ export const ComputerThreadQuery = gql`
       }
       lifecycleStatus
       metadata
-      agentcoreManaged
       lastModel
       lastResponsePreview
       costSummary

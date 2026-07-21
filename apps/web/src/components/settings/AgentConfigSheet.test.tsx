@@ -102,23 +102,6 @@ function seedHappyQueries() {
   queryResponses.set("TenantGoalBudget", {
     data: { tenant: { settings: { goalDefaultTokenBudget: 100000 } } },
   });
-  queryResponses.set("SettingsDeploymentStatus", {
-    data: {
-      deploymentStatus: {
-        agentcoreHarness: {
-          state: "ready",
-          ready: true,
-          reasonCode: "ready",
-          endpointName: "ThinkworkProof",
-          expectedVersion: "4",
-          liveVersion: "4",
-          sessionStrategy: "fresh",
-          activeThreadId: null,
-          checkedAt: "2026-07-17T20:00:00.000Z",
-        },
-      },
-    },
-  });
 }
 
 beforeEach(() => {

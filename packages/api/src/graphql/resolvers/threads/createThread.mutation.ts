@@ -40,7 +40,6 @@ import {
   PlatformAgentNotFoundError,
   resolveTenantPlatformAgent,
 } from "../../../lib/agents/tenant-platform-agent.js";
-import { requireHarnessManagedProfile } from "../../../lib/harness/managed-profile.js";
 import {
   defaultThreadRuntimeFromConfig,
   pinThreadRuntimeMetadata,
@@ -209,17 +208,6 @@ export const createThread = async (
     threadAgentId === platformAgent.id
       ? defaultThreadRuntimeFromConfig(platformAgent.runtime_config)
       : "pi";
-  let harnessProfile: Awaited<
-    ReturnType<typeof requireHarnessManagedProfile>
-  > | null = null;
-  if (pinnedRuntime === "agentcore") {
-    const [tenant] = await db
-      .select({ slug: tenants.slug })
-      .from(tenants)
-      .where(eq(tenants.id, i.tenantId))
-      .limit(1);
-    harnessProfile = await requireHarnessManagedProfile(tenant?.slug ?? "");
-  }
   const CHANNEL_PREFIX: Record<string, string> = {
     schedule: "AUTO",
     email: "EMAIL",
@@ -336,22 +324,6 @@ export const createThread = async (
 
       if (participantRows.length > 0) {
         await tx.insert(threadParticipants).values(participantRows);
-      }
-
-      if (harnessProfile && createdById) {
-        await tx.insert(harnessManagedThreadEnrollments).values({
-          tenant_id: i.tenantId,
-          thread_id: threadRow.id,
-          logical_agent_id: threadAgentId!,
-          trust_profile: "default",
-          harness_arn: harnessProfile.harnessArn,
-          qualifier: harnessProfile.endpointName,
-          resolved_version: harnessProfile.liveVersion,
-          session_strategy: "fresh",
-          prior_runtime: "pi",
-          status: "active",
-          enrolled_by_user_id: createdById,
-        });
       }
 
       let firstMsgId: string | null = null;

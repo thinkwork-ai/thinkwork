@@ -214,6 +214,23 @@ describe("chat-agent-invoke runtime routing", () => {
     ).toBe("pi");
   });
 
+  it("resolves legacy harness requests and configs to Pi (THINK-324)", async () => {
+    const { resolveChatInvocationRuntimeType } =
+      await import("./chat-agent-invoke.js");
+    expect(
+      resolveChatInvocationRuntimeType({
+        configuredRuntimeType: "agentcore",
+        requestedRuntime: "agentcore",
+      }),
+    ).toBe("pi");
+    expect(
+      resolveChatInvocationRuntimeType({
+        configuredRuntimeType: "agentcore",
+        requestedRuntime: null,
+      }),
+    ).toBe("pi");
+  });
+
   it("dispatches Computer-backed Pi agent turns to the Pi AgentCore runtime", async () => {
     const { handler } = await import("./chat-agent-invoke.js");
 
@@ -810,166 +827,6 @@ describe("chat-agent-invoke runtime routing", () => {
         "https://api.example.com/api/threads/thread-1/finalize",
       finalize_callback_secret: "test-secret",
     });
-  });
-
-  it("fails a harness-flagged agent's turn loudly while the runner is unprovisioned (THINK-311 U2, AE2)", async () => {
-    vi.stubEnv("HARNESS_RUNNER_FUNCTION_NAME", "");
-    // No override AND no stage identity → the derivation fallback cannot
-    // resolve either; the branch throws RuntimeNotProvisionedError.
-    vi.stubEnv("STAGE", "");
-    vi.stubEnv("STACK_NAME", "");
-    mocks.resolveAgentRuntimeConfig.mockResolvedValueOnce({
-      tenantId: "tenant-1",
-      agentId: "agent-1",
-      agentName: "ThinkWork",
-      agentSlug: "thinkwork",
-      agentSystemPrompt: null,
-      humanName: undefined,
-      humanPairId: null,
-      tenantSlug: "acme",
-      templateId: null,
-      templateModel: "moonshotai.kimi-k2.5",
-      runtimeType: "agentcore",
-      budgetMonthlyCents: null,
-      budgetPaused: false,
-      blockedTools: [],
-      sandboxTemplate: null,
-      browserAutomationEnabled: false,
-      threadJsonRenderUiEnabled: false,
-      contextEngineEnabled: false,
-      guardrailId: null,
-      guardrailConfig: undefined,
-      skillsConfig: [],
-      knowledgeBasesConfig: undefined,
-      mcpConfigs: [],
-      agentProfilesConfig: [],
-    });
-    const { handler } = await import("./chat-agent-invoke.js");
-
-    const result = await handler({
-      tenantId: "tenant-1",
-      threadId: "thread-1",
-      agentId: "agent-1",
-      userMessage: "run the QBR",
-      messageId: "message-1",
-    });
-
-    // Zero Lambda invocations of any kind — the Pi runtime must never be
-    // dispatched for a harness-flagged agent (R4: structural no-fallback).
-    expect(mocks.lambdaSend).not.toHaveBeenCalled();
-    expect(result).toBeUndefined();
-    // The turn row records the harness runtime and the explicit failure.
-    expect(mocks.insertValues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          runtime_type: "agentcore",
-          context_snapshot: expect.objectContaining({
-            runtime_type: "agentcore",
-          }),
-        }),
-      ]),
-    );
-    expect(mocks.updateValues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          status: "failed",
-          error: expect.stringContaining("Harness runtime not yet provisioned"),
-          error_code: "agentcore_setup_failed",
-        }),
-      ]),
-    );
-    expect(mocks.notifyThreadTurnUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "failed" }),
-    );
-  });
-
-  it("dispatches a harness-flagged agent to the harness runner, never the Pi function (THINK-311 U2)", async () => {
-    vi.stubEnv("HARNESS_RUNNER_FUNCTION_NAME", "harness-runner-fn");
-    mocks.resolveAgentRuntimeConfig.mockResolvedValueOnce({
-      tenantId: "tenant-1",
-      agentId: "agent-1",
-      agentName: "ThinkWork",
-      agentSlug: "thinkwork",
-      agentSystemPrompt: null,
-      humanName: undefined,
-      humanPairId: null,
-      tenantSlug: "acme",
-      templateId: null,
-      templateModel: "moonshotai.kimi-k2.5",
-      runtimeType: "agentcore",
-      budgetMonthlyCents: null,
-      budgetPaused: false,
-      blockedTools: [],
-      sandboxTemplate: null,
-      browserAutomationEnabled: false,
-      threadJsonRenderUiEnabled: false,
-      contextEngineEnabled: false,
-      guardrailId: null,
-      guardrailConfig: undefined,
-      skillsConfig: [],
-      knowledgeBasesConfig: undefined,
-      mcpConfigs: [],
-      agentProfilesConfig: [],
-    });
-    const { handler } = await import("./chat-agent-invoke.js");
-
-    const result = await handler({
-      tenantId: "tenant-1",
-      threadId: "thread-1",
-      agentId: "agent-1",
-      userMessage: "run the QBR",
-      messageId: "message-1",
-    });
-
-    expect(result).toEqual({ ok: true, threadTurnId: "turn-pi-1" });
-    expect(mocks.lambdaSend).toHaveBeenCalledTimes(1);
-    const command = mocks.lambdaSend.mock.calls[0][0] as {
-      input: {
-        FunctionName: string;
-        InvocationType: string;
-        Payload: Uint8Array;
-      };
-    };
-    expect(command.input).toMatchObject({
-      FunctionName: "harness-runner-fn",
-      InvocationType: "Event",
-    });
-    expect(command.input.FunctionName).not.toBe("pi-runtime-fn");
-    const body = decodeInvokeBody(command);
-    expect(body.runtime_type).toBe("agentcore");
-  });
-
-  it("routes a per-turn agentcore request to the harness runner (THINK-311 U5b)", async () => {
-    vi.stubEnv("HARNESS_RUNNER_FUNCTION_NAME", "harness-runner-fn");
-    const { handler } = await import("./chat-agent-invoke.js");
-
-    const result = await handler({
-      tenantId: "tenant-1",
-      threadId: "thread-1",
-      agentId: "agent-1",
-      userMessage: "run the QBR on harness",
-      messageId: "message-1",
-      requestedRuntime: "agentcore",
-    });
-
-    expect(result).toEqual({ ok: true, threadTurnId: "turn-pi-1" });
-    const command = mocks.lambdaSend.mock.calls[0][0] as {
-      input: { FunctionName: string; Payload: Uint8Array };
-    };
-    expect(command.input.FunctionName).toBe("harness-runner-fn");
-    const body = decodeInvokeBody(command);
-    expect(body.runtime_type).toBe("agentcore");
-    // Evidence: the per-turn request is recorded on the turn row.
-    expect(mocks.insertValues).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          runtime_type: "agentcore",
-          context_snapshot: expect.objectContaining({
-            requested_runtime: "agentcore",
-          }),
-        }),
-      ]),
-    );
   });
 
   it("dispatches nothing when runtime config resolution rejects the runtime selector", async () => {

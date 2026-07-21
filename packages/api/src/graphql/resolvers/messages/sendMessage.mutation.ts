@@ -25,9 +25,7 @@ import {
   dispatchDefaultAgentChatTurn,
   dispatchMentionedAgentChatTurn,
 } from "../../../lib/mentions/default-agent-routing.js";
-import {
-  InvalidRequestedRuntimeError,
-} from "../../../lib/turn-runtime-selection.js";
+import { InvalidRequestedRuntimeError } from "../../../lib/turn-runtime-selection.js";
 import { requestedRuntimeForTurn } from "../../../lib/harness/thread-runtime-policy.js";
 import { consumePendingQuestions } from "../../../lib/user-questions/consume.js";
 import type { PendingQuestionAnswersPayload } from "../../../lib/user-questions/runtime-payload.js";
@@ -196,7 +194,7 @@ export const sendMessage = async (
   });
   // THINK-311 U5b: per-turn AgentCore trial selection from the composer's
   // runtime picker. Malformed values reject here — never silently Pi.
-  let requestedRuntime: "pi" | "agentcore" | null = null;
+  let requestedRuntime: "pi" | null = null;
   try {
     requestedRuntime = requestedRuntimeForTurn(parsedMetadata, thread.metadata);
   } catch (err) {
@@ -523,58 +521,19 @@ export const sendMessage = async (
     !shouldSuppressAgentMentionDispatch({ agentDispatch: i.agentDispatch })
   ) {
     try {
-      // AgentCore Harness-pinned @mentions are interactive chat turns. They
-      // must use the direct invoke path: the durable wakeup path is polled
-      // once per minute and resolves runtime from the agent row, which can
-      // silently execute Pi even though the thread is pinned to Harness.
-      const mentionResults =
-        requestedRuntime === "agentcore"
-          ? await Promise.all(
-              parsedMentions
-                .filter((mention) => mention.targetType === "agent")
-                .map(async (mention, index) => {
-                  try {
-                    const result = await dispatchMentionedAgentChatTurn({
-                      tenantId: thread.tenant_id,
-                      threadId: i.threadId,
-                      spaceId: thread.space_id,
-                      messageId: row.id,
-                      agentId: mention.targetId,
-                      content: i.content,
-                      requestedModelId,
-                      requestedRuntime,
-                      ...(index === 0 && pendingQuestionAnswers
-                        ? { pendingQuestionAnswers }
-                        : {}),
-                      sender: { type: senderType, id: senderId },
-                    });
-                    return {
-                      agentId: mention.targetId,
-                      enqueued: false,
-                      wakeupRequestId: result?.wakeupRequestId ?? undefined,
-                    };
-                  } catch (err) {
-                    return {
-                      agentId: mention.targetId,
-                      enqueued: false,
-                      failed: true,
-                      error:
-                        err instanceof Error ? err.message : String(err),
-                    };
-                  }
-                }),
-            )
-          : await dispatchAgentMentions({
-              tenantId: thread.tenant_id,
-              threadId: i.threadId,
-              spaceId: thread.space_id,
-              messageId: row.id,
-              content: i.content,
-              mentions: parsedMentions,
-              requestedModelId,
-              ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
-              sender: { type: senderType, id: senderId },
-            });
+      // THINK-324: the managed harness is retired; requestedRuntime can only
+      // be "pi"/null, so mentions always ride the standard dispatch.
+      const mentionResults = await dispatchAgentMentions({
+        tenantId: thread.tenant_id,
+        threadId: i.threadId,
+        spaceId: thread.space_id,
+        messageId: row.id,
+        content: i.content,
+        mentions: parsedMentions,
+        requestedModelId,
+        ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
+        sender: { type: senderType, id: senderId },
+      });
       // R7: mention dispatch can fail per-agent (multiple mentioned agents).
       // Stamp a per-dispatch failed state naming which agents failed, rather
       // than treating it as all-or-nothing.

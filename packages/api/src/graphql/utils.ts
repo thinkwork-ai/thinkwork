@@ -152,7 +152,6 @@ import {
 import { checkAndFireUnblockWakeups } from "../lib/orchestration/thread-release.js";
 import { generateSlug } from "@thinkwork/database-pg/utils/generate-slug";
 import {
-  HarnessChatDispatchOnlyError,
   normalizeAgentRuntimeType,
   type AgentRuntimeType,
 } from "../lib/resolve-runtime-function-name.js";
@@ -332,9 +331,8 @@ export async function getChatAgentInvokeFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } = await import(
-      "@aws-sdk/client-ssm"
-    );
+    const { SSMClient, GetParameterCommand } =
+      await import("@aws-sdk/client-ssm");
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -366,9 +364,8 @@ export async function getKbManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } = await import(
-      "@aws-sdk/client-ssm"
-    );
+    const { SSMClient, GetParameterCommand } =
+      await import("@aws-sdk/client-ssm");
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -441,9 +438,8 @@ export async function invokeChatAgent(payload: {
       );
       return false;
     }
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     await lambda.send(
       new InvokeCommand({
@@ -477,9 +473,8 @@ export async function getJobScheduleManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } = await import(
-      "@aws-sdk/client-ssm"
-    );
+    const { SSMClient, GetParameterCommand } =
+      await import("@aws-sdk/client-ssm");
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -508,9 +503,8 @@ export async function invokeJobScheduleManager(
       console.error("[graphql]", msg);
       return { ok: false, error: msg };
     }
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const res = await lambda.send(
       new InvokeCommand({
@@ -593,12 +587,6 @@ async function getSkillRunInvokeFnName(
   runtimeType: AgentRuntimeType,
 ): Promise<string | null> {
   const normalizedRuntimeType = normalizeAgentRuntimeType(runtimeType);
-  // THINK-311 (KTD-7): the Harness trial is chat-dispatch only — a
-  // harness-flagged agent's skill runs fail explicitly (caught by
-  // invokeSkillRun's error envelope), never silently run on Pi.
-  if (normalizedRuntimeType === "agentcore") {
-    throw new HarnessChatDispatchOnlyError("skill_run");
-  }
   if (_skillRunInvokeFnName[normalizedRuntimeType] !== undefined) {
     return _skillRunInvokeFnName[normalizedRuntimeType] ?? null;
   }
@@ -685,9 +673,8 @@ export async function invokeSkillRun(
         error: `${runtimeType} agentcore-invoke Lambda name not configured`,
       };
     }
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const body = JSON.stringify(payload);
     const lambdaPayload = JSON.stringify({

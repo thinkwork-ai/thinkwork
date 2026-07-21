@@ -1,7 +1,9 @@
 import { requestedRuntimeFromMetadata } from "../turn-runtime-selection.js";
 
-export type PinnedThreadRuntime = "pi" | "agentcore";
-export type RequestedTurnRuntime = "pi" | "agentcore";
+// THINK-324: Pi is the only runtime; legacy "agentcore"/"harness" values in
+// tenant runtime_config or thread metadata normalize to "pi".
+export type PinnedThreadRuntime = "pi";
+export type RequestedTurnRuntime = "pi";
 
 function objectRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -12,11 +14,8 @@ function objectRecord(value: unknown): Record<string, unknown> {
 export function defaultThreadRuntimeFromConfig(
   runtimeConfig: unknown,
 ): PinnedThreadRuntime {
-  const value = objectRecord(runtimeConfig).defaultThreadRuntime;
-  return typeof value === "string" &&
-    ["harness", "agentcore"].includes(value.toLowerCase())
-    ? "agentcore"
-    : "pi";
+  void objectRecord(runtimeConfig).defaultThreadRuntime;
+  return "pi";
 }
 
 export function pinThreadRuntimeMetadata(

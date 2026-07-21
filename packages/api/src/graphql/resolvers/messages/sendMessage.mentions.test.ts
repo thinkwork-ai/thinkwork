@@ -39,12 +39,6 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("hasAgentMentions");
   });
 
-  it("direct-invokes Harness-pinned @mentions instead of entering the minute-polled Pi wakeup path", () => {
-    expect(source).toContain('requestedRuntime === "agentcore"');
-    expect(source).toContain("await dispatchMentionedAgentChatTurn");
-    expect(source).toContain("requestedRuntime,");
-  });
-
   it("publishes user messages to collaborative thread subscribers", () => {
     expect(source).toContain("notifyNewMessage");
     expect(source).toContain("messageId: row.id");
@@ -230,9 +224,7 @@ describe("sendMessage sync-dispatch failure stamp (plan 2026-07-03-003 U6, R7)",
     // for failures and names which agents failed in the stamped reason.
     expect(source).toContain("mentionResults");
     expect(source).toContain(".filter((result) => result.failed)");
-    expect(source).toContain(
-      "mention dispatch failed for agents:",
-    );
+    expect(source).toContain("mention dispatch failed for agents:");
     const mentionBlock = source.slice(source.indexOf("const mentionResults ="));
     expect(mentionBlock).toContain("stampDispatchFailure({");
     expect(mentionBlock).toContain('route: "mention"');
@@ -241,7 +233,9 @@ describe("sendMessage sync-dispatch failure stamp (plan 2026-07-03-003 U6, R7)",
   it("merges the dispatch stamp into existing metadata and pushes a message update", () => {
     // The helper reads current metadata, merges (never clobbers) the dispatch
     // key, writes it back tenant-scoped, and re-notifies via notifyNewMessage.
-    const helper = source.slice(source.indexOf("async function stampDispatchFailure"));
+    const helper = source.slice(
+      source.indexOf("async function stampDispatchFailure"),
+    );
     expect(helper).toContain("...existingMetadata");
     expect(helper).toContain('status: "failed"');
     expect(helper).toContain(".update(messages)");
@@ -410,13 +404,18 @@ describe("sendMessage tri-state dispatch wiring (plan 2026-07-03-003 U4, R1/R4/R
     const postCommit = source.indexOf("const dispatchThreadMode =");
     const transactionEnd = source.indexOf("const row = await db.transaction");
     expect(postCommit).toBeGreaterThan(transactionEnd);
-    const block = source.slice(postCommit, source.indexOf("shouldDispatchDefaultAgentTurn", postCommit));
+    const block = source.slice(
+      postCommit,
+      source.indexOf("shouldDispatchDefaultAgentTurn", postCommit),
+    );
     expect(block).toContain("resolveDispatchThreadMode");
     expect(block).not.toContain("extraUserIds");
   });
 
   it("passes agentDispatch and threadMode into the default dispatch gate", () => {
-    const gateCall = source.slice(source.lastIndexOf("shouldDispatchDefaultAgentTurn({"));
+    const gateCall = source.slice(
+      source.lastIndexOf("shouldDispatchDefaultAgentTurn({"),
+    );
     expect(gateCall).toContain("agentDispatch: i.agentDispatch");
     expect(gateCall).toContain("threadMode: dispatchThreadMode");
   });
@@ -428,7 +427,9 @@ describe("sendMessage tri-state dispatch wiring (plan 2026-07-03-003 U4, R1/R4/R
   });
 
   it("predicts the pre-transaction goal-mode check by unioning sender and user mentions", () => {
-    const goalCheck = source.indexOf("Goal mode requires default agent dispatch");
+    const goalCheck = source.indexOf(
+      "Goal mode requires default agent dispatch",
+    );
     const before = source.slice(0, goalCheck);
     expect(before).toContain("extraUserIds");
     expect(before).toContain('senderType === "user" ? senderId : null');

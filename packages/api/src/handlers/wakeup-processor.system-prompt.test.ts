@@ -29,7 +29,7 @@ beforeEach(() => {
 });
 
 describe("wakeup processor system prompt capture", () => {
-  it("routes workflow automations through the tenant-selected AgentCore runtime", () => {
+  it("resolves legacy tenant-selected AgentCore automation defaults to Pi (THINK-324)", () => {
     expect(
       resolveWakeupRuntimeType({
         source: "workflow_step",
@@ -37,7 +37,7 @@ describe("wakeup processor system prompt capture", () => {
         templateRuntime: "pi",
         runtimeConfig: { defaultThreadRuntime: "agentcore" },
       }),
-    ).toBe("agentcore");
+    ).toBe("pi");
   });
 
   it("honors a selected Pi runtime for background automation", () => {
@@ -62,7 +62,7 @@ describe("wakeup processor system prompt capture", () => {
     ).toBe("pi");
   });
 
-  it("pins a question resume to the runtime that asked the question", () => {
+  it("resolves a legacy harness question-resume pin to Pi (THINK-324)", () => {
     expect(
       resolveWakeupRuntimeType({
         source: "question_answer",
@@ -71,10 +71,10 @@ describe("wakeup processor system prompt capture", () => {
         runtimeConfig: { defaultThreadRuntime: "pi" },
         pinnedRuntimeType: "agentcore",
       }),
-    ).toBe("agentcore");
+    ).toBe("pi");
   });
 
-  it("preserves legacy automation routing when no selected default exists", () => {
+  it("resolves legacy agentcore agent rows to Pi when no default exists (THINK-324)", () => {
     expect(
       resolveWakeupRuntimeType({
         source: "agent_loop",
@@ -82,7 +82,7 @@ describe("wakeup processor system prompt capture", () => {
         templateRuntime: "pi",
         runtimeConfig: {},
       }),
-    ).toBe("agentcore");
+    ).toBe("pi");
   });
 
   it("extracts the composed prompt returned at the top level", () => {
@@ -270,9 +270,8 @@ describe("wakeup processor system prompt capture", () => {
     expect(mocks.lambdaSend).not.toHaveBeenCalled();
   });
 
-  it("routes automation wakeups to the selected Harness runner instead of Pi", async () => {
+  it("routes legacy agentcore wakeups to the Pi function (THINK-324)", async () => {
     vi.stubEnv("AGENTCORE_PI_FUNCTION_NAME", "thinkwork-dev-agentcore-pi");
-    vi.stubEnv("HARNESS_RUNNER_FUNCTION_NAME", "thinkwork-dev-harness-runner");
 
     const result = await invokeAgentCore({ message: "wake up" }, "agentcore");
 
@@ -286,31 +285,7 @@ describe("wakeup processor system prompt capture", () => {
       input: { FunctionName: string; InvocationType: string };
     };
     expect(command.input).toMatchObject({
-      FunctionName: "thinkwork-dev-harness-runner",
-      InvocationType: "RequestResponse",
-    });
-  });
-
-  it("routes a pending-question answer wakeup to the Harness runner", async () => {
-    vi.stubEnv("HARNESS_RUNNER_FUNCTION_NAME", "thinkwork-dev-harness-runner");
-
-    const result = await invokeAgentCore(
-      { message: "continue", pending_user_questions: { question_id: "q-1" } },
-      "agentcore",
-      { channel: "question_answer" },
-    );
-
-    expect(result).toEqual({
-      ok: true,
-      status: 200,
-      result: { ok: true },
-    });
-    expect(mocks.lambdaSend).toHaveBeenCalledTimes(1);
-    const command = mocks.lambdaSend.mock.calls[0][0] as {
-      input: { FunctionName: string; InvocationType: string };
-    };
-    expect(command.input).toMatchObject({
-      FunctionName: "thinkwork-dev-harness-runner",
+      FunctionName: "thinkwork-dev-agentcore-pi",
       InvocationType: "RequestResponse",
     });
   });

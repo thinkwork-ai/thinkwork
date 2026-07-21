@@ -263,19 +263,6 @@ export type AgentCapabilityInput = {
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
-export type AgentCoreHarnessStatus = {
-  __typename?: 'AgentCoreHarnessStatus';
-  activeThreadId?: Maybe<Scalars['ID']['output']>;
-  checkedAt: Scalars['AWSDateTime']['output'];
-  endpointName?: Maybe<Scalars['String']['output']>;
-  expectedVersion?: Maybe<Scalars['String']['output']>;
-  liveVersion?: Maybe<Scalars['String']['output']>;
-  ready: Scalars['Boolean']['output'];
-  reasonCode: Scalars['String']['output'];
-  sessionStrategy?: Maybe<Scalars['String']['output']>;
-  state: Scalars['String']['output'];
-};
-
 export type AgentCostSummary = {
   __typename?: 'AgentCostSummary';
   agentId?: Maybe<Scalars['ID']['output']>;
@@ -593,7 +580,6 @@ export type AgentProfileSpaceAssignment = {
 };
 
 export enum AgentRuntime {
-  Agentcore = 'AGENTCORE',
   Flue = 'FLUE'
 }
 
@@ -2377,12 +2363,6 @@ export type DeploymentStatus = {
   __typename?: 'DeploymentStatus';
   accountId?: Maybe<Scalars['String']['output']>;
   adminUrl?: Maybe<Scalars['String']['output']>;
-  agentcoreHarness: AgentCoreHarnessStatus;
-  /**
-   * Legacy read alias retained during the managed-runtime rollout.
-   * @deprecated Use agentcoreHarness
-   */
-  agentcoreHarnessProof: AgentCoreHarnessStatus;
   agentcoreStatus?: Maybe<Scalars['String']['output']>;
   apiEndpoint?: Maybe<Scalars['String']['output']>;
   appsyncRealtimeUrl?: Maybe<Scalars['String']['output']>;
@@ -11689,8 +11669,6 @@ export type Thread = {
   __typename?: 'Thread';
   agent?: Maybe<Agent>;
   agentId?: Maybe<Scalars['ID']['output']>;
-  /** True when the thread is pinned to an active managed AgentCore runtime enrollment. */
-  agentcoreManaged: Scalars['Boolean']['output'];
   archivedAt?: Maybe<Scalars['AWSDateTime']['output']>;
   assignee?: Maybe<User>;
   assigneeId?: Maybe<Scalars['ID']['output']>;
@@ -11711,11 +11689,6 @@ export type Thread = {
   createdByType?: Maybe<Scalars['String']['output']>;
   dueAt?: Maybe<Scalars['AWSDateTime']['output']>;
   goal?: Maybe<ThreadGoal>;
-  /**
-   * Legacy read alias retained during the managed-runtime rollout.
-   * @deprecated Use agentcoreManaged
-   */
-  harnessProof: Scalars['Boolean']['output'];
   id: Scalars['ID']['output'];
   identifier?: Maybe<Scalars['String']['output']>;
   isBlocked: Scalars['Boolean']['output'];
