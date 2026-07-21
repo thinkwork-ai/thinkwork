@@ -33,7 +33,14 @@ locals {
   twenty_credential_provider_name = "thinkwork-${var.stage}-twenty-crm"
   oauth_issuer                    = trimsuffix(var.oauth_issuer, "/")
   oauth_return_url                = "${local.oauth_issuer}/complete"
-  allowed_oauth_return_urls       = distinct(concat([local.oauth_return_url], var.user_federation_return_urls))
+  # THINK-324: with the proof plane retired, oauth_issuer is "" and the
+  # derived return URL degenerates to the schemeless "/complete", which
+  # UpdateWorkloadIdentity rejects (member must match \w+:...). Only carry
+  # the proof return URL while a real issuer exists.
+  allowed_oauth_return_urls = distinct(concat(
+    local.oauth_issuer == "" ? [] : [local.oauth_return_url],
+    var.user_federation_return_urls,
+  ))
   configuration_hash = nonsensitive(sha256(jsonencode({
     issuer        = local.oauth_issuer
     client_id     = var.oauth_client_id
