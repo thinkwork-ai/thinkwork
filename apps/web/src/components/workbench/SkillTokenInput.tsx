@@ -377,6 +377,20 @@ export const SkillTokenInput = forwardRef<
   };
 
   const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
+    // Pasted files (screenshots, copied images, files copied from Finder)
+    // become attachments — parity with PromptInputTextarea's handlePaste.
+    const files: File[] = [];
+    for (const item of event.clipboardData.items) {
+      if (item.kind === "file") {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length > 0) {
+      event.preventDefault();
+      attachments.add(files);
+      return;
+    }
     // Always paste as plain text — never inject foreign HTML into the editor.
     event.preventDefault();
     const text = event.clipboardData.getData("text/plain");

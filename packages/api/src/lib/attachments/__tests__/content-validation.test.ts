@@ -65,10 +65,39 @@ describe("verifyMagicBytes", () => {
     if (!result.ok) expect(result.reason).toBe("magic_byte_mismatch");
   });
 
-  it("rejects unsupported extension", () => {
-    const result = verifyMagicBytes(Buffer.from([0x00]), ".zip");
+  it("passes through extensions without a registered magic table", () => {
+    // Any-file-type support: unknown formats aren't sniffable, so they
+    // are accepted here and gated by the extension blocklist + forced
+    // download disposition instead.
+    expect(verifyMagicBytes(Buffer.from([0x00]), ".zip").ok).toBe(true);
+    expect(verifyMagicBytes(Buffer.from("{}"), ".json").ok).toBe(true);
+    expect(verifyMagicBytes(Buffer.from("FROM node:22"), "").ok).toBe(true);
+  });
+
+  it("accepts real image prefixes", () => {
+    expect(
+      verifyMagicBytes(
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]),
+        ".png",
+      ).ok,
+    ).toBe(true);
+    expect(
+      verifyMagicBytes(Buffer.from([0xff, 0xd8, 0xff, 0xe0]), ".jpg").ok,
+    ).toBe(true);
+    expect(
+      verifyMagicBytes(Buffer.from([0xff, 0xd8, 0xff, 0xe1]), ".jpeg").ok,
+    ).toBe(true);
+    expect(verifyMagicBytes(Buffer.from("GIF89a"), ".gif").ok).toBe(true);
+  });
+
+  it("rejects a renamed executable posing as an image", () => {
+    // PE/MZ header declared as .png
+    const result = verifyMagicBytes(
+      Buffer.from([0x4d, 0x5a, 0x90, 0x00]),
+      ".png",
+    );
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toBe("unsupported_extension");
+    if (!result.ok) expect(result.reason).toBe("magic_byte_mismatch");
   });
 });
 

@@ -88,7 +88,7 @@ describe("uploadThreadAttachments", () => {
     });
   });
 
-  it("uses the fallback spreadsheet MIME for both presign and signed PUT when the browser file type is empty", async () => {
+  it("falls back to application/octet-stream for both presign and signed PUT when the browser file type is empty", async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -100,12 +100,7 @@ describe("uploadThreadAttachments", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify(
-            finalizeBody(
-              "att-1",
-              "ledger.xlsx",
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-              1,
-            ),
+            finalizeBody("att-1", "ledger.xlsx", "application/octet-stream", 1),
           ),
           { status: 200 },
         ),
@@ -120,34 +115,30 @@ describe("uploadThreadAttachments", () => {
 
     expect(result.failures).toEqual([]);
     const [, presignInit] = fetchImpl.mock.calls[0]!;
-    expect(JSON.parse((presignInit as RequestInit).body as string)).toMatchObject(
-      {
-        mimeType:
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      },
-    );
+    expect(
+      JSON.parse((presignInit as RequestInit).body as string),
+    ).toMatchObject({ mimeType: "application/octet-stream" });
     const [, putInit] = fetchImpl.mock.calls[1]!;
     expect((putInit as RequestInit).headers).toMatchObject({
-      "Content-Type":
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Type": "application/octet-stream",
     });
   });
 
   it("binds the default global fetch so browser uploads do not hit illegal invocation", async () => {
     const originalFetch = globalThis.fetch;
     const receiver = { expected: true };
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockImplementation(function (this: typeof receiver) {
-        if (this !== receiver) {
-          throw new TypeError("Illegal invocation");
-        }
-        return Promise.resolve(
-          new Response(JSON.stringify(presignBody("att-1", "data.csv")), {
-            status: 200,
-          }),
-        );
-      });
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(function (
+      this: typeof receiver,
+    ) {
+      if (this !== receiver) {
+        throw new TypeError("Illegal invocation");
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify(presignBody("att-1", "data.csv")), {
+          status: 200,
+        }),
+      );
+    });
 
     Object.defineProperty(globalThis, "fetch", {
       configurable: true,

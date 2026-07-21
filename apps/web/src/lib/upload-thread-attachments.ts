@@ -212,8 +212,7 @@ function errorMessage(err: unknown): string {
 }
 
 function declaredMimeTypeFor(file: File): string {
-  return (
-    file.type ||
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-  );
+  // Browsers report an empty type for unrecognized extensions; the server
+  // accepts any well-formed media type, so fall back to the generic one.
+  return file.type || "application/octet-stream";
 }

@@ -74,8 +74,8 @@ interface SpacesComposerProps {
   value: string;
   onChange: (value: string) => void;
   /**
-   * Fired on submit. `files` is the user's attached File objects
-   * (.xlsx / .xls / .csv only — `accept` constrains the picker).
+   * Fired on submit. `files` is the user's attached File objects (any
+   * file type; the server-side blocklist rejects dangerous extensions).
    * Empty array when no files attached.
    *
    * Return `false` (or a promise resolving to `false`) when the send
@@ -112,8 +112,9 @@ interface SpacesComposerProps {
  * landed in a follow-on after U1 deferred this surface).
  *
  * Renders the AI Elements <PromptInput> with the attachments chip row
- * and a paperclip trigger so the user can attach an .xlsx / .csv
- * BEFORE the thread exists. SpacesWorkbench's handleSubmit owns the
+ * and a paperclip trigger so the user can attach files (any type,
+ * including pasted images) BEFORE the thread exists. SpacesWorkbench's
+ * handleSubmit owns the
  * full sequence: createThread (sans firstMessage when files attached)
  * → upload via presign+finalize → sendMessage with
  * metadata.attachments → navigate.
@@ -427,7 +428,6 @@ export function SpacesComposer({
           // (`has-disabled:bg-input/80` empty -> `bg-input/30` once typing),
           // which reads as the card darkening as you type. Focus ring dropped.
           className="tw-composer-surface [&_[data-slot=input-group]]:rounded-3xl [&_[data-slot=input-group]]:border-black/10 dark:[&_[data-slot=input-group]]:border-white/10 [&_[data-slot=input-group]]:!bg-card dark:[&_[data-slot=input-group]]:!bg-input/80 [&_[data-slot=input-group]]:!opacity-100 [&_[data-slot=input-group]]:shadow-lg [&_[data-slot=input-group]]:!ring-0"
-          accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
           maxFiles={5}
           maxFileSize={25 * 1024 * 1024}
           multiple
