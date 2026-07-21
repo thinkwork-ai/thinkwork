@@ -10,10 +10,11 @@ export interface LambdaCallbackFetchOptions {
   finalizeFunctionName: string;
   activityFunctionName: string;
   manifestFunctionName?: string;
+  toolExecutionsFunctionName?: string;
   logger?: (entry: Record<string, unknown>) => void;
 }
 
-type CallbackTarget = "activity" | "finalize" | "manifest";
+type CallbackTarget = "activity" | "finalize" | "manifest" | "tool-executions";
 
 interface CallbackRoute {
   threadId?: string;
@@ -33,6 +34,9 @@ function callbackRoute(url: URL): CallbackRoute | null {
   if (/^\/api\/runtime\/manifests$/.test(url.pathname)) {
     return { target: "manifest" };
   }
+  if (/^\/api\/runtime\/tool-executions$/.test(url.pathname)) {
+    return { target: "tool-executions" };
+  }
   return null;
 }
 
@@ -47,6 +51,8 @@ function functionNameForRoute(
       return options.finalizeFunctionName;
     case "manifest":
       return options.manifestFunctionName ?? "";
+    case "tool-executions":
+      return options.toolExecutionsFunctionName ?? "";
   }
 }
 
@@ -116,7 +122,9 @@ function buildApiGatewayEvent(args: {
   const routeKey =
     args.route.target === "manifest"
       ? "POST /api/runtime/manifests"
-      : `POST /api/threads/{threadId}/${args.route.target}`;
+      : args.route.target === "tool-executions"
+        ? "POST /api/runtime/tool-executions"
+        : `POST /api/threads/{threadId}/${args.route.target}`;
   const now = Date.now();
   return {
     version: "2.0",

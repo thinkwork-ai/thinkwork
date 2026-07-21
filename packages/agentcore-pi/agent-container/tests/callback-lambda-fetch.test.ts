@@ -136,6 +136,45 @@ describe("createLambdaCallbackFetch", () => {
     expect(invocations[0]?.event.pathParameters).toBeUndefined();
   });
 
+  it("invokes the tool-executions Lambda for ledger posts", async () => {
+    const invocations: RecordedInvoke[] = [];
+    const fallbackFetch = vi.fn();
+    const fetchImpl = createLambdaCallbackFetch({
+      fallbackFetch: fallbackFetch as unknown as typeof fetch,
+      lambdaClient: makeLambdaClient(invocations),
+      finalizeFunctionName: "finalize-fn",
+      activityFunctionName: "activity-fn",
+      toolExecutionsFunctionName: "thinkwork-dev-api-tool-executions",
+    });
+
+    const response = await fetchImpl(
+      "https://api.thinkwork.ai/api/runtime/tool-executions",
+      {
+        method: "POST",
+        headers: {
+          authorization: "Bearer ledger-secret",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ turn_id: "turn-1" }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(fallbackFetch).not.toHaveBeenCalled();
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]?.input.FunctionName).toBe(
+      "thinkwork-dev-api-tool-executions",
+    );
+    expect(invocations[0]?.event).toMatchObject({
+      routeKey: "POST /api/runtime/tool-executions",
+      rawPath: "/api/runtime/tool-executions",
+      body: JSON.stringify({ turn_id: "turn-1" }),
+    });
+    expect(
+      (invocations[0]?.event.headers as Record<string, string>).authorization,
+    ).toBe("Bearer ledger-secret");
+  });
+
   it("falls back to fetch for manifest posts when manifestFunctionName is empty", async () => {
     const invocations: RecordedInvoke[] = [];
     const fallbackResponse = new Response("ok", { status: 202 });

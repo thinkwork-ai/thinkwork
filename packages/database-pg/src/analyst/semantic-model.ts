@@ -111,6 +111,9 @@ export const ANALYST_DENYLISTED_COLUMNS: Readonly<
   // Correlates a runtime tool invocation with the principal whose private
   // credential was used. Keep this audit evidence out of analyst queries.
   harness_tool_execution_events: ["credential_owner_alias"],
+  // Pi tool-execution ledger (THINK-324 C17) — same audit-evidence boundary
+  // as its retired harness predecessor above.
+  tool_execution_events: ["credential_owner_alias"],
   routines: ["credential_refs"], // connector credential references
   skill_catalog: ["signature_payload"], // skill signing material
   skill_runs: ["completion_hmac_secret"], // per-run HMAC secret

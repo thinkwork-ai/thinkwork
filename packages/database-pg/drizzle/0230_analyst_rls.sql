@@ -1478,6 +1478,15 @@ BEGIN
   ELSE
     missing := missing || 'threads'::text;
   END IF;
+  IF to_regclass('public.tool_execution_events') IS NOT NULL THEN
+    ALTER TABLE public.tool_execution_events ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.tool_execution_events;
+    CREATE POLICY analyst_tenant_isolation ON public.tool_execution_events
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'tool_execution_events'::text;
+  END IF;
   IF to_regclass('public.trace_cost_reconciliation_facts') IS NOT NULL THEN
     ALTER TABLE public.trace_cost_reconciliation_facts ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS analyst_tenant_isolation ON public.trace_cost_reconciliation_facts;
