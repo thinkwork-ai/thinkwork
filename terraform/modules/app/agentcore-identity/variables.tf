@@ -4,6 +4,12 @@ variable "enabled" {
   default     = false
 }
 
+variable "twenty_enabled" {
+  description = "THINK-324 — keep the Twenty CRM user-federation identity (shared workload identity, twenty-crm credential provider, DCR client secret) alive independent of the proof plane, so retiring the managed-harness proof (enabled = false) does not destroy the live Twenty connector."
+  type        = bool
+  default     = false
+}
+
 variable "stage" {
   description = "Deployment stage."
   type        = string

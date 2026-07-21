@@ -21,6 +21,13 @@ terraform {
 ################################################################################
 
 locals {
+  # THINK-324: the workload identity is SHARED — live Twenty 3LO
+  # (lib/harness/agentcore-user-oauth.ts via AGENTCORE_IDENTITY_WORKLOAD_NAME)
+  # rides the same workload identity the proof plane created. It must exist
+  # whenever either half is enabled, and its deletion is owned by the Twenty
+  # cleanup owner (not the proof lifecycle) so retiring the proof plane never
+  # invalidates per-user Twenty grants.
+  identity_enabled                = var.enabled || var.twenty_enabled
   workload_identity_name          = "thinkwork-${var.stage}-multiplayer-proof"
   credential_provider_name        = "thinkwork-${var.stage}-proof-oauth"
   twenty_credential_provider_name = "thinkwork-${var.stage}-twenty-crm"
@@ -49,7 +56,7 @@ locals {
 # value never enters Terraform state. AgentCore Identity reads the JSON key
 # directly and remains the sole custodian of each user's downstream grant.
 resource "aws_secretsmanager_secret" "twenty_oauth_client" {
-  count = var.enabled ? 1 : 0
+  count = var.twenty_enabled ? 1 : 0
 
   name                    = "thinkwork/${var.stage}/agentcore-identity/twenty-crm-oauth-client"
   description             = "Confidential Twenty OAuth client used only by AgentCore Identity Token Vault"
@@ -63,7 +70,7 @@ resource "aws_secretsmanager_secret" "twenty_oauth_client" {
 }
 
 resource "aws_secretsmanager_secret_policy" "twenty_oauth_client" {
-  count      = var.enabled ? 1 : 0
+  count      = var.twenty_enabled ? 1 : 0
   secret_arn = aws_secretsmanager_secret.twenty_oauth_client[0].arn
   policy = jsonencode({
     Version = "2012-10-17"
@@ -114,11 +121,60 @@ resource "terraform_data" "identity_lifecycle" {
   }
 }
 
+# THINK-324 — Twenty-side workload-identity guarantee. When the proof plane
+# is retired (enabled = false) the identity_lifecycle resource above no longer
+# runs, but live Twenty 3LO still needs the shared workload identity. This
+# ensure step is create-if-missing only (it never rewrites the return-url
+# allowlist — twenty_identity_reconciliation owns that) and has NO destroy
+# action; deletion is owned by workload_identity_cleanup_owner below.
+resource "terraform_data" "workload_identity_ensure" {
+  count = var.twenty_enabled ? 1 : 0
+
+  input = {
+    region                 = var.region
+    workload_identity_name = local.workload_identity_name
+  }
+
+  provisioner "local-exec" {
+    command = "bash ${path.module}/scripts/ensure_workload_identity.sh"
+    environment = {
+      AWS_REGION             = var.region
+      WORKLOAD_IDENTITY_NAME = local.workload_identity_name
+      OAUTH_RETURN_URLS_JSON = jsonencode(local.allowed_oauth_return_urls)
+    }
+  }
+}
+
+# THINK-324 — the shared workload identity's deletion moved here from the
+# proof lifecycle (delete_identity.sh no longer touches it): it is deleted
+# only when the Twenty identity half itself is removed, never when the proof
+# plane is retired. Note: on a hypothetical proof-only stage (enabled = true,
+# twenty_enabled = false) the workload identity is leaked on teardown rather
+# than risking a destructive replace of identity_lifecycle here; no such
+# stage exists (dev, the only proof stage, runs Twenty).
+resource "terraform_data" "workload_identity_cleanup_owner" {
+  count = var.twenty_enabled ? 1 : 0
+
+  input = {
+    region                 = var.region
+    workload_identity_name = local.workload_identity_name
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "bash ${path.module}/scripts/delete_workload_identity.sh"
+    environment = {
+      AWS_REGION             = self.input.region
+      WORKLOAD_IDENTITY_NAME = self.input.workload_identity_name
+    }
+  }
+}
+
 # Stable cleanup ownership is deliberately separate from reconciliation.
 # Script-only changes must never replace a resource whose destroy provisioner
 # deletes the external provider and invalidates its service-issued callback.
 resource "terraform_data" "twenty_identity_cleanup_owner" {
-  count = var.enabled ? 1 : 0
+  count = var.twenty_enabled ? 1 : 0
 
   input = {
     region                          = var.region
@@ -140,7 +196,7 @@ resource "terraform_data" "twenty_identity_cleanup_owner" {
 # the provider in place. The stable owner above deletes only when the module is
 # truly disabled or removed.
 resource "terraform_data" "twenty_identity_reconciliation" {
-  count = var.enabled ? 1 : 0
+  count = var.twenty_enabled ? 1 : 0
 
   input = {
     region                          = var.region
@@ -164,6 +220,7 @@ resource "terraform_data" "twenty_identity_reconciliation" {
 
   depends_on = [
     terraform_data.identity_lifecycle,
+    terraform_data.workload_identity_ensure,
     terraform_data.twenty_identity_cleanup_owner,
     aws_secretsmanager_secret_policy.twenty_oauth_client,
   ]
@@ -173,17 +230,21 @@ resource "terraform_data" "twenty_identity_reconciliation" {
 # Gateway IAM can therefore scope vault and secret access exactly rather than
 # granting a token-vault or Secrets Manager wildcard.
 data "external" "identity_state" {
-  count = var.enabled ? 1 : 0
+  count = local.identity_enabled ? 1 : 0
   depends_on = [
     terraform_data.identity_lifecycle,
+    terraform_data.workload_identity_ensure,
     terraform_data.twenty_identity_reconciliation,
   ]
   program = ["bash", "${path.module}/scripts/read_identity.sh"]
 
   query = {
-    region                          = var.region
-    workload_identity_name          = local.workload_identity_name
-    credential_provider_name        = local.credential_provider_name
-    twenty_credential_provider_name = local.twenty_credential_provider_name
+    region                 = var.region
+    workload_identity_name = local.workload_identity_name
+    # Empty names tell the reader to skip that half (THINK-324: the proof
+    # provider is absent once the proof plane is retired; the Twenty provider
+    # is absent on proof-only stages).
+    credential_provider_name        = var.enabled ? local.credential_provider_name : ""
+    twenty_credential_provider_name = var.twenty_enabled ? local.twenty_credential_provider_name : ""
   }
 }

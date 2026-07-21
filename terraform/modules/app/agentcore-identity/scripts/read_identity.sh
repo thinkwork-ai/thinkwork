@@ -6,19 +6,32 @@ region="$(jq -r '.region // empty' <<<"$input")"
 workload_name="$(jq -r '.workload_identity_name // empty' <<<"$input")"
 provider_name="$(jq -r '.credential_provider_name // empty' <<<"$input")"
 twenty_provider_name="$(jq -r '.twenty_credential_provider_name // empty' <<<"$input")"
-if [[ -z "$region" || -z "$workload_name" || -z "$provider_name" || -z "$twenty_provider_name" ]]; then
-  printf '%s\n' '{"error":"region and identity names are required"}' >&2
+# THINK-324: an empty provider name means that half is disabled (proof
+# retired, or Twenty absent on a proof-only stage) — skip its reads and
+# return empty fields instead of failing.
+if [[ -z "$region" || -z "$workload_name" ]]; then
+  printf '%s\n' '{"error":"region and workload_identity_name are required"}' >&2
   exit 1
 fi
 
 workload_json="$(aws bedrock-agentcore-control get-workload-identity \
   --region "$region" --name "$workload_name" --output json)"
-provider_json="$(aws bedrock-agentcore-control get-oauth2-credential-provider \
-  --region "$region" --name "$provider_name" --output json)"
-twenty_provider_json="$(aws bedrock-agentcore-control get-oauth2-credential-provider \
-  --region "$region" --name "$twenty_provider_name" --output json)"
+
+provider_json='{}'
+if [[ -n "$provider_name" ]]; then
+  provider_json="$(aws bedrock-agentcore-control get-oauth2-credential-provider \
+    --region "$region" --name "$provider_name" --output json)"
+fi
+
+twenty_provider_json='{}'
+if [[ -n "$twenty_provider_name" ]]; then
+  twenty_provider_json="$(aws bedrock-agentcore-control get-oauth2-credential-provider \
+    --region "$region" --name "$twenty_provider_name" --output json)"
+fi
 
 jq -n \
+  --arg proof_enabled "$provider_name" \
+  --arg twenty_enabled "$twenty_provider_name" \
   --arg workload_identity_arn "$(jq -r '.workloadIdentityArn // empty' <<<"$workload_json")" \
   --arg credential_provider_arn "$(jq -r '.credentialProviderArn // empty' <<<"$provider_json")" \
   --arg credential_secret_arn "$(jq -r '
@@ -29,7 +42,9 @@ jq -n \
   ' <<<"$provider_json")" \
   --arg twenty_credential_provider_arn "$(jq -r '.credentialProviderArn // empty' <<<"$twenty_provider_json")" \
   --arg twenty_oauth_callback_url "$(jq -r '.callbackUrl // empty' <<<"$twenty_provider_json")" \
-  'if ($workload_identity_arn == "" or $credential_provider_arn == "" or $credential_secret_arn == "" or $twenty_credential_provider_arn == "" or $twenty_oauth_callback_url == "")
+  'if ($workload_identity_arn == ""
+       or ($proof_enabled != "" and ($credential_provider_arn == "" or $credential_secret_arn == ""))
+       or ($twenty_enabled != "" and ($twenty_credential_provider_arn == "" or $twenty_oauth_callback_url == "")))
    then error("AgentCore Identity readback omitted required ARNs")
    else {
      workload_identity_arn: $workload_identity_arn,

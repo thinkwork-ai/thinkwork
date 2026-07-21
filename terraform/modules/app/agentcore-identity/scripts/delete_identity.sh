@@ -13,13 +13,10 @@ if aws bedrock-agentcore-control get-oauth2-credential-provider \
     --name "$CREDENTIAL_PROVIDER_NAME" >/dev/null
 fi
 
-if aws bedrock-agentcore-control get-workload-identity \
-  --region "$AWS_REGION" \
-  --name "$WORKLOAD_IDENTITY_NAME" >/dev/null 2>&1; then
-  aws bedrock-agentcore-control delete-workload-identity \
-    --region "$AWS_REGION" \
-    --name "$WORKLOAD_IDENTITY_NAME" >/dev/null
-fi
-
-printf 'AgentCore Identity proof resources deleted: workload=%s provider=%s\n' \
+# THINK-324: the workload identity is SHARED with the live Twenty connector
+# (per-user grants live under it). Its deletion is owned by
+# workload_identity_cleanup_owner / delete_workload_identity.sh — retiring
+# the proof plane must never delete it. See main.tf for the proof-only-stage
+# leak trade-off.
+printf 'AgentCore Identity proof provider deleted (workload identity retained): workload=%s provider=%s\n' \
   "$WORKLOAD_IDENTITY_NAME" "$CREDENTIAL_PROVIDER_NAME"
