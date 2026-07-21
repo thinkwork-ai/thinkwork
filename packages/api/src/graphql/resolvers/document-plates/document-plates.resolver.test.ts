@@ -495,6 +495,36 @@ describe("content contract save gates (THINK-183 U2)", () => {
     ]);
   });
 
+  it("accepts analysis guidance, bounds it, and rejects junk", () => {
+    expect(
+      boundedAnalyses([
+        { ...goodAnalysis, guidance: "  Compute vs list price.  " },
+      ]),
+    ).toEqual([
+      {
+        ...goodAnalysis,
+        params: undefined,
+        source: "model-supplied",
+        guidance: "Compute vs list price.",
+      },
+    ]);
+    expect(() =>
+      boundedAnalyses([{ ...goodAnalysis, guidance: "   " }]),
+    ).toThrow(/guidance must be a non-empty string/);
+    expect(() =>
+      boundedAnalyses([{ ...goodAnalysis, guidance: "x".repeat(4001) }]),
+    ).toThrow(/≤4000 characters/);
+  });
+
+  it("accepts long section guidance up to the raised 4000-char ceiling", () => {
+    const long = "y".repeat(4000);
+    const sections = boundedSections([{ ...goodSection, guidance: long }]);
+    expect(sections?.[0]?.guidance).toBe(long);
+    expect(() =>
+      boundedSections([{ ...goodSection, guidance: "y".repeat(4001) }]),
+    ).toThrow(/≤4000 characters/);
+  });
+
   it("rejects an unregistered analysis op, listing available ops (AE5)", () => {
     expect(() =>
       boundedAnalyses([{ ...goodAnalysis, op: "median_absolute_deviation" }]),

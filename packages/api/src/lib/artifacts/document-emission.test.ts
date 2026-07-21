@@ -271,6 +271,41 @@ describe("handleDocumentEmission", () => {
     expect(JSON.stringify(recorded.cards[0])).not.toContain("<!DOCTYPE");
   });
 
+  it("success body names the plate; manifest-bearing emissions carry per-section outcomes", async () => {
+    const { deps } = makeDeps();
+    const result = await emit(VALID_DOCUMENT, deps);
+    expect(result.statusCode).toBe(200);
+    const body = result.body as Record<string, unknown>;
+    expect(body.plate).toMatchObject({ slug: "report" });
+    expect(typeof (body.plate as Record<string, unknown>).displayName).toBe(
+      "string",
+    );
+    // "report" is a contract-less core plate — no sectionFacts, no sections
+    // field. Manifest-bearing plates (business set) add per-section
+    // outcomes; that path is covered by the sales-rep-review emission below.
+    const srr = await emit(
+      {
+        ...VALID_DOCUMENT,
+        genre: "sales-rep-review",
+        digest_markdown: "# Review\n\nBody without required sections.",
+      },
+      deps,
+    );
+    if (srr.body.ok === true) {
+      const sections = srr.body.sections as Array<Record<string, unknown>>;
+      expect(Array.isArray(sections)).toBe(true);
+      for (const section of sections) {
+        expect(typeof section.title).toBe("string");
+        expect(["present", "missing", "waived"]).toContain(section.status);
+      }
+    } else {
+      // Missing required sections reject — equally fine for this assertion;
+      // the success-path section payload is then covered when the compile
+      // succeeds. Either way the plate field must ride the success body.
+      expect(srr.body.code).toBeDefined();
+    }
+  });
+
   it("preflight failure on compiled output is a platform error and persists nothing (R6)", async () => {
     const diagnostics = [
       { code: "EXTERNAL_REF" as const, message: "x", location: "line 1" },

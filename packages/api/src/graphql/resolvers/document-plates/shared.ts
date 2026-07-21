@@ -85,7 +85,9 @@ const MAX_TEXT_FIELD = 200;
 const MAX_PALETTE_ENTRIES = 24;
 const MAX_SECTIONS = 24;
 const MAX_ANALYSES = 12;
-const MAX_GUIDANCE = 500;
+// Operators write real instructions here — the cap is an abuse ceiling,
+// not an editorial limit (raised from 500 on 2026-07-21 plates feedback).
+const MAX_GUIDANCE = 4000;
 const MAX_SUGGESTED_DIRECTIVES = 4;
 const CONTRACT_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
@@ -108,6 +110,7 @@ export interface PlateDraftAnalysis {
   params?: Record<string, unknown>;
   presentation: { directive: string; chartType?: string };
   source?: "model-supplied";
+  guidance?: string;
 }
 
 export interface PlateDraftConfig {
@@ -459,6 +462,17 @@ export function boundedAnalyses(
     if (params !== undefined && asObject(params) === null) {
       throw badInput(`analyses[${i}].params must be an object`);
     }
+    const guidance = rec.guidance;
+    if (guidance !== undefined) {
+      if (typeof guidance !== "string" || guidance.trim() === "") {
+        throw badInput(`analyses[${i}].guidance must be a non-empty string`);
+      }
+      if (guidance.length > MAX_GUIDANCE) {
+        throw badInput(
+          `analyses[${i}].guidance must be ≤${MAX_GUIDANCE} characters`,
+        );
+      }
+    }
     out.push({
       key,
       op,
@@ -469,6 +483,7 @@ export function boundedAnalyses(
           ? { directive, chartType: chartType as string }
           : { directive },
       source: "model-supplied",
+      ...(typeof guidance === "string" ? { guidance: guidance.trim() } : {}),
     });
   }
   return out;

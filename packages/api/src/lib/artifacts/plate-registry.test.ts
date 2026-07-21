@@ -618,11 +618,14 @@ describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () =
     const summaries = visiblePlateSummaries(await listPlates(TENANT, store));
     const srr = summaries.find((s) => s.slug === "report")!;
     // Suggested-tier sections are for THINK-185/189, not the dispatch floor.
+    // Guidance rides pre-emission (plates feedback 2026-07-21) so the model
+    // authors from the operator's instructions, not just the section title.
     expect(srr.sections).toEqual([
       {
         id: "pipeline-health",
         title: "Pipeline Health",
         tier: "required-if-material",
+        guidance: "Funnel with rates.",
       },
     ]);
     expect(srr.analyses).toEqual([
@@ -632,6 +635,56 @@ describe("dispatch summaries carry the contract floor (THINK-183 U6/KTD8)", () =
         inputHint: "ordered stages: [{ label, count }], >=2 stages",
       },
     ]);
+  });
+
+  it("passes long section guidance through untruncated (operator instructions are load-bearing)", async () => {
+    const longGuidance = "x".repeat(1000);
+    const store = fakeStore([
+      {
+        slug: "report",
+        origin: "platform_override",
+        config: {
+          sections: [
+            {
+              id: "pipeline-health",
+              title: "Pipeline Health",
+              tier: "required",
+              guidance: longGuidance,
+            },
+          ],
+        } as never,
+        hidden: false,
+      },
+    ]);
+    const summaries = visiblePlateSummaries(await listPlates(TENANT, store));
+    const srr = summaries.find((s) => s.slug === "report")!;
+    expect(srr.sections?.[0]?.guidance).toBe(longGuidance);
+  });
+
+  it("dispatch summaries carry analysis guidance", async () => {
+    const store = fakeStore([
+      {
+        slug: "report",
+        origin: "platform_override",
+        config: {
+          analyses: [
+            {
+              key: "discount-rate",
+              op: "ratio_pct",
+              presentation: { directive: "stats" },
+              guidance: "Requested discount vs list price from the CRM quote.",
+            },
+          ],
+        } as never,
+        hidden: false,
+      },
+    ]);
+    const summaries = visiblePlateSummaries(await listPlates(TENANT, store));
+    const srr = summaries.find((s) => s.slug === "report")!;
+    expect(srr.analyses?.[0]).toMatchObject({
+      key: "discount-rate",
+      guidance: "Requested discount vs list price from the CRM quote.",
+    });
   });
 
   it("a contract-less plate's summary keeps the original three-field shape", async () => {

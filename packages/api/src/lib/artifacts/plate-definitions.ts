@@ -59,6 +59,8 @@ export interface PlateAnalysisSpec {
   presentation: { directive: string; chartType?: string };
   /** Raw-input provenance; v1 is model-supplied (binding is a future rung). */
   source: "model-supplied";
+  /** Operator-authored instructions for authoring this analysis (optional). */
+  guidance?: string;
 }
 
 export interface PlateDefinition {

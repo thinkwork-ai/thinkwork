@@ -50,6 +50,8 @@ export interface DocumentPlateAnalysisConfig {
   params?: Record<string, unknown>;
   presentation: { directive: string; chartType?: string };
   source?: "model-supplied";
+  /** Operator-authored instructions for authoring this analysis (optional). */
+  guidance?: string;
 }
 
 /**

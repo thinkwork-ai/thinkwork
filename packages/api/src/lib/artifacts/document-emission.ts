@@ -1091,6 +1091,26 @@ export async function handleDocumentEmission(
   const renderHtml = compiled.renderHtml;
   const compileWarnings = compiled.warnings;
 
+  // Plate identity + per-section outcomes for the emit response. The tool
+  // surfaces these in its activity details so the thread shows WHICH plate
+  // authored the document and how each contract section fared (present /
+  // waived / missing) instead of an anonymous "Using emit document" row.
+  const plateOutcome = {
+    plate: { slug: plate.slug, displayName: plate.displayName },
+    ...(compiled.sectionFacts
+      ? {
+          sections: compiled.sectionFacts.sections.map((fact) => ({
+            id: fact.id,
+            title:
+              plate.sections?.find((section) => section.id === fact.id)
+                ?.title ?? fact.id,
+            tier: fact.tier,
+            status: fact.status,
+          })),
+        }
+      : {}),
+  };
+
   // ---- DocSpector (R6: retained runtime preflight before the S3 write) ----
   const preflight = deps.preflight({
     renderHtml,
@@ -1176,6 +1196,7 @@ export async function handleDocumentEmission(
         documentId,
         status: "draft",
         headVersion: row?.head_version ?? 0,
+        ...plateOutcome,
         ...(compileWarnings.length > 0 ? { warnings: compileWarnings } : {}),
       },
     };
@@ -1464,6 +1485,7 @@ export async function handleDocumentEmission(
       documentId,
       status,
       headVersion,
+      ...plateOutcome,
       ...(compileWarnings.length > 0 ? { warnings: compileWarnings } : {}),
     },
   };

@@ -473,6 +473,10 @@ function normalizeAnalyses(raw: unknown): PlateAnalysisSpec[] | undefined {
         ? (rec.params as Record<string, unknown>)
         : undefined;
     seen.add(key);
+    const guidance =
+      typeof rec.guidance === "string" && rec.guidance.trim() !== ""
+        ? rec.guidance.trim()
+        : undefined;
     out.push({
       key,
       op,
@@ -483,6 +487,7 @@ function normalizeAnalyses(raw: unknown): PlateAnalysisSpec[] | undefined {
           ? { directive, chartType }
           : { directive },
       source: "model-supplied",
+      ...(guidance ? { guidance } : {}),
     });
   }
   return out.length > 0 ? out : undefined;
@@ -712,10 +717,14 @@ export async function listPlates(
 /**
  * The agent-facing plate summary (R10 + THINK-183 KTD8/R14): discovery
  * fields plus a terse contract projection — enforced section ids with their
- * expected titles and tier, and declared analysis keys with their ops and
- * the op's one-line input-shape hint. No guidance text (token cost scales
- * with plate count; full guidance arrives in rejection diagnostics at point
- * of use). Contract-less plates keep the original three-field shape.
+ * expected titles, tier, AND the operator-authored guidance (untruncated —
+ * operators may write long instructions and every word must reach the
+ * model).
+ * Guidance rides pre-emission because rejection-diagnostics-only delivery
+ * left the model authoring from section titles alone — operators write
+ * instructions expecting the agent to follow them on the first pass, and
+ * the plate editor promises exactly that. Contract-less plates keep the
+ * original three-field shape.
  */
 export interface PlateDispatchSummary {
   slug: string;
@@ -725,8 +734,16 @@ export interface PlateDispatchSummary {
     id: string;
     title: string;
     tier: "required" | "required-if-material";
+    /** Operator-authored section instructions, untruncated. */
+    guidance?: string;
   }>;
-  analyses?: Array<{ key: string; op: string; inputHint: string }>;
+  analyses?: Array<{
+    key: string;
+    op: string;
+    inputHint: string;
+    /** Operator-authored analysis instructions, untruncated. */
+    guidance?: string;
+  }>;
 }
 
 export function visiblePlateSummaries(
@@ -737,16 +754,24 @@ export function visiblePlateSummaries(
     .map((p) => {
       const sections = (p.sections ?? [])
         .filter((s) => s.tier !== "suggested")
-        .map((s) => ({
-          id: s.id,
-          title: s.title,
-          tier: s.tier as "required" | "required-if-material",
-        }));
-      const analyses = (p.analyses ?? []).map((a) => ({
-        key: a.key,
-        op: a.op,
-        inputHint: getAnalysisOp(a.op)?.inputHint ?? "",
-      }));
+        .map((s) => {
+          const guidance = s.guidance?.trim();
+          return {
+            id: s.id,
+            title: s.title,
+            tier: s.tier as "required" | "required-if-material",
+            ...(guidance ? { guidance } : {}),
+          };
+        });
+      const analyses = (p.analyses ?? []).map((a) => {
+        const guidance = a.guidance?.trim();
+        return {
+          key: a.key,
+          op: a.op,
+          inputHint: getAnalysisOp(a.op)?.inputHint ?? "",
+          ...(guidance ? { guidance } : {}),
+        };
+      });
       return {
         slug: p.slug,
         displayName: p.displayName,

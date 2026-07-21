@@ -17,6 +17,7 @@ import {
   Input,
   Label,
   Select,
+  Textarea,
   SelectContent,
   SelectItem,
   SelectTrigger,
@@ -69,6 +70,7 @@ export function PlateAnalysisPicker({
               }
             : { directive },
         source: "tenant",
+        guidance: "",
       },
     ]);
     setPickerOpen(false);
@@ -221,6 +223,18 @@ export function PlateAnalysisPicker({
                     onChange={(presentation) =>
                       updateRow(row.rowKey, { presentation })
                     }
+                  />
+                  <Label className="self-start pt-1.5 text-xs text-muted-foreground">
+                    Instructions
+                  </Label>
+                  <Textarea
+                    value={row.guidance}
+                    onChange={(e) =>
+                      updateRow(row.rowKey, { guidance: e.target.value })
+                    }
+                    placeholder="What the agent should compute and how to source the inputs — the agent reads this when authoring."
+                    className="min-h-16 text-xs"
+                    data-testid="plate-analysis-guidance"
                   />
                 </div>
               )}

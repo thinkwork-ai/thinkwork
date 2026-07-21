@@ -223,6 +223,7 @@ describe("content contract helpers (THINK-188)", () => {
           op: "ratio_pct",
           presentation: { directive: "stats" },
           source: "tenant",
+          guidance: "Won vs total closed from the CRM.",
         },
       ],
       false,
@@ -231,6 +232,7 @@ describe("content contract helpers (THINK-188)", () => {
     expect(JSON.parse(payload.sections!)).toHaveLength(1);
     expect(JSON.parse(payload.analyses!)).toEqual([
       {
+        guidance: "Won vs total closed from the CRM.",
         key: "win-rate",
         op: "ratio_pct",
         presentation: { directive: "stats" },
