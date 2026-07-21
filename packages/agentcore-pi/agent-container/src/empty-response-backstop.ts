@@ -75,11 +75,55 @@ export function turnProducedNoUserVisibleOutput(
 export interface EmptyResponseBackstopLogEntry {
   level: "warn" | "error";
   event: "empty_response_backstop";
-  phase: "detected" | "recovered" | "failed";
+  phase: "detected" | "recovered" | "failed" | "provider_error";
   threadId?: string;
   threadTurnId?: string;
   // Index signature keeps this assignable to the host's LogFields sink.
   [key: string]: unknown;
+}
+
+/**
+ * THINK-324 C7 — typed classification for the swallowed-provider-error
+ * shape. pi-ai's Bedrock provider can swallow a ValidationException (e.g. a
+ * mis-prefixed model id) and return an empty assistant message with zero
+ * usage; before this class the turn burned a forced continuation (which hit
+ * the same exception) and then failed as a generic `empty_response`,
+ * mis-diagnosing a provider error as a model that "said nothing".
+ */
+export class BedrockSilentFailureError extends Error {
+  readonly code = "bedrock_silent_failure";
+  constructor() {
+    super(
+      "bedrock_silent_failure: model call returned no content and zero token usage — " +
+        "this is the swallowed-provider-error signature (commonly a ValidationException " +
+        "such as a bad or mis-prefixed model id), not an empty model reply. " +
+        "Check the model id and Bedrock region routing.",
+    );
+    this.name = "BedrockSilentFailureError";
+  }
+}
+
+/**
+ * The swallowed-provider-error signature: nothing user-visible, NO tool
+ * activity, and zero (or absent) token usage. A model that genuinely replied
+ * emptily still reports input tokens; a turn that ran tools has usage and
+ * invocations. Zero everything means the provider call itself failed and
+ * pi-ai swallowed it (memory: empty content + 0 tokens = ValidationException).
+ */
+export function turnLooksLikeSwallowedProviderError(
+  runResult: RunAgentLoopResult,
+): boolean {
+  if (!turnProducedNoUserVisibleOutput(runResult)) return false;
+  if (runResult.toolInvocations.length > 0) return false;
+  // Require an EXPLICIT zero-usage record: pi-ai reports usage {0, 0} when
+  // it swallows the provider exception, while a genuinely empty reply
+  // records input tokens. Results with no usage record at all keep the
+  // forced-continuation path (absence proves nothing).
+  const usage = runResult.usage as
+    | { input?: number; output?: number }
+    | undefined;
+  if (!usage) return false;
+  return (usage.input ?? 0) === 0 && (usage.output ?? 0) === 0;
 }
 
 export interface EmptyResponseBackstopInput {
@@ -105,6 +149,20 @@ export async function applyEmptyResponseBackstop(
   const { runResult, retry, log, threadId, threadTurnId } = input;
   if (!turnProducedNoUserVisibleOutput(runResult)) return runResult;
 
+  // THINK-324 C7 — swallowed provider error: fail fast with the typed
+  // diagnosis instead of burning a forced continuation that will hit the
+  // same exception and then mislabeling the turn `empty_response`.
+  if (turnLooksLikeSwallowedProviderError(runResult)) {
+    log?.({
+      level: "error",
+      event: "empty_response_backstop",
+      phase: "provider_error",
+      threadId,
+      threadTurnId,
+    });
+    throw new BedrockSilentFailureError();
+  }
+
   log?.({
     level: "warn",
     event: "empty_response_backstop",
@@ -114,6 +172,16 @@ export async function applyEmptyResponseBackstop(
   });
 
   const retried = await retry();
+  if (turnLooksLikeSwallowedProviderError(retried)) {
+    log?.({
+      level: "error",
+      event: "empty_response_backstop",
+      phase: "provider_error",
+      threadId,
+      threadTurnId,
+    });
+    throw new BedrockSilentFailureError();
+  }
   if (!turnProducedNoUserVisibleOutput(retried)) {
     log?.({
       level: "warn",

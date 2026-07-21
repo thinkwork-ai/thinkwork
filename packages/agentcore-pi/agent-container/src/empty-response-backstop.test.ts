@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { RunAgentLoopResult } from "@thinkwork/pi-runtime-core";
 
 import {
+  BedrockSilentFailureError,
   EmptyResponseError,
   applyEmptyResponseBackstop,
+  turnLooksLikeSwallowedProviderError,
   turnProducedNoUserVisibleOutput,
 } from "./empty-response-backstop.js";
 
@@ -157,5 +159,59 @@ describe("applyEmptyResponseBackstop", () => {
     const err = new EmptyResponseError();
     expect(err.code).toBe("empty_response");
     expect(err.message).toContain("empty_response");
+  });
+});
+
+describe("swallowed provider error classification (THINK-324 C7)", () => {
+  const zeroUsage = { input: 0, output: 0 } as RunAgentLoopResult["usage"];
+
+  it("matches empty content + no tools + explicit zero usage", () => {
+    expect(
+      turnLooksLikeSwallowedProviderError(result({ usage: zeroUsage })),
+    ).toBe(true);
+  });
+
+  it("does NOT match when usage is absent (absence proves nothing)", () => {
+    expect(turnLooksLikeSwallowedProviderError(result())).toBe(false);
+  });
+
+  it("does NOT match a genuinely empty reply that consumed input tokens", () => {
+    expect(
+      turnLooksLikeSwallowedProviderError(
+        result({
+          usage: { input: 812, output: 0 } as RunAgentLoopResult["usage"],
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("does NOT match a turn that ran tools", () => {
+    expect(
+      turnLooksLikeSwallowedProviderError(
+        result({ usage: zeroUsage, toolInvocations: [okInvocation("bash")] }),
+      ),
+    ).toBe(false);
+  });
+
+  it("fails fast with the typed error and never burns the continuation", async () => {
+    const retry = vi.fn();
+    await expect(
+      applyEmptyResponseBackstop({
+        runResult: result({ usage: zeroUsage }),
+        retry,
+      }),
+    ).rejects.toBeInstanceOf(BedrockSilentFailureError);
+    expect(retry).not.toHaveBeenCalled();
+  });
+
+  it("classifies a provider error surfacing on the continuation attempt", async () => {
+    const retry = vi.fn().mockResolvedValue(result({ usage: zeroUsage }));
+    await expect(
+      applyEmptyResponseBackstop({
+        runResult: result(),
+        retry,
+      }),
+    ).rejects.toBeInstanceOf(BedrockSilentFailureError);
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 });
