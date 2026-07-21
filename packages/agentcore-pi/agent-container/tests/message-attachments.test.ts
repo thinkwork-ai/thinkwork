@@ -125,4 +125,62 @@ describe("buildFileReadTool", () => {
       await rm(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  it("returns an image block for image attachments so the model can see them", async () => {
+    const tmpRoot = await mkdtemp(path.join(os.tmpdir(), "pi-file-read-img-"));
+    const filePath = path.join(tmpRoot, "screenshot.png");
+    const pngBytes = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01, 0x02, 0x03,
+    ]);
+    await import("node:fs/promises").then((fs) =>
+      fs.writeFile(filePath, pngBytes),
+    );
+    try {
+      const tool = buildFileReadTool([
+        {
+          attachmentId: "att-img",
+          localPath: filePath,
+          name: "screenshot.png",
+          mimeType: "image/png",
+          sizeBytes: pngBytes.byteLength,
+        },
+      ]);
+      const result = await tool!.execute("tool-1", { path: filePath });
+      expect(result.content[0]).toMatchObject({
+        type: "image",
+        mimeType: "image/png",
+        data: pngBytes.toString("base64"),
+      });
+      expect(result.details).toMatchObject({ kind: "image", readable: true });
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("degrades oversized images to a downscale hint instead of failing", async () => {
+    const tmpRoot = await mkdtemp(path.join(os.tmpdir(), "pi-file-read-big-"));
+    const filePath = path.join(tmpRoot, "huge.png");
+    await import("node:fs/promises").then((fs) =>
+      fs.writeFile(filePath, Buffer.alloc(3_600_000, 1)),
+    );
+    try {
+      const tool = buildFileReadTool([
+        {
+          attachmentId: "att-big",
+          localPath: filePath,
+          name: "huge.png",
+          mimeType: "image/png",
+          sizeBytes: 3_600_000,
+        },
+      ]);
+      const result = await tool!.execute("tool-1", { path: filePath });
+      expect(result.content[0]).toMatchObject({
+        type: "text",
+        text: expect.stringContaining("Downscale"),
+      });
+      expect(result.details).toMatchObject({ oversizedImage: true });
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });
