@@ -30,6 +30,16 @@ extend type Query {
   """
   twinEntityPage(tenantId: ID, entityType: String!, canonicalId: ID!): AWSJSON!
   """
+  Raw openCypher console (THINK-327 U5). Operator-only, audited, read-only:
+  the handler strips comments, refuses write/procedure clauses, appends a
+  default LIMIT, executes under a dedicated read-only Neptune grant with the
+  server-derived $tenantId as the only bound parameter, and post-filters
+  node/edge results outside the caller tenant's ~id prefix (redactedCount);
+  scalar projections pass through flagged unfenced.
+  Result: { ok, results, redactedCount, unfenced, truncated } | { ok: false, reason }.
+  """
+  twinRawQuery(tenantId: ID, query: String!): AWSJSON!
+  """
   Open materialization suggestions (R8) — operator surface (ontology tab).
   """
   twinMaterializationSuggestions(tenantId: ID): AWSJSON!
