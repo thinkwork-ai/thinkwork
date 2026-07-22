@@ -124,8 +124,9 @@ svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-ser
  * Visually quiet by design: an audit footnote riding the existing .card
  * vocabulary (background/border/muted tokens track light/dark automatically).
  */
-export const SECTION_SOURCES_CSS = `.card.section-sources{margin:14px 0 6px;padding:10px 14px;font-size:.85em}
-.card.section-sources .sources-label{display:block;font-size:.78em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+export const SECTION_SOURCES_CSS = `.card.section-sources{margin:14px 0 6px;padding:8px 14px;font-size:.85em}
+.card.section-sources .sources-label{font-size:.78em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);cursor:pointer;user-select:none}
+.card.section-sources .sources-label::marker{color:var(--muted);font-size:.85em}
 .card.section-sources ul{margin:.35em 0 0;padding-left:1.2em;color:var(--muted)}
 .card.section-sources li{margin:.15em 0;max-width:none}
 .card.section-sources code{background:none;padding:0}`;

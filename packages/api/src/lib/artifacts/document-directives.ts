@@ -800,7 +800,9 @@ export function renderSourcesDirective(input: {
         : `<li>No tool data — ${escapeHtml(e.detail)}</li>`,
     )
     .join("");
-  const html = `<div class="card section-sources"><span class="sources-label">Data sources</span><ul>${items}</ul></div>`;
+  // <details> (collapsed by default) so provenance is one quiet row until the
+  // reader opens it — native disclosure, no JS, works in sandboxed viewers.
+  const html = `<details class="card section-sources"><summary class="sources-label">Data sources</summary><ul>${items}</ul></details>`;
   return { ok: true, html, sources: { sectionId, entries } };
 }
 
