@@ -24,6 +24,7 @@ import {
   useState,
 } from "react";
 import ForceGraph2D from "react-force-graph-2d";
+import * as d3 from "d3-force";
 import { useClient, useQuery } from "urql";
 import { TwinNeighborsQuery, TwinSubgraphQuery } from "./queries.js";
 import {
@@ -70,6 +71,29 @@ export interface TwinGraphHandle {
 const CENTER_COLOR = "#0ea5e9";
 const NEIGHBOR_COLOR = "#64748b";
 const SYSTEM_COLOR = "#a78bfa";
+
+/** Stable per-entity-type hues so dense neighborhoods read as data, not
+ * uniform gray blobs — hash the type label into a small curated palette. */
+const TYPE_PALETTE = [
+  "#2dd4bf", // teal
+  "#f59e0b", // amber
+  "#818cf8", // indigo
+  "#f472b6", // pink
+  "#4ade80", // green
+  "#fb923c", // orange
+  "#38bdf8", // sky
+  "#e879f9", // fuchsia
+  "#a3e635", // lime
+  "#f87171", // red
+];
+export function twinTypeColor(typeLabel: string | null): string {
+  if (!typeLabel) return NEIGHBOR_COLOR;
+  let hash = 0;
+  for (let i = 0; i < typeLabel.length; i += 1) {
+    hash = (hash * 31 + typeLabel.charCodeAt(i)) | 0;
+  }
+  return TYPE_PALETTE[Math.abs(hash) % TYPE_PALETTE.length]!;
+}
 
 /** `t#<tenant>#e#<canonicalId>` → canonicalId. */
 export function twinCanonicalIdFromNodeId(nodeId: string): string | null {
@@ -441,6 +465,22 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     );
     const graphData = graphDataRef.current;
 
+    // Dense neighborhoods (invoices/items fanning out of one customer)
+    // otherwise stack into a single blob — collision keeps every node
+    // individually visible.
+    useEffect(() => {
+      const fg = fgRef.current;
+      if (!fg || typeof fg.d3Force !== "function") return;
+      fg.d3Force(
+        "collide",
+        d3
+          .forceCollide()
+          .radius((node: any) => (node.isCenter ? 12 : 7))
+          .strength(0.9),
+      );
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [graphKey, dims]);
+
     useEffect(() => {
       if (!containerEl) return;
       const measure = () => {
@@ -465,7 +505,7 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
           ? CENTER_COLOR
           : node.isSystem
             ? SYSTEM_COLOR
-            : NEIGHBOR_COLOR;
+            : twinTypeColor(node.typeLabel);
         ctx.beginPath();
         ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
         ctx.fillStyle = color;
