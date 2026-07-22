@@ -176,6 +176,7 @@ Conventions:
 - [trace_events](#trace-events)
 - [trace_runs](#trace-runs)
 - [trace_source_evidence](#trace-source-evidence)
+- [twin_materialization_suggestions](#twin-materialization-suggestions)
 - [user_model_approvals](#user-model-approvals)
 - [user_plugin_activations](#user-plugin-activations)
 - [user_profiles](#user-profiles)
@@ -4395,6 +4396,24 @@ Join hints:
 - `trace_source_evidence.tenant_id` → `tenants.id`
 - `trace_source_evidence.trace_event_id` → `trace_events.id`
 - `trace_source_evidence.trace_run_id` → `trace_runs.id`
+
+## twin_materialization_suggestions
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| entity_type_slug | text | not null |
+| facet_slug | text | not null |
+| hit_count | integer | not null |
+| last_question | text |  |
+| dismissed_at | timestamp with time zone |  |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Join hints:
+
+- `twin_materialization_suggestions.tenant_id` → `tenants.id`
 
 ## user_model_approvals
 
