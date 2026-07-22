@@ -1,8 +1,8 @@
 import {
-import { getConfig } from "@thinkwork/runtime-config";
   ExecuteOpenCypherQueryCommand,
   NeptunedataClient,
 } from "@aws-sdk/client-neptunedata";
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   compileTwinQuery,
   TwinCompileError,
