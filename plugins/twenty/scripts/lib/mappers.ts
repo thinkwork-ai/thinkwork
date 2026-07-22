@@ -328,6 +328,7 @@ export function mapDispatchCustomer(
   customer: {
     id: string;
     name: string | null;
+    p21Code?: string | null;
     ownerRepId: string | null;
   },
   ownerMap: ReadonlyMap<string, string>,
@@ -342,6 +343,7 @@ export function mapDispatchCustomer(
   const input: Record<string, unknown> = {
     name: customer.name ?? `Customer ${customer.id}`,
     ...(accountOwnerId ? { accountOwnerId } : {}),
+    ...(customer.p21Code ? { p21Code: customer.p21Code } : {}),
     sourceId: sourceId("customer", customer.id),
   };
   return { sourceId: input.sourceId as string, input, warnings };
