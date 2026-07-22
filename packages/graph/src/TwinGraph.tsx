@@ -591,6 +591,19 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
           onZoom={({ k }: { k: number }) => {
             zoomKRef.current = k;
           }}
+          onEngineTick={() => {
+            // Live settle (no off-screen warmup): keep the camera on the
+            // forming layout every tick until the first stop — otherwise
+            // the load animation plays unframed (flash, drift off-view,
+            // then one jarring final reframe).
+            if (zoomInitRef.current) return;
+            fgRef.current?.zoomToFit?.(0, 30);
+            const k = fgRef.current?.zoom?.();
+            if (typeof k === "number") {
+              if (k > 1.75) fgRef.current?.zoom?.(1.75, 0);
+              else if (k < 0.5) fgRef.current?.zoom?.(0.5, 0);
+            }
+          }}
           onEngineStop={() => {
             // One-shot framing: depth-change merges never re-frame. Small
             // neighborhoods (2–3 nodes) make zoomToFit dive to absurd zoom

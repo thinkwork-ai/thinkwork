@@ -941,7 +941,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         ref={setContainerEl}
         data-testid="graph-container"
         className={`absolute inset-0 overflow-hidden transition-opacity duration-150 ${
-          framed ? "opacity-100" : "opacity-0"
+          framed || graphData.nodes.length <= 300 ? "opacity-100" : "opacity-0"
         }`}
       >
         <ForceGraph2D
@@ -987,6 +987,13 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
           }
           onZoom={({ k }: { k: number }) => {
             zoomKRef.current = k;
+          }}
+          onEngineTick={() => {
+            // Small graphs settle LIVE (no warmup): follow the forming
+            // layout every tick until first framing so the animation
+            // plays centered instead of flashing off-view.
+            if (framed) return;
+            fgRef.current?.zoomToFit?.(0, 40);
           }}
           onEngineStop={() => {
             if (zoomInitRef.current) return;

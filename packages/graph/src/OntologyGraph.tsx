@@ -1185,6 +1185,11 @@ export const OntologyGraph = forwardRef<
         onZoom={({ k }: { k: number }) => {
           zoomKRef.current = k;
         }}
+        onEngineTick={() => {
+          // Live settle: follow the forming layout until first framing.
+          if (framed) return;
+          fgRef.current?.zoomToFit?.(0, 40);
+        }}
         onEngineStop={() => {
           if (zoomInitRef.current) return;
           zoomInitRef.current = true;
