@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useQuery } from "urql";
 import {
   Activity,
@@ -411,8 +412,8 @@ export function OntologyMapView({
 
   if (!effectiveTenantId) {
     return (
-      <div className="text-muted-foreground flex h-full items-center justify-center text-sm">
-        Loading tenant...
+      <div className="flex h-full items-center justify-center">
+        <LoadingShimmer />
       </div>
     );
   }

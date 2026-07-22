@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useClient, useQuery } from "urql";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useNavigate } from "@tanstack/react-router";
 import { Link2, Search, Shapes, Tag, X } from "lucide-react";
 import {
@@ -648,8 +649,8 @@ export function TwinExplorer({
 
   if (!tenantId) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Loading tenant...
+      <div className="flex h-full items-center justify-center">
+        <LoadingShimmer />
       </div>
     );
   }
@@ -802,6 +803,11 @@ export function TwinExplorer({
         <div className="relative min-h-[28rem] flex-1 overflow-hidden rounded-lg border border-border">
           <TwinGraph
             tenantId={tenantId}
+            loadingFallback={
+              <div className="flex h-full min-h-48 items-center justify-center">
+                <LoadingShimmer />
+              </div>
+            }
             subgraphEntityTypes={effectiveEntityTypes}
             subgraphLimit={25}
             depth={3}
@@ -832,10 +838,11 @@ export function TwinExplorer({
       effectiveEntityTypes.length > 0 &&
       fetching &&
       !rows ? (
-        <div className="space-y-2" data-testid="explorer-loading">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-10 animate-pulse rounded-md bg-muted" />
-          ))}
+        <div
+          className="flex min-h-40 flex-1 items-center justify-center"
+          data-testid="explorer-loading"
+        >
+          <LoadingShimmer />
         </div>
       ) : null}
 

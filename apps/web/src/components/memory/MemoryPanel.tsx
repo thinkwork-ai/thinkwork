@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useState } from "react";
 import { Button } from "@thinkwork/ui";
 
@@ -48,7 +49,7 @@ export function MemoryPanel({
         ) : null}
 
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading memory...</p>
+          <LoadingShimmer />
         ) : records.length === 0 ? (
           <div className="rounded-lg border border-border/70 bg-card px-5 py-6 text-sm text-muted-foreground">
             No requester memories have been captured yet.
