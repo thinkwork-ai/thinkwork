@@ -17,7 +17,7 @@
  */
 
 import { and, eq } from "drizzle-orm";
-import { wikiPages } from "@thinkwork/database-pg/schema";
+import { ontologyEntityTypes, wikiPages } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../db.js";
 import type { PageSectionDeclaration } from "../ontology/twin-declarations.js";
 import { resolveFacetFreshness } from "./freshness.js";
@@ -203,6 +203,26 @@ export async function projectEntityPage(args: {
       section.visibility !== "operators_only" || args.viewerIsOperator,
   );
 
+  // The facet declarations back every facet_backed section's freshness
+  // read. Callers may inject them (tests); the GraphQL resolver does not,
+  // so load the type row's declarations here — leaving this to the `?? []`
+  // default made EVERY live facet section resolve ERROR
+  // "facet_not_declared" (dev AE2, 2026-07-22).
+  let facets = args.facets;
+  if (facets === undefined) {
+    const [typeRow] = await db
+      .select({ twin_facets: ontologyEntityTypes.twin_facets })
+      .from(ontologyEntityTypes)
+      .where(
+        and(
+          eq(ontologyEntityTypes.tenant_id, args.tenantId),
+          eq(ontologyEntityTypes.slug, args.entityTypeSlug),
+        ),
+      )
+      .limit(1);
+    facets = typeRow?.twin_facets ?? [];
+  }
+
   const twinQuery = args.twinQuery ?? executeTwinQuery;
   // One entity read + one system-edge read shared across sections.
   const [entityResult, systemsResult] = await Promise.all([
@@ -227,7 +247,7 @@ export async function projectEntityPage(args: {
               section,
               tenantId: args.tenantId,
               canonicalId: args.canonicalId,
-              facets: args.facets ?? [],
+              facets,
               nodeProperties,
               now: args.now,
             });
