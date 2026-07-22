@@ -1,0 +1,59 @@
+/**
+ * tenant_mcp_twin_keys — per-tenant Bearer keys for the Digital Twin MCP
+ * server (THINK-333).
+ *
+ * The agent path to `/mcp/twin` authenticates with a `tkt_` key; the
+ * handler hashes the incoming Bearer with SHA-256 and looks it up here —
+ * the matched row IS the tenant selection (no tenant id embedded in the
+ * token). Raw keys are never stored. Mirrors tenant_mcp_admin_keys.
+ *
+ * See drizzle/0274_tenant_mcp_twin_keys.sql for the canonical DDL — this
+ * Drizzle schema mirrors that hand-rolled DDL (not registered in
+ * meta/_journal.json); apply via psql.
+ */
+
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  uniqueIndex,
+  index,
+} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { tenants } from "./core.js";
+
+export const tenantMcpTwinKeys = pgTable(
+  "tenant_mcp_twin_keys",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id, { onDelete: "cascade" })
+      .notNull(),
+    /** SHA-256 hex digest of the raw `tkt_` key; raw value never stored. */
+    key_hash: text("key_hash").notNull(),
+    /** Human label; "default" for the provisioned connector key. */
+    name: text("name").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** Nullable for service-provisioned keys with no attributable user. */
+    created_by_user_id: uuid("created_by_user_id"),
+    /** Bumped on successful auth; async, best-effort. */
+    last_used_at: timestamp("last_used_at", { withTimezone: true }),
+    /** Soft-delete; NULL = active. Rotation revokes the old row. */
+    revoked_at: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => ({
+    uq_hash: uniqueIndex("uq_tenant_mcp_twin_keys_hash").on(t.key_hash),
+    // The active-name partial unique index is declared in the raw SQL
+    // migration (WHERE revoked_at IS NULL) — same convention as
+    // tenant_mcp_admin_keys (see mcp-admin-keys.ts for why).
+    idx_tenant: index("idx_tenant_mcp_twin_keys_tenant").on(
+      t.tenant_id,
+      t.created_at,
+    ),
+  }),
+);

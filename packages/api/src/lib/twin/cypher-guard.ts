@@ -88,17 +88,17 @@ interface Violation {
  * Checked before the allowlist.
  */
 const MUTATION_CONTEXTS = [
-  "CreateClauseContext",
-  "MergeClauseContext",
-  "MergeActionContext",
-  "SetClauseContext",
-  "DeleteClauseContext",
-  "RemoveClauseContext",
-  "InsertClauseContext",
-  "ForeachClauseContext",
+  "createClause",
+  "mergeClause",
+  "mergeAction",
+  "setClause",
+  "deleteClause",
+  "removeClause",
+  "insertClause",
+  "foreachClause",
 ] as const;
 
-const PROCEDURE_CONTEXTS = ["CallClauseContext", "SubqueryClauseContext"] as const;
+const PROCEDURE_CONTEXTS = ["callClause", "subqueryClause"] as const;
 
 /**
  * Every context type the guard understands as benign read-query structure.
@@ -109,138 +109,138 @@ const PROCEDURE_CONTEXTS = ["CallClauseContext", "SubqueryClauseContext"] as con
  */
 const ALLOWED_CONTEXTS = new Set<string>([
   // Statement scaffolding
-  "StatementsOrCommandsContext",
-  "StatementOrCommandContext",
-  "StatementsContext",
-  "StatementContext",
-  "PreparsedStatementContext",
-  "QueryWithLocalDefinitionsContext",
-  "NextStatementContext",
-  "RegularQueryContext",
-  "UnionContext",
-  "SingleQueryContext",
-  "ClauseContext",
+  "statementsOrCommands",
+  "statementOrCommand",
+  "statements",
+  "statement",
+  "preparsedStatement",
+  "queryWithLocalDefinitions",
+  "nextStatement",
+  "regularQuery",
+  "union",
+  "singleQuery",
+  "clause",
   // Read clauses
-  "MatchClauseContext",
-  "MatchModeContext",
-  "WhereClauseContext",
-  "WithClauseContext",
-  "UnwindClauseContext",
-  "ReturnClauseContext",
-  "ReturnBodyContext",
-  "ReturnItemsContext",
-  "ReturnItemContext",
-  "OrderByContext",
-  "OrderItemContext",
-  "AscTokenContext",
-  "DescTokenContext",
-  "SkipContext",
-  "LimitContext",
+  "matchClause",
+  "matchMode",
+  "whereClause",
+  "withClause",
+  "unwindClause",
+  "returnClause",
+  "returnBody",
+  "returnItems",
+  "returnItem",
+  "orderBy",
+  "orderItem",
+  "ascToken",
+  "descToken",
+  "skip",
+  "limit",
   // Patterns
-  "PatternListContext",
-  "PatternContext",
-  "AnonymousPatternContext",
-  "PatternElementContext",
-  "PathPatternNonEmptyContext",
-  "NodePatternContext",
-  "RelationshipPatternContext",
-  "ParenthesizedPathContext",
-  "ArrowLineContext",
-  "LeftArrowContext",
-  "RightArrowContext",
-  "PathLengthContext",
-  "PropertiesContext",
-  "ShortestPathPatternContext",
-  "ShortestPathExpressionContext",
+  "patternList",
+  "pattern",
+  "anonymousPattern",
+  "patternElement",
+  "pathPatternNonEmpty",
+  "nodePattern",
+  "relationshipPattern",
+  "parenthesizedPath",
+  "arrowLine",
+  "leftArrow",
+  "rightArrow",
+  "pathLength",
+  "properties",
+  "shortestPathPattern",
+  "shortestPathExpression",
   // Labels
-  "LabelExpressionContext",
-  "LabelExpression1Context",
-  "LabelExpression2Context",
-  "LabelExpression3Context",
-  "LabelExpression4Context",
-  "LabelNameContext",
-  "LabelOrRelTypeContext",
-  "LabelTypeContext",
-  "LabelComparisonContext",
-  "NodeLabelsContext",
-  "NodeLabelsIsContext",
-  "AnyLabelContext",
-  "RelTypeContext",
+  "labelExpression",
+  "labelExpression1",
+  "labelExpression2",
+  "labelExpression3",
+  "labelExpression4",
+  "labelName",
+  "labelOrRelType",
+  "labelType",
+  "labelComparison",
+  "nodeLabels",
+  "nodeLabelsIs",
+  "anyLabel",
+  "relType",
   // Expressions
-  "ExpressionContext",
-  "Expression1Context",
-  "Expression2Context",
-  "Expression3Context",
-  "Expression4Context",
-  "Expression5Context",
-  "Expression6Context",
-  "Expression7Context",
-  "Expression8Context",
-  "Expression9Context",
-  "Expression10Context",
-  "Expression11Context",
-  "ComparisonExpression6Context",
-  "NullComparisonContext",
-  "StringAndListComparisonContext",
-  "TypeComparisonContext",
-  "NormalFormComparisonContext",
-  "ParenthesizedExpressionContext",
-  "PostFixContext",
-  "PropertyPostfixContext",
-  "IndexPostfixContext",
-  "RangePostfixContext",
-  "PropertyContext",
-  "PropertyKeyNameContext",
-  "PropertyListContext",
-  "CaseExpressionContext",
-  "CaseAlternativeContext",
-  "ExtendedCaseExpressionContext",
-  "ExtendedCaseAlternativeContext",
-  "ExtendedWhenContext",
-  "WhenContext",
-  "WhenBranchContext",
-  "ElseBranchContext",
-  "ListComprehensionContext",
-  "ListItemsPredicateContext",
-  "ListLiteralContext",
-  "PatternComprehensionContext",
-  "PatternExpressionContext",
-  "ExistsExpressionContext",
-  "CountExpressionContext",
-  "CollectExpressionContext",
-  "CountStarContext",
-  "ReduceExpressionContext",
-  "AllReduceExpressionContext",
-  "AllReduceExpressionValidArgumentsContext",
-  "FunctionInvocationContext",
-  "FunctionNameContext",
-  "FunctionArgumentContext",
-  "NamespaceContext",
-  "TrimFunctionContext",
-  "NormalizeFunctionContext",
-  "MapContext",
-  "MapProjectionContext",
-  "MapProjectionElementContext",
+  "expression",
+  "expression1",
+  "expression2",
+  "expression3",
+  "expression4",
+  "expression5",
+  "expression6",
+  "expression7",
+  "expression8",
+  "expression9",
+  "expression10",
+  "expression11",
+  "comparisonExpression6",
+  "nullComparison",
+  "stringAndListComparison",
+  "typeComparison",
+  "normalFormComparison",
+  "parenthesizedExpression",
+  "postFix",
+  "propertyPostfix",
+  "indexPostfix",
+  "rangePostfix",
+  "property",
+  "propertyKeyName",
+  "propertyList",
+  "caseExpression",
+  "caseAlternative",
+  "extendedCaseExpression",
+  "extendedCaseAlternative",
+  "extendedWhen",
+  "when",
+  "whenBranch",
+  "elseBranch",
+  "listComprehension",
+  "listItemsPredicate",
+  "listLiteral",
+  "patternComprehension",
+  "patternExpression",
+  "existsExpression",
+  "countExpression",
+  "collectExpression",
+  "countStar",
+  "reduceExpression",
+  "allReduceExpression",
+  "allReduceExpressionValidArguments",
+  "functionInvocation",
+  "functionName",
+  "functionArgument",
+  "namespace",
+  "trimFunction",
+  "normalizeFunction",
+  "map",
+  "mapProjection",
+  "mapProjectionElement",
   // Literals / names / parameters
-  "LiteralContext",
-  "NumberLiteralContext",
-  "NumericLiteralContext",
-  "SignedIntegerLiteralContext",
-  "StringLiteralContext",
-  "StringsLiteralContext",
-  "BooleanLiteralContext",
-  "KeywordLiteralContext",
-  "OtherLiteralContext",
-  "ParameterContext",
-  "ParameterNameContext",
-  "VariableContext",
-  "SymbolicNameStringContext",
-  "SymbolicVariableNameStringContext",
-  "EscapedSymbolicNameStringContext",
-  "EscapedSymbolicVariableNameStringContext",
-  "UnescapedSymbolicNameStringContext",
-  "UnescapedSymbolicNameString_Context",
-  "UnescapedSymbolicVariableNameStringContext",
+  "literal",
+  "numberLiteral",
+  "numericLiteral",
+  "signedIntegerLiteral",
+  "stringLiteral",
+  "stringsLiteral",
+  "booleanLiteral",
+  "keywordLiteral",
+  "otherLiteral",
+  "parameter",
+  "parameterName",
+  "variable",
+  "symbolicNameString",
+  "symbolicVariableNameString",
+  "escapedSymbolicNameString",
+  "escapedSymbolicVariableNameString",
+  "unescapedSymbolicNameString",
+  "unescapedSymbolicNameString_",
+  "unescapedSymbolicVariableNameString",
 ]);
 
 const RULE_PRIORITY: GuardRule[] = [
@@ -263,18 +263,26 @@ type Ctx = ParserRuleContext & {
   getText(): string;
 };
 
+const RULE_NAMES: string[] =
+  (cypher.CypherParser as unknown as { ruleNames: string[] }).ruleNames;
+
+/**
+ * Grammar rule name for a parse-tree node ("nodePattern", "matchClause"…).
+ * NEVER key on constructor.name here — esbuild minification renames the
+ * generated context classes in the deployed bundle, which silently turns an
+ * allowlist into reject-everything (caught in the U2 bundle smoke).
+ */
 function ctxName(node: Ctx): string {
-  return node.constructor.name;
+  const index = (node as { ruleIndex?: number }).ruleIndex;
+  return index !== undefined ? (RULE_NAMES[index] ?? "?") : "?";
 }
 
 function isContext(node: Ctx): boolean {
-  // ParserRuleContexts have a children array (possibly empty); terminal
-  // nodes do not.
-  return (node as { children?: unknown }).children !== undefined;
+  return (node as { ruleIndex?: number }).ruleIndex !== undefined;
 }
 
 function constructLabel(name: string): string {
-  return name.replace(/Context$/, "");
+  return name;
 }
 
 function normalizeKey(text: string): string {
@@ -366,10 +374,10 @@ export function guardTwinCypher(
   const statementNodes: Ctx[] = [];
   const topLevelArms: Ctx[] = [];
   const subqueryBoundary = new Set([
-    "ExistsExpressionContext",
-    "CountExpressionContext",
-    "CollectExpressionContext",
-    "PatternComprehensionContext",
+    "existsExpression",
+    "countExpression",
+    "collectExpression",
+    "patternComprehension",
   ]);
 
   const walk = (node: Ctx, insideSubquery: boolean) => {
@@ -387,7 +395,7 @@ export function guardTwinCypher(
       violations.push({
         rule: "procedure_call",
         message:
-          name === "CallClauseContext"
+          name === "callClause"
             ? "procedure calls are not allowed"
             : "CALL { } subqueries are not allowed",
       });
@@ -401,13 +409,13 @@ export function guardTwinCypher(
       return;
     }
 
-    if (name === "StatementContext") statementNodes.push(node);
-    if (name === "SingleQueryContext" && !insideSubquery) {
+    if (name === "statement") statementNodes.push(node);
+    if (name === "singleQuery" && !insideSubquery) {
       topLevelArms.push(node);
     }
-    if (name === "NodePatternContext") nodePatterns.push(node);
+    if (name === "nodePattern") nodePatterns.push(node);
 
-    if (name === "ParameterNameContext") {
+    if (name === "parameterName") {
       const paramName = normalizeKey(node.getText());
       if (reservedParams.has(paramName)) {
         violations.push({
@@ -417,7 +425,7 @@ export function guardTwinCypher(
       }
     }
 
-    if (name === "PathLengthContext") {
+    if (name === "pathLength") {
       const text = node.getText();
       const match = /^\*(\d+)?(\.\.(\d+)?)?$/.exec(text.replace(/\s+/g, ""));
       const lower = match?.[1];
@@ -520,12 +528,12 @@ function fenceNodePattern(
 ): Edit[] | null {
   const children = (nodePattern.children ?? []) as Ctx[];
   const propertiesCtx = children.find(
-    (c) => ctxName(c) === "PropertiesContext",
+    (c) => ctxName(c) === "properties",
   );
 
   if (propertiesCtx) {
     const inner = ((propertiesCtx.children ?? []) as Ctx[])[0];
-    if (!inner || ctxName(inner) !== "MapContext") {
+    if (!inner || ctxName(inner) !== "map") {
       violations.push({
         rule: "unsupported_construct",
         message:
@@ -571,13 +579,13 @@ function fenceExistingMap(
       const child = children[i];
       if (
         isContext(child) &&
-        ctxName(child) === "PropertyKeyNameContext" &&
+        ctxName(child) === "propertyKeyName" &&
         normalizeKey(child.getText()) === entry.property
       ) {
         // Replace the value expression that follows this key.
         const value = children
           .slice(i + 1)
-          .find((c) => isContext(c) && ctxName(c) === "ExpressionContext");
+          .find((c) => isContext(c) && ctxName(c) === "expression");
         if (value) {
           edits.push({
             start: value.start?.start as number,
@@ -598,7 +606,7 @@ function fenceExistingMap(
     );
     const insertAt = ((openBrace?.symbol?.stop as number) ?? mapCtx.start?.stop as number) + 1;
     const hasEntries = children.some(
-      (c) => isContext(c) && ctxName(c) === "PropertyKeyNameContext",
+      (c) => isContext(c) && ctxName(c) === "propertyKeyName",
     );
     const text =
       missing.map((f) => `${f.property}: $${f.parameter}`).join(", ") +
@@ -619,11 +627,11 @@ function clampArm(
   // The arm's final clause must be RETURN (Neptune read queries always are);
   // find the last ReturnClauseContext that is a direct clause of this arm.
   const clauses = ((arm.children ?? []) as Ctx[]).filter(
-    (c) => isContext(c) && ctxName(c) === "ClauseContext",
+    (c) => isContext(c) && ctxName(c) === "clause",
   );
   const lastClause = clauses[clauses.length - 1];
   const returnClause = ((lastClause?.children ?? []) as Ctx[]).find(
-    (c) => isContext(c) && ctxName(c) === "ReturnClauseContext",
+    (c) => isContext(c) && ctxName(c) === "returnClause",
   );
   if (!returnClause) {
     violations.push({
@@ -638,10 +646,10 @@ function clampArm(
   const findLimit = (node: Ctx) => {
     if (!isContext(node)) return;
     const name = ctxName(node);
-    if (name === "LimitContext") limitCtx = node;
+    if (name === "limit") limitCtx = node;
     // Don't descend into expressions — a RETURN item could contain an
     // EXISTS subquery with its own inner structure.
-    if (name === "ExpressionContext") return;
+    if (name === "expression") return;
     for (const child of node.children ?? []) findLimit(child as Ctx);
   };
   findLimit(returnClause);

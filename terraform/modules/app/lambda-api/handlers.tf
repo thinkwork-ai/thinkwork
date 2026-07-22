@@ -784,6 +784,8 @@ resource "aws_lambda_function" "handler" {
     "mcp-open-engine",
     # THINK-280 U8: scoped external capability search MCP facade.
     "mcp-capability-search",
+    # THINK-333: Digital Twin MCP server at /mcp/twin.
+    "mcp-twin",
     "activity",
     "routines",
     "budgets",
@@ -2005,6 +2007,12 @@ locals {
       # the mcp-admin-keys handler below. The shared API_AUTH_SECRET is
       # retained as a break-glass superuser path for bootstrap/debug.
       "POST /mcp/admin" = "admin-ops-mcp"
+
+      # Digital Twin MCP server (THINK-333). Streamable-HTTP JSON-RPC at
+      # /mcp/twin; auth in-handler (tkt_ tenant key hash lookup, or MCP
+      # OAuth token with twin:read). ANY so the handler serves the CORS
+      # preflight itself.
+      "ANY /mcp/twin" = "mcp-twin"
 
       # Analyst query broker — first-party MCP server exposing query
       # (THINK-228 U3). Callers present the tenant-wide broker service

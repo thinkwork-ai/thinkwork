@@ -85,6 +85,15 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_burst_limit = 10
   }
 
+  # Digital Twin MCP (THINK-333 KTD-4/KTD-6): edge throttle on the
+  # externally reachable query surface — bounds cost-DoS against Neptune
+  # before the Lambda concurrency layer.
+  route_settings {
+    route_key              = "ANY /mcp/twin"
+    throttling_rate_limit  = 10
+    throttling_burst_limit = 20
+  }
+
   # UpdateStage 404s ("Unable to find Route by key … within the provided
   # RouteSettings") if the stage update races the route creation — Terraform
   # sees no reference edge between route_settings.route_key and the route

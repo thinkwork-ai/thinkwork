@@ -394,6 +394,9 @@ build_handler "mcp-oauth" \
 build_handler "mcp-user-memory" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-user-memory.ts"
 
+build_handler "mcp-twin" \
+  "$REPO_ROOT/packages/api/src/handlers/mcp-twin.ts"
+
 build_handler "mcp-context-engine" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-context-engine.ts"
 
