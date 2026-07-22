@@ -1,5 +1,37 @@
+diff --git a/dist/models.generated.js b/dist/models.generated.js
+index 2a2598e..0c98893 100644
+--- a/dist/models.generated.js
++++ b/dist/models.generated.js
+@@ -1304,6 +1304,27 @@ export const MODELS = {
+             contextWindow: 1000000,
+             maxTokens: 64000,
+         },
++        "us.anthropic.claude-sonnet-5": {
++            id: "us.anthropic.claude-sonnet-5",
++            name: "Claude Sonnet 5 (US)",
++            api: "bedrock-converse-stream",
++            provider: "amazon-bedrock",
++            baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
++            reasoning: true,
++            input: ["text", "image"],
++            cost: {
++                input: 2,
++                output: 10,
++                cacheRead: 0.2,
++                cacheWrite: 2.5,
++            },
++            contextWindow: 1000000,
++            maxTokens: 128000,
++            thinkingLevelMap: {
++                xhigh: "xhigh",
++                max: "max",
++            },
++        },
+         "us.deepseek.r1-v1:0": {
+             id: "us.deepseek.r1-v1:0",
+             name: "DeepSeek-R1 (US)",
 diff --git a/dist/providers/amazon-bedrock.js b/dist/providers/amazon-bedrock.js
-index 333deceab32e5b6166556eb884ce89eabf2cffa2..657ad3fda84ed25c6bbd0b105c9f9e3074df779f 100644
+index 333dece..3c24d94 100644
 --- a/dist/providers/amazon-bedrock.js
 +++ b/dist/providers/amazon-bedrock.js
 @@ -31,7 +31,7 @@ export const streamBedrock = (model, context, options = {}) => {
@@ -11,6 +43,15 @@ index 333deceab32e5b6166556eb884ce89eabf2cffa2..657ad3fda84ed25c6bbd0b105c9f9e30
          const hasConfiguredProfile = hasConfiguredBedrockProfile();
          const endpointRegion = getStandardBedrockEndpointRegion(model.baseUrl);
          const useExplicitEndpoint = shouldUseExplicitBedrockEndpoint(model.baseUrl, configuredRegion, hasConfiguredProfile);
+@@ -350,7 +350,7 @@ function getModelMatchCandidates(modelId, modelName) {
+ }
+ function supportsAdaptiveThinking(modelId, modelName) {
+     const candidates = getModelMatchCandidates(modelId, modelName);
+-    return candidates.some((s) => s.includes("opus-4-6") || s.includes("opus-4-7") || s.includes("sonnet-4-6"));
++    return candidates.some((s) => s.includes("opus-4-6") || s.includes("opus-4-7") || s.includes("sonnet-4-6") || s.includes("sonnet-5"));
+ }
+ function supportsNativeXhighEffort(model) {
+     const candidates = getModelMatchCandidates(model.id, model.name);
 @@ -655,11 +655,45 @@ function mapStopReason(reason) {
              return "error";
      }
@@ -68,30 +109,3 @@ index 333deceab32e5b6166556eb884ce89eabf2cffa2..657ad3fda84ed25c6bbd0b105c9f9e30
      if (region?.toLowerCase().startsWith("us-gov-")) {
          return true;
      }
-diff --git a/dist/models.generated.js b/dist/models.generated.js
---- a/dist/models.generated.js
-+++ b/dist/models.generated.js
-@@ -1304,6 +1304,23 @@ export const MODELS = {
-             contextWindow: 1000000,
-             maxTokens: 64000,
-         },
-+        "us.anthropic.claude-sonnet-5": {
-+            id: "us.anthropic.claude-sonnet-5",
-+            name: "Claude Sonnet 5 (US)",
-+            api: "bedrock-converse-stream",
-+            provider: "amazon-bedrock",
-+            baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
-+            reasoning: true,
-+            input: ["text", "image"],
-+            cost: {
-+                input: 2,
-+                output: 10,
-+                cacheRead: 0.2,
-+                cacheWrite: 2.5,
-+            },
-+            contextWindow: 1000000,
-+            maxTokens: 128000,
-+        },
-         "us.deepseek.r1-v1:0": {
-             id: "us.deepseek.r1-v1:0",
-             name: "DeepSeek-R1 (US)",
