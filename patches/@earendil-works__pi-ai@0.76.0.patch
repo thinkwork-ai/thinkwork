@@ -68,3 +68,30 @@ index 333deceab32e5b6166556eb884ce89eabf2cffa2..657ad3fda84ed25c6bbd0b105c9f9e30
      if (region?.toLowerCase().startsWith("us-gov-")) {
          return true;
      }
+diff --git a/dist/models.generated.js b/dist/models.generated.js
+--- a/dist/models.generated.js
++++ b/dist/models.generated.js
+@@ -1304,6 +1304,23 @@ export const MODELS = {
+             contextWindow: 1000000,
+             maxTokens: 64000,
+         },
++        "us.anthropic.claude-sonnet-5": {
++            id: "us.anthropic.claude-sonnet-5",
++            name: "Claude Sonnet 5 (US)",
++            api: "bedrock-converse-stream",
++            provider: "amazon-bedrock",
++            baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
++            reasoning: true,
++            input: ["text", "image"],
++            cost: {
++                input: 2,
++                output: 10,
++                cacheRead: 0.2,
++                cacheWrite: 2.5,
++            },
++            contextWindow: 1000000,
++            maxTokens: 128000,
++        },
+         "us.deepseek.r1-v1:0": {
+             id: "us.deepseek.r1-v1:0",
+             name: "DeepSeek-R1 (US)",
