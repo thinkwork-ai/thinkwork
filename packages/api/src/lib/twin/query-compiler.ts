@@ -229,10 +229,13 @@ export function compileTwinQuery(
         // page's Systems panel instead; the graph is entity↔entity only.
         // Edge triples carry properties so the UI can show them in the
         // side sheet.
+        // The fence uses a size()-of-comprehension check: Neptune's
+        // openCypher rejects the NONE()/ALL() list predicates outright
+        // (verified live on dev, 2026-07-22).
         query:
           "MATCH (n {`~id`: $nodeId}) WHERE n.tenantId = $tenantId " +
           `MATCH p = (n)-[r*1..${depth}]-(m) WHERE m.tenantId = $tenantId ` +
-          "AND NONE(rel IN relationships(p) WHERE type(rel) = 'external_identity') " +
+          "AND size([rel IN relationships(p) WHERE type(rel) = 'external_identity']) = 0 " +
           "UNWIND relationships(p) AS rel " +
           "RETURN n AS node, collect(DISTINCT m)[0..50] AS neighbors, " +
           "collect(DISTINCT {rel: type(rel), sourceId: id(startNode(rel)), " +
@@ -323,7 +326,7 @@ export function compileTwinQuery(
           `WITH n LIMIT ${limit} ` +
           `OPTIONAL MATCH p = (n)-[r*1..${depth}]-(m) ` +
           "WHERE m.tenantId = $tenantId " +
-          "AND NONE(rel IN relationships(p) WHERE type(rel) = 'external_identity') " +
+          "AND size([rel IN relationships(p) WHERE type(rel) = 'external_identity']) = 0 " +
           `RETURN collect(DISTINCT n)[0..${limit}] AS roots, ` +
           "collect(DISTINCT m)[0..150] AS neighbors, " +
           "collect(DISTINCT p)[0..300] AS paths",
