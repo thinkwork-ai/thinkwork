@@ -158,8 +158,6 @@ const KNOWLEDGE_GRAPH_TOOL_ENABLED =
   (process.env.KNOWLEDGE_GRAPH_TOOL_ENABLED || "").toLowerCase() === "true";
 // Company Brain twin tool seam (plan 2026-07-21-001 U7) — same rollout
 // posture: stage env flag, per-agent tool policy can still block.
-const COMPANY_BRAIN_ENABLED =
-  (process.env.COMPANY_BRAIN_ENABLED || "").toLowerCase() === "true";
 // THINK-321 U5 — stage-level seam flag for the agent-facing identity
 // resolution tools (resolve_entities / propose_mapping_candidates /
 // confirm_mapping). Same pattern as the knowledge-graph flag: terraform
@@ -1759,12 +1757,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       knowledge_graph_enabled:
         KNOWLEDGE_GRAPH_TOOL_ENABLED &&
         isAnyToolAllowed(...toolPolicyAliases("knowledge_graph_search"))
-          ? true
-          : undefined,
-      // Company Brain twin tool seam (plan 2026-07-21-001 U7).
-      company_brain_enabled:
-        COMPANY_BRAIN_ENABLED &&
-        isAnyToolAllowed(...toolPolicyAliases("twin_cohort_query"))
           ? true
           : undefined,
       // THINK-321 U5 — identity-resolution tool seam. Stage env flag gates

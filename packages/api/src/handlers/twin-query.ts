@@ -8,6 +8,10 @@ import {
   TwinCompileError,
   type TwinRequest,
 } from "../lib/twin/query-compiler.js";
+import {
+  guardTwinCypher,
+  type AclPredicate,
+} from "../lib/twin/cypher-guard.js";
 
 /**
  * Twin graph-query Lambda (Company Brain U6 / KTD-6) — the ONLY read path
@@ -20,6 +24,11 @@ import {
 export interface TwinQueryEvent {
   tenantId?: string;
   request?: TwinRequest;
+  /**
+   * THINK-330 seam: per-user visibility predicates supplied by the trusted
+   * caller (mcp-twin handler) for `cypher` requests. Empty in v1.
+   */
+  aclPredicates?: AclPredicate[];
 }
 
 let client: NeptunedataClient | null = null;
@@ -110,9 +119,69 @@ export function postFilterRawResults(
   return { rows, redactedCount, unfenced };
 }
 
+/**
+ * Guarded agent-authored openCypher (THINK-333 U2). The guard runs HERE,
+ * inside the VPC boundary — even a compromised caller path cannot reach
+ * Neptune with unguarded text. Guard rejections return verbatim
+ * (`{ ok: false, reason: "rejected", rule, message }`) so the model can
+ * self-correct; execution failures stay the typed `unavailable` shape.
+ */
+async function executeGuardedCypher(
+  query: string,
+  tenantId: string,
+  parameters?: Record<string, unknown>,
+  aclPredicates?: AclPredicate[],
+) {
+  const guarded = guardTwinCypher(query, {
+    tenantId,
+    parameters,
+    aclPredicates,
+  });
+  if (!guarded.ok) {
+    return {
+      ok: false as const,
+      reason: "rejected" as const,
+      rule: guarded.rule,
+      message: guarded.message,
+    };
+  }
+  try {
+    const response = await neptune().send(
+      new ExecuteOpenCypherQueryCommand({
+        openCypherQuery: guarded.query,
+        parameters: JSON.stringify(guarded.parameters),
+      }),
+    );
+    const results = Array.isArray((response as { results?: unknown }).results)
+      ? ((response as { results: Array<Record<string, unknown>> }).results ??
+        [])
+      : [];
+    return {
+      ok: true as const,
+      results,
+      limited: guarded.limited || results.length >= guarded.effectiveLimit,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[twin-query] cypher execution failed", {
+      tenantId,
+      error: message,
+    });
+    return { ok: false as const, reason: "unavailable" as const, detail: message };
+  }
+}
+
 export const handler = async (event: TwinQueryEvent = {}) => {
   if (!event.tenantId || !event.request || typeof event.request !== "object") {
     return { ok: false, reason: "invalid_request", detail: "missing fields" };
+  }
+  if (event.request.kind === "cypher") {
+    return executeGuardedCypher(
+      event.request.query,
+      event.tenantId,
+      event.request.parameters,
+      event.aclPredicates,
+    );
   }
   let compiled;
   try {

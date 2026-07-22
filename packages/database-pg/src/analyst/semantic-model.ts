@@ -72,6 +72,7 @@ export const ANALYST_DENYLISTED_TABLES: ReadonlySet<string> = new Set([
   "tenant_auth_policies", // tenant login admission policy
   "tenant_credentials", // credential secret refs
   "tenant_mcp_admin_keys", // admin key hashes
+  "tenant_mcp_twin_keys", // twin MCP key hashes (THINK-333)
   "user_mcp_tokens", // per-user MCP token refs
   "user_auth_identities", // immutable external identity subjects/evidence
   "user_plugin_activation_tokens", // activation token secret refs

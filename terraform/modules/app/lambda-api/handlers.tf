@@ -456,7 +456,6 @@ locals {
       # THINK-324 C18: mint the signed-turn assertion with the active key.
       AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.turn_assertion_active_key_arn
       KNOWLEDGE_GRAPH_TOOL_ENABLED        = tostring(var.knowledge_graph_tool_enabled)
-      COMPANY_BRAIN_ENABLED               = tostring(var.company_brain_enabled)
       # THINK-321 U5: stage gate for the Pi identity-resolution tools; the
       # per-agent tool policy gates on top. Mirrored on wakeup-processor so
       # wakeup turns carry the same payload flag (env-gated feature is dead
@@ -784,6 +783,9 @@ resource "aws_lambda_function" "handler" {
     "mcp-open-engine",
     # THINK-280 U8: scoped external capability search MCP facade.
     "mcp-capability-search",
+    # THINK-333: Digital Twin MCP server at /mcp/twin.
+    "mcp-twin",
+    "mcp-twin-provision",
     "activity",
     "routines",
     "budgets",
@@ -2006,6 +2008,12 @@ locals {
       # retained as a break-glass superuser path for bootstrap/debug.
       "POST /mcp/admin" = "admin-ops-mcp"
 
+      # Digital Twin MCP server (THINK-333). Streamable-HTTP JSON-RPC at
+      # /mcp/twin; auth in-handler (tkt_ tenant key hash lookup, or MCP
+      # OAuth token with twin:read). ANY so the handler serves the CORS
+      # preflight itself.
+      "ANY /mcp/twin" = "mcp-twin"
+
       # Analyst query broker — first-party MCP server exposing query
       # (THINK-228 U3). Callers present the tenant-wide broker service
       # credential as Bearer; SQL executes as the hardened analyst_reader
@@ -2035,6 +2043,13 @@ locals {
       # tenant_mcp_servers row so the runtime picks the server up for
       # any agent that gets it assigned via agent_mcp_servers.
       "POST /api/tenants/{tenantId}/mcp-admin-provision" = "mcp-admin-provision"
+
+      # Digital Twin MCP provisioning (THINK-333 U4): mints the tkt_ key,
+      # writes the secret, upserts the approved digital-twin connector row
+      # (url_hash pinned), and materializes connectors/digital-twin/ into
+      # every agent workspace. Re-run = rotate.
+      "POST /api/tenants/{tenantId}/mcp-twin-provision"    = "mcp-twin-provision"
+      "OPTIONS /api/tenants/{tenantId}/mcp-twin-provision" = "mcp-twin-provision"
 
       # MCP server admin approval (plan §U11, SI-5). Externally-sourced MCP
       # servers land with status='pending'; these routes flip them to

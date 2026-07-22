@@ -147,3 +147,81 @@ describe("twin-query handler — raw kind", () => {
     expect(result.redactedCount).toBeUndefined();
   });
 });
+
+describe("twin-query handler — cypher kind (THINK-333 U2)", () => {
+  beforeEach(() => {
+    send.mockReset();
+  });
+
+  it("guards, executes, and returns rows with the fence in the sent query", async () => {
+    send.mockResolvedValue({ results: [{ c: { "~id": `t#${TENANT}#e#c1` } }] });
+    const result = await handler({
+      tenantId: TENANT,
+      request: { kind: "cypher", query: "MATCH (c:customer) RETURN c" },
+    });
+    expect(result).toMatchObject({ ok: true, limited: false });
+    const sent = send.mock.calls[0]![0] as {
+      input: { openCypherQuery: string; parameters: string };
+    };
+    expect(sent.input.openCypherQuery).toContain("tenantId: $tenantId");
+    expect(sent.input.openCypherQuery).toMatch(/LIMIT 100\s*$/);
+    expect(JSON.parse(sent.input.parameters)).toEqual({ tenantId: TENANT });
+  });
+
+  it("guard rejections surface rule + message without touching Neptune", async () => {
+    const result = await handler({
+      tenantId: TENANT,
+      request: { kind: "cypher", query: "MATCH (n) DETACH DELETE n" },
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      reason: "rejected",
+      rule: "mutation_clause",
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("caller parameters pass through beside the injected tenantId", async () => {
+    send.mockResolvedValue({ results: [] });
+    await handler({
+      tenantId: TENANT,
+      request: {
+        kind: "cypher",
+        query: "MATCH (i:invoice) WHERE i.days > $days RETURN i",
+        parameters: { days: 60 },
+      },
+    });
+    const sent = send.mock.calls[0]![0] as { input: { parameters: string } };
+    expect(JSON.parse(sent.input.parameters)).toEqual({
+      days: 60,
+      tenantId: TENANT,
+    });
+  });
+
+  it("row count reaching the effective limit flags limited", async () => {
+    send.mockResolvedValue({
+      results: Array.from({ length: 100 }, (_, i) => ({ n: i })),
+    });
+    const result = await handler({
+      tenantId: TENANT,
+      request: { kind: "cypher", query: "MATCH (n:customer) RETURN n" },
+    });
+    expect(result).toMatchObject({ ok: true, limited: true });
+  });
+
+  it("Neptune failure returns the typed unavailable shape, not a leak", async () => {
+    send.mockRejectedValue(new Error("boom"));
+    const result = await handler({
+      tenantId: TENANT,
+      request: { kind: "cypher", query: "MATCH (n) RETURN n" },
+    });
+    expect(result).toMatchObject({ ok: false, reason: "unavailable" });
+  });
+
+  it("missing tenantId stays invalid_request (existing contract)", async () => {
+    const result = await handler({
+      request: { kind: "cypher", query: "MATCH (n) RETURN n" },
+    });
+    expect(result).toMatchObject({ ok: false, reason: "invalid_request" });
+  });
+});

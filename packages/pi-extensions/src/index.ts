@@ -9,7 +9,6 @@ export * from "./document-composer.js";
 export * from "./fetch-workspace-source.js";
 export * from "./identity-resolution.js";
 export * from "./knowledge-graph.js";
-export * from "./company-brain.js";
 export * from "./search.js";
 export * from "./memory.js";
 export * from "./okf-wiki-navigator.js";
