@@ -2758,6 +2758,13 @@ export type EntityDossier = {
   ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
   summary?: Maybe<Scalars['String']['output']>;
   threads: Array<SearchThreadHit>;
+  /**
+   * Dual-read gate verdict (Company Brain U9 / AE8): true when this entity's
+   * tenant/type has flipped to the projected twin page, so search consumers
+   * can route to the living render; the compiled `wikiPage` stays the
+   * fallback either way.
+   */
+  twinProjected: Scalars['Boolean']['output'];
   /** Compiled Entity page; null when the entity has no page (degrade path). */
   wikiPage?: Maybe<WikiPage>;
 };
@@ -13120,6 +13127,13 @@ export type WikiPage = {
   __typename?: 'WikiPage';
   aliases: Array<Scalars['String']['output']>;
   bodyMd?: Maybe<Scalars['String']['output']>;
+  /**
+   * Canonical entity id backing an ENTITY page (Company Brain U9). Lets the
+   * reader ask `twinEntityPage` for the projected per-section render; the
+   * server-side dual-read gate still decides whether that projection exists,
+   * so this id alone never flips a page. Null for topic/decision/legacy pages.
+   */
+  canonicalEntityId?: Maybe<Scalars['ID']['output']>;
   /**
    * Pages that were promoted out of this page's sections — the reverse of
    * `parent`. Empty for pages that have never had a child promoted.

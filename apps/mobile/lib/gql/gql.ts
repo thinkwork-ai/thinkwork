@@ -108,6 +108,8 @@ type Documents = {
     "\n  mutation DeleteQuickAction($id: ID!) {\n    deleteQuickAction(id: $id)\n  }\n": typeof types.DeleteQuickActionDocument,
     "\n  mutation ReorderQuickActions($input: ReorderQuickActionsInput!) {\n    reorderQuickActions(input: $input) {\n      id\n      sortOrder\n    }\n  }\n": typeof types.ReorderQuickActionsDocument,
     "\n  mutation CreateRecipe($input: CreateRecipeInput!) {\n    createRecipe(input: $input) {\n      id\n      title\n      genuiType\n    }\n  }\n": typeof types.CreateRecipeDocument,
+    "\n  query WikiPageTwinKeys(\n    $tenantId: ID!\n    $userId: ID\n    $type: WikiPageType!\n    $slug: String!\n  ) {\n    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {\n      id\n      entitySubtype\n      canonicalEntityId\n    }\n  }\n": typeof types.WikiPageTwinKeysDocument,
+    "\n  query TwinEntityPage($tenantId: ID, $entityType: String!, $canonicalId: ID!) {\n    twinEntityPage(\n      tenantId: $tenantId\n      entityType: $entityType\n      canonicalId: $canonicalId\n    )\n  }\n": typeof types.TwinEntityPageDocument,
 };
 const documents: Documents = {
     "\n  query TenantUsersForFormPicker($tenantId: ID!) {\n    tenantMembers(tenantId: $tenantId) {\n      principalType\n      principalId\n      user {\n        id\n        email\n        name\n      }\n    }\n  }\n": types.TenantUsersForFormPickerDocument,
@@ -204,6 +206,8 @@ const documents: Documents = {
     "\n  mutation DeleteQuickAction($id: ID!) {\n    deleteQuickAction(id: $id)\n  }\n": types.DeleteQuickActionDocument,
     "\n  mutation ReorderQuickActions($input: ReorderQuickActionsInput!) {\n    reorderQuickActions(input: $input) {\n      id\n      sortOrder\n    }\n  }\n": types.ReorderQuickActionsDocument,
     "\n  mutation CreateRecipe($input: CreateRecipeInput!) {\n    createRecipe(input: $input) {\n      id\n      title\n      genuiType\n    }\n  }\n": types.CreateRecipeDocument,
+    "\n  query WikiPageTwinKeys(\n    $tenantId: ID!\n    $userId: ID\n    $type: WikiPageType!\n    $slug: String!\n  ) {\n    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {\n      id\n      entitySubtype\n      canonicalEntityId\n    }\n  }\n": types.WikiPageTwinKeysDocument,
+    "\n  query TwinEntityPage($tenantId: ID, $entityType: String!, $canonicalId: ID!) {\n    twinEntityPage(\n      tenantId: $tenantId\n      entityType: $entityType\n      canonicalId: $canonicalId\n    )\n  }\n": types.TwinEntityPageDocument,
 };
 
 /**
@@ -596,6 +600,14 @@ export function graphql(source: "\n  mutation ReorderQuickActions($input: Reorde
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation CreateRecipe($input: CreateRecipeInput!) {\n    createRecipe(input: $input) {\n      id\n      title\n      genuiType\n    }\n  }\n"): (typeof documents)["\n  mutation CreateRecipe($input: CreateRecipeInput!) {\n    createRecipe(input: $input) {\n      id\n      title\n      genuiType\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query WikiPageTwinKeys(\n    $tenantId: ID!\n    $userId: ID\n    $type: WikiPageType!\n    $slug: String!\n  ) {\n    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {\n      id\n      entitySubtype\n      canonicalEntityId\n    }\n  }\n"): (typeof documents)["\n  query WikiPageTwinKeys(\n    $tenantId: ID!\n    $userId: ID\n    $type: WikiPageType!\n    $slug: String!\n  ) {\n    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {\n      id\n      entitySubtype\n      canonicalEntityId\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query TwinEntityPage($tenantId: ID, $entityType: String!, $canonicalId: ID!) {\n    twinEntityPage(\n      tenantId: $tenantId\n      entityType: $entityType\n      canonicalId: $canonicalId\n    )\n  }\n"): (typeof documents)["\n  query TwinEntityPage($tenantId: ID, $entityType: String!, $canonicalId: ID!) {\n    twinEntityPage(\n      tenantId: $tenantId\n      entityType: $entityType\n      canonicalId: $canonicalId\n    )\n  }\n"];
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};

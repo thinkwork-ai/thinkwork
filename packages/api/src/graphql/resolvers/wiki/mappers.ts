@@ -35,6 +35,9 @@ export interface GraphQLWikiPage {
   ownerId?: string | null;
   type: string;
   entitySubtype?: string | null;
+  /** Canonical entity id backing an entity page (Company Brain U9) —
+   * enables the reader's `twinEntityPage` fetch. */
+  canonicalEntityId?: string | null;
   displayType?: string;
   slug: string;
   title: string;
@@ -80,6 +83,7 @@ export function toGraphQLPage(
     owner_id: string | null;
     type: string;
     entity_subtype?: string | null;
+    canonical_entity_id?: string | null;
     slug: string;
     title: string;
     summary: string | null;
@@ -103,6 +107,7 @@ export function toGraphQLPage(
     ownerId: row.owner_id,
     type: toGraphQLType(row.type),
     entitySubtype: row.entity_subtype ?? null,
+    canonicalEntityId: row.canonical_entity_id ?? null,
     displayType:
       displayLabelFromSlug(row.entity_subtype) ??
       displayLabelFromSlug(row.type) ??

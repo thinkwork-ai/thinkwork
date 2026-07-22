@@ -44,6 +44,13 @@ type WikiPage {
   ontology entity type when present; falls back to the legacy page type.
   """
   displayType: String!
+  """
+  Canonical entity id backing an ENTITY page (Company Brain U9). Lets the
+  reader ask `twinEntityPage` for the projected per-section render; the
+  server-side dual-read gate still decides whether that projection exists,
+  so this id alone never flips a page. Null for topic/decision/legacy pages.
+  """
+  canonicalEntityId: ID
   slug: String!
   title: String!
   summary: String

@@ -2718,6 +2718,7 @@ export const EntityDossierQuery = gql`
           title
           displayType
         }
+        twinProjected
         memories {
           memoryRecordId
           text
@@ -2761,6 +2762,8 @@ export const ComputerWikiPageQuery = gql`
     wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
       id
       type
+      entitySubtype
+      canonicalEntityId
       slug
       title
       summary
@@ -2778,6 +2781,22 @@ export const ComputerWikiPageQuery = gql`
         lastSourceAt
       }
     }
+  }
+`;
+
+/**
+ * Projected twin page for an entity (Company Brain U9 / KTD-8). AWSJSON
+ * payload: `{ projected: true, sections: [...] }` with per-section
+ * OK/STALE/TIMEOUT/ERROR states, or `{ projected: false, reason }` when the
+ * tenant/type hasn't flipped — the reader then keeps the compiled render.
+ */
+export const TwinEntityPageQuery = gql`
+  query TwinEntityPage($tenantId: ID, $entityType: String!, $canonicalId: ID!) {
+    twinEntityPage(
+      tenantId: $tenantId
+      entityType: $entityType
+      canonicalId: $canonicalId
+    )
   }
 `;
 

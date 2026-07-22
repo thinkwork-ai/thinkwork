@@ -11,7 +11,13 @@ import { Badge } from "@thinkwork/ui";
 import {
   ComputerWikiPageLinksQuery,
   ComputerWikiPageQuery,
+  TwinEntityPageQuery,
 } from "@/lib/graphql-queries";
+import {
+  parseTwinEntityPage,
+  TwinSectionBody,
+  TwinSectionStateChip,
+} from "@/components/memory/twin-page";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
   NodeBadge,
@@ -31,6 +37,8 @@ interface WikiPageSection {
 interface WikiPageDetail {
   id: string;
   type: WikiPageType;
+  entitySubtype?: string | null;
+  canonicalEntityId?: string | null;
   slug: string;
   title?: string | null;
   summary?: string | null;
@@ -113,6 +121,33 @@ export function WikiPageView({
   const headerTitle = page?.title ?? title ?? slug;
   const navigate = useNavigate();
 
+  // Living page (Company Brain U9 / AE2): entity pages with a canonical id
+  // ask for the projected twin render. The SERVER's dual-read gate decides —
+  // `projected: false` (or any fetch failure) keeps the compiled sections
+  // below unchanged (AE8), so an unflipped tenant never sees a difference.
+  const canAskTwin =
+    !!tenantId &&
+    page?.type === "ENTITY" &&
+    !!page?.canonicalEntityId &&
+    !!page?.entitySubtype;
+  const [{ data: twinData }] = useQuery<{ twinEntityPage?: unknown }>({
+    query: TwinEntityPageQuery,
+    variables: {
+      tenantId,
+      entityType: page?.entitySubtype ?? "",
+      canonicalId: page?.canonicalEntityId ?? "",
+    },
+    pause: !canAskTwin,
+  });
+  const twinPage = useMemo(
+    () => (canAskTwin ? parseTwinEntityPage(twinData?.twinEntityPage) : null),
+    [canAskTwin, twinData],
+  );
+  const projectedSections =
+    twinPage?.projected && (twinPage.sections?.length ?? 0) > 0
+      ? twinPage.sections!
+      : null;
+
   // Connected + backlink pages resolve relationship-badge labels into real
   // wiki navigation targets (THINK-270 repair) — the graph tab supplies its
   // sheet with edges directly, but the full-page reader must look them up.
@@ -159,7 +194,7 @@ export function WikiPageView({
   usePageHeaderActions({
     title: headerTitle,
     breadcrumbs: [
-      { label: "Wiki", href: "/settings/memory/wiki" },
+      { label: "Pages", href: "/settings/memory/wiki" },
       { label: headerTitle },
     ],
     backHref,
@@ -206,7 +241,9 @@ export function WikiPageView({
                   {pageTypeLabel(type)}
                 </Badge>
               </div>
-              {page.lastCompiledAt ? (
+              {/* Projected pages carry per-section freshness chips instead
+                  of the single page-level Compiled stamp (KTD-8). */}
+              {!projectedSections && page.lastCompiledAt ? (
                 <p className="text-xs text-muted-foreground">
                   Compiled{" "}
                   {new Date(page.lastCompiledAt).toLocaleDateString("en-US", {
@@ -243,7 +280,21 @@ export function WikiPageView({
               </div>
             ) : null}
 
-            {sortedSections.length > 0 ? (
+            {projectedSections ? (
+              <div className="space-y-6" data-testid="twin-projected-sections">
+                {projectedSections.map((section) => (
+                  <section key={section.slug} className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-sm font-semibold text-foreground">
+                        {section.heading}
+                      </h2>
+                      <TwinSectionStateChip section={section} />
+                    </div>
+                    <TwinSectionBody section={section} />
+                  </section>
+                ))}
+              </div>
+            ) : sortedSections.length > 0 ? (
               <div className="space-y-6">
                 {sortedSections.map((section) => (
                   <section key={section.id} className="space-y-2">

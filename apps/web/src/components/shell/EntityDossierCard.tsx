@@ -76,6 +76,13 @@ export function EntityDossierCard({
             <span className="min-w-0 flex-1 truncate font-medium">
               Open {match.wikiPage.title} page
             </span>
+            {/* Dual-read gate verdict (Company Brain U9): the reader will
+                serve the living projected page for this entity. */}
+            {match.twinProjected ? (
+              <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-600 dark:text-emerald-400">
+                Live
+              </span>
+            ) : null}
           </CommandItem>
         ) : null}
 

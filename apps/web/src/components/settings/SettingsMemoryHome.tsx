@@ -179,11 +179,13 @@ export function SettingsMemoryHome() {
     ) : null;
 
   usePageHeaderActions({
-    title: "Memory",
-    breadcrumbs: [{ label: "Memory" }],
+    // "Knowledge" umbrella naming (Company Brain U9): the nav item and this
+    // page title read Knowledge; the wiki tab reads Pages. URLs unchanged.
+    title: "Knowledge",
+    breadcrumbs: [{ label: "Knowledge" }],
     tabs: [
       { to: MEMORY, label: "Memory" },
-      { to: WIKI, label: "Wiki" },
+      { to: WIKI, label: "Pages" },
       { to: KNOWLEDGE_BASES, label: "KBs" },
       { to: ONTOLOGY, label: "Ontology" },
     ],

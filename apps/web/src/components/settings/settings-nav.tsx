@@ -96,7 +96,14 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     icon: FileBox,
     operatorOnly: true,
   },
-  { label: "Memory", to: "/settings/memory", icon: Brain, operatorOnly: true },
+  // "Knowledge" is the user-facing umbrella for the memory/pages/KBs/ontology
+  // surfaces (Company Brain U9 naming decision — never "Company Brain" in UI).
+  {
+    label: "Knowledge",
+    to: "/settings/memory",
+    icon: Brain,
+    operatorOnly: true,
+  },
   // Automations and Routines collapsed into the unified Workflows section
   // (THINK-218): Automations/Routines/Agent Loops surfaces all redirect to
   // /settings/workflows now — Routines lives on as the Library tab.
