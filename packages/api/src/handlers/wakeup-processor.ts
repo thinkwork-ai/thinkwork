@@ -2066,10 +2066,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const effectiveKnowledgeGraphEnabled =
     (process.env.KNOWLEDGE_GRAPH_TOOL_ENABLED || "").toLowerCase() === "true" &&
     isAnyToolAllowed(...toolPolicyAliases("knowledge_graph_search"));
-  // Company Brain twin tool parity (plan 2026-07-21-001 U7).
-  const effectiveCompanyBrainEnabled =
-    (process.env.COMPANY_BRAIN_ENABLED || "").toLowerCase() === "true" &&
-    isAnyToolAllowed(...toolPolicyAliases("twin_cohort_query"));
   // THINK-321 U5 — identity-resolution tool parity with chat-agent-invoke:
   // wakeup turns get the crosswalk tools under the same stage env flag and
   // per-agent tool policy.
@@ -2420,7 +2416,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       context_engine_enabled: effectiveContextEngineEnabled || undefined,
       context_engine_config: effectiveContextEngineConfig,
       knowledge_graph_enabled: effectiveKnowledgeGraphEnabled || undefined,
-      company_brain_enabled: effectiveCompanyBrainEnabled || undefined,
       identity_resolution_enabled:
         effectiveIdentityResolutionEnabled || undefined,
       runtime_type: runtimeType,
@@ -3212,8 +3207,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             context_engine_config: effectiveContextEngineConfig,
             knowledge_graph_enabled:
               effectiveKnowledgeGraphEnabled || undefined,
-            company_brain_enabled: effectiveCompanyBrainEnabled || undefined,
-            identity_resolution_enabled:
+                  identity_resolution_enabled:
               effectiveIdentityResolutionEnabled || undefined,
             runtime_type: runtimeType,
             invocation_source: wakeup.source,

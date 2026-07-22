@@ -868,12 +868,6 @@ variable "knowledge_graph_tool_enabled" {
   default     = true
 }
 
-variable "company_brain_enabled" {
-  type        = bool
-  default     = false
-  description = "Company Brain twin tool seam (plan 2026-07-21-001 U7) — enables the twin_* Pi tools on chat + wakeup turns"
-}
-
 variable "identity_resolution_tool_enabled" {
   description = "Stage gate for the Pi identity-resolution tools (resolve_entities / propose_mapping_candidates / confirm_mapping, THINK-321 U5). Per-agent tool policy gates on top."
   type        = bool

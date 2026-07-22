@@ -456,7 +456,6 @@ locals {
       # THINK-324 C18: mint the signed-turn assertion with the active key.
       AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.turn_assertion_active_key_arn
       KNOWLEDGE_GRAPH_TOOL_ENABLED        = tostring(var.knowledge_graph_tool_enabled)
-      COMPANY_BRAIN_ENABLED               = tostring(var.company_brain_enabled)
       # THINK-321 U5: stage gate for the Pi identity-resolution tools; the
       # per-agent tool policy gates on top. Mirrored on wakeup-processor so
       # wakeup turns carry the same payload flag (env-gated feature is dead
