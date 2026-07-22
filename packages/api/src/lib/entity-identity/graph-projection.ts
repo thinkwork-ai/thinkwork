@@ -43,7 +43,7 @@ import {
   NeptunedataClient,
 } from "@aws-sdk/client-neptunedata";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { and, asc, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   canonicalEntities,
   entityResolutionEvents,
@@ -413,8 +413,14 @@ export async function projectPendingIdentityEvents(args: {
     .limit(1);
 
   const afterCreatedAt = cursorRow?.last_event_created_at ?? null;
-  const afterId = cursorRow?.last_event_id ?? null;
 
+  // The (created_at, id) comparison stays ENTIRELY in SQL. Postgres stores
+  // microseconds; a JS Date only carries milliseconds, so round-tripping the
+  // cursor timestamp through a query parameter truncates it to strictly
+  // BEFORE every event it was cut from. With bulk-inserted events (one
+  // transaction ⇒ identical created_at) that re-matched the same first page
+  // forever — seen live on the 2026-07-22 TEI seed (3,751 events, cursor
+  // pinned, 20 passes × 200 events per invoke, never drained).
   const events = await db
     .select({
       id: entityResolutionEvents.id,
@@ -428,13 +434,12 @@ export async function projectPendingIdentityEvents(args: {
       afterCreatedAt
         ? and(
             eq(entityResolutionEvents.tenant_id, args.tenantId),
-            or(
-              gt(entityResolutionEvents.created_at, afterCreatedAt),
-              and(
-                eq(entityResolutionEvents.created_at, afterCreatedAt),
-                afterId ? gt(entityResolutionEvents.id, afterId) : sql`TRUE`,
-              ),
-            ),
+            sql`(${entityResolutionEvents.created_at}, ${entityResolutionEvents.id}) > (
+              SELECT c.last_event_created_at,
+                     COALESCE(c.last_event_id, '00000000-0000-0000-0000-000000000000'::uuid)
+              FROM identity.graph_projection_cursors c
+              WHERE c.tenant_id = ${args.tenantId}
+            )`,
           )
         : eq(entityResolutionEvents.tenant_id, args.tenantId),
     )
@@ -532,11 +537,14 @@ export async function projectPendingIdentityEvents(args: {
   });
   const upload = await uploadIdentitySnapshot({ snapshot, s3: args.s3 });
 
+  // Persist the timestamp from the event ROW, not the JS Date — the Date is
+  // already truncated to milliseconds (see the page-query comment above).
+  const lastCreatedAtExact = sql`(SELECT created_at FROM identity.entity_resolution_events WHERE id = ${last.id})`;
   await db
     .insert(identityGraphProjectionCursors)
     .values({
       tenant_id: args.tenantId,
-      last_event_created_at: last.created_at,
+      last_event_created_at: lastCreatedAtExact as unknown as Date,
       last_event_id: last.id,
       last_snapshot_cursor: cursor,
       updated_at: args.now ?? new Date(),
@@ -544,7 +552,7 @@ export async function projectPendingIdentityEvents(args: {
     .onConflictDoUpdate({
       target: [identityGraphProjectionCursors.tenant_id],
       set: {
-        last_event_created_at: last.created_at,
+        last_event_created_at: lastCreatedAtExact as unknown as Date,
         last_event_id: last.id,
         last_snapshot_cursor: cursor,
         updated_at: args.now ?? new Date(),
@@ -712,11 +720,17 @@ export async function rebuildTenantGraph(args: {
     now: args.now,
   });
   await uploadIdentitySnapshot({ snapshot, s3: args.s3 });
+  // SQL-side timestamp for the same reason as projectPendingIdentityEvents:
+  // a truncated fast-forward cursor would leave every event sharing the
+  // newest millisecond perpetually "pending" for the next nudge.
+  const latestCreatedAtExact = latest
+    ? (sql`(SELECT created_at FROM identity.entity_resolution_events WHERE id = ${latest.id})` as unknown as Date)
+    : null;
   await db
     .insert(identityGraphProjectionCursors)
     .values({
       tenant_id: args.tenantId,
-      last_event_created_at: latest?.created_at ?? null,
+      last_event_created_at: latestCreatedAtExact,
       last_event_id: latest?.id ?? null,
       last_snapshot_cursor: cursor,
       updated_at: args.now ?? new Date(),
@@ -724,7 +738,7 @@ export async function rebuildTenantGraph(args: {
     .onConflictDoUpdate({
       target: [identityGraphProjectionCursors.tenant_id],
       set: {
-        last_event_created_at: latest?.created_at ?? null,
+        last_event_created_at: latestCreatedAtExact,
         last_event_id: latest?.id ?? null,
         last_snapshot_cursor: cursor,
         updated_at: args.now ?? new Date(),
