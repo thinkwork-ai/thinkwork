@@ -19,6 +19,7 @@ import {
   buildIdentitySnapshot,
   entityNodeId,
   projectPendingIdentityEvents,
+  rebuildTenantGraph,
   systemEdgeId,
   systemNodeId,
   type GraphOp,
@@ -124,6 +125,13 @@ describe("buildCanonicalResyncOps", () => {
     expect(ops[2].parameters.survivorId).toBe(
       entityNodeId("tenant-1", "can-777"),
     );
+    // Loser AND survivor MERGEs carry the entity-type label: an unlabeled
+    // MERGE would mint a label-less survivor when the loser resyncs first,
+    // and the survivor's own labeled resync would collide on ~id ("Cannot
+    // create node; id already in use" — first dev rebuild, 2026-07-22).
+    expect(ops[0].query).toContain("MERGE (n:customer");
+    expect(ops[2].query).toContain("MERGE (loser:customer");
+    expect(ops[2].query).toContain("MERGE (survivor:customer");
     // No external_identity re-creation on the loser.
     expect(ops.some((op) => op.query.includes("external_identity {"))).toBe(
       false,
@@ -363,5 +371,47 @@ describe("buildIdentitySnapshot", () => {
     expect(snapshot.redirects).toEqual([
       { fromCanonicalEntityId: "can-loser", toCanonicalEntityId: "can-777" },
     ]);
+  });
+});
+
+describe("rebuildTenantGraph", () => {
+  it("clearFirst drops the tenant subgraph in batches before resyncing", async () => {
+    const fake = createFakeIdentityDb();
+    const neptune = new FakeNeptune();
+    const s3Send = vi.fn().mockResolvedValue({});
+    // allCanonicals empty -> no resync; latest event empty; snapshot selects.
+    fake.selectQueue.push([], [], [], []);
+
+    const result = await rebuildTenantGraph({
+      tenantId: "tenant-1",
+      clearFirst: true,
+      db: fake.db as never,
+      neptune,
+      s3: { send: s3Send } as never,
+      now: new Date("2026-07-22T04:00:00Z"),
+    });
+
+    expect(result).toEqual({ tenantId: "tenant-1", resyncedCanonicals: 0 });
+    // First op deletes a bounded batch; the FakeNeptune count read (empty
+    // results) ends the loop after one round.
+    expect(neptune.ops[0].query).toContain("DETACH DELETE n");
+    expect(neptune.ops[0].query).toContain("LIMIT 2000");
+    expect(neptune.ops[0].parameters).toEqual({ tenantId: "tenant-1" });
+    expect(neptune.ops[1].query).toContain("RETURN count(n)");
+  });
+
+  it("default rebuild does NOT clear (facet properties survive)", async () => {
+    const fake = createFakeIdentityDb();
+    const neptune = new FakeNeptune();
+    fake.selectQueue.push([], [], [], []);
+    await rebuildTenantGraph({
+      tenantId: "tenant-1",
+      db: fake.db as never,
+      neptune,
+      s3: { send: vi.fn().mockResolvedValue({}) } as never,
+    });
+    expect(neptune.ops.some((op) => op.query.includes("DETACH DELETE"))).toBe(
+      false,
+    );
   });
 });

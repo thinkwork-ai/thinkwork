@@ -16,6 +16,9 @@ import {
 export interface IdentityGraphProjectorEvent {
   tenantId?: string;
   mode?: "nudge" | "rebuild";
+  /** Rebuild only: drop the tenant subgraph first (also destroys synced
+   * facet properties — see rebuildTenantGraph's clearFirst doc). */
+  clear?: boolean;
 }
 
 export const handler = async (event: IdentityGraphProjectorEvent = {}) => {
@@ -29,7 +32,10 @@ export const handler = async (event: IdentityGraphProjectorEvent = {}) => {
 
   try {
     if (event.mode === "rebuild") {
-      const result = await rebuildTenantGraph({ tenantId });
+      const result = await rebuildTenantGraph({
+        tenantId,
+        clearFirst: event.clear === true,
+      });
       return { statusCode: 200, body: JSON.stringify({ ok: true, ...result }) };
     }
 
