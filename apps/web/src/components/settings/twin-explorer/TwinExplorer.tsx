@@ -281,7 +281,7 @@ export function TwinExplorer({
   const entityTypes = useMemo(
     () =>
       (ontologyData?.ontologyDefinitions?.entityTypes ?? []).filter(
-        (type) => type.lifecycleStatus === "approved",
+        (type) => (type.lifecycleStatus ?? "").toUpperCase() === "APPROVED",
       ),
     [ontologyData],
   );
@@ -302,7 +302,7 @@ export function TwinExplorer({
     () =>
       (ontologyData?.ontologyDefinitions?.relationshipTypes ?? []).filter(
         (rel) =>
-          rel.lifecycleStatus === "approved" &&
+          (rel.lifecycleStatus ?? "").toUpperCase() === "APPROVED" &&
           !!entityType &&
           (rel.sourceTypeSlugs ?? []).includes(entityType),
       ),
