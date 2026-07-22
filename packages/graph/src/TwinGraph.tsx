@@ -24,7 +24,7 @@ import {
   useState,
 } from "react";
 import ForceGraph2D from "react-force-graph-2d";
-import { useQuery } from "urql";
+import { useClient, useQuery } from "urql";
 import { TwinNeighborsQuery, TwinSubgraphQuery } from "./queries.js";
 import {
   degreeRadius,
@@ -226,16 +226,41 @@ export function buildTwinGraphData(payload: unknown): TwinGraphData {
   return { nodes, links };
 }
 
+/** Union several subgraph payloads (multi-type overview) by node/link id. */
+export function combineTwinGraphData(payloads: unknown[]): TwinGraphData {
+  const nodes: TwinGraphNode[] = [];
+  const links: TwinGraphLink[] = [];
+  const nodeIds = new Set<string>();
+  const linkIds = new Set<string>();
+  for (const payload of payloads) {
+    const part = buildTwinGraphData(payload);
+    for (const node of part.nodes) {
+      if (nodeIds.has(node.id)) continue;
+      nodeIds.add(node.id);
+      nodes.push(node);
+    }
+    for (const link of part.links) {
+      if (linkIds.has(link.id)) continue;
+      linkIds.add(link.id);
+      links.push(link);
+    }
+  }
+  return { nodes, links };
+}
+
 /**
  * In-place merge (sibling R17 discipline): surviving node/link objects keep
  * their identity — and therefore their simulation positions — across
- * depth-change refetches, so the camera never re-frames.
+ * depth-change refetches, so the camera never re-frames. Accepts one raw
+ * payload or an array of them (multi-type overview).
  */
 export function mergeTwinGraphData(
   target: TwinGraphData,
   payload: unknown,
 ): void {
-  const next = buildTwinGraphData(payload);
+  const next = Array.isArray(payload)
+    ? combineTwinGraphData(payload)
+    : buildTwinGraphData(payload);
   const nodeById = new Map(target.nodes.map((node) => [node.id, node]));
   const mergedNodes = next.nodes.map((node) => {
     const existing = nodeById.get(node.id);
@@ -258,10 +283,11 @@ export interface TwinGraphProps {
   /** Entity-neighborhood mode: the entity whose neighborhood renders. */
   canonicalId?: string;
   /**
-   * Type-overview mode (Explorer graph view): a bounded sample of the
-   * type's instances + neighborhoods. Used when `canonicalId` is absent.
+   * Type-overview mode (Explorer graph view): a bounded per-type sample of
+   * instances + neighborhoods, unioned across the listed types. Used when
+   * `canonicalId` is absent.
    */
-  subgraphEntityType?: string;
+  subgraphEntityTypes?: string[];
   /** Root sample size for type-overview mode (compiler-capped at 25). */
   subgraphLimit?: number;
   /** Neighborhood depth (compiler-bounded 1..2). Default 1. */
@@ -284,7 +310,7 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     {
       tenantId,
       canonicalId,
-      subgraphEntityType,
+      subgraphEntityTypes,
       subgraphLimit,
       depth = 1,
       onNodeClick,
@@ -299,32 +325,102 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     const fgRef = useRef<any>(null);
     const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
 
-    const overviewMode = !canonicalId && !!subgraphEntityType;
-    const [result, reexecute] = useQuery({
-      query: overviewMode ? TwinSubgraphQuery : TwinNeighborsQuery,
-      variables: overviewMode
-        ? {
-            tenantId,
-            entityType: subgraphEntityType,
-            limit: subgraphLimit,
-            depth,
-          }
-        : { tenantId, canonicalId, depth },
-      pause: !tenantId || (!canonicalId && !subgraphEntityType),
-    });
-    const refetch = useCallback(
-      () => reexecute({ requestPolicy: "network-only" }),
-      [reexecute],
+    const overviewTypes = useMemo(
+      () => (canonicalId ? [] : (subgraphEntityTypes ?? []).filter(Boolean)),
+      [canonicalId, subgraphEntityTypes],
     );
+    const overviewMode = !canonicalId && overviewTypes.length > 0;
+    const client = useClient();
+
+    // Neighbors mode keeps the plain useQuery; overview fans one subgraph
+    // query out per selected type and unions the payloads.
+    const [neighborsResult, reexecute] = useQuery({
+      query: TwinNeighborsQuery,
+      variables: { tenantId, canonicalId, depth },
+      pause: !tenantId || !canonicalId,
+    });
+    const [overview, setOverview] = useState<{
+      key: string;
+      fetching: boolean;
+      error: string | null;
+      payloads: unknown[] | null;
+    }>({ key: "", fetching: false, error: null, payloads: null });
+    const overviewKey = overviewMode
+      ? JSON.stringify([tenantId, overviewTypes, subgraphLimit, depth])
+      : "";
+    const overviewGenRef = useRef(0);
+    const fetchOverview = useCallback(() => {
+      if (!overviewMode) return;
+      const generation = ++overviewGenRef.current;
+      setOverview({
+        key: overviewKey,
+        fetching: true,
+        error: null,
+        payloads: null,
+      });
+      void Promise.all(
+        overviewTypes.map((entityType) =>
+          client
+            .query(
+              TwinSubgraphQuery,
+              { tenantId, entityType, limit: subgraphLimit, depth },
+              { requestPolicy: "network-only" },
+            )
+            .toPromise(),
+        ),
+      ).then((results) => {
+        if (generation !== overviewGenRef.current) return;
+        const firstError = results.find((r) => r.error)?.error;
+        setOverview({
+          key: overviewKey,
+          fetching: false,
+          error: firstError ? firstError.message : null,
+          payloads: results.map(
+            (r) => (r.data as { twinSubgraph?: unknown })?.twinSubgraph ?? null,
+          ),
+        });
+      });
+      // `client` is render-stable from the urql Provider — kept out of the
+      // deps so test doubles can't loop the effect.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [overviewMode, overviewKey]);
+    useEffect(() => {
+      if (overviewMode) fetchOverview();
+    }, [overviewMode, fetchOverview]);
+
+    const refetch = useCallback(() => {
+      if (overviewMode) fetchOverview();
+      else reexecute({ requestPolicy: "network-only" });
+    }, [overviewMode, fetchOverview, reexecute]);
     useImperativeHandle(ref, () => ({ refetch }), [refetch]);
 
     // Stable container mutated in place; the engine gets a fresh shallow
     // wrapper per merge so it re-ingests without a layout restart.
     const graphDataRef = useRef<TwinGraphData>({ nodes: [], links: [] });
     const lastKeyRef = useRef<string | null>(null);
-    const payload =
-      (overviewMode ? result.data?.twinSubgraph : result.data?.twinNeighbors) ??
-      null;
+    const zoomInitRef = useRef(false);
+
+    // The query identity (mode + types + entity): when it changes, the old
+    // dataset is WRONG, not stale-but-refreshing — drop it immediately so
+    // the loading state shows instead of the previous type's nodes, and
+    // re-frame the camera for the next dataset.
+    const identityKey = overviewMode
+      ? overviewKey
+      : JSON.stringify([tenantId, canonicalId]);
+    const identityRef = useRef(identityKey);
+    if (identityRef.current !== identityKey) {
+      identityRef.current = identityKey;
+      graphDataRef.current.nodes.length = 0;
+      graphDataRef.current.links.length = 0;
+      lastKeyRef.current = null;
+      zoomInitRef.current = false;
+    }
+
+    const payload = overviewMode
+      ? overview.key === overviewKey
+        ? overview.payloads
+        : null
+      : (neighborsResult.data?.twinNeighbors ?? null);
     const graphKey =
       payload === null
         ? null
@@ -398,9 +494,14 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
       [],
     );
 
-    const zoomInitRef = useRef(false);
+    const fetching = overviewMode
+      ? overview.fetching || overview.key !== overviewKey
+      : neighborsResult.fetching;
+    const errorMessage = overviewMode
+      ? overview.error
+      : (neighborsResult.error?.message ?? null);
 
-    if (result.fetching && !result.data) {
+    if (fetching && graphData.nodes.length === 0) {
       return (
         loadingFallback ?? (
           <div
@@ -417,9 +518,9 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
       );
     }
 
-    if (result.error && graphData.nodes.length === 0) {
+    if (errorMessage && graphData.nodes.length === 0) {
       return (
-        errorFallback?.(result.error.message, refetch) ?? (
+        errorFallback?.(errorMessage, refetch) ?? (
           <div className="flex h-full min-h-48 flex-col items-center justify-center gap-2 py-16 text-center">
             <p className="text-sm font-medium">
               {overviewMode
@@ -427,7 +528,7 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
                 : "Neighborhood could not load."}
             </p>
             <p className="max-w-sm text-sm text-muted-foreground">
-              {result.error.message}
+              {errorMessage}
             </p>
             <button
               type="button"

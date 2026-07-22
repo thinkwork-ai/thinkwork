@@ -68,6 +68,14 @@ export interface DataTableTokenFilterColumn<
   singleSelect?: boolean;
   /** Restrict the operator choices for this column (subset of the type's). */
   operators?: DataTableTokenFilterOperator[];
+  /**
+   * Collapse this column under a single subject entry shared with every
+   * column carrying the same `group.id` — the entry opens a second-level
+   * list of the group's columns. Keeps large governed attribute sets
+   * (e.g. one column per declared facet attribute) from flooding the
+   * top-level subject list.
+   */
+  group?: { id: string; label: string; icon?: React.ReactNode };
   loading?: boolean;
   loadingMessage?: string;
   emptyMessage?: string;
@@ -444,6 +452,39 @@ export function StaticTokenFilter({
   );
 }
 
+function FilterSubjectButton({
+  icon,
+  label,
+  disabledReason,
+  onClick,
+}: {
+  icon?: React.ReactNode;
+  label: string;
+  disabledReason?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={Boolean(disabledReason)}
+      className={cn(
+        "flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted disabled:cursor-not-allowed disabled:opacity-50",
+      )}
+      onClick={onClick}
+    >
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {disabledReason ? (
+        <span className="max-w-36 truncate text-xs text-muted-foreground">
+          {disabledReason}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
 function FilterSubjectList({
   columns,
   onSelect,
@@ -451,33 +492,95 @@ function FilterSubjectList({
   columns: DataTableTokenFilterColumn[];
   onSelect: (column: DataTableTokenFilterColumn) => void;
 }) {
+  const [openGroupId, setOpenGroupId] = React.useState<string | null>(null);
+
+  // Top-level entries: ungrouped columns as-is, each group once (at the
+  // position of its first member).
+  const entries: Array<
+    | { kind: "column"; column: DataTableTokenFilterColumn }
+    | {
+        kind: "group";
+        group: NonNullable<DataTableTokenFilterColumn["group"]>;
+        columns: DataTableTokenFilterColumn[];
+      }
+  > = [];
+  const groupIndex = new Map<string, number>();
+  for (const column of columns) {
+    if (!column.group) {
+      entries.push({ kind: "column", column });
+      continue;
+    }
+    const existing = groupIndex.get(column.group.id);
+    if (existing === undefined) {
+      groupIndex.set(column.group.id, entries.length);
+      entries.push({ kind: "group", group: column.group, columns: [column] });
+    } else {
+      (
+        entries[existing] as { columns: DataTableTokenFilterColumn[] }
+      ).columns.push(column);
+    }
+  }
+
+  const openGroup =
+    openGroupId === null
+      ? null
+      : entries.find(
+          (entry) => entry.kind === "group" && entry.group.id === openGroupId,
+        );
+
+  if (openGroup && openGroup.kind === "group") {
+    return (
+      <>
+        <PopoverHeader className="px-1 pb-1">
+          <button
+            type="button"
+            className="flex items-center gap-1 text-left"
+            aria-label="Back to filters"
+            onClick={() => setOpenGroupId(null)}
+          >
+            <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+            <PopoverTitle>{openGroup.group.label}</PopoverTitle>
+          </button>
+        </PopoverHeader>
+        <div className="grid max-h-[min(20rem,55vh)] gap-1 overflow-y-auto">
+          {openGroup.columns.map((column) => (
+            <FilterSubjectButton
+              key={column.id}
+              icon={column.icon}
+              label={column.label}
+              disabledReason={column.disabledReason}
+              onClick={() => onSelect(column)}
+            />
+          ))}
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <PopoverHeader className="px-1 pb-1">
         <PopoverTitle>Filters</PopoverTitle>
       </PopoverHeader>
-      <div className="grid gap-1">
-        {columns.map((column) => (
-          <button
-            key={column.id}
-            type="button"
-            disabled={Boolean(column.disabledReason)}
-            className={cn(
-              "flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-muted focus-visible:bg-muted disabled:cursor-not-allowed disabled:opacity-50",
-            )}
-            onClick={() => onSelect(column)}
-          >
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground">
-              {column.icon}
-            </span>
-            <span className="min-w-0 flex-1 truncate">{column.label}</span>
-            {column.disabledReason ? (
-              <span className="max-w-36 truncate text-xs text-muted-foreground">
-                {column.disabledReason}
-              </span>
-            ) : null}
-          </button>
-        ))}
+      <div className="grid max-h-[min(20rem,55vh)] gap-1 overflow-y-auto">
+        {entries.map((entry) =>
+          entry.kind === "column" ? (
+            <FilterSubjectButton
+              key={entry.column.id}
+              icon={entry.column.icon}
+              label={entry.column.label}
+              disabledReason={entry.column.disabledReason}
+              onClick={() => onSelect(entry.column)}
+            />
+          ) : (
+            <FilterSubjectButton
+              key={`group:${entry.group.id}`}
+              icon={entry.group.icon ?? entry.columns[0]?.icon}
+              label={entry.group.label}
+              onClick={() => setOpenGroupId(entry.group.id)}
+            />
+          ),
+        )}
       </div>
     </>
   );

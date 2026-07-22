@@ -24,10 +24,29 @@ vi.mock("urql", () => ({
   }) => {
     const name = args.query?.definitions?.[0]?.name?.value;
     if (name === "TwinExplorerOntology") return [urqlState.ontology, vi.fn()];
-    if (name !== "TwinCohort") return [{ fetching: false }, vi.fn()];
-    if (!args.pause) cohortCalls.push(args.variables ?? {});
-    return [args.pause ? { fetching: false } : urqlState.cohort, vi.fn()];
+    return [{ fetching: false }, vi.fn()];
   },
+  // Cohort queries fan out per selected type through the client.
+  useClient: () => ({
+    query: (
+      query: { definitions?: Array<{ name?: { value?: string } }> },
+      variables: Record<string, unknown>,
+    ) => {
+      const name = query?.definitions?.[0]?.name?.value;
+      if (name === "TwinCohort") cohortCalls.push(variables ?? {});
+      return {
+        toPromise: () =>
+          Promise.resolve({
+            data: {
+              twinCohort: (
+                urqlState.cohort.data as { twinCohort?: unknown } | null
+              )?.twinCohort,
+            },
+            error: undefined,
+          }),
+      };
+    },
+  }),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -203,7 +222,7 @@ describe("buildExplorerFilterModel", () => {
       FACETS,
       RELATIONSHIPS,
     );
-    expect(model.entityType).toBe("customer");
+    expect(model.entityTypes).toEqual(["customer"]);
     expect(model.predicates).toEqual([
       { facet: "aging", attribute: "daysPastDue", op: "gt", value: 90 },
     ]);
@@ -406,7 +425,7 @@ describe("TwinExplorer", () => {
     expect(screen.getByTestId("explorer-loading")).toBeTruthy();
   });
 
-  it("renders the degrade state for a typed unavailable result", () => {
+  it("renders the degrade state for a typed unavailable result", async () => {
     urqlState.cohort = {
       fetching: false,
       data: {
@@ -421,12 +440,12 @@ describe("TwinExplorer", () => {
     render(<TwinExplorer />);
     switchToTable();
     applyFilters([typeFilter]);
-    expect(screen.getByTestId("explorer-unavailable").textContent).toContain(
-      "twin_not_deployed",
-    );
+    expect(
+      (await screen.findByTestId("explorer-unavailable")).textContent,
+    ).toContain("twin_not_deployed");
   });
 
-  it("shows the clamp note at the cap", () => {
+  it("shows the clamp note at the cap", async () => {
     urqlState.cohort = {
       fetching: false,
       data: { twinCohort: cohortPayload(100) },
@@ -435,14 +454,14 @@ describe("TwinExplorer", () => {
     render(<TwinExplorer />);
     switchToTable();
     applyFilters([typeFilter]);
-    expect(screen.getByTestId("explorer-limit-note")).toBeTruthy();
+    expect(await screen.findByTestId("explorer-limit-note")).toBeTruthy();
   });
 
-  it("row click navigates to the entity detail with type + canonicalId", () => {
+  it("row click navigates to the entity detail with type + canonicalId", async () => {
     render(<TwinExplorer />);
     switchToTable();
     applyFilters([typeFilter]);
-    fireEvent.click(screen.getAllByTestId("data-row")[0]!);
+    fireEvent.click((await screen.findAllByTestId("data-row"))[0]!);
     expect(navigateMock).toHaveBeenCalledWith({
       to: "/settings/memory/explorer/$entityType/$canonicalId",
       params: { entityType: "customer", canonicalId: "cust-0" },
