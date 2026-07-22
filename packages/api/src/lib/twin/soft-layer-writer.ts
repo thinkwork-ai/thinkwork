@@ -14,6 +14,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { wikiPages } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../db.js";
+import { moduleDbConfigured } from "./db-config.js";
 import {
   createNeptuneClient,
   type NeptuneQueryClient,
@@ -108,6 +109,11 @@ export async function syncTenantSoftLayerNodes(args: {
   neptune?: NeptuneQueryClient;
 }): Promise<SoftLayerWriteResult> {
   try {
+    if (!args.db && !moduleDbConfigured()) {
+      // Module-level db would orphan its credential-resolution rejection
+      // (unconfigured env) — skip the sweep instead of touching it.
+      return { written: 0, skipped: 0 };
+    }
     const db = args.db ?? defaultDb;
     const rows = await db
       .select({

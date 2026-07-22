@@ -16,6 +16,7 @@ import {
   ontologyEntityTypes,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../db.js";
+import { moduleDbConfigured } from "./db-config.js";
 import {
   parsePageSectionDeclarations,
   type PageSectionDeclaration,
@@ -26,7 +27,11 @@ type DbLike = typeof defaultDb;
 export interface TwinPageGate {
   projected: boolean;
   sections: PageSectionDeclaration[];
-  reason: "projected" | "no_sections_declared" | "first_sync_incomplete";
+  reason:
+    | "projected"
+    | "no_sections_declared"
+    | "first_sync_incomplete"
+    | "gate_unavailable";
 }
 
 export async function resolveTwinPageGate(args: {
@@ -34,6 +39,11 @@ export async function resolveTwinPageGate(args: {
   entityTypeSlug: string;
   db?: DbLike;
 }): Promise<TwinPageGate> {
+  if (!args.db && !moduleDbConfigured()) {
+    // Module-level db would orphan its credential-resolution rejection —
+    // fall back to the compiled page instead of touching it (AE8 posture).
+    return { projected: false, sections: [], reason: "gate_unavailable" };
+  }
   const db = args.db ?? defaultDb;
   const [typeRow] = await db
     .select({
