@@ -126,15 +126,13 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
   },
 ];
 
-// "General" stays pinned at the top; the remaining sections are alphabetised by
-// label so the growing operator list stays scannable. Sorting at export keeps
-// the source list above free-form — new items can be added in any order.
+// Strictly alphabetised by label (Eric 2026-07-22 — General is no longer
+// pinned) so the growing operator list stays scannable. Sorting at export
+// keeps the source list above free-form — new items can be added in any
+// order.
 export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
-  ...RAW_SETTINGS_NAV_ITEMS.filter((item) => item.label === "General"),
-  ...RAW_SETTINGS_NAV_ITEMS.filter((item) => item.label !== "General").sort(
-    (a, b) => a.label.localeCompare(b.label),
-  ),
-];
+  ...RAW_SETTINGS_NAV_ITEMS,
+].sort((a, b) => a.label.localeCompare(b.label));
 
 /**
  * Visible settings sections for the current caller. Operator-only sections need

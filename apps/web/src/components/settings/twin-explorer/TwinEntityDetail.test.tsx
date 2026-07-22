@@ -94,7 +94,7 @@ describe("TwinEntityDetail", () => {
 
   it("shows a loading state until the page resolves", () => {
     renderDetail();
-    expect(screen.getByText("Loading entity…")).toBeTruthy();
+    expect(screen.getByRole("status", { name: "Loading" })).toBeTruthy();
   });
 
   it("renders projected sections with state chips for an entity with no wiki page", () => {

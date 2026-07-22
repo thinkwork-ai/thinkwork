@@ -45,9 +45,9 @@ describe("visibleSettingsNavItems", () => {
     });
 
     expect(memberWeb.map((i) => i.label)).toEqual([
-      "General",
       "Activity",
       "Connectors",
+      "General",
       "Plugins",
     ]);
     expect(memberWeb.some((i) => i.to === "/settings/users")).toBe(false);
@@ -264,13 +264,11 @@ describe("visibleSettingsNavItems", () => {
     expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Analytics")).toBe(false);
   });
 
-  it("pins General first and alphabetises the rest by label", () => {
-    // General is the only fixed entry; every other section sorts by label so the
-    // growing operator list stays scannable.
-    expect(SETTINGS_NAV_ITEMS[0]?.to).toBe("/settings/general");
-
-    const rest = SETTINGS_NAV_ITEMS.slice(1).map((i) => i.label);
-    const sorted = [...rest].sort((a, b) => a.localeCompare(b));
-    expect(rest).toEqual(sorted);
+  it("alphabetises every section by label (no pinned entries)", () => {
+    // Strict alpha order (Eric 2026-07-22) — General is not pinned; the
+    // default section is Activity via the /settings index redirect.
+    const labels = SETTINGS_NAV_ITEMS.map((i) => i.label);
+    const sorted = [...labels].sort((a, b) => a.localeCompare(b));
+    expect(labels).toEqual(sorted);
   });
 });

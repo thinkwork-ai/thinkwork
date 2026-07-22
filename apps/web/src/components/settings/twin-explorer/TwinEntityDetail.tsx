@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useQuery } from "urql";
 import { useNavigate } from "@tanstack/react-router";
-import { Loader2 } from "lucide-react";
 import { Badge, cn } from "@thinkwork/ui";
 import {
   TwinGraph,
@@ -159,8 +159,8 @@ export function TwinEntityDetail({
     <main className="flex h-full min-h-0 w-full flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-6 py-8">
         {loading ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" /> Loading entity…
+          <div className="flex min-h-40 items-center justify-center">
+            <LoadingShimmer />
           </div>
         ) : (
           <article className="space-y-6">
@@ -271,6 +271,11 @@ export function TwinEntityDetail({
                     tenantId={tenantId}
                     canonicalId={canonicalId}
                     depth={graphDepth}
+                    loadingFallback={
+                      <div className="flex h-full min-h-48 items-center justify-center">
+                        <LoadingShimmer />
+                      </div>
+                    }
                     onNodeClick={(node: TwinGraphNode) =>
                       setSheetSelection({ kind: "node", node })
                     }
