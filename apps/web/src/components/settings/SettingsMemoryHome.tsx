@@ -15,16 +15,24 @@ import {
 import { KnowledgeModelTab } from "@/components/settings/knowledge-model/KnowledgeModelTab";
 import type { OntologyMapHeaderController } from "@/components/settings/knowledge-model/OntologyMapView";
 import { SettingsWiki } from "@/components/settings/SettingsWiki";
+import { TwinExplorer } from "@/components/settings/twin-explorer/TwinExplorer";
 
 const MEMORY = "/settings/memory";
 const WIKI = "/settings/memory/wiki";
+const EXPLORER = "/settings/memory/explorer";
 const KNOWLEDGE_BASES = "/settings/memory/knowledge-bases";
 const ONTOLOGY = "/settings/memory/ontology";
 
-type MemoryTab = "memory" | "wiki" | "knowledge-bases" | "ontology";
+type MemoryTab =
+  | "memory"
+  | "wiki"
+  | "explorer"
+  | "knowledge-bases"
+  | "ontology";
 
 function tabForPath(pathname: string): MemoryTab {
   if (pathname.startsWith(WIKI)) return "wiki";
+  if (pathname.startsWith(EXPLORER)) return "explorer";
   if (pathname.startsWith(KNOWLEDGE_BASES)) return "knowledge-bases";
   if (pathname.startsWith(ONTOLOGY)) return "ontology";
   return "memory";
@@ -186,6 +194,9 @@ export function SettingsMemoryHome() {
     tabs: [
       { to: MEMORY, label: "Memory" },
       { to: WIKI, label: "Pages" },
+      // THINK-327 U4: Explorer rides next to Pages until the U8 flip
+      // removes the wiki tab and Explorer takes its slot.
+      { to: EXPLORER, label: "Explorer" },
       { to: KNOWLEDGE_BASES, label: "KBs" },
       { to: ONTOLOGY, label: "Ontology" },
     ],
@@ -208,6 +219,7 @@ export function SettingsMemoryHome() {
         />
       ) : null}
       {activeTab === "wiki" ? <SettingsWiki embedded /> : null}
+      {activeTab === "explorer" ? <TwinExplorer /> : null}
       {activeTab === "knowledge-bases" ? (
         <SettingsKnowledgeBases
           embedded
