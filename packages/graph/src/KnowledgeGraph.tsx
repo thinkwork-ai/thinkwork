@@ -860,9 +860,9 @@ export const KnowledgeGraph = forwardRef<
         // fully (communities separate); once framed, fast decay keeps
         // drag-triggered reheats snappy.
         d3AlphaDecay={
-          framed ? 0.05 : graphData.nodes.length > 2000 ? 0.035 : 0.0115
+          framed ? 0.028 : graphData.nodes.length > 2000 ? 0.035 : 0.0115
         }
-        d3VelocityDecay={0.55}
+        d3VelocityDecay={framed ? 0.45 : 0.55}
         warmupTicks={graphData.nodes.length > 2000 ? 200 : 600}
         onZoom={({ k }: { k: number }) => {
           zoomKRef.current = k;

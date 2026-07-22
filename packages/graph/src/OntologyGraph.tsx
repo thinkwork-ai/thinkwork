@@ -1176,8 +1176,8 @@ export const OntologyGraph = forwardRef<
         linkCanvasObjectMode={() => "replace" as const}
         linkCanvasObject={linkCanvasObject}
         cooldownTicks={framed ? 120 : 0}
-        d3AlphaDecay={framed ? 0.05 : 0.0115}
-        d3VelocityDecay={0.55}
+        d3AlphaDecay={framed ? 0.028 : 0.0115}
+        d3VelocityDecay={framed ? 0.45 : 0.55}
         warmupTicks={400}
         onZoom={({ k }: { k: number }) => {
           zoomKRef.current = k;
