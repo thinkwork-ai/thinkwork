@@ -581,7 +581,9 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
           linkColor={() => "rgba(148,163,184,0.4)"}
           linkDirectionalArrowLength={3}
           linkDirectionalArrowRelPos={1}
-          cooldownTicks={120}
+          cooldownTicks={300}
+          d3AlphaDecay={0.0228}
+          d3VelocityDecay={0.4}
           onNodeClick={(node: any) => {
             if (node?.canonicalId) onNodeClick?.(node as TwinGraphNode);
           }}

@@ -855,15 +855,27 @@ export const KnowledgeGraph = forwardRef<
         // Settle the layout synchronously before the first paint: zero
         // cooldown until the initial framing lands (no load animation),
         // then normal cooldown so dragging a node relaxes its neighbors.
-        cooldownTicks={framed ? 120 : 0}
+        cooldownTicks={graphData.nodes.length > 300 ? (framed ? 120 : 0) : 300}
         // Warmup runs at slow decay so the pre-paint settle converges
         // fully (communities separate); once framed, fast decay keeps
         // drag-triggered reheats snappy.
         d3AlphaDecay={
-          framed ? 0.05 : graphData.nodes.length > 2000 ? 0.035 : 0.0115
+          graphData.nodes.length > 300
+            ? framed
+              ? 0.05
+              : graphData.nodes.length > 2000
+                ? 0.035
+                : 0.0115
+            : 0.0228
         }
-        d3VelocityDecay={0.55}
-        warmupTicks={graphData.nodes.length > 2000 ? 200 : 600}
+        d3VelocityDecay={graphData.nodes.length > 300 ? 0.55 : 0.4}
+        warmupTicks={
+          graphData.nodes.length > 300
+            ? graphData.nodes.length > 2000
+              ? 200
+              : 600
+            : 0
+        }
         onZoom={({ k }: { k: number }) => {
           zoomKRef.current = k;
         }}
