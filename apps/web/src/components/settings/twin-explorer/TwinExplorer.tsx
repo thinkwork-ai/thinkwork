@@ -810,7 +810,7 @@ export function TwinExplorer({
             }
             subgraphEntityTypes={effectiveEntityTypes}
             subgraphLimit={25}
-            depth={3}
+            depth={2}
             onNodeClick={(node: TwinGraphNode) =>
               setSheetSelection({ kind: "node", node })
             }
