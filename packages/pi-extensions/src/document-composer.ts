@@ -17,187 +17,34 @@
  * `addExtension` or it registers but never reaches the model.
  */
 
-import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionContext,
+  ToolDefinition,
+} from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import {
   defineExtension,
   type ThinkworkExtension,
 } from "./define-extension.js";
+import {
+  FALLBACK_PLATES,
+  normalizeDocumentPlates,
+  parseSourcesClaims,
+  PLATE_SLUG_RE,
+  toolNamesMatch,
+  type DocumentPlateSummary,
+} from "./document-plates.js";
+
+// Re-exported for existing consumers — the canonical home moved to
+// document-plates.ts so the system-prompt contract block shares one
+// normalizer (plates provenance 2026-07).
+export {
+  FALLBACK_PLATES,
+  normalizeDocumentPlates,
+  type DocumentPlateSummary,
+} from "./document-plates.js";
 
 export const EMIT_DOCUMENT_TOOL_NAME = "emit_document";
-
-/** One registered plate on the tenant's emit_document tool surface (R10). */
-export interface DocumentPlateSummary {
-  slug: string;
-  displayName: string;
-  useFor: string;
-  /** Plate-wide operator authoring instructions — shown pre-emission. */
-  authoringInstructions?: string;
-  /**
-   * THINK-183 KTD8: enforced content contract, when the plate declares one.
-   * Sections are required (or required-if-material — waive with tw:waiver
-   * when the data is genuinely unavailable); analyses name plate-declared
-   * server-computed calculations authored via tw:analysis blocks.
-   */
-  sections?: Array<{
-    id: string;
-    title: string;
-    tier: "required" | "required-if-material";
-    /** Operator-authored section instructions — shown pre-emission. */
-    guidance?: string;
-    /** Plate-suggested visualizations for this section. */
-    suggestedDirectives?: Array<{ kind: string; chartType?: string }>;
-  }>;
-  analyses?: Array<{
-    key: string;
-    op: string;
-    inputHint: string;
-    /** Operator-authored analysis instructions — shown pre-emission. */
-    guidance?: string;
-  }>;
-}
-
-/**
- * Fallback surface when the dispatch payload carries no `document_plates`
- * field (older server or lagging customer stack). Server-side registry
- * validation remains the authority either way (KTD4).
- */
-export const FALLBACK_PLATES: readonly DocumentPlateSummary[] = [
-  {
-    slug: "report",
-    displayName: "Report",
-    useFor:
-      "General findings and analysis presented as a narrative with evidence.",
-  },
-  {
-    slug: "plan",
-    displayName: "Plan",
-    useFor: "A course of action: phases, workstreams, owners, and sequencing.",
-  },
-  {
-    slug: "brief",
-    displayName: "Decision Brief",
-    useFor: "A decision brief: options, tradeoffs, and a recommendation.",
-  },
-  {
-    slug: "ideation",
-    displayName: "Ideation",
-    useFor: "Exploratory thinking: directions, concepts, and open questions.",
-  },
-];
-
-const PLATE_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
-
-/**
- * Normalize the payload's `document_plates` field. A missing or malformed
- * field (wrong shape, junk entries only) is treated as ABSENT — the caller
- * falls back to the core four and logs a structured event — never a throw.
- */
-/** THINK-183 KTD8: carry a plate's contract sections; junk degrades to absent. */
-function normalizePlateSections(
-  raw: unknown,
-): DocumentPlateSummary["sections"] {
-  if (!Array.isArray(raw)) return undefined;
-  const sections: NonNullable<DocumentPlateSummary["sections"]> = [];
-  for (const entry of raw) {
-    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-      continue;
-    }
-    const rec = entry as Record<string, unknown>;
-    const id = typeof rec.id === "string" ? rec.id.trim() : "";
-    const title = typeof rec.title === "string" ? rec.title.trim() : "";
-    const tier = rec.tier;
-    if (
-      !PLATE_SLUG_RE.test(id) ||
-      !title ||
-      (tier !== "required" && tier !== "required-if-material")
-    ) {
-      continue;
-    }
-    const guidance =
-      typeof rec.guidance === "string" ? rec.guidance.trim() : "";
-    const suggestedDirectives = Array.isArray(rec.suggestedDirectives)
-      ? rec.suggestedDirectives.flatMap((d) => {
-          if (d === null || typeof d !== "object" || Array.isArray(d)) {
-            return [];
-          }
-          const dr = d as Record<string, unknown>;
-          const kind = typeof dr.kind === "string" ? dr.kind.trim() : "";
-          if (!kind) return [];
-          const chartType =
-            typeof dr.chartType === "string" ? dr.chartType.trim() : "";
-          return [{ kind, ...(chartType ? { chartType } : {}) }];
-        })
-      : [];
-    sections.push({
-      id,
-      title,
-      tier,
-      ...(guidance ? { guidance } : {}),
-      ...(suggestedDirectives.length > 0 ? { suggestedDirectives } : {}),
-    });
-  }
-  return sections.length > 0 ? sections : undefined;
-}
-
-/** THINK-183 KTD8: carry a plate's declared analyses; junk degrades to absent. */
-function normalizePlateAnalyses(
-  raw: unknown,
-): DocumentPlateSummary["analyses"] {
-  if (!Array.isArray(raw)) return undefined;
-  const analyses: NonNullable<DocumentPlateSummary["analyses"]> = [];
-  for (const entry of raw) {
-    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-      continue;
-    }
-    const rec = entry as Record<string, unknown>;
-    const key = typeof rec.key === "string" ? rec.key.trim() : "";
-    const op = typeof rec.op === "string" ? rec.op.trim() : "";
-    if (!PLATE_SLUG_RE.test(key) || !op) continue;
-    const guidance =
-      typeof rec.guidance === "string" ? rec.guidance.trim() : "";
-    analyses.push({
-      key,
-      op,
-      inputHint: typeof rec.inputHint === "string" ? rec.inputHint.trim() : "",
-      ...(guidance ? { guidance } : {}),
-    });
-  }
-  return analyses.length > 0 ? analyses : undefined;
-}
-
-export function normalizeDocumentPlates(
-  raw: unknown,
-): DocumentPlateSummary[] | null {
-  if (!Array.isArray(raw)) return null;
-  const plates: DocumentPlateSummary[] = [];
-  for (const entry of raw) {
-    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
-      continue;
-    }
-    const rec = entry as Record<string, unknown>;
-    const slug = typeof rec.slug === "string" ? rec.slug.trim() : "";
-    if (!PLATE_SLUG_RE.test(slug)) continue;
-    const sections = normalizePlateSections(rec.sections);
-    const analyses = normalizePlateAnalyses(rec.analyses);
-    const authoringInstructions =
-      typeof rec.authoringInstructions === "string"
-        ? rec.authoringInstructions.trim()
-        : "";
-    plates.push({
-      slug,
-      displayName:
-        typeof rec.displayName === "string" && rec.displayName.trim()
-          ? rec.displayName.trim()
-          : slug,
-      useFor: typeof rec.useFor === "string" ? rec.useFor.trim() : "",
-      ...(authoringInstructions ? { authoringInstructions } : {}),
-      ...(sections ? { sections } : {}),
-      ...(analyses ? { analyses } : {}),
-    });
-  }
-  return plates.length > 0 ? plates : null;
-}
 
 /**
  * Local fast-fail ceiling. Kept in sync with the server-side source of truth
@@ -228,6 +75,109 @@ function asString(value: unknown): string {
 
 function byteLength(value: string): number {
   return new TextEncoder().encode(value).length;
+}
+
+/**
+ * Tools ACTUALLY invoked this turn, from the session tree (plates provenance
+ * 2026-07): assistant `toolCall` content items plus `toolResult` messages on
+ * the current branch. Returns null when the context/sessionManager is
+ * unavailable (test harnesses, older hosts) — callers skip the cross-check
+ * gracefully rather than blocking the emission.
+ */
+export function collectInvokedToolNames(
+  ctx: ExtensionContext | undefined,
+): string[] | null {
+  const sessionManager = ctx?.sessionManager;
+  if (!sessionManager) return null;
+  let entries: unknown[];
+  try {
+    entries =
+      typeof sessionManager.getBranch === "function"
+        ? sessionManager.getBranch()
+        : sessionManager.getEntries();
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(entries)) return null;
+  const names = new Set<string>();
+  for (const entry of entries) {
+    if (
+      entry === null ||
+      typeof entry !== "object" ||
+      (entry as { type?: unknown }).type !== "message"
+    ) {
+      continue;
+    }
+    const message = (entry as { message?: unknown }).message;
+    if (message === null || typeof message !== "object") continue;
+    const record = message as Record<string, unknown>;
+    if (record.role === "toolResult" && typeof record.toolName === "string") {
+      names.add(record.toolName);
+      continue;
+    }
+    if (record.role === "assistant" && Array.isArray(record.content)) {
+      for (const item of record.content) {
+        if (
+          item !== null &&
+          typeof item === "object" &&
+          (item as { type?: unknown }).type === "toolCall" &&
+          typeof (item as { name?: unknown }).name === "string"
+        ) {
+          names.add((item as { name: string }).name);
+        }
+      }
+    }
+  }
+  return [...names];
+}
+
+/**
+ * Ledger cross-check (plates provenance 2026-07): every tool a tw:sources
+ * fence cites must match a tool actually invoked this turn. Returns the
+ * REJECTED tool result to hand back for self-repair, or null when the claims
+ * verify (or the check cannot run — absent ctx skips gracefully).
+ */
+function verifySourcesClaims(
+  digestMarkdown: string,
+  ctx: ExtensionContext | undefined,
+): ReturnType<typeof diagnosticsResult> | null {
+  const claimedTools = [
+    ...new Set(parseSourcesClaims(digestMarkdown).flatMap((c) => c.tools)),
+  ];
+  if (claimedTools.length === 0) return null;
+  let invoked: string[] | null;
+  try {
+    invoked = collectInvokedToolNames(ctx);
+  } catch {
+    invoked = null;
+  }
+  if (invoked === null) {
+    console.log(
+      JSON.stringify({
+        event: "document_sources_crosscheck_skipped",
+        reason: "session_manager_unavailable",
+        claimedTools,
+      }),
+    );
+    return null;
+  }
+  const unmatched = claimedTools.filter(
+    (claim) => !invoked.some((name) => toolNamesMatch(claim, name)),
+  );
+  if (unmatched.length === 0) return null;
+  const invokedList =
+    invoked.filter((name) => name !== EMIT_DOCUMENT_TOOL_NAME).join(", ") ||
+    "(none)";
+  return diagnosticsResult([
+    {
+      code: "SOURCES_UNVERIFIED",
+      message:
+        `The tw:sources fences cite tools that were NOT invoked this turn: ${unmatched.join(", ")}. ` +
+        `Tools actually invoked this turn: ${invokedList}. ` +
+        "Only cite tools you actually called — fix each tw:sources fence to name the real tool that produced the section's data (or use `- none: <reason>` for narrative-only sections), then call emit_document again.",
+      location: "tw:sources",
+    },
+  ]);
 }
 
 export function createDocumentComposerExtension(
@@ -333,6 +283,12 @@ export function createDocumentComposerExtension(
           "never write HTML or SVG yourself (raw HTML is stripped; external links become plain text). " +
           "Start the body at ## Summary (the platform renders the H1 from title). " +
           "Unknown components or malformed YAML reject with a diagnostic showing the corrected form. " +
+          "PROVENANCE: every data-backed section must include a ```tw:sources fence inside the section " +
+          "citing the exact tools + queries that produced its numbers — first line `section: <section-id>` " +
+          "(the section's compiled heading id), then one `- tool: <tool-name> — <query/table/filter + row " +
+          "count>` line per source. Purely narrative sections use `- none: <why no tool data backs this " +
+          "section>` instead. Cited tools are VERIFIED against the tools you actually invoked this turn — " +
+          "citing a tool you did not call rejects the emission. " +
           (anyContract
             ? "Some genres declare a content contract: author every required section as a ## heading with " +
               "its exact listed title, satisfy declared analyses with ```tw:analysis blocks (analysis: <key> " +
@@ -381,7 +337,7 @@ export function createDocumentComposerExtension(
           ),
         }),
         executionMode: "sequential",
-        async execute(_toolCallId, params) {
+        async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
           const typed = (params ?? {}) as Record<string, unknown>;
           const genre = asString(typed.genre).toLowerCase();
           const digestMarkdown =
@@ -409,6 +365,14 @@ export function createDocumentComposerExtension(
               },
             ]);
           }
+
+          // Provenance ledger cross-check (plates provenance 2026-07): a
+          // tw:sources claim citing a tool that was never invoked this turn
+          // is fabricated provenance — reject locally (no POST) so the model
+          // self-repairs against the real ledger. Skips gracefully without a
+          // session manager.
+          const unverified = verifySourcesClaims(digestMarkdown, ctx);
+          if (unverified) return unverified;
 
           const response = await fetchImpl(
             `${apiUrl}/api/threads/${threadId}/activity`,

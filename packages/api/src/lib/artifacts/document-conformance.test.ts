@@ -146,6 +146,40 @@ describe("buildConformanceReportRow", () => {
     expect(row.manifest_snapshot).toEqual(SNAPSHOT);
   });
 
+  it("section facts carrying tw:sources provenance flow into the row verbatim", () => {
+    const input = makeInput({
+      sectionFacts: {
+        sections: [
+          {
+            id: "pipeline-health",
+            tier: "suggested",
+            status: "present",
+            bodyChars: 10,
+            suggestedDirectives: [],
+            sources: [
+              {
+                kind: "tool",
+                tool: "twenty--crm.search_records",
+                detail: "opportunities for the rep (72 records)",
+              },
+              { kind: "none", detail: "narrative synthesis" },
+            ],
+          },
+        ],
+        analyses: [],
+      },
+    });
+    const row = buildConformanceReportRow(input);
+    expect(row.sections[0].sources).toEqual([
+      {
+        kind: "tool",
+        tool: "twenty--crm.search_records",
+        detail: "opportunities for the rep (72 records)",
+      },
+      { kind: "none", detail: "narrative synthesis" },
+    ]);
+  });
+
   it("an unjudgeable manifest starts skipped, never pending", () => {
     const row = buildConformanceReportRow(
       makeInput({

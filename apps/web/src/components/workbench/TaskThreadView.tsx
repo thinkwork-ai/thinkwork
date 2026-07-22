@@ -39,6 +39,7 @@ import { Link } from "@tanstack/react-router";
 import {
   DocumentCard,
   type DocumentCardData,
+  type DocumentCardSection,
 } from "@/components/workbench/DocumentCard";
 import { useTenant } from "@/context/TenantContext";
 import {
@@ -4581,9 +4582,43 @@ function documentCardsForTurn(turn: TaskThreadTurn): DocumentCardData[] {
       headVersion:
         typeof card.headVersion === "number" ? card.headVersion : undefined,
       updatedAt: event.createdAt ?? undefined,
+      sections: documentCardSections(card.sections),
     });
   }
   return [...byArtifact.values()];
+}
+
+/** Parse the card payload's per-section outcomes + tw:sources provenance. */
+function documentCardSections(raw: unknown): DocumentCardSection[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const sections: DocumentCardSection[] = [];
+  for (const entry of raw) {
+    const section = parseRecord(entry);
+    const id = stringValue(section.id);
+    if (!id) continue;
+    const sources = Array.isArray(section.sources)
+      ? section.sources.flatMap((sourceEntry) => {
+          const source = parseRecord(sourceEntry);
+          const kind = stringValue(source.kind);
+          if (kind !== "tool" && kind !== "none") return [];
+          return [
+            {
+              kind: kind as "tool" | "none",
+              tool: stringValue(source.tool) || undefined,
+              detail: stringValue(source.detail) || undefined,
+            },
+          ];
+        })
+      : [];
+    sections.push({
+      id,
+      title: stringValue(section.title) || id,
+      tier: stringValue(section.tier) || undefined,
+      status: stringValue(section.status) || undefined,
+      ...(sources.length > 0 ? { sources } : {}),
+    });
+  }
+  return sections.length > 0 ? sections : undefined;
 }
 
 function questionCardsForMessage(
@@ -5789,7 +5824,22 @@ function emitDocumentActionRow(
       const section = parseRecord(entry);
       const title = stringValue(section.title) || stringValue(section.id);
       const status = stringValue(section.status) || "unknown";
-      if (title) lines.push(`- ${title}: ${status}`);
+      // tw:sources provenance (plates provenance 2026-07): a compact
+      // "sources: tool-a, tool-b" suffix per section.
+      const sources = Array.isArray(section.sources) ? section.sources : [];
+      const sourceNames = [
+        ...new Set(
+          sources.flatMap((sourceEntry) => {
+            const source = parseRecord(sourceEntry);
+            if (stringValue(source.kind) === "none") return ["narrative"];
+            const tool = stringValue(source.tool);
+            return tool ? [tool] : [];
+          }),
+        ),
+      ];
+      const sourcesSuffix =
+        sourceNames.length > 0 ? ` · sources: ${sourceNames.join(", ")}` : "";
+      if (title) lines.push(`- ${title}: ${status}${sourcesSuffix}`);
     }
   }
   const base = toolInvocationDetail(record);

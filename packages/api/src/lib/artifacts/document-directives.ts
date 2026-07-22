@@ -675,6 +675,136 @@ export function renderWaiverDirective(input: {
 }
 
 // ---------------------------------------------------------------------------
+// tw:sources — per-section data-source provenance (plates provenance 2026-07).
+// The third structural contract directive (KTD11 posture): routed before the
+// plate's allowedDirectives gate, validated against the section manifest when
+// one exists. Placement is meaning — the sources card renders where the block
+// sits (an audit footnote inside its section), and the compositor collects the
+// claims for section facts, conformance rows, and the customized-plate
+// enforcement check.
+// ---------------------------------------------------------------------------
+
+/** One provenance line inside a tw:sources fence. */
+export interface SectionSourceEntry {
+  kind: "tool" | "none";
+  /** The tool that produced the data (kind "tool" only). */
+  tool?: string;
+  /** Free-text detail: query/table/filter + row count, or the none-reason. */
+  detail: string;
+}
+
+export interface CollectedSectionSources {
+  sectionId: string;
+  entries: SectionSourceEntry[];
+}
+
+export type SourcesRender =
+  | { ok: true; html: string; sources: CollectedSectionSources }
+  | { ok: false; diagnostics: CompositorDiagnostic[] };
+
+const MAX_SOURCE_DETAIL = 300;
+
+export const SOURCES_EXAMPLE = `section: pipeline-health
+- tool: mcp_lastmile-data_query — SELECT stage, count(*) FROM opportunity GROUP BY stage (12 rows)
+- tool: twenty--crm.search_records — opportunities for the rep, current quarter (72 records)`;
+
+function rejectSources(message: string): SourcesRender {
+  return {
+    ok: false,
+    diagnostics: [
+      {
+        code: "DIRECTIVE_INVALID",
+        message: `${message} Corrected minimal example:\n\`\`\`tw:sources\n${SOURCES_EXAMPLE}\n\`\`\`\nNarrative-only sections use \`- none: <why no tool data backs this section>\` instead of tool lines.`,
+        location: "tw:sources",
+      },
+    ],
+  };
+}
+
+const SOURCES_SECTION_LINE = /^section:\s*(\S+)\s*$/;
+const SOURCES_TOOL_LINE = /^-\s*tool:\s*([^\s—:]+)\s*(?:[—:]\s*(.*))?$/;
+const SOURCES_NONE_LINE = /^-\s*none:\s*(.*)$/;
+
+/**
+ * Parse a tw:sources fence body. Deliberately NOT YAML: source details are
+ * free text (queries carry colons and commas), so the grammar is line-based —
+ * one `section:` line, then one `- tool:` or `- none:` line per source.
+ */
+export function renderSourcesDirective(input: {
+  body: string;
+  sections: readonly WaiverableSection[] | undefined;
+}): SourcesRender {
+  const lines = input.body
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l !== "");
+  if (lines.length === 0) {
+    return rejectSources("tw:sources fence is empty.");
+  }
+  const sectionMatch = SOURCES_SECTION_LINE.exec(lines[0]);
+  if (!sectionMatch) {
+    return rejectSources(
+      "tw:sources must start with a `section: <section-id>` line naming the section the sources back.",
+    );
+  }
+  const sectionId = sectionMatch[1];
+  const manifest = input.sections ?? [];
+  if (manifest.length > 0 && !manifest.some((s) => s.id === sectionId)) {
+    return rejectSources(
+      `Section ${JSON.stringify(sectionId)} is not in this plate's manifest. Manifest sections: ${manifest.map((s) => s.id).join(", ")}.`,
+    );
+  }
+  const entries: SectionSourceEntry[] = [];
+  for (const line of lines.slice(1)) {
+    const tool = SOURCES_TOOL_LINE.exec(line);
+    if (tool) {
+      const detail = (tool[2] ?? "").trim();
+      if (detail.length > MAX_SOURCE_DETAIL) {
+        return rejectSources(
+          `The source detail for tool "${tool[1]}" must be ≤${MAX_SOURCE_DETAIL} characters — state the query/filter and row count, not the narrative.`,
+        );
+      }
+      entries.push({ kind: "tool", tool: tool[1], detail });
+      continue;
+    }
+    const none = SOURCES_NONE_LINE.exec(line);
+    if (none) {
+      const detail = none[1].trim();
+      if (!detail) {
+        return rejectSources(
+          "`- none:` lines need a reason explaining why the section is narrative-only.",
+        );
+      }
+      if (detail.length > MAX_SOURCE_DETAIL) {
+        return rejectSources(
+          `The \`- none:\` reason must be ≤${MAX_SOURCE_DETAIL} characters.`,
+        );
+      }
+      entries.push({ kind: "none", detail });
+      continue;
+    }
+    return rejectSources(
+      `tw:sources line ${JSON.stringify(line)} is not valid — every source line is either \`- tool: <tool-name> — <query/filter + row count>\` or \`- none: <reason>\`.`,
+    );
+  }
+  if (entries.length === 0) {
+    return rejectSources(
+      "tw:sources needs at least one source line after the `section:` line.",
+    );
+  }
+
+  const items = entries
+    .map((e) =>
+      e.kind === "tool"
+        ? `<li><code>${escapeHtml(e.tool ?? "")}</code>${e.detail ? ` — ${escapeHtml(e.detail)}` : ""}</li>`
+        : `<li>No tool data — ${escapeHtml(e.detail)}</li>`,
+    )
+    .join("");
+  const html = `<div class="card section-sources"><span class="sources-label">Data sources</span><ul>${items}</ul></div>`;
+  return { ok: true, html, sources: { sectionId, entries } };
+}
+
+// ---------------------------------------------------------------------------
 // Registry + engine
 // ---------------------------------------------------------------------------
 

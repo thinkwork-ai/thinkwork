@@ -1436,6 +1436,11 @@ describe("waiver persistence (THINK-183 U5)", () => {
 
 Attainment held at 82% of target.
 
+\`\`\`tw:sources
+section: summary
+- tool: twenty--crm.search_records — attainment records for the rep, current quarter (12 records)
+\`\`\`
+
 \`\`\`tw:waiver
 section: pipeline-health
 reason: No stage-level pipeline data is connected for this rep.
@@ -1470,9 +1475,19 @@ reason: No stage-level pipeline data is connected for this rep.
 
 All good.
 
+\`\`\`tw:sources
+section: summary
+- none: narrative synthesis of the sections below
+\`\`\`
+
 ## Pipeline Health
 
 Funnel narrative.
+
+\`\`\`tw:sources
+section: pipeline-health
+- tool: mcp_lastmile-data_query — SELECT stage, count(*) FROM opportunity GROUP BY stage (5 rows)
+\`\`\`
 `,
     };
     const result = await emit(fullDoc, deps);
@@ -1623,6 +1638,11 @@ describe("conformance recording (THINK-189 U3)", () => {
 
 Attainment held at 82% of target.
 
+\`\`\`tw:sources
+section: summary
+- tool: twenty--crm.search_records — attainment records for the rep, current quarter (12 records)
+\`\`\`
+
 ## Pipeline Health
 
 Funnel narrative without the chart.
@@ -1700,5 +1720,93 @@ Funnel narrative without the chart.
     await emit(CONFORMING_DOC, deps);
     await emit(CONFORMING_DOC, deps);
     expect(recorded.conformanceRecords).toHaveLength(2);
+  });
+
+  it("success body sections, conformance facts, and thread card carry tw:sources provenance", async () => {
+    const { deps, recorded } = conformanceDeps();
+    const result = await emit(CONFORMING_DOC, deps);
+    expect(result.body).toMatchObject({ ok: true });
+    // Success response body: per-section outcomes include sources.
+    const bodySections = (
+      result.body as { sections: Array<Record<string, unknown>> }
+    ).sections;
+    const bodySummary = bodySections.find((s) => s.id === "summary")!;
+    expect(bodySummary.sources).toEqual([
+      {
+        kind: "tool",
+        tool: "twenty--crm.search_records",
+        detail: "attainment records for the rep, current quarter (12 records)",
+      },
+    ]);
+    // Conformance record: the same sources ride the section facts row.
+    const record = recorded.conformanceRecords[0] as {
+      sectionFacts: { sections: Array<Record<string, unknown>> };
+    };
+    const factSummary = record.sectionFacts.sections.find(
+      (s) => s.id === "summary",
+    )!;
+    expect(factSummary.sources).toEqual(bodySummary.sources);
+    // Thread card: sections + sources fold into the compact card payload.
+    const card = (recorded.cards[0] as { card: Record<string, unknown> }).card;
+    const cardSections = card.sections as Array<Record<string, unknown>>;
+    const cardSummary = cardSections.find((s) => s.id === "summary")!;
+    expect(cardSummary).toMatchObject({ title: "Summary", status: "present" });
+    expect(
+      (cardSummary.sources as Array<Record<string, unknown>>)[0],
+    ).toMatchObject({ kind: "tool", tool: "twenty--crm.search_records" });
+  });
+
+  it("buildDocumentCard truncates source details and always fits the card ceiling", () => {
+    const longDetail = "d".repeat(400);
+    const card = buildDocumentCard({
+      artifactId: "artifact-1",
+      documentId: "doc-1",
+      title: "T",
+      genre: "rep-check",
+      abstract: "A short abstract.",
+      status: "draft",
+      headVersion: 0,
+      sections: [
+        {
+          id: "summary",
+          title: "Summary",
+          tier: "required",
+          status: "present",
+          sources: [{ kind: "tool", tool: "some_tool", detail: longDetail }],
+        },
+      ],
+    });
+    const sections = card.sections as Array<{
+      sources: Array<{ detail: string }>;
+    }>;
+    // boundedCanvasText caps at 120 chars plus a truncation marker.
+    expect(sections[0].sources[0].detail.length).toBeLessThanOrEqual(125);
+    expect(sections[0].sources[0].detail.length).toBeLessThan(400);
+    expect(Buffer.byteLength(JSON.stringify(card), "utf8")).toBeLessThanOrEqual(
+      DOCUMENT_CARD_MAX_BYTES,
+    );
+
+    // Degenerate pressure: many sections with long titles still fit — sources
+    // (then sections) drop before the card ever exceeds the ceiling.
+    const bloated = buildDocumentCard({
+      artifactId: "artifact-1",
+      title: "T",
+      genre: "rep-check",
+      abstract: "x".repeat(20_000),
+      status: "draft",
+      headVersion: 0,
+      sections: Array.from({ length: 200 }, (_, i) => ({
+        id: `section-${i}`,
+        title: `Section ${i} ${"t".repeat(120)}`,
+        tier: "required" as const,
+        status: "present" as const,
+        sources: [
+          { kind: "tool" as const, tool: `tool-${i}`, detail: "d".repeat(200) },
+        ],
+      })),
+    });
+    expect(
+      Buffer.byteLength(JSON.stringify(bloated), "utf8"),
+    ).toBeLessThanOrEqual(DOCUMENT_CARD_MAX_BYTES);
   });
 });

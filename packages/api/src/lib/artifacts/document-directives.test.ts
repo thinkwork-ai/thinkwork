@@ -10,6 +10,7 @@ import {
   buildDirectiveEngine,
   makeChartSpec,
   renderDocumentDirective,
+  renderSourcesDirective,
   type DirectiveSpec,
 } from "./document-directives.js";
 import { runDocumentPreflight } from "./document-preflight.js";
@@ -384,6 +385,141 @@ Prose after components.
       expect(result.diagnostics[0].message).toContain(
         "tw:stats, tw:verdict-grid, tw:chart",
       );
+    }
+  });
+});
+
+describe("tw:sources (per-section provenance)", () => {
+  const SECTIONS = [
+    {
+      id: "pipeline-health",
+      title: "Pipeline Health",
+      tier: "required-if-material" as const,
+    },
+    { id: "summary", title: "Summary", tier: "required" as const },
+  ];
+
+  it("renders a compact sources card and collects the claims", () => {
+    const result = renderSourcesDirective({
+      body: [
+        "section: pipeline-health",
+        "- tool: mcp_lastmile-data_query — SELECT stage, count(*) FROM opportunity (12 rows)",
+        "- tool: twenty--crm.search_records: opportunities for the rep (72 records)",
+        "- none: closing narrative synthesized from the rows above",
+      ].join("\n"),
+      sections: SECTIONS,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.html).toContain('class="card section-sources"');
+      expect(result.html).toContain(
+        '<span class="sources-label">Data sources</span>',
+      );
+      expect(result.html).toContain(
+        "<code>mcp_lastmile-data_query</code> — SELECT stage, count(*) FROM opportunity (12 rows)",
+      );
+      expect(result.html).toContain("<code>twenty--crm.search_records</code>");
+      expect(result.html).toContain(
+        "No tool data — closing narrative synthesized from the rows above",
+      );
+      expect(result.sources).toEqual({
+        sectionId: "pipeline-health",
+        entries: [
+          {
+            kind: "tool",
+            tool: "mcp_lastmile-data_query",
+            detail: "SELECT stage, count(*) FROM opportunity (12 rows)",
+          },
+          {
+            kind: "tool",
+            tool: "twenty--crm.search_records",
+            detail: "opportunities for the rep (72 records)",
+          },
+          {
+            kind: "none",
+            detail: "closing narrative synthesized from the rows above",
+          },
+        ],
+      });
+    }
+  });
+
+  it("HTML in tool names and details is escaped", () => {
+    const result = renderSourcesDirective({
+      body: 'section: summary\n- tool: some_tool — detail with <script>alert("x")</script>',
+      sections: SECTIONS,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.html).not.toContain("<script>");
+      expect(result.html).toContain("&lt;script&gt;");
+    }
+  });
+
+  it("rejects a missing section line with the corrected example", () => {
+    const result = renderSourcesDirective({
+      body: "- tool: some_tool — a query",
+      sections: SECTIONS,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics[0].code).toBe("DIRECTIVE_INVALID");
+      expect(result.diagnostics[0].message).toContain("section:");
+      expect(result.diagnostics[0].message).toContain("```tw:sources");
+    }
+  });
+
+  it("rejects a section id outside the manifest, naming the manifest ids", () => {
+    const result = renderSourcesDirective({
+      body: "section: nonexistent\n- tool: some_tool — a query",
+      sections: SECTIONS,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics[0].message).toContain(
+        "pipeline-health, summary",
+      );
+    }
+  });
+
+  it("accepts any slug-shaped section when the plate has no manifest", () => {
+    const result = renderSourcesDirective({
+      body: "section: anything-goes\n- tool: some_tool — a query",
+      sections: undefined,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects fences with no source lines, junk lines, empty none reasons, and oversize details", () => {
+    const noLines = renderSourcesDirective({
+      body: "section: summary",
+      sections: SECTIONS,
+    });
+    expect(noLines.ok).toBe(false);
+
+    const junk = renderSourcesDirective({
+      body: "section: summary\njust some prose",
+      sections: SECTIONS,
+    });
+    expect(junk.ok).toBe(false);
+    if (!junk.ok) {
+      expect(junk.diagnostics[0].message).toContain("- tool:");
+      expect(junk.diagnostics[0].message).toContain("- none:");
+    }
+
+    const emptyNone = renderSourcesDirective({
+      body: "section: summary\n- none:",
+      sections: SECTIONS,
+    });
+    expect(emptyNone.ok).toBe(false);
+
+    const oversize = renderSourcesDirective({
+      body: `section: summary\n- tool: some_tool — ${"x".repeat(301)}`,
+      sections: SECTIONS,
+    });
+    expect(oversize.ok).toBe(false);
+    if (!oversize.ok) {
+      expect(oversize.diagnostics[0].message).toContain("300");
     }
   });
 });

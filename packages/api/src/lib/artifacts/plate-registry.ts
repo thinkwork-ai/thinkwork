@@ -923,10 +923,18 @@ export function buildPlateExemplar(plate: ResolvedPlate): PlateExemplar {
 
   // A heading per manifest section (title verbatim — its slug is the section
   // id by the KTD6 save-time consistency check) with representative prose.
-  const manifestSections = (plate.sections ?? []).map(
-    (section) =>
-      `## ${section.title}\n\nRepresentative content for this section. ${section.guidance}`,
-  );
+  // Enforced sections carry a demo tw:sources fence (plates provenance
+  // 2026-07): customized plates require per-section provenance, and the save
+  // gates compile this exemplar against the customized resolution — without
+  // the fence, every contract-plate save would self-reject on
+  // SECTION_MISSING_SOURCES.
+  const manifestSections = (plate.sections ?? []).map((section) => {
+    const sources =
+      section.tier === "suggested"
+        ? ""
+        : `\n\n\`\`\`tw:sources\nsection: ${section.id}\n- tool: example-connector.query — representative query for this section (12 rows)\n\`\`\``;
+    return `## ${section.title}\n\nRepresentative content for this section. ${section.guidance}${sources}`;
+  });
 
   const markdownBody = `---
 date: Q3 2026
@@ -1035,7 +1043,14 @@ export function buildContractPreviewExemplar(
     if (section.id === demoTarget?.id) {
       return `\`\`\`tw:waiver\nsection: ${section.id}\nreason: ${WAIVER_DEMO_REASON}\n\`\`\``;
     }
-    return `## ${section.title}\n\n${section.guidance.trim() || "Representative content for this section."}`;
+    // Enforced present sections carry a demo tw:sources card (plates
+    // provenance 2026-07) — both to satisfy the customized-plate provenance
+    // check and to show the operator how provenance renders.
+    const sources =
+      section.tier === "suggested"
+        ? ""
+        : `\n\n\`\`\`tw:sources\nsection: ${section.id}\n- tool: example-connector.query — representative query for this section (12 rows)\n\`\`\``;
+    return `## ${section.title}\n\n${section.guidance.trim() || "Representative content for this section."}${sources}`;
   });
 
   const markdownBody = `---

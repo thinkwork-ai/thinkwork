@@ -117,6 +117,20 @@ svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-ser
 }`;
 
 /**
+ * Sources-card styling (per-section provenance, plates provenance 2026-07).
+ * NOT part of DOCUMENT_PLATE_CSS: the compositor appends this block only when
+ * a document renders a tw:sources fence, so documents without provenance —
+ * including the golden-parity fixtures — compile byte-identical to before.
+ * Visually quiet by design: an audit footnote riding the existing .card
+ * vocabulary (background/border/muted tokens track light/dark automatically).
+ */
+export const SECTION_SOURCES_CSS = `.card.section-sources{margin:14px 0 6px;padding:10px 14px;font-size:.85em}
+.card.section-sources .sources-label{display:block;font-size:.78em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.card.section-sources ul{margin:.35em 0 0;padding-left:1.2em;color:var(--muted)}
+.card.section-sources li{margin:.15em 0;max-width:none}
+.card.section-sources code{background:none;padding:0}`;
+
+/**
  * Build the CSS block that layers a plate's resolved token values over the
  * base palette. Returns "" when both maps are empty (golden parity: an
  * uncustomized core plate compiles byte-identical to the pre-registry
@@ -174,13 +188,21 @@ export function renderDocumentShell(input: {
   /** Resolved plate token overrides (plate registry); empty = base palette. */
   tokensLight?: Record<string, string>;
   tokensDark?: Record<string, string>;
+  /**
+   * Compiler-owned conditional CSS (e.g. SECTION_SOURCES_CSS when a
+   * tw:sources card rendered). Absent → output byte-identical to before.
+   */
+  extraCss?: string;
 }): string {
   const t = escapeHtml(input.title);
   const meta = input.metaLineHtml ? `\n${input.metaLineHtml}` : "";
-  const overrideCss = buildPlateTokenOverrideCss(
+  const baseOverrideCss = buildPlateTokenOverrideCss(
     input.tokensLight ?? {},
     input.tokensDark ?? {},
   );
+  const overrideCss = [baseOverrideCss, input.extraCss ?? ""]
+    .filter(Boolean)
+    .join("\n");
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
