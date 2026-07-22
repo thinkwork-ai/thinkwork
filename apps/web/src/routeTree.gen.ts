@@ -75,6 +75,7 @@ import { Route as AuthedSettingsMemoryWikiRouteImport } from "./routes/_authed/s
 import { Route as AuthedSettingsMemoryOntologyRouteImport } from "./routes/_authed/settings.memory.ontology";
 import { Route as AuthedSettingsMemoryKnowledgeGraphRouteImport } from "./routes/_authed/settings.memory.knowledge-graph";
 import { Route as AuthedSettingsMemoryKnowledgeBasesRouteImport } from "./routes/_authed/settings.memory.knowledge-bases";
+import { Route as AuthedSettingsMemoryExplorerRouteImport } from "./routes/_authed/settings.memory.explorer";
 import { Route as AuthedSettingsMcpServersServersRouteImport } from "./routes/_authed/settings.mcp-servers.servers";
 import { Route as AuthedSettingsMcpServersSelfAcquiredRouteImport } from "./routes/_authed/settings.mcp-servers.self-acquired";
 import { Route as AuthedSettingsMcpServersPluginsRouteImport } from "./routes/_authed/settings.mcp-servers.plugins";
@@ -115,6 +116,7 @@ import { Route as AuthedShellAppsPluginKeyAppRouteSegmentRouteImport } from "./r
 import { Route as AuthedSettingsRoutinesRoutineIdExecutionsIndexRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.index";
 import { Route as AuthedSettingsWorkflowsWorkflowIdRunsRunIdRouteImport } from "./routes/_authed/settings.workflows.$workflowId_.runs.$runId";
 import { Route as AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.$executionId";
+import { Route as AuthedSettingsMemoryExplorerEntityTypeCanonicalIdRouteImport } from "./routes/_authed/settings.memory_.explorer.$entityType.$canonicalId";
 import { Route as AuthedSettingsEvaluationsStudioEditTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.edit.$testCaseId";
 import { Route as AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRouteImport } from "./routes/_authed/settings.agent-loops.$agentLoopId_.runs.$runId";
 import { Route as AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRouteImport } from "./routes/_authed/crm.$provider.$objectType.$objectId.$workflowKey";
@@ -487,6 +489,12 @@ const AuthedSettingsMemoryKnowledgeBasesRoute =
     path: "/knowledge-bases",
     getParentRoute: () => AuthedSettingsMemoryRoute,
   } as any);
+const AuthedSettingsMemoryExplorerRoute =
+  AuthedSettingsMemoryExplorerRouteImport.update({
+    id: "/explorer",
+    path: "/explorer",
+    getParentRoute: () => AuthedSettingsMemoryRoute,
+  } as any);
 const AuthedSettingsMcpServersServersRoute =
   AuthedSettingsMcpServersServersRouteImport.update({
     id: "/mcp-servers/servers",
@@ -724,6 +732,12 @@ const AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute =
     path: "/routines/$routineId/executions/$executionId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsMemoryExplorerEntityTypeCanonicalIdRoute =
+  AuthedSettingsMemoryExplorerEntityTypeCanonicalIdRouteImport.update({
+    id: "/memory_/explorer/$entityType/$canonicalId",
+    path: "/memory/explorer/$entityType/$canonicalId",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsEvaluationsStudioEditTestCaseIdRoute =
   AuthedSettingsEvaluationsStudioEditTestCaseIdRouteImport.update({
     id: "/evaluations/studio/edit/$testCaseId",
@@ -810,6 +824,7 @@ export interface FileRoutesByFullPath {
   "/settings/mcp-servers/plugins": typeof AuthedSettingsMcpServersPluginsRoute;
   "/settings/mcp-servers/self-acquired": typeof AuthedSettingsMcpServersSelfAcquiredRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
+  "/settings/memory/explorer": typeof AuthedSettingsMemoryExplorerRoute;
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
@@ -862,6 +877,7 @@ export interface FileRoutesByFullPath {
   "/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
   "/settings/agent-loops/$agentLoopId/runs/$runId": typeof AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
+  "/settings/memory/explorer/$entityType/$canonicalId": typeof AuthedSettingsMemoryExplorerEntityTypeCanonicalIdRoute;
   "/settings/routines/$routineId/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
   "/settings/workflows/$workflowId/runs/$runId": typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
   "/settings/routines/$routineId/executions/": typeof AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute;
@@ -917,6 +933,7 @@ export interface FileRoutesByTo {
   "/settings/mcp-servers/plugins": typeof AuthedSettingsMcpServersPluginsRoute;
   "/settings/mcp-servers/self-acquired": typeof AuthedSettingsMcpServersSelfAcquiredRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
+  "/settings/memory/explorer": typeof AuthedSettingsMemoryExplorerRoute;
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
@@ -969,6 +986,7 @@ export interface FileRoutesByTo {
   "/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
   "/settings/agent-loops/$agentLoopId/runs/$runId": typeof AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute;
   "/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
+  "/settings/memory/explorer/$entityType/$canonicalId": typeof AuthedSettingsMemoryExplorerEntityTypeCanonicalIdRoute;
   "/settings/routines/$routineId/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
   "/settings/workflows/$workflowId/runs/$runId": typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
   "/settings/routines/$routineId/executions": typeof AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute;
@@ -1031,6 +1049,7 @@ export interface FileRoutesById {
   "/_authed/settings/mcp-servers/plugins": typeof AuthedSettingsMcpServersPluginsRoute;
   "/_authed/settings/mcp-servers/self-acquired": typeof AuthedSettingsMcpServersSelfAcquiredRoute;
   "/_authed/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
+  "/_authed/settings/memory/explorer": typeof AuthedSettingsMemoryExplorerRoute;
   "/_authed/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/_authed/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/_authed/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
@@ -1083,6 +1102,7 @@ export interface FileRoutesById {
   "/_authed/crm/$provider/$objectType/$objectId/$workflowKey": typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
   "/_authed/settings/agent-loops/$agentLoopId_/runs/$runId": typeof AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute;
   "/_authed/settings/evaluations/studio/edit/$testCaseId": typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
+  "/_authed/settings/memory_/explorer/$entityType/$canonicalId": typeof AuthedSettingsMemoryExplorerEntityTypeCanonicalIdRoute;
   "/_authed/settings/routines/$routineId_/executions/$executionId": typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
   "/_authed/settings/workflows/$workflowId_/runs/$runId": typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
   "/_authed/settings/routines/$routineId_/executions/": typeof AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute;
@@ -1144,6 +1164,7 @@ export interface FileRouteTypes {
     | "/settings/mcp-servers/plugins"
     | "/settings/mcp-servers/self-acquired"
     | "/settings/mcp-servers/servers"
+    | "/settings/memory/explorer"
     | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/ontology"
@@ -1196,6 +1217,7 @@ export interface FileRouteTypes {
     | "/crm/$provider/$objectType/$objectId/$workflowKey"
     | "/settings/agent-loops/$agentLoopId/runs/$runId"
     | "/settings/evaluations/studio/edit/$testCaseId"
+    | "/settings/memory/explorer/$entityType/$canonicalId"
     | "/settings/routines/$routineId/executions/$executionId"
     | "/settings/workflows/$workflowId/runs/$runId"
     | "/settings/routines/$routineId/executions/";
@@ -1251,6 +1273,7 @@ export interface FileRouteTypes {
     | "/settings/mcp-servers/plugins"
     | "/settings/mcp-servers/self-acquired"
     | "/settings/mcp-servers/servers"
+    | "/settings/memory/explorer"
     | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/ontology"
@@ -1303,6 +1326,7 @@ export interface FileRouteTypes {
     | "/crm/$provider/$objectType/$objectId/$workflowKey"
     | "/settings/agent-loops/$agentLoopId/runs/$runId"
     | "/settings/evaluations/studio/edit/$testCaseId"
+    | "/settings/memory/explorer/$entityType/$canonicalId"
     | "/settings/routines/$routineId/executions/$executionId"
     | "/settings/workflows/$workflowId/runs/$runId"
     | "/settings/routines/$routineId/executions";
@@ -1364,6 +1388,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/mcp-servers/plugins"
     | "/_authed/settings/mcp-servers/self-acquired"
     | "/_authed/settings/mcp-servers/servers"
+    | "/_authed/settings/memory/explorer"
     | "/_authed/settings/memory/knowledge-bases"
     | "/_authed/settings/memory/knowledge-graph"
     | "/_authed/settings/memory/ontology"
@@ -1416,6 +1441,7 @@ export interface FileRouteTypes {
     | "/_authed/crm/$provider/$objectType/$objectId/$workflowKey"
     | "/_authed/settings/agent-loops/$agentLoopId_/runs/$runId"
     | "/_authed/settings/evaluations/studio/edit/$testCaseId"
+    | "/_authed/settings/memory_/explorer/$entityType/$canonicalId"
     | "/_authed/settings/routines/$routineId_/executions/$executionId"
     | "/_authed/settings/workflows/$workflowId_/runs/$runId"
     | "/_authed/settings/routines/$routineId_/executions/";
@@ -1897,6 +1923,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsMemoryKnowledgeBasesRouteImport;
       parentRoute: typeof AuthedSettingsMemoryRoute;
     };
+    "/_authed/settings/memory/explorer": {
+      id: "/_authed/settings/memory/explorer";
+      path: "/explorer";
+      fullPath: "/settings/memory/explorer";
+      preLoaderRoute: typeof AuthedSettingsMemoryExplorerRouteImport;
+      parentRoute: typeof AuthedSettingsMemoryRoute;
+    };
     "/_authed/settings/mcp-servers/servers": {
       id: "/_authed/settings/mcp-servers/servers";
       path: "/mcp-servers/servers";
@@ -2177,6 +2210,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/memory_/explorer/$entityType/$canonicalId": {
+      id: "/_authed/settings/memory_/explorer/$entityType/$canonicalId";
+      path: "/memory/explorer/$entityType/$canonicalId";
+      fullPath: "/settings/memory/explorer/$entityType/$canonicalId";
+      preLoaderRoute: typeof AuthedSettingsMemoryExplorerEntityTypeCanonicalIdRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/evaluations/studio/edit/$testCaseId": {
       id: "/_authed/settings/evaluations/studio/edit/$testCaseId";
       path: "/evaluations/studio/edit/$testCaseId";
@@ -2360,6 +2400,7 @@ const AuthedSettingsArtifactsRouteWithChildren =
   );
 
 interface AuthedSettingsMemoryRouteChildren {
+  AuthedSettingsMemoryExplorerRoute: typeof AuthedSettingsMemoryExplorerRoute;
   AuthedSettingsMemoryKnowledgeBasesRoute: typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   AuthedSettingsMemoryKnowledgeGraphRoute: typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   AuthedSettingsMemoryOntologyRoute: typeof AuthedSettingsMemoryOntologyRoute;
@@ -2367,6 +2408,7 @@ interface AuthedSettingsMemoryRouteChildren {
 }
 
 const AuthedSettingsMemoryRouteChildren: AuthedSettingsMemoryRouteChildren = {
+  AuthedSettingsMemoryExplorerRoute: AuthedSettingsMemoryExplorerRoute,
   AuthedSettingsMemoryKnowledgeBasesRoute:
     AuthedSettingsMemoryKnowledgeBasesRoute,
   AuthedSettingsMemoryKnowledgeGraphRoute:
@@ -2471,6 +2513,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsEvaluationsStudioIndexRoute: typeof AuthedSettingsEvaluationsStudioIndexRoute;
   AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute: typeof AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute;
   AuthedSettingsEvaluationsStudioEditTestCaseIdRoute: typeof AuthedSettingsEvaluationsStudioEditTestCaseIdRoute;
+  AuthedSettingsMemoryExplorerEntityTypeCanonicalIdRoute: typeof AuthedSettingsMemoryExplorerEntityTypeCanonicalIdRoute;
   AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute: typeof AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute;
   AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute: typeof AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute;
   AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute: typeof AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute;
@@ -2553,6 +2596,8 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
     AuthedSettingsAgentLoopsAgentLoopIdRunsRunIdRoute,
   AuthedSettingsEvaluationsStudioEditTestCaseIdRoute:
     AuthedSettingsEvaluationsStudioEditTestCaseIdRoute,
+  AuthedSettingsMemoryExplorerEntityTypeCanonicalIdRoute:
+    AuthedSettingsMemoryExplorerEntityTypeCanonicalIdRoute,
   AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute:
     AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRoute,
   AuthedSettingsWorkflowsWorkflowIdRunsRunIdRoute:

@@ -52,6 +52,19 @@ export type {
 } from "./OntologyGraph.js";
 
 export {
+  TwinGraph,
+  buildTwinGraphData,
+  mergeTwinGraphData,
+  twinCanonicalIdFromNodeId,
+} from "./TwinGraph.js";
+export type {
+  TwinGraphData,
+  TwinGraphHandle,
+  TwinGraphLink,
+  TwinGraphNode,
+} from "./TwinGraph.js";
+
+export {
   classifyNode,
   communityColor,
   connectedGraphEdges,
@@ -88,5 +101,6 @@ export {
   KnowledgeGraphQuery,
   MemoryGraphQuery,
   OntologyGraphQuery,
+  TwinNeighborsQuery,
   WikiGraphQuery,
 } from "./queries.js";

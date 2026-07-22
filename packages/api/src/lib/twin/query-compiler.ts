@@ -156,10 +156,15 @@ export function compileTwinQuery(
       parameters.nodeId = `t#${tenantId}#e#${request.canonicalId}`;
       return {
         // Depth is a VALIDATED LITERAL (Neptune VLP bounds are constant-only).
+        // Edge triples ride along (THINK-327 U3) so graph consumers can draw
+        // labeled relationships; additive — node/neighbors keys unchanged.
         query:
           "MATCH (n {`~id`: $nodeId}) WHERE n.tenantId = $tenantId " +
-          `MATCH (n)-[r*1..${depth}]-(m) WHERE m.tenantId = $tenantId ` +
-          "RETURN n AS node, collect(DISTINCT m)[0..50] AS neighbors",
+          `MATCH p = (n)-[r*1..${depth}]-(m) WHERE m.tenantId = $tenantId ` +
+          "UNWIND relationships(p) AS rel " +
+          "RETURN n AS node, collect(DISTINCT m)[0..50] AS neighbors, " +
+          "collect(DISTINCT {rel: type(rel), sourceId: id(startNode(rel)), " +
+          "targetId: id(endNode(rel))})[0..200] AS edges",
         parameters,
       };
     }
