@@ -35,6 +35,7 @@ import {
 import ForceGraph2D from "react-force-graph-2d";
 import { useQuery } from "urql";
 import * as d3 from "d3-force";
+import { twinTypeColor } from "./TwinGraph.js";
 import { OntologyGraphQuery } from "./queries.js";
 import {
   classifyNode,
@@ -192,6 +193,7 @@ interface OntologyGraphProps extends OntologyGraphFilters {
 
 /** Approved types render in the trusted teal of the trust palette. */
 const APPROVED_COLOR = "#14b8a6";
+const UNIFORM_TYPE_RADIUS = 10;
 /** Ghost candidates render pending-amber (weak/pending tier). */
 const CANDIDATE_COLOR = "#f59e0b";
 /** External systems render violet, matching the instance graph's system
@@ -682,13 +684,13 @@ export const OntologyGraph = forwardRef<
   const maxInstanceCountRef = useRef(maxInstanceCount);
   maxInstanceCountRef.current = maxInstanceCount;
 
+  // Uniform sizing (Explorer visual language, Eric 2026-07-22): every
+  // type node renders the same radius — density reads through color and
+  // position, not disc size.
   const nodeRadius = useCallback((node: any) => {
     if (node.kind === "candidate") return CANDIDATE_NODE_RADIUS;
     if (node.kind === "system") return SYSTEM_NODE_RADIUS;
-    return degreeRadius(
-      (node.instanceCount ?? 0) + 1,
-      maxInstanceCountRef.current + 1,
-    );
+    return UNIFORM_TYPE_RADIUS;
   }, []);
 
   // --- Dim-in-place classification (R3): search + focus mutate painter
@@ -842,7 +844,7 @@ export const OntologyGraph = forwardRef<
           ? SYSTEM_COLOR
           : ghost
             ? CANDIDATE_COLOR
-            : APPROVED_COLOR;
+            : twinTypeColor(node.slug ?? node.label ?? null);
       const r = nodeRadius(node);
 
       ctx.globalAlpha = ghost ? alpha * 0.25 : alpha;
@@ -1039,14 +1041,16 @@ export const OntologyGraph = forwardRef<
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    fg.d3Force("charge")?.strength(-140).distanceMax(260);
-    fg.d3Force("link")?.distance(90);
+    fg.d3Force("charge")?.strength(-60).distanceMax(260);
+    fg.d3Force("link")?.distance(55);
+    fg.d3Force("x", d3.forceX(0).strength(0.08));
+    fg.d3Force("y", d3.forceY(0).strength(0.08));
     fg.d3Force(
       "collide",
       d3
         .forceCollide()
-        .radius((node: any) => nodeRadius(node) + 14)
-        .strength(0.9),
+        .radius((node: any) => nodeRadius(node) + 10)
+        .strength(1),
     );
     // `dims` re-runs this once the engine actually mounts.
   }, [dims, nodeRadius]);
@@ -1175,20 +1179,12 @@ export const OntologyGraph = forwardRef<
         linkCurvature={(link: any) => link.curvature ?? 0}
         linkCanvasObjectMode={() => "replace" as const}
         linkCanvasObject={linkCanvasObject}
-        // The schema map is small — let it settle LIVE with natural d3
-        // decay instead of pre-warming off-screen: the frozen "muted"
-        // look came from warmup + heavy damping (Eric, 2026-07-22).
-        cooldownTicks={300}
-        d3AlphaDecay={0.0228}
-        d3VelocityDecay={0.4}
-        warmupTicks={0}
+        cooldownTicks={framed ? 120 : 0}
+        d3AlphaDecay={framed ? 0.028 : 0.0115}
+        d3VelocityDecay={framed ? 0.45 : 0.55}
+        warmupTicks={400}
         onZoom={({ k }: { k: number }) => {
           zoomKRef.current = k;
-        }}
-        onEngineTick={() => {
-          // Live settle: follow the forming layout until first framing.
-          if (framed) return;
-          fgRef.current?.zoomToFit?.(0, 40);
         }}
         onEngineStop={() => {
           if (zoomInitRef.current) return;

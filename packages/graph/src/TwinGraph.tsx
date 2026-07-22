@@ -24,6 +24,7 @@ import {
   useState,
 } from "react";
 import ForceGraph2D from "react-force-graph-2d";
+import * as d3 from "d3-force";
 import { useClient, useQuery } from "urql";
 import { TwinNeighborsQuery, TwinSubgraphQuery } from "./queries.js";
 import {
@@ -70,6 +71,33 @@ export interface TwinGraphHandle {
 const CENTER_COLOR = "#0ea5e9";
 const NEIGHBOR_COLOR = "#64748b";
 const SYSTEM_COLOR = "#a78bfa";
+
+/** Stable per-entity-type hues so dense neighborhoods read as data, not
+ * uniform gray blobs — hash the type label into a small curated palette. */
+const TYPE_PALETTE = [
+  "#2dd4bf", // teal
+  "#f59e0b", // amber
+  "#818cf8", // indigo
+  "#f472b6", // pink
+  "#4ade80", // green
+  "#fb923c", // orange
+  "#38bdf8", // sky
+  "#e879f9", // fuchsia
+  "#a3e635", // lime
+  "#f87171", // red
+];
+/** Every node renders the same size — density reads through color and
+ * position, not radius. */
+export const TWIN_NODE_RADIUS = 6;
+
+export function twinTypeColor(typeLabel: string | null): string {
+  if (!typeLabel) return NEIGHBOR_COLOR;
+  let hash = 0;
+  for (let i = 0; i < typeLabel.length; i += 1) {
+    hash = (hash * 31 + typeLabel.charCodeAt(i)) | 0;
+  }
+  return TYPE_PALETTE[Math.abs(hash) % TYPE_PALETTE.length]!;
+}
 
 /** `t#<tenant>#e#<canonicalId>` → canonicalId. */
 export function twinCanonicalIdFromNodeId(nodeId: string): string | null {
@@ -399,6 +427,7 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     const graphDataRef = useRef<TwinGraphData>({ nodes: [], links: [] });
     const lastKeyRef = useRef<string | null>(null);
     const zoomInitRef = useRef(false);
+    const tickCountRef = useRef(0);
 
     // The query identity (mode + types + entity): when it changes, the old
     // dataset is WRONG, not stale-but-refreshing — drop it immediately so
@@ -414,6 +443,7 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
       graphDataRef.current.links.length = 0;
       lastKeyRef.current = null;
       zoomInitRef.current = false;
+      tickCountRef.current = 0;
     }
 
     const payload = overviewMode
@@ -441,6 +471,32 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     );
     const graphData = graphDataRef.current;
 
+    // Dense neighborhoods (invoices/items fanning out of one customer)
+    // otherwise stack into a single blob. Firm collision + wider link
+    // distance + stronger charge keep uniform nodes separated, and every
+    // data merge reheats the simulation so the layout actually updates.
+    useEffect(() => {
+      const fg = fgRef.current;
+      if (!fg || typeof fg.d3Force !== "function") return;
+      fg.d3Force(
+        "collide",
+        d3
+          .forceCollide()
+          .radius(TWIN_NODE_RADIUS + 3)
+          .strength(1)
+          .iterations(2),
+      );
+      // Weak centering keeps the many disconnected star-clusters of a
+      // 1-hop overview gathered instead of repelling into a sparse
+      // starfield at the canvas corners.
+      fg.d3Force("x", d3.forceX(0).strength(0.1));
+      fg.d3Force("y", d3.forceY(0).strength(0.1));
+      fg.d3Force("charge")?.strength?.(-25);
+      fg.d3Force("link")?.distance?.(28);
+      fg.d3ReheatSimulation?.();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [graphKey, dims]);
+
     useEffect(() => {
       if (!containerEl) return;
       const measure = () => {
@@ -460,12 +516,12 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
 
     const nodeCanvasObject = useCallback(
       (node: any, ctx: CanvasRenderingContext2D) => {
-        const r = node.isCenter ? 10 : node.isSystem ? 5 : degreeRadius(1, 2);
+        const r = TWIN_NODE_RADIUS;
         const color = node.isCenter
           ? CENTER_COLOR
           : node.isSystem
             ? SYSTEM_COLOR
-            : NEIGHBOR_COLOR;
+            : twinTypeColor(node.typeLabel);
         ctx.beginPath();
         ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
         ctx.fillStyle = color;
@@ -581,9 +637,7 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
           linkColor={() => "rgba(148,163,184,0.4)"}
           linkDirectionalArrowLength={3}
           linkDirectionalArrowRelPos={1}
-          cooldownTicks={300}
-          d3AlphaDecay={0.0228}
-          d3VelocityDecay={0.4}
+          cooldownTicks={120}
           onNodeClick={(node: any) => {
             if (node?.canonicalId) onNodeClick?.(node as TwinGraphNode);
           }}
@@ -592,29 +646,18 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
             zoomKRef.current = k;
           }}
           onEngineTick={() => {
-            // Live settle (no off-screen warmup): keep the camera on the
-            // forming layout every tick until the first stop — otherwise
-            // the load animation plays unframed (flash, drift off-view,
-            // then one jarring final reframe).
-            if (zoomInitRef.current) return;
-            fgRef.current?.zoomToFit?.(0, 30);
-            const k = fgRef.current?.zoom?.();
-            if (typeof k === "number") {
-              if (k > 1.75) fgRef.current?.zoom?.(1.75, 0);
-              else if (k < 0.5) fgRef.current?.zoom?.(0.5, 0);
-            }
-          }}
-          onEngineStop={() => {
-            // One-shot framing: depth-change merges never re-frame. Small
-            // neighborhoods (2–3 nodes) make zoomToFit dive to absurd zoom
-            // levels — clamp both ends so nodes stay node-sized.
-            if (zoomInitRef.current) return;
+            // Frame ONCE, early in the settle (tick ~15, when the layout
+            // has rough shape) — after that the camera is never touched
+            // again: no end-of-settle zoom snap (Eric, 2026-07-22). Clamp
+            // keeps tiny neighborhoods from absurd zoom levels.
+            tickCountRef.current += 1;
+            if (zoomInitRef.current || tickCountRef.current < 15) return;
             zoomInitRef.current = true;
-            fgRef.current?.zoomToFit?.(0, 30);
+            fgRef.current?.zoomToFit?.(0, 20);
             const k = fgRef.current?.zoom?.();
             if (typeof k === "number") {
-              if (k > 1.75) fgRef.current?.zoom?.(1.75, 0);
-              else if (k < 0.5) fgRef.current?.zoom?.(0.5, 0);
+              if (k > 2.5) fgRef.current?.zoom?.(2.5, 0);
+              else if (k < 0.7) fgRef.current?.zoom?.(0.7, 0);
             }
           }}
         />
