@@ -71,6 +71,13 @@ locals {
     # signed sidecar block authoritative (budgets/policyClaims flow). Flip
     # ONLY after clean shadow parity on live traffic.
     ANALYST_POLICY_SOURCE = var.analyst_policy_source
+    # Company Brain U9 follow-up: the twin "deployed?" signal must reach
+    # graphql-http too — projectEntityPage's internal twin-query invoke
+    # gated on this and read only the per-handler env, so every projected
+    # page rendered facet sections as pending (dev AE2, 2026-07-22).
+    # Document, not env: graphql-http's env sits near the 4KB ceiling.
+    # Readers use getConfig; env still wins on the VPC twin handlers.
+    NEPTUNE_ENDPOINT = var.neptune_endpoint
     # Governed autonomy — per-tenant opt-in allowlist for autonomous capability
     # self-extension (the two self_admit_connection / self_approve_routine
     # actions on capability-control-service). Comma/space-separated tenant ids;
