@@ -21,13 +21,6 @@ import {
 } from "@/lib/hooks/use-memory";
 import { useMe } from "@/lib/hooks/use-users";
 
-type WikiPageChip = {
-  id: string;
-  type: "ENTITY" | "TOPIC" | "DECISION";
-  slug: string;
-  title: string;
-};
-
 type MemoryRecord = {
   memoryRecordId: string;
   content?: { text?: string | null } | null;
@@ -36,7 +29,6 @@ type MemoryRecord = {
   expiresAt?: string | null;
   namespace?: string | null;
   strategyId?: string | null;
-  wikiPages?: WikiPageChip[] | null;
 };
 
 function formatDate(iso?: string | null): string {
@@ -148,48 +140,6 @@ function MemoryCard({
             {text}
           </Text>
         )}
-
-        {/* "Contributes to:" chips — Unit 8 read surface. Tap navigates to
-            the wiki page. Only rendered when not editing so the chips don't
-            fight for vertical space with the edit controls. */}
-        {!editing && record.wikiPages && record.wikiPages.length > 0 ? (
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              gap: 6,
-              marginTop: 8,
-            }}
-          >
-            <Muted style={{ fontSize: 11, marginRight: 2 }}>
-              Contributes to:
-            </Muted>
-            {record.wikiPages.map((page) => (
-              <Pressable
-                key={page.id}
-                onPress={(event) => {
-                  event.stopPropagation?.();
-                  const path = `/wiki/${encodeURIComponent(page.type)}/${encodeURIComponent(page.slug)}`;
-                  router.push(
-                    userId
-                      ? `${path}?userId=${encodeURIComponent(userId)}`
-                      : path,
-                  );
-                }}
-                style={({ pressed }) => ({
-                  paddingHorizontal: 8,
-                  paddingVertical: 3,
-                  borderRadius: 999,
-                  backgroundColor: pressed ? colors.primary : colors.secondary,
-                })}
-              >
-                <Text style={{ fontSize: 11, color: colors.foreground }}>
-                  {page.title}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        ) : null}
 
         {/* Metadata row */}
         <View className="flex-row items-center justify-between mt-2.5 pt-2 border-t border-neutral-100 dark:border-neutral-800">

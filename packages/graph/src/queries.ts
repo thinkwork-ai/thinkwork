@@ -37,32 +37,6 @@ export const MemoryGraphQuery = gql`
   }
 `;
 
-export const WikiGraphQuery = gql`
-  query WikiGraph($tenantId: ID!, $userId: ID) {
-    wikiGraph(tenantId: $tenantId, userId: $userId) {
-      nodes {
-        id
-        label
-        type
-        entityType
-        entitySubtype
-        displayType
-        slug
-        strategy
-        edgeCount
-        latestThreadId
-      }
-      edges {
-        source
-        target
-        kind
-        label
-        weight
-      }
-    }
-  }
-`;
-
 export const OntologyGraphQuery = gql`
   query OntologySchemaGraph($tenantId: ID!) {
     ontologySchemaGraph(tenantId: $tenantId) {

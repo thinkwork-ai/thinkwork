@@ -62,7 +62,6 @@ import {
   isHomeSegmentKey,
   type HomeSegmentKey,
 } from "@/components/home/segments";
-import { WikiSegment } from "@/components/home/WikiSegment";
 import { WorkItemList } from "@/components/work-items/WorkItemList";
 import { prewarmWorkspaceCache } from "@/lib/agent/workspace-cache";
 import {
@@ -1000,26 +999,26 @@ export default function ThreadsScreen() {
                     }
                     className="p-2 relative"
                   >
-                  <Filter
-                    size={22}
-                    color={
-                      (
-                        activeSegment === "threads"
-                          ? filtersOpen && hasActiveFilters
-                          : workItemFiltersOpen
-                      )
-                        ? colors.primary
-                        : colors.foreground
-                    }
-                  />
-                  {activeSegment === "threads" &&
-                    filtersOpen &&
-                    hasActiveFilters && (
-                      <View
-                        className="absolute top-1 right-1 w-2 h-2 rounded-full"
-                        style={{ backgroundColor: colors.primary }}
-                      />
-                    )}
+                    <Filter
+                      size={22}
+                      color={
+                        (
+                          activeSegment === "threads"
+                            ? filtersOpen && hasActiveFilters
+                            : workItemFiltersOpen
+                        )
+                          ? colors.primary
+                          : colors.foreground
+                      }
+                    />
+                    {activeSegment === "threads" &&
+                      filtersOpen &&
+                      hasActiveFilters && (
+                        <View
+                          className="absolute top-1 right-1 w-2 h-2 rounded-full"
+                          style={{ backgroundColor: colors.primary }}
+                        />
+                      )}
                   </Pressable>
                 </>
               ) : null}
@@ -1165,9 +1164,6 @@ export default function ThreadsScreen() {
                   onFetchingChange={setWorkItemsFetching}
                 />
               );
-            }
-            if (segment.key === "wiki") {
-              return <WikiSegment tenantId={tenantId} userId={callerUserId} />;
             }
             return (
               <View className="flex-1">

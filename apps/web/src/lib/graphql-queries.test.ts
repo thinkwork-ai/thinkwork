@@ -9,10 +9,6 @@ import {
   ComputerMemoryRecordsQuery,
   ComputerMemorySearchQuery,
   ComputerMemorySystemConfigQuery,
-  ComputerRecentWikiPagesQuery,
-  ComputerWikiBacklinksQuery,
-  ComputerWikiPageQuery,
-  ComputerWikiSearchQuery,
   CreateWorkItemDocumentMutation,
   DeleteComputerMemoryRecordMutation,
   PromoteDraftAppletMutation,
@@ -103,13 +99,6 @@ describe("computer GraphQL queries", () => {
     expect(printed).toContain("spaceMemoryEnabled");
     expect(printed).toContain("legacyHindsightAvailable");
     expect(printed).toContain("managedMemoryEnabled");
-  });
-
-  it("recentWikiPages + wikiSearch + wikiPage + wikiBacklinks compose the Pages tab", () => {
-    expect(print(ComputerRecentWikiPagesQuery)).toContain("recentWikiPages");
-    expect(print(ComputerWikiSearchQuery)).toContain("wikiSearch");
-    expect(print(ComputerWikiPageQuery)).toContain("wikiPage");
-    expect(print(ComputerWikiBacklinksQuery)).toContain("wikiBacklinks");
   });
 
   it("KB queries hit the read-only knowledgeBases + knowledgeBase fields", () => {

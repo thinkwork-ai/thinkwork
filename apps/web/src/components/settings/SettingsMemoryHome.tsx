@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
-import { Eye, EyeOff, Inbox, Plus, RefreshCw } from "lucide-react";
+import { Eye, EyeOff, Inbox, Plus, RefreshCw, Terminal } from "lucide-react";
 import { TooltipIconButton, cn } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
@@ -14,24 +14,19 @@ import {
 } from "@/components/settings/SettingsKnowledgeBases";
 import { KnowledgeModelTab } from "@/components/settings/knowledge-model/KnowledgeModelTab";
 import type { OntologyMapHeaderController } from "@/components/settings/knowledge-model/OntologyMapView";
-import { SettingsWiki } from "@/components/settings/SettingsWiki";
-import { TwinExplorer } from "@/components/settings/twin-explorer/TwinExplorer";
+import {
+  TwinExplorer,
+  type TwinExplorerHeaderController,
+} from "@/components/settings/twin-explorer/TwinExplorer";
 
 const MEMORY = "/settings/memory";
-const WIKI = "/settings/memory/wiki";
 const EXPLORER = "/settings/memory/explorer";
 const KNOWLEDGE_BASES = "/settings/memory/knowledge-bases";
 const ONTOLOGY = "/settings/memory/ontology";
 
-type MemoryTab =
-  | "memory"
-  | "wiki"
-  | "explorer"
-  | "knowledge-bases"
-  | "ontology";
+type MemoryTab = "memory" | "explorer" | "knowledge-bases" | "ontology";
 
 function tabForPath(pathname: string): MemoryTab {
-  if (pathname.startsWith(WIKI)) return "wiki";
   if (pathname.startsWith(EXPLORER)) return "explorer";
   if (pathname.startsWith(KNOWLEDGE_BASES)) return "knowledge-bases";
   if (pathname.startsWith(ONTOLOGY)) return "ontology";
@@ -56,6 +51,8 @@ export function SettingsMemoryHome() {
     useState<OntologyMapHeaderController | null>(null);
   const [kbController, setKbController] =
     useState<KnowledgeBasesHeaderController | null>(null);
+  const [explorerController, setExplorerController] =
+    useState<TwinExplorerHeaderController | null>(null);
 
   const updateRefreshController = useCallback(
     (controller: MemoryRefreshController | null) => {
@@ -78,6 +75,12 @@ export function SettingsMemoryHome() {
   const updateKbController = useCallback(
     (controller: KnowledgeBasesHeaderController | null) => {
       setKbController(controller);
+    },
+    [],
+  );
+  const updateExplorerController = useCallback(
+    (controller: TwinExplorerHeaderController | null) => {
+      setExplorerController(controller);
     },
     [],
   );
@@ -186,16 +189,32 @@ export function SettingsMemoryHome() {
       </TooltipIconButton>
     ) : null;
 
+  // Explorer header action (THINK-327): the Cypher console toggle rides
+  // the page header as a TooltipIconButton — the Ontology/KBs pattern.
+  const explorerAction =
+    activeTab === "explorer" && explorerController ? (
+      <TooltipIconButton
+        label="Cypher console"
+        aria-label="Toggle the Cypher console"
+        data-testid="settings-explorer-console"
+        className={cn(
+          explorerController.consoleOpen &&
+            "bg-primary/10 text-primary hover:text-primary",
+        )}
+        onClick={() => explorerController.toggleConsole()}
+      >
+        <Terminal className="size-4" />
+      </TooltipIconButton>
+    ) : null;
+
   usePageHeaderActions({
     // "Knowledge" umbrella naming (Company Brain U9): the nav item and this
-    // page title read Knowledge; the wiki tab reads Pages. URLs unchanged.
+    // page title read Knowledge. URLs unchanged.
     title: "Knowledge",
     breadcrumbs: [{ label: "Knowledge" }],
     tabs: [
       { to: MEMORY, label: "Memory" },
-      { to: WIKI, label: "Pages" },
-      // THINK-327 U4: Explorer rides next to Pages until the U8 flip
-      // removes the wiki tab and Explorer takes its slot.
+      // THINK-327 U8: Explorer holds the retired wiki "Pages" slot.
       { to: EXPLORER, label: "Explorer" },
       { to: KNOWLEDGE_BASES, label: "KBs" },
       { to: ONTOLOGY, label: "Ontology" },
@@ -205,8 +224,10 @@ export function SettingsMemoryHome() {
         ? ontologyAction
         : activeTab === "knowledge-bases"
           ? kbAction
-          : refreshAction,
-    actionKey: `memory-refresh:${activeTab}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}:${rawUnitsController ? `${rawUnitsController.showRaw ? "raw" : "curated"}:${rawUnitsController.hiddenCount}` : "no-raw"}:${ontologyMapController ? `ontology:${ontologyMapController.pendingCount}` : "no-ontology"}:${kbController ? "kb" : "no-kb"}`,
+          : activeTab === "explorer"
+            ? explorerAction
+            : refreshAction,
+    actionKey: `memory-refresh:${activeTab}:${explorerController ? `console:${explorerController.consoleOpen ? "open" : "closed"}` : "no-console"}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}:${rawUnitsController ? `${rawUnitsController.showRaw ? "raw" : "curated"}:${rawUnitsController.hiddenCount}` : "no-raw"}:${ontologyMapController ? `ontology:${ontologyMapController.pendingCount}` : "no-ontology"}:${kbController ? "kb" : "no-kb"}`,
   });
 
   return (
@@ -218,8 +239,9 @@ export function SettingsMemoryHome() {
           onRawUnitsControllerChange={updateRawUnitsController}
         />
       ) : null}
-      {activeTab === "wiki" ? <SettingsWiki embedded /> : null}
-      {activeTab === "explorer" ? <TwinExplorer /> : null}
+      {activeTab === "explorer" ? (
+        <TwinExplorer onHeaderControllerChange={updateExplorerController} />
+      ) : null}
       {activeTab === "knowledge-bases" ? (
         <SettingsKnowledgeBases
           embedded

@@ -1540,27 +1540,6 @@ export const MemoryRecordsQuery = graphql(`
       # "Contributes to:" chips — Unit 8 / handoff #3. One nested resolver
       # call per record, capped at typical list size ≤50. DataLoader is a
       # future optimization if large result sets become the norm.
-      wikiPages {
-        id
-        type
-        slug
-        title
-      }
-    }
-  }
-`);
-
-export const WikiPageSourceMemoryIdsQuery = graphql(`
-  query WikiPageSourceMemoryIds(
-    $tenantId: ID!
-    $userId: ID
-    $type: WikiPageType!
-    $slug: String!
-    $limit: Int
-  ) {
-    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
-      id
-      sourceMemoryIds(limit: $limit)
     }
   }
 `);
@@ -1866,25 +1845,6 @@ export const CreateRecipeMutation = gql`
     }
   }
 `;
-
-/**
- * Twin projected-page fetch keys (Company Brain U9): the reader asks for the
- * entity's canonical id + ontology type so it can request `twinEntityPage`.
- */
-export const WikiPageTwinKeysQuery = graphql(`
-  query WikiPageTwinKeys(
-    $tenantId: ID!
-    $userId: ID
-    $type: WikiPageType!
-    $slug: String!
-  ) {
-    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
-      id
-      entitySubtype
-      canonicalEntityId
-    }
-  }
-`);
 
 /**
  * Projected twin page (Company Brain U9 / KTD-8). AWSJSON payload:
