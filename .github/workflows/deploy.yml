@@ -126,6 +126,12 @@ jobs:
               - 'packages/pi-extensions/**'
               - 'packages/pi-runtime-core/**'
               - 'packages/skill-trust-runner/**'
+              # pnpm patches are baked into the image at `pnpm install`
+              # time — a patch-only change (e.g. registering a new model
+              # in pi-ai's registry) must rebuild the container, and the
+              # lockfile is what pins every installed dependency.
+              - 'patches/**'
+              - 'pnpm-lock.yaml'
               # Build config changes count as container changes — a
               # platform or base-image tweak must rebuild even if no
               # Python source moved.
