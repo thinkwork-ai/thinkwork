@@ -59,7 +59,7 @@ function toolActivityLabel(name: string): string {
   if (normalized.includes("recall") || normalized.includes("memory")) {
     return "Reading memory";
   }
-  if (normalized.includes("wiki")) return "Checking the wiki";
+  if (normalized.includes("wiki")) return "Checking knowledge";
   if (normalized.includes("read") || normalized.includes("file")) {
     return "Reading files";
   }

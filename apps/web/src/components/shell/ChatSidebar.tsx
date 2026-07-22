@@ -1084,16 +1084,16 @@ export function ChatSidebar() {
     [activateThread, defaultSpaceIds, navigate],
   );
 
-  // A wiki result opens that specific page in the full-page reader (THINK-263
-  // U5) — reachable by any tenant member, unlike the operator-gated graph tab.
-  const openSearchWiki = useCallback(
-    (hit: { page: { type: string; slug: string } }) => {
+  // A dossier open action routes to the Twin Explorer entity detail
+  // (THINK-327 U7) — the living projected page, no wiki dependency.
+  const openSearchEntityDetail = useCallback(
+    (target: { entityType: string; canonicalId: string }) => {
       setSearchOpen(false);
       void navigate({
-        to: "/wiki/$type/$slug",
+        to: "/settings/memory/explorer/$entityType/$canonicalId",
         params: {
-          type: hit.page.type.toLowerCase(),
-          slug: hit.page.slug,
+          entityType: target.entityType,
+          canonicalId: target.canonicalId,
         },
       });
     },
@@ -1440,7 +1440,6 @@ export function ChatSidebar() {
         defaultSpaceIds={defaultSpaceIds}
         locallyReadThreadAt={locallyReadThreadAt}
         onSelectThread={openSearchThread}
-        onSelectWiki={openSearchWiki}
         onSelectEntity={(hit) => selectDossierEntity(hit.entityId)}
         onAsk={askFromPalette}
         onResearch={researchFromPalette}
@@ -1453,7 +1452,7 @@ export function ChatSidebar() {
           <EntityDossierCard
             result={dossierData?.entityDossier ?? null}
             fetching={dossierFetching}
-            onOpenWikiPage={(page) => openSearchWiki({ page })}
+            onOpenEntity={openSearchEntityDetail}
             onOpenThread={openSearchThread}
             onOpenArtifact={openSearchArtifact}
             onSelectEntity={selectDossierEntity}

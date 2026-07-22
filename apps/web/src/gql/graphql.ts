@@ -2752,7 +2752,15 @@ export type EntityDossier = {
   __typename?: 'EntityDossier';
   aliases?: Maybe<Array<Scalars['String']['output']>>;
   artifacts: Array<DossierArtifact>;
+  /**
+   * Canonical identity for twin routing (THINK-327 U7): consumers link to the
+   * Explorer entity detail with these instead of the wiki page. Null when the
+   * matched entity has no canonical identity yet.
+   */
+  canonicalEntityId?: Maybe<Scalars['ID']['output']>;
   entityId: Scalars['ID']['output'];
+  /** Ontology entity-type slug of the canonical identity (pairs with canonicalEntityId). */
+  entityType?: Maybe<Scalars['String']['output']>;
   label: Scalars['String']['output'];
   memories: Array<SearchMemoryHit>;
   ontologyTypeSlug?: Maybe<Scalars['String']['output']>;

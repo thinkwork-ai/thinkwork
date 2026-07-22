@@ -164,6 +164,14 @@ type EntityDossier {
   "Compiled Entity page; null when the entity has no page (degrade path)."
   wikiPage: WikiPage
   """
+  Canonical identity for twin routing (THINK-327 U7): consumers link to the
+  Explorer entity detail with these instead of the wiki page. Null when the
+  matched entity has no canonical identity yet.
+  """
+  canonicalEntityId: ID
+  "Ontology entity-type slug of the canonical identity (pairs with canonicalEntityId)."
+  entityType: String
+  """
   Dual-read gate verdict (Company Brain U9 / AE8): true when this entity's
   tenant/type has flipped to the projected twin page, so search consumers
   can route to the living render; the compiled `wikiPage` stays the
