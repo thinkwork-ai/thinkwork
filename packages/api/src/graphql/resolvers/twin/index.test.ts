@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const executeTwinQuery = vi.fn(async () => ({ ok: true }));
+const executeTwinQuery = vi.fn(async (_args: unknown) => ({ ok: true }));
 
 vi.mock("../knowledge-graph/search-auth.js", () => ({
   resolveKnowledgeGraphSearchScope: vi.fn(async () => ({
@@ -8,7 +8,7 @@ vi.mock("../knowledge-graph/search-auth.js", () => ({
   })),
 }));
 vi.mock("../../../lib/twin/client.js", () => ({
-  executeTwinQuery: (...args: unknown[]) => executeTwinQuery(...args),
+  executeTwinQuery: (args: unknown) => executeTwinQuery(args),
 }));
 
 import { twinCohort } from "./index.js";
@@ -58,7 +58,7 @@ describe("twinCohort resolver — filter passthrough", () => {
       },
       ctx,
     );
-    const request = executeTwinQuery.mock.calls[0]?.[0] as {
+    const request = executeTwinQuery.mock.calls[0]?.[0] as unknown as {
       request: { nameContains?: string };
     };
     expect(request.request.nameContains).toBeUndefined();
