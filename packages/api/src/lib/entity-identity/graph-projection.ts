@@ -194,7 +194,9 @@ export function buildCanonicalResyncOps(args: {
         `MERGE (loser:${label} {\`~id\`: $nodeId}) ` +
         `MERGE (survivor:${label} {\`~id\`: $survivorId}) ` +
         "MERGE (loser)-[a:merged_into {`~id`: $aliasId}]->(survivor) " +
-        "SET a.tenantId = $tenantId",
+        // Stamp the survivor too: a survivor first minted here must never
+        // be a property-less ghost invisible to tenant-scoped maintenance.
+        "SET a.tenantId = $tenantId, survivor.tenantId = $tenantId",
       parameters: {
         nodeId,
         survivorId: survivorNodeId,
@@ -559,6 +561,29 @@ export async function projectPendingIdentityEvents(args: {
 }
 
 /**
+ * First numeric leaf in a Neptune openCypher result — count reads must not
+ * depend on the SDK's exact envelope shape (verify-wire-format rule). A
+ * shape we can't read returns null, which the clear loop treats as "keep
+ * going" rather than a premature break.
+ */
+export function readSingleCount(result: unknown): number | null {
+  if (typeof result === "number") return result;
+  if (!result || typeof result !== "object") return null;
+  const record = result as Record<string, unknown>;
+  // Scope to the query payload when present — the SDK envelope carries
+  // $metadata.httpStatusCode, which a blind numeric walk would return.
+  const scope = "results" in record ? record.results : record;
+  if (typeof scope === "number") return scope;
+  if (!scope || typeof scope !== "object") return null;
+  for (const [key, value] of Object.entries(scope as Record<string, unknown>)) {
+    if (key.startsWith("$")) continue;
+    const found = readSingleCount(value);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+/**
  * Full rebuild (first-class recovery command): resync EVERY canonical
  * entity for the tenant from the relational store, then cut a fresh
  * snapshot and fast-forward the cursor to the newest event. The graph is
@@ -584,19 +609,24 @@ export async function rebuildTenantGraph(args: {
   const neptune = args.neptune ?? createNeptuneClient();
 
   if (args.clearFirst) {
-    // Batched DETACH DELETE — Neptune rejects unbounded deletes on large
-    // graphs, and every node this projector (or the etl writer) creates
-    // carries tenantId, so the property match is the tenant firewall.
+    // Batched DETACH DELETE, fenced by the tenant's deterministic ~id
+    // PREFIX rather than a property match: the pre-label-fix loser path
+    // minted survivor nodes with NO properties at all, and a
+    // {tenantId: …} match walks straight past those ghosts (which is how
+    // the first clearing rebuild still collided). The id prefix is the
+    // tenant firewall by construction.
+    const idPrefix = `t#${args.tenantId}#`;
     for (let round = 0; round < 200; round += 1) {
       await neptune.execute(
-        "MATCH (n {tenantId: $tenantId}) WITH n LIMIT 2000 DETACH DELETE n",
-        { tenantId: args.tenantId },
+        "MATCH (n) WHERE id(n) STARTS WITH $idPrefix " +
+          "WITH n LIMIT 2000 DETACH DELETE n",
+        { idPrefix },
       );
-      const remaining = (await neptune.execute(
-        "MATCH (n {tenantId: $tenantId}) RETURN count(n) AS c",
-        { tenantId: args.tenantId },
-      )) as { results?: Array<{ c?: number }> };
-      if (!remaining.results?.[0]?.c) break;
+      const remaining = await neptune.execute(
+        "MATCH (n) WHERE id(n) STARTS WITH $idPrefix RETURN count(n) AS c",
+        { idPrefix },
+      );
+      if (readSingleCount(remaining) === 0) break;
     }
   }
 

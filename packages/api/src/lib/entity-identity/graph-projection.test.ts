@@ -19,6 +19,7 @@ import {
   buildIdentitySnapshot,
   entityNodeId,
   projectPendingIdentityEvents,
+  readSingleCount,
   rebuildTenantGraph,
   systemEdgeId,
   systemNodeId,
@@ -392,11 +393,12 @@ describe("rebuildTenantGraph", () => {
     });
 
     expect(result).toEqual({ tenantId: "tenant-1", resyncedCanonicals: 0 });
-    // First op deletes a bounded batch; the FakeNeptune count read (empty
-    // results) ends the loop after one round.
+    // First op deletes a bounded batch, fenced by the tenant ~id PREFIX so
+    // property-less ghost nodes (pre-label-fix survivors) are swept too.
     expect(neptune.ops[0].query).toContain("DETACH DELETE n");
     expect(neptune.ops[0].query).toContain("LIMIT 2000");
-    expect(neptune.ops[0].parameters).toEqual({ tenantId: "tenant-1" });
+    expect(neptune.ops[0].query).toContain("id(n) STARTS WITH $idPrefix");
+    expect(neptune.ops[0].parameters).toEqual({ idPrefix: "t#tenant-1#" });
     expect(neptune.ops[1].query).toContain("RETURN count(n)");
   });
 
@@ -413,5 +415,26 @@ describe("rebuildTenantGraph", () => {
     expect(neptune.ops.some((op) => op.query.includes("DETACH DELETE"))).toBe(
       false,
     );
+  });
+});
+
+describe("readSingleCount", () => {
+  it("reads the count from the openCypher payload, never the SDK envelope", () => {
+    expect(
+      readSingleCount({
+        $metadata: { httpStatusCode: 200 },
+        results: [{ c: 0 }],
+      }),
+    ).toBe(0);
+    expect(
+      readSingleCount({
+        $metadata: { httpStatusCode: 200 },
+        results: [{ c: 4213 }],
+      }),
+    ).toBe(4213);
+    // Unreadable shapes are "unknown", not zero — the clear loop must keep
+    // going rather than break early on a shape mismatch.
+    expect(readSingleCount({ $metadata: { httpStatusCode: 200 } })).toBeNull();
+    expect(readSingleCount(undefined)).toBeNull();
   });
 });
