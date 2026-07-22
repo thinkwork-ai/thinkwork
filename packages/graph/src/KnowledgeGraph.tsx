@@ -835,7 +835,7 @@ export const KnowledgeGraph = forwardRef<
       ref={setContainerEl}
       data-testid="graph-container"
       className={`absolute inset-0 overflow-hidden transition-opacity duration-150 ${
-        framed || graphData.nodes.length <= 300 ? "opacity-100" : "opacity-0"
+        framed ? "opacity-100" : "opacity-0"
       }`}
     >
       <ForceGraph2D
@@ -855,36 +855,17 @@ export const KnowledgeGraph = forwardRef<
         // Settle the layout synchronously before the first paint: zero
         // cooldown until the initial framing lands (no load animation),
         // then normal cooldown so dragging a node relaxes its neighbors.
-        cooldownTicks={graphData.nodes.length > 300 ? (framed ? 120 : 0) : 300}
+        cooldownTicks={framed ? 120 : 0}
         // Warmup runs at slow decay so the pre-paint settle converges
         // fully (communities separate); once framed, fast decay keeps
         // drag-triggered reheats snappy.
         d3AlphaDecay={
-          graphData.nodes.length > 300
-            ? framed
-              ? 0.05
-              : graphData.nodes.length > 2000
-                ? 0.035
-                : 0.0115
-            : 0.0228
+          framed ? 0.05 : graphData.nodes.length > 2000 ? 0.035 : 0.0115
         }
-        d3VelocityDecay={graphData.nodes.length > 300 ? 0.55 : 0.4}
-        warmupTicks={
-          graphData.nodes.length > 300
-            ? graphData.nodes.length > 2000
-              ? 200
-              : 600
-            : 0
-        }
+        d3VelocityDecay={0.55}
+        warmupTicks={graphData.nodes.length > 2000 ? 200 : 600}
         onZoom={({ k }: { k: number }) => {
           zoomKRef.current = k;
-        }}
-        onEngineTick={() => {
-          // Small graphs settle LIVE (no warmup): follow the forming
-          // layout every tick until first framing so the animation
-          // plays centered instead of flashing off-view.
-          if (framed) return;
-          fgRef.current?.zoomToFit?.(0, 40);
         }}
         onEngineStop={() => {
           if (zoomInitRef.current) return;
