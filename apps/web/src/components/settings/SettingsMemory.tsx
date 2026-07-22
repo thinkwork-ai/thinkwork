@@ -699,6 +699,11 @@ export function SettingsMemory({
           <div className="relative h-full overflow-hidden rounded-lg border border-border">
             {effectiveTenantId ? (
               <MemoryGraph
+                loadingFallback={
+                  <div className="flex h-full min-h-48 items-center justify-center">
+                    <LoadingShimmer />
+                  </div>
+                }
                 ref={graphRef}
                 useRequesterScope
                 allTenantBanks

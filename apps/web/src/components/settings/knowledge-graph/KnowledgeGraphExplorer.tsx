@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { useQuery } from "urql";
 import { Loader2, Search, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -281,6 +282,11 @@ export function KnowledgeGraphExplorer({ mode }: { mode: ExplorerMode }) {
             {view === "graph" ? (
               <div className="relative h-full overflow-hidden rounded-lg border border-border">
                 <KnowledgeGraph
+                  loadingFallback={
+                    <div className="flex h-full min-h-48 items-center justify-center">
+                      <LoadingShimmer />
+                    </div>
+                  }
                   ref={graphRef}
                   tenantId={effectiveTenantId}
                   threadId={null}
