@@ -1,14 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const executeTwinQuery = vi.fn(async (_args: unknown): Promise<unknown> => ({
-  ok: true,
-  results: [{ count: 1 }],
-  redactedCount: 0,
-  unfenced: true,
-  truncated: false,
-}));
+const executeTwinQuery = vi.fn(
+  async (_args: unknown): Promise<unknown> => ({
+    ok: true,
+    results: [{ count: 1 }],
+    redactedCount: 0,
+    unfenced: true,
+    truncated: false,
+  }),
+);
 const requireAdminOrServiceCaller = vi.fn(async () => {});
-const emitAuditEvent = vi.fn(async () => ({ eventId: "e", outboxId: "o" }));
+const emitAuditEvent = vi.fn(async (_input: unknown) => ({
+  eventId: "e",
+  outboxId: "o",
+}));
 
 vi.mock("../knowledge-graph/search-auth.js", () => ({
   resolveKnowledgeGraphSearchScope: vi.fn(async () => ({

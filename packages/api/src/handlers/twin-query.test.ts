@@ -11,11 +11,7 @@ vi.mock("@thinkwork/runtime-config", () => ({
     key === "NEPTUNE_ENDPOINT" ? "neptune.example" : null,
 }));
 
-import {
-  handler,
-  postFilterRawResults,
-  RAW_RESULT_CAP,
-} from "./twin-query.js";
+import { handler, postFilterRawResults, RAW_RESULT_CAP } from "./twin-query.js";
 
 const TENANT = "tenant-1";
 const node = (id: string, extra: Record<string, unknown> = {}) => ({
@@ -47,9 +43,9 @@ describe("postFilterRawResults", () => {
     expect(unfenced).toBe(false);
     expect(rows).toHaveLength(4); // the pure-foreign row collapsed away
     expect((rows[1] as { list: unknown[] }).list).toHaveLength(2);
-    expect(
-      Object.keys((rows[2] as { projected: object }).projected),
-    ).toEqual(["keep"]);
+    expect(Object.keys((rows[2] as { projected: object }).projected)).toEqual([
+      "keep",
+    ]);
     expect((rows[3] as { path: unknown[][] }).path[0]).toHaveLength(1);
   });
 

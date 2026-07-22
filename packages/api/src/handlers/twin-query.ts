@@ -75,10 +75,13 @@ export function postFilterRawResults(
       return { keep: true, value };
     }
     if (Array.isArray(value)) {
-      return { keep: true, value: value.flatMap((item) => {
-        const walked = walk(item);
-        return walked.keep ? [walked.value] : [];
-      }) };
+      return {
+        keep: true,
+        value: value.flatMap((item) => {
+          const walked = walk(item);
+          return walked.keep ? [walked.value] : [];
+        }),
+      };
     }
     if (value && typeof value === "object") {
       const out: Record<string, unknown> = {};
@@ -170,9 +173,8 @@ export const handler = async (event: TwinQueryEvent = {}) => {
     return {
       ok: false,
       reason: "unavailable",
-      detail: isRaw && message.toLowerCase().includes("abort")
-        ? "timeout"
-        : message,
+      detail:
+        isRaw && message.toLowerCase().includes("abort") ? "timeout" : message,
     };
   }
 };
