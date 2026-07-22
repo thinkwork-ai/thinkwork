@@ -20,6 +20,10 @@ import type { TwinRequest } from "./query-compiler.js";
 export interface TwinQueryOk {
   ok: true;
   results: Array<Record<string, unknown>>;
+  /** Raw console responses only (THINK-327 U5). */
+  redactedCount?: number;
+  unfenced?: boolean;
+  truncated?: boolean;
 }
 
 export interface TwinQueryUnavailable {

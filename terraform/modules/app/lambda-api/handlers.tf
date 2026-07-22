@@ -1051,7 +1051,12 @@ resource "aws_lambda_function" "handler" {
   # so its destructive evidence-snapshot S3 capability (version enumeration +
   # bulk version deletion) never leaks into the 90+ handlers on the shared
   # role. Everything else keeps the shared role.
-  role    = each.key == "memory-retraction-drainer" ? aws_iam_role.memory_retraction_drainer.arn : aws_iam_role.lambda.arn
+  # THINK-327 U5: twin-query runs under a DEDICATED READ-ONLY role. The
+  # shared role carries neptune-db Write/Delete for the identity-graph-
+  # projector; the raw operator console executes through twin-query, so its
+  # role holds ReadDataViaQuery ONLY — the structural backstop behind the
+  # handler's write-clause denylist.
+  role    = each.key == "memory-retraction-drainer" ? aws_iam_role.memory_retraction_drainer.arn : each.key == "twin-query" ? aws_iam_role.twin_query.arn : aws_iam_role.lambda.arn
   handler = "index.handler"
   runtime = local.runtime
   # Parameters and Secrets extension: container-local cache for the SSM
@@ -1368,6 +1373,78 @@ resource "aws_lambda_function_event_invoke_config" "memory_retain" {
 # drainer actually uses: logs (managed basic policy), Secrets Manager +
 # SSM runtime-config reads, and conditional KMS for the encrypted bucket.
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# THINK-327 U5: dedicated read-only IAM role for twin-query.
+#
+# The raw operator console (twinRawQuery) executes caller-supplied openCypher
+# through this Lambda. The comment-stripped write-clause denylist is UX, not
+# the fence — the fence is IAM: this role grants neptune-db:ReadDataViaQuery
+# ONLY, so a write that slips any text-level guard still fails at Neptune.
+# The shared api role keeps Write/Delete for the identity-graph-projector;
+# twin-query (typed reads included) never needed them. Otherwise the role
+# carries exactly what the handler uses: logs, VPC ENIs (Neptune is
+# VPC-only), and SSM/Secrets runtime-config reads.
+# ---------------------------------------------------------------------------
+
+resource "aws_iam_role" "twin_query" {
+  name = "thinkwork-${var.stage}-api-twin-query-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "twin_query_basic" {
+  role       = aws_iam_role.twin_query.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "twin_query_vpc_access" {
+  role       = aws_iam_role.twin_query.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy" "twin_query" {
+  name = "twin-query-read-only"
+  role = aws_iam_role.twin_query.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [
+        # Runtime-config document + platform secrets (NEPTUNE_ENDPOINT and
+        # the loader's cold-start prefetches).
+        {
+          Effect   = "Allow"
+          Action   = ["ssm:GetParameter", "ssm:GetParameters"]
+          Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/*"
+        },
+        {
+          Effect   = "Allow"
+          Action   = ["secretsmanager:GetSecretValue"]
+          Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/*"
+        },
+      ],
+      var.neptune_cluster_resource_id == "" ? [] : [
+        {
+          Sid      = "TwinNeptuneReadOnly"
+          Effect   = "Allow"
+          Action   = ["neptune-db:ReadDataViaQuery"]
+          Resource = "arn:aws:neptune-db:${var.region}:${var.account_id}:${var.neptune_cluster_resource_id}/*"
+          Condition = {
+            StringEquals = { "neptune-db:QueryLanguage" = "OpenCypher" }
+          }
+        },
+      ],
+    )
+  })
+}
 
 resource "aws_iam_role" "memory_retraction_drainer" {
   name = "thinkwork-${var.stage}-memory-retraction-drainer-role"

@@ -56,11 +56,71 @@ export type TwinRequest =
       path?: TwinPath;
       limit?: number;
     }
-  | { kind: "system_edges"; canonicalId: string };
+  | { kind: "system_edges"; canonicalId: string }
+  | { kind: "raw"; query: string };
 
 export interface CompiledTwinQuery {
   query: string;
   parameters: Record<string, unknown>;
+}
+
+// ── Raw operator console guards (THINK-327 U5 / KTD-5) ─────────────────
+//
+// The raw kind is the ONE caller-supplied query surface, operator-gated at
+// the resolver and executed under a dedicated read-only Neptune grant (the
+// IAM segment is the structural fence — this denylist is UX, catching
+// mistakes before they burn a round-trip). Guard order: strip comments →
+// collapse whitespace → word-boundary denylist → default LIMIT.
+
+export const RAW_QUERY_MAX_LENGTH = 5000;
+export const RAW_DEFAULT_LIMIT = 100;
+
+/** Mutating/procedure clauses the console refuses (word-boundary). */
+const RAW_DENYLIST_RE =
+  /\b(CREATE|MERGE|DELETE|DETACH|SET|REMOVE|DROP|CALL|LOAD)\b/i;
+
+/**
+ * Strip openCypher comments (line comments to end-of-line, block comments
+ * anywhere) and collapse whitespace, so keywords split by an inline block
+ * comment reassemble
+ * BEFORE the denylist runs and cannot slip past it.
+ */
+export function stripCypherComments(text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Validate raw console text: bounded length, non-empty after stripping,
+ * and no write/procedure clause survives comment normalization. Returns
+ * the NORMALIZED query (comments stripped) with a default `LIMIT` appended
+ * when the query has none — the cost bound on the pooled cluster.
+ */
+export function prepareRawCypher(text: string): string {
+  if (typeof text !== "string" || !text.trim()) {
+    throw new TwinCompileError("query text required");
+  }
+  if (text.length > RAW_QUERY_MAX_LENGTH) {
+    throw new TwinCompileError(
+      `query exceeds ${RAW_QUERY_MAX_LENGTH} characters`,
+    );
+  }
+  const stripped = stripCypherComments(text);
+  if (!stripped) {
+    throw new TwinCompileError("query text required");
+  }
+  const denied = RAW_DENYLIST_RE.exec(stripped);
+  if (denied) {
+    throw new TwinCompileError(
+      `write/procedure clause not allowed: ${denied[1]!.toUpperCase()}`,
+    );
+  }
+  return /\bLIMIT\s+\d+\s*$/i.test(stripped)
+    ? stripped
+    : `${stripped} LIMIT ${RAW_DEFAULT_LIMIT}`;
 }
 
 function slug(value: string, what: string): string {
@@ -208,6 +268,12 @@ export function compileTwinQuery(
           `RETURN n AS node${pathReturn} LIMIT ${limit}`,
         parameters,
       };
+    }
+    case "raw": {
+      // Operator console passthrough (THINK-327 U5): guarded text, with the
+      // server-derived tenant id as the ONLY bound parameter — operators
+      // self-scope with `$tenantId`; a client-supplied binding never exists.
+      return { query: prepareRawCypher(request.query), parameters };
     }
     default: {
       const kind = (request as { kind?: unknown }).kind;
