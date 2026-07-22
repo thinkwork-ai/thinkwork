@@ -24,6 +24,7 @@ vi.mock("urql", () => ({
   }) => {
     const name = args.query?.definitions?.[0]?.name?.value;
     if (name === "TwinExplorerOntology") return [urqlState.ontology, vi.fn()];
+    if (name !== "TwinCohort") return [{ fetching: false }, vi.fn()];
     if (!args.pause) cohortCalls.push(args.variables ?? {});
     return [args.pause ? { fetching: false } : urqlState.cohort, vi.fn()];
   },
@@ -31,6 +32,9 @@ vi.mock("urql", () => ({
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
+}));
+vi.mock("@thinkwork/graph", () => ({
+  TwinGraph: () => <div data-testid="twin-overview-graph" />,
 }));
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => ({ tenantId: "tenant-1" }),
@@ -178,6 +182,10 @@ function applyFilters(filters: ColumnFiltersState) {
   fireEvent.click(screen.getByTestId("token-filter"));
 }
 
+function switchToTable() {
+  fireEvent.click(screen.getByRole("radio", { name: "Table view" }));
+}
+
 function lastCohortFilter(): Record<string, unknown> {
   return JSON.parse(cohortCalls.at(-1)!.filter as string);
 }
@@ -312,8 +320,18 @@ describe("TwinExplorer", () => {
   });
   afterEach(cleanup);
 
+  it("defaults to the graph view over the customer type without any filter", () => {
+    render(<TwinExplorer />);
+    expect(screen.getByTestId("twin-overview-graph")).toBeTruthy();
+    expect(cohortCalls).toHaveLength(0);
+    switchToTable();
+    expect(cohortCalls.at(-1)!.entityType).toBe("customer");
+    expect(lastCohortFilter().predicates).toEqual([]);
+  });
+
   it("offers only governed filter columns: approved types, declared attributes, declared relationships", () => {
     render(<TwinExplorer />);
+    switchToTable();
     applyFilters([typeFilter]);
     const ids = (filterColumnsSeen.value as Array<{ id: string }>).map(
       (column) => column.id,
@@ -337,6 +355,7 @@ describe("TwinExplorer", () => {
 
   it("AE1: applying type + number token issues the typed cohort filter", () => {
     render(<TwinExplorer />);
+    switchToTable();
     applyFilters([
       typeFilter,
       {
@@ -354,6 +373,7 @@ describe("TwinExplorer", () => {
 
   it("AE2: committed name search rides the filter as nameContains", () => {
     render(<TwinExplorer />);
+    switchToTable();
     applyFilters([typeFilter]);
     fireEvent.click(screen.getByTestId("explorer-search-toggle"));
     const search = screen.getByTestId("explorer-name-search");
@@ -381,6 +401,7 @@ describe("TwinExplorer", () => {
   it("shows the loading skeleton while the cohort is in flight", () => {
     urqlState.cohort = { fetching: true, data: null, error: null };
     render(<TwinExplorer />);
+    switchToTable();
     applyFilters([typeFilter]);
     expect(screen.getByTestId("explorer-loading")).toBeTruthy();
   });
@@ -398,6 +419,7 @@ describe("TwinExplorer", () => {
       error: null,
     };
     render(<TwinExplorer />);
+    switchToTable();
     applyFilters([typeFilter]);
     expect(screen.getByTestId("explorer-unavailable").textContent).toContain(
       "twin_not_deployed",
@@ -411,12 +433,14 @@ describe("TwinExplorer", () => {
       error: null,
     };
     render(<TwinExplorer />);
+    switchToTable();
     applyFilters([typeFilter]);
     expect(screen.getByTestId("explorer-limit-note")).toBeTruthy();
   });
 
   it("row click navigates to the entity detail with type + canonicalId", () => {
     render(<TwinExplorer />);
+    switchToTable();
     applyFilters([typeFilter]);
     fireEvent.click(screen.getAllByTestId("data-row")[0]!);
     expect(navigateMock).toHaveBeenCalledWith({

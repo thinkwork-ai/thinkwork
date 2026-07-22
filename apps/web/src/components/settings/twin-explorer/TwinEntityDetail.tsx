@@ -3,7 +3,12 @@ import { useQuery } from "urql";
 import { useNavigate } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { Badge, cn } from "@thinkwork/ui";
-import { TwinGraph } from "@thinkwork/graph";
+import {
+  TwinGraph,
+  type TwinGraphLink,
+  type TwinGraphNode,
+} from "@thinkwork/graph";
+import { TwinNodeSheet, type TwinSheetSelection } from "./TwinNodeSheet";
 import {
   TwinEntityPageQuery,
   TwinEntityQuery,
@@ -98,6 +103,8 @@ export function TwinEntityDetail({
   const { tenantId } = useTenant();
   const navigate = useNavigate();
   const [graphDepth, setGraphDepth] = useState(1);
+  const [sheetSelection, setSheetSelection] =
+    useState<TwinSheetSelection | null>(null);
 
   const [{ data: pageData, fetching, error }] = useQuery<{
     twinEntityPage?: unknown;
@@ -264,18 +271,27 @@ export function TwinEntityDetail({
                     tenantId={tenantId}
                     canonicalId={canonicalId}
                     depth={graphDepth}
-                    onNodeClick={(node) => {
-                      if (!node.canonicalId || !node.typeLabel) return;
-                      void navigate({
-                        to: "/settings/memory/explorer/$entityType/$canonicalId",
-                        params: {
-                          entityType: node.typeLabel,
-                          canonicalId: node.canonicalId,
-                        },
-                      });
-                    }}
+                    onNodeClick={(node: TwinGraphNode) =>
+                      setSheetSelection({ kind: "node", node })
+                    }
+                    onLinkClick={(link: TwinGraphLink) =>
+                      setSheetSelection({ kind: "edge", link })
+                    }
                   />
                 </div>
+                <TwinNodeSheet
+                  selection={sheetSelection}
+                  onOpenChange={(open) => {
+                    if (!open) setSheetSelection(null);
+                  }}
+                  onOpenEntity={(target) => {
+                    setSheetSelection(null);
+                    void navigate({
+                      to: "/settings/memory/explorer/$entityType/$canonicalId",
+                      params: target,
+                    });
+                  }}
+                />
               </section>
             ) : null}
           </article>

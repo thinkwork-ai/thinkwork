@@ -15,11 +15,19 @@ import {
   DataTable,
   DataTableTokenFilter,
   Input,
+  ToggleGroup,
+  ToggleGroupItem,
   dataTableTokenFilterFns,
   isDataTableTokenFilterValue,
   type DataTableTokenFilterColumn,
   type DataTableTokenFilterValue,
 } from "@thinkwork/ui";
+import {
+  TwinGraph,
+  type TwinGraphLink,
+  type TwinGraphNode,
+} from "@thinkwork/graph";
+import { TwinNodeSheet, type TwinSheetSelection } from "./TwinNodeSheet";
 import {
   TwinCohortQuery,
   TwinExplorerOntologyQuery,
@@ -259,6 +267,9 @@ export function TwinExplorer({
   const [activeNameQuery, setActiveNameQuery] = useState("");
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
+  const [view, setView] = useState<"graph" | "table">("graph");
+  const [sheetSelection, setSheetSelection] =
+    useState<TwinSheetSelection | null>(null);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
   const toggleConsole = useCallback(() => setConsoleOpen((open) => !open), []);
@@ -291,7 +302,16 @@ export function TwinExplorer({
   const entityType = isDataTableTokenFilterValue(entityTypeFilter?.value)
     ? (singleStringValue(entityTypeFilter.value) ?? "")
     : "";
-  const selectedType = entityTypes.find((type) => type.slug === entityType);
+  // Default data (no filters yet): customer when declared, else the first
+  // approved type — the tab shows the twin immediately, like Memory.
+  const defaultEntityType =
+    entityTypes.find((type) => type.slug === "customer")?.slug ??
+    entityTypes[0]?.slug ??
+    "";
+  const effectiveEntityType = entityType || defaultEntityType;
+  const selectedType = entityTypes.find(
+    (type) => type.slug === effectiveEntityType,
+  );
   const facets: ExplorerFacet[] = useMemo(
     () => parseExplorerFacets(selectedType?.twinFacets),
     [selectedType],
@@ -303,10 +323,10 @@ export function TwinExplorer({
       (ontologyData?.ontologyDefinitions?.relationshipTypes ?? []).filter(
         (rel) =>
           (rel.lifecycleStatus ?? "").toUpperCase() === "APPROVED" &&
-          !!entityType &&
-          (rel.sourceTypeSlugs ?? []).includes(entityType),
+          !!effectiveEntityType &&
+          (rel.sourceTypeSlugs ?? []).includes(effectiveEntityType),
       ),
-    [ontologyData, entityType],
+    [ontologyData, effectiveEntityType],
   );
 
   // Changing the entity type invalidates facet/path selections — drop any
@@ -367,7 +387,7 @@ export function TwinExplorer({
         });
       }
     }
-    if (entityType && pathRelationships.length > 0) {
+    if (effectiveEntityType && pathRelationships.length > 0) {
       columns.push({
         id: PATH_COLUMN_ID,
         label: "Related to",
@@ -381,7 +401,7 @@ export function TwinExplorer({
       });
     }
     return columns;
-  }, [entityTypes, facets, entityType, pathRelationships]);
+  }, [entityTypes, facets, effectiveEntityType, pathRelationships]);
 
   // Headless table purely to drive the standard filter UI (the Memory
   // graphFilterTable pattern) — the cohort query is server-filtered.
@@ -425,11 +445,15 @@ export function TwinExplorer({
     query: TwinCohortQuery,
     variables: {
       tenantId,
-      entityType: model.entityType,
+      entityType: effectiveEntityType,
       filter: JSON.stringify(filter),
       limit: COHORT_LIMIT,
     },
-    pause: !tenantId || !model.entityType || model.errors.length > 0,
+    pause:
+      !tenantId ||
+      !effectiveEntityType ||
+      view !== "table" ||
+      model.errors.length > 0,
   });
 
   const rows = useMemo(
@@ -514,6 +538,40 @@ export function TwinExplorer({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-4">
+      <div className="shrink-0 space-y-1">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            Explorer
+          </h1>
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={(next) => {
+              if (next === "graph" || next === "table") setView(next);
+            }}
+            className="rounded-full border border-border p-0.5"
+          >
+            <ToggleGroupItem
+              value="graph"
+              className="h-7 rounded-full px-3 text-xs"
+              aria-label="Graph view"
+            >
+              Graph
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="table"
+              className="h-7 rounded-full px-3 text-xs"
+              aria-label="Table view"
+            >
+              Table
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Browse the digital twin — live entities projected from your source
+          systems.
+        </p>
+      </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         {/* Collapsible search — the Memory tab's toolbar idiom. */}
         {!(searchExpanded || nameQuery.length > 0) ? (
@@ -524,7 +582,7 @@ export function TwinExplorer({
             className="h-8 w-8 rounded-md"
             aria-label="Search by name"
             data-testid="explorer-search-toggle"
-            disabled={!model.entityType}
+            disabled={!effectiveEntityType}
             onClick={() => setSearchExpanded(true)}
           >
             <Search className="h-4 w-4" aria-hidden="true" />
@@ -583,9 +641,9 @@ export function TwinExplorer({
 
       {consoleOpen ? <CypherConsole /> : null}
 
-      {!model.entityType ? (
+      {!effectiveEntityType ? (
         <p className="text-sm text-muted-foreground">
-          Add an Entity type filter to browse the twin.
+          No approved entity types yet — declare one in the Ontology tab.
         </p>
       ) : null}
 
@@ -622,7 +680,37 @@ export function TwinExplorer({
         )
       ) : null}
 
-      {model.entityType && fetching && !cohortData ? (
+      {view === "graph" && effectiveEntityType ? (
+        <div className="relative min-h-[28rem] flex-1 overflow-hidden rounded-lg border border-border">
+          <TwinGraph
+            tenantId={tenantId}
+            subgraphEntityType={effectiveEntityType}
+            subgraphLimit={25}
+            depth={2}
+            onNodeClick={(node: TwinGraphNode) =>
+              setSheetSelection({ kind: "node", node })
+            }
+            onLinkClick={(link: TwinGraphLink) =>
+              setSheetSelection({ kind: "edge", link })
+            }
+          />
+          <TwinNodeSheet
+            selection={sheetSelection}
+            onOpenChange={(open) => {
+              if (!open) setSheetSelection(null);
+            }}
+            onOpenEntity={(target) => {
+              setSheetSelection(null);
+              void navigate({
+                to: "/settings/memory/explorer/$entityType/$canonicalId",
+                params: target,
+              });
+            }}
+          />
+        </div>
+      ) : null}
+
+      {view === "table" && effectiveEntityType && fetching && !cohortData ? (
         <div className="space-y-2" data-testid="explorer-loading">
           {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="h-10 animate-pulse rounded-md bg-muted" />
@@ -630,7 +718,7 @@ export function TwinExplorer({
         </div>
       ) : null}
 
-      {rows ? (
+      {view === "table" && rows ? (
         rows.length > 0 ? (
           <div className="min-h-0 flex-1">
             {rows.length >= COHORT_LIMIT ? (
@@ -650,7 +738,7 @@ export function TwinExplorer({
                 void navigate({
                   to: "/settings/memory/explorer/$entityType/$canonicalId",
                   params: {
-                    entityType: model.entityType,
+                    entityType: effectiveEntityType,
                     canonicalId: row.canonicalId,
                   },
                 });

@@ -87,4 +87,5 @@ export {
   MemoryGraphQuery,
   OntologyGraphQuery,
   TwinNeighborsQuery,
+  TwinSubgraphQuery,
 } from "./queries.js";

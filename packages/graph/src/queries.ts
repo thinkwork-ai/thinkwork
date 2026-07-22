@@ -79,6 +79,23 @@ export const TwinNeighborsQuery = gql`
   }
 `;
 
+/** Type-level twin overview: `{ ok, results: [{ roots, neighbors, edges }] }`. */
+export const TwinSubgraphQuery = gql`
+  query TwinSubgraph(
+    $tenantId: ID
+    $entityType: String!
+    $limit: Int
+    $depth: Int
+  ) {
+    twinSubgraph(
+      tenantId: $tenantId
+      entityType: $entityType
+      limit: $limit
+      depth: $depth
+    )
+  }
+`;
+
 export const KnowledgeGraphQuery = gql`
   query KnowledgeGraph($tenantId: ID!, $threadId: ID, $runId: ID) {
     knowledgeGraphGraph(
