@@ -116,7 +116,7 @@ interface SpacesWorkbenchProps {
 
 export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
   const navigate = useNavigate();
-  const { tenantId } = useTenant();
+  const { tenantId, userId } = useTenant();
   const [prompt, setPrompt] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -552,6 +552,7 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           onChange={setPrompt}
           onSubmit={handleSubmit}
           mentionTargets={mentionTargets}
+          currentUserId={userId ?? null}
           skillCatalog={skillCatalog}
           spaces={composerSpaces}
           selectedSpaceId={selectedSpace?.id ?? defaultSpaceId ?? null}

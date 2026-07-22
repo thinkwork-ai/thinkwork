@@ -147,6 +147,7 @@ import { deriveDispatchIndicatorState } from "@/components/workbench/dispatch-in
 import {
   deriveAgentDefault,
   deriveAgentDispatch,
+  resolveDraftMentions,
   type AgentDispatchRequestValue,
   type ServerThreadMode,
 } from "@/lib/agent-mode";
@@ -3460,12 +3461,23 @@ function FollowUpComposer({
           senderType: message.sender?.type ?? null,
           senderId: message.sender?.id ?? null,
         })),
-        draftMentions: mentions.map((mention) => ({
-          targetType: mention.targetType,
-          targetId: mention.targetId,
-        })),
+        // Resolved from the live draft text so a picked-or-typed @Name counts
+        // (and stops counting the moment it's deleted) — see THINK-328.
+        draftMentions: resolveDraftMentions({
+          text: composer.text,
+          structuredMentions: mentions,
+          mentionTargets,
+          currentUserId,
+        }),
       }).agentDefaultOn,
-    [currentUserId, serverMode, threadMessages, mentions],
+    [
+      currentUserId,
+      serverMode,
+      threadMessages,
+      mentions,
+      composer.text,
+      mentionTargets,
+    ],
   );
   const [agentEnabled, setAgentEnabled] = useState(agentDefaultOn);
   // Whether the user has manually toggled the agent in this thread. While

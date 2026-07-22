@@ -15,6 +15,27 @@ export interface AgentModeMention {
   targetId: string;
 }
 
+/**
+ * A structured mention held in composer state: the picker-inserted token plus
+ * the raw text it rendered into the draft (`@Name`). Structurally satisfied by
+ * both ComposerMention and SpacesComposerMention.
+ */
+export interface DraftStructuredMention extends AgentModeMention {
+  rawText: string;
+}
+
+/**
+ * Minimal structural slice of a tenant mention target (MentionMenu's
+ * MentionTarget satisfies it) — enough to mirror the server's typed-mention
+ * text scan without importing from a composer module.
+ */
+export interface DraftMentionTarget {
+  targetType: "USER" | "AGENT" | "AGENT_PROFILE";
+  targetId: string;
+  displayName: string;
+  aliases?: string[];
+}
+
 export interface AgentModeMessage {
   role: string;
   senderType?: string | null;
@@ -72,12 +93,81 @@ export function deriveAgentMode(input: DeriveAgentDefaultInput): AgentMode {
       )
     : false;
 
-  const draftMentionsOtherUser = draftMentions.some(
+  return otherHumanPosted || draftMentionsOtherUser(input) ? "multi" : "single";
+}
+
+/**
+ * Whether the current draft @mentions a human other than the current user.
+ * When the current user is unknown, any user mention counts as "other".
+ */
+function draftMentionsOtherUser(input: DeriveAgentDefaultInput): boolean {
+  const { currentUserId, draftMentions = [] } = input;
+  return draftMentions.some(
     (mention) =>
       mention.targetType === "USER" && mention.targetId !== currentUserId,
   );
+}
 
-  return otherHumanPosted || draftMentionsOtherUser ? "multi" : "single";
+/**
+ * Resolves the draft mentions the toggle derivation should see, from the live
+ * composer text:
+ *  - structured (picker-inserted) mentions survive only while their rawText is
+ *    still present in the text — the same filter submit applies, so a deleted
+ *    `@Name` stops counting immediately (not only at send);
+ *  - plain-text `@Name` typed against a known USER mention target counts too,
+ *    mirroring the server's `findTextMentions` scan (boundary-anchored,
+ *    case-insensitive match of `@` + displayName/alias) so the toggle agrees
+ *    with what the server will parse at send. Only USER targets other than the
+ *    current user are scanned; agent aliases keep their existing force-on path.
+ */
+export function resolveDraftMentions(input: {
+  text: string;
+  structuredMentions?: DraftStructuredMention[];
+  mentionTargets?: DraftMentionTarget[];
+  currentUserId?: string | null;
+}): AgentModeMention[] {
+  const {
+    text,
+    structuredMentions = [],
+    mentionTargets = [],
+    currentUserId,
+  } = input;
+
+  const resolved = new Map<string, AgentModeMention>();
+  const add = (mention: AgentModeMention) => {
+    resolved.set(`${mention.targetType}:${mention.targetId}`, {
+      targetType: mention.targetType,
+      targetId: mention.targetId,
+    });
+  };
+
+  for (const mention of structuredMentions) {
+    if (text.includes(mention.rawText)) add(mention);
+  }
+
+  if (text.includes("@")) {
+    for (const target of mentionTargets) {
+      if (target.targetType !== "USER") continue;
+      if (currentUserId && target.targetId === currentUserId) continue;
+      const typed = [target.displayName, ...(target.aliases ?? [])].some(
+        (alias) => {
+          const trimmed = alias?.trim();
+          if (!trimmed) return false;
+          return new RegExp(
+            `(^|\\s)@${escapeRegExp(trimmed)}(?=$|\\s|[.,!?;:])`,
+            "iu",
+          ).test(text);
+        },
+      );
+      if (typed) add(target);
+    }
+  }
+
+  return [...resolved.values()];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -85,16 +175,25 @@ export function deriveAgentMode(input: DeriveAgentDefaultInput): AgentMode {
  * multi-player. Callers use this to set the initial per-thread default; a
  * user's manual override then persists within the thread.
  *
- * When the server Thread Mode is known (`serverMode`), it is authoritative and
- * wins over the local heuristics: AGENT → default on, MULTIPLAYER → default
- * off. This closes the documented blind spot (a user @mentioned but not yet
- * replied) that the message-history heuristic can't see. When absent the
- * heuristic is the fallback, unchanged.
+ * A draft that @mentions another human outranks everything else: the server
+ * Thread Mode is a snapshot from before the draft existed, and the server will
+ * count that mention when the message lands (participants are inserted before
+ * dispatch-mode resolution). A draft user-mention can only force `multi`
+ * (uncheck) — it never converts a MULTIPLAYER thread to `single`.
+ *
+ * Otherwise, when the server Thread Mode is known (`serverMode`), it is
+ * authoritative and wins over the local heuristics: AGENT → default on,
+ * MULTIPLAYER → default off. This closes the documented blind spot (a user
+ * @mentioned but not yet replied) that the message-history heuristic can't
+ * see. When absent the heuristic is the fallback, unchanged.
  */
 export function deriveAgentDefault(input: DeriveAgentDefaultInput): {
   mode: AgentMode;
   agentDefaultOn: boolean;
 } {
+  if (draftMentionsOtherUser(input)) {
+    return { mode: "multi", agentDefaultOn: false };
+  }
   if (input.serverMode) {
     const mode: AgentMode = input.serverMode === "AGENT" ? "single" : "multi";
     return { mode, agentDefaultOn: mode === "single" };

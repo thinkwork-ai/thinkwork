@@ -55,7 +55,7 @@ import {
 import { toast } from "sonner";
 import { SPACES_COMPOSER_FOCUS_EVENT } from "@/lib/composer-focus";
 import { cn } from "@/lib/utils";
-import { deriveAgentDefault } from "@/lib/agent-mode";
+import { deriveAgentDefault, resolveDraftMentions } from "@/lib/agent-mode";
 import type { ApprovedModelOption } from "@/lib/approved-model-selection";
 
 export interface SpacesComposerMention {
@@ -93,6 +93,8 @@ interface SpacesComposerProps {
     goalMode?: ComposerGoalModeIntent,
   ) => void | boolean | Promise<void | boolean>;
   mentionTargets?: MentionTarget[];
+  /** The signed-in user; excluded from the draft user-mention scan. */
+  currentUserId?: string | null;
   /** Tenant skill catalog for the `/skill` force-pin popup. */
   skillCatalog?: SkillOption[];
   spaces?: SpacesComposerSpaceOption[];
@@ -127,6 +129,7 @@ export function SpacesComposer({
   onChange,
   onSubmit,
   mentionTargets = [],
+  currentUserId,
   skillCatalog = [],
   spaces = [],
   selectedSpaceId,
@@ -168,16 +171,21 @@ export function SpacesComposer({
   const mentionMenuOpen =
     mentionQuery !== null && mentionOptions.length > 0 && !mentionMenuDismissed;
   // New threads have no history, so mode derives from the draft mentions only:
-  // mentioning another user makes it multi-player (agent defaults OFF).
+  // mentioning another user (picked or typed) makes it multi-player (agent
+  // defaults OFF). Mentions resolve from the live text so a deleted @Name
+  // stops counting immediately.
   const agentDefaultOn = useMemo(
     () =>
       deriveAgentDefault({
-        draftMentions: mentions.map((mention) => ({
-          targetType: mention.targetType,
-          targetId: mention.targetId,
-        })),
+        currentUserId,
+        draftMentions: resolveDraftMentions({
+          text: value,
+          structuredMentions: mentions,
+          mentionTargets,
+          currentUserId,
+        }),
       }).agentDefaultOn,
-    [mentions],
+    [currentUserId, value, mentions, mentionTargets],
   );
   const [agentEnabled, setAgentEnabled] = useState(agentDefaultOn);
   // Once the user manually toggles, their choice persists until the draft is

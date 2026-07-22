@@ -737,6 +737,36 @@ describe("SpacesComposer", () => {
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("unchecks the agent toggle for a typed plain-text user mention (THINK-328 R7)", () => {
+    render(<ControlledComposer />);
+
+    const toggle = screen.getByRole("button", { name: "Send to agent" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+
+    // Type the full display name without picking from the menu — the client
+    // mirror of the server's findTextMentions scan must still uncheck.
+    setComposerText("@Eric Odom please take a look");
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+
+    // Deleting the typed mention restores the derived default (R2).
+    setComposerText("please take a look");
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("re-checks the toggle when a picked mention's text is deleted (THINK-328 R2)", () => {
+    render(<ControlledComposer />);
+
+    const toggle = screen.getByRole("button", { name: "Send to agent" });
+    setComposerText("@eri");
+    fireEvent.click(screen.getByRole("option", { name: /Eric Odom/ }));
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+
+    // Wipe the draft (rawText gone) — the stale structured-mention state must
+    // stop counting immediately, not only at submit.
+    setComposerText("something else entirely");
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("keeps the agent toggle ON when only an agent is mentioned", () => {
     render(<ControlledComposer />);
 
