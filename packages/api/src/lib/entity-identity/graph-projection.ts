@@ -358,7 +358,7 @@ export async function uploadIdentitySnapshot(args: {
   s3?: SnapshotS3Client;
   bucket?: string;
 }): Promise<{ uploaded: boolean; key?: string }> {
-  const bucket = args.bucket ?? process.env.BRAIN_ARTIFACTS_BUCKET ?? null;
+  const bucket = args.bucket ?? getConfig("BRAIN_ARTIFACTS_BUCKET") ?? null;
   if (!bucket) return { uploaded: false };
   const s3 = args.s3 ?? new S3Client({});
   const key = `twin-identity/${args.snapshot.tenantId}/latest.json`;

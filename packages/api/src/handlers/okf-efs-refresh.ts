@@ -1,4 +1,5 @@
 import { S3Client } from "@aws-sdk/client-s3";
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   discoverOkfCurrentTenantSlugs,
   refreshOkfEfsCurrentView,
@@ -66,7 +67,7 @@ async function runOkfEfsRefresh(
     errors: [],
   };
 
-  const bucket = process.env.BRAIN_ARTIFACTS_BUCKET;
+  const bucket = getConfig("BRAIN_ARTIFACTS_BUCKET");
   if (!bucket) {
     return {
       ...result,

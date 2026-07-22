@@ -9,6 +9,7 @@
  * (30-day expiration on the `evidence-snapshots/` prefix).
  */
 
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
@@ -44,7 +45,7 @@ export function setDefaultSnapshotS3Client(client: S3Client | null): void {
  * wired to the memory-stage-worker Lambda as BRAIN_ARTIFACTS_BUCKET.
  */
 export function resolveSnapshotBucket(): string {
-  const bucket = process.env.BRAIN_ARTIFACTS_BUCKET;
+  const bucket = getConfig("BRAIN_ARTIFACTS_BUCKET");
   if (!bucket) {
     throw new Error(
       "BRAIN_ARTIFACTS_BUCKET is not set — evidence snapshots require the " +
