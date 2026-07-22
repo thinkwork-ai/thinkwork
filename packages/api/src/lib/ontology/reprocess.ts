@@ -508,32 +508,9 @@ async function processClaimedOntologyReprocessJob(args: {
       .where(eq(ontologyReprocessJobs.id, args.job.id));
   });
 
-  // Post-apply hook (plan R8): the apply transaction has committed and the
-  // change set is now `applied`, so a re-ingest dispatch failure here must
-  // never fail the reprocess job — it is recorded on the job's metrics and
-  // logged instead.
-  try {
-    metrics = await dispatchObservationsReingestForOntologyApproval({
-      job: args.job,
-      baseMetrics: metrics,
-      db: args.db,
-      deps: args.reingestDeps,
-    });
-  } catch (err) {
-    console.error(
-      "[ontology-reprocess] failed to record observations re-ingest outcome",
-      {
-        jobId: args.job.id,
-        tenantId: args.job.tenant_id,
-        error: err instanceof Error ? err.message : String(err),
-      },
-    );
-  }
-
   // Post-apply hook (THINK-321 U4, KTD-4): an applied identity_map item
   // changed `entity_types.system_map`, so the workspace routing-map
-  // projection must follow. Best-effort like the re-ingest dispatch above
-  // — the change set is already `applied`, so a projection failure is
+  // projection must follow. Best-effort — the change set is already `applied`, so a projection failure is
   // recorded on metrics and logged, never thrown.
   metrics = await refreshRoutingMapProjectionForApply({
     tenantId: args.job.tenant_id,
@@ -553,6 +530,32 @@ async function processClaimedOntologyReprocessJob(args: {
     baseMetrics: metrics,
     db: args.db,
   });
+
+  // Post-apply hook (plan R8) — LAST on purpose: the observations
+  // re-ingest dispatch is a RequestResponse invoke of the KG ingest worker
+  // (fullRebuild), which on a large tenant runs past this Lambda's own
+  // timeout. When that happens the invoke dies with the Lambda — but the
+  // fast, must-happen projections above (routing map, twin export) have
+  // already landed. Seen live: dev apply 2026-07-22 timed out here and the
+  // twin export silently never regenerated. A failure is recorded on the
+  // job's metrics and logged, never thrown.
+  try {
+    metrics = await dispatchObservationsReingestForOntologyApproval({
+      job: args.job,
+      baseMetrics: metrics,
+      db: args.db,
+      deps: args.reingestDeps,
+    });
+  } catch (err) {
+    console.error(
+      "[ontology-reprocess] failed to record observations re-ingest outcome",
+      {
+        jobId: args.job.id,
+        tenantId: args.job.tenant_id,
+        error: err instanceof Error ? err.message : String(err),
+      },
+    );
+  }
 
   return {
     impact: persistedImpact,
