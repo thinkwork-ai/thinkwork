@@ -1175,12 +1175,20 @@ export const OntologyGraph = forwardRef<
         linkCurvature={(link: any) => link.curvature ?? 0}
         linkCanvasObjectMode={() => "replace" as const}
         linkCanvasObject={linkCanvasObject}
-        cooldownTicks={framed ? 120 : 0}
-        d3AlphaDecay={framed ? 0.05 : 0.0115}
-        d3VelocityDecay={0.55}
-        warmupTicks={400}
+        // The schema map is small — let it settle LIVE with natural d3
+        // decay instead of pre-warming off-screen: the frozen "muted"
+        // look came from warmup + heavy damping (Eric, 2026-07-22).
+        cooldownTicks={300}
+        d3AlphaDecay={0.0228}
+        d3VelocityDecay={0.4}
+        warmupTicks={0}
         onZoom={({ k }: { k: number }) => {
           zoomKRef.current = k;
+        }}
+        onEngineTick={() => {
+          // Live settle: follow the forming layout until first framing.
+          if (framed) return;
+          fgRef.current?.zoomToFit?.(0, 40);
         }}
         onEngineStop={() => {
           if (zoomInitRef.current) return;
