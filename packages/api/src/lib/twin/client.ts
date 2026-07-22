@@ -14,6 +14,7 @@
  */
 
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
+import { getConfig } from "@thinkwork/runtime-config";
 import type { TwinRequest } from "./query-compiler.js";
 
 export interface TwinQueryOk {
@@ -38,7 +39,7 @@ export async function executeTwinQuery(args: {
   stage?: string;
 }): Promise<TwinQueryResult> {
   const stage = args.stage ?? process.env.STAGE ?? "";
-  if (!stage || !process.env.NEPTUNE_ENDPOINT) {
+  if (!stage || !getConfig("NEPTUNE_ENDPOINT")) {
     // Twin not deployed on this stage — typed unavailable, never a throw.
     return { ok: false, reason: "unavailable", detail: "twin_not_deployed" };
   }

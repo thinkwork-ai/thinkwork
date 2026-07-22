@@ -37,6 +37,7 @@
  */
 
 import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   ExecuteOpenCypherQueryCommand,
   NeptunedataClient,
@@ -68,7 +69,7 @@ export function createNeptuneClient(args?: {
   endpoint?: string;
   port?: number;
 }): NeptuneQueryClient {
-  const endpoint = args?.endpoint ?? process.env.NEPTUNE_ENDPOINT ?? "";
+  const endpoint = args?.endpoint ?? getConfig("NEPTUNE_ENDPOINT") ?? "";
   const port = args?.port ?? Number(process.env.NEPTUNE_PORT ?? "8182");
   if (!endpoint) {
     throw new Error("NEPTUNE_ENDPOINT is not configured");
@@ -750,7 +751,7 @@ export async function nudgeIdentityGraphProjector(
 ): Promise<void> {
   try {
     const stage = process.env.STAGE ?? "";
-    if (!stage || !process.env.NEPTUNE_ENDPOINT) return; // twin not deployed
+    if (!stage || !getConfig("NEPTUNE_ENDPOINT")) return; // twin not deployed
     lambdaClient ??= new LambdaClient({});
     await lambdaClient.send(
       new InvokeCommand({

@@ -2,6 +2,7 @@ import {
   ExecuteOpenCypherQueryCommand,
   NeptunedataClient,
 } from "@aws-sdk/client-neptunedata";
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   compileTwinQuery,
   TwinCompileError,
@@ -24,7 +25,7 @@ export interface TwinQueryEvent {
 let client: NeptunedataClient | null = null;
 
 function neptune(): NeptunedataClient {
-  const endpoint = process.env.NEPTUNE_ENDPOINT ?? "";
+  const endpoint = getConfig("NEPTUNE_ENDPOINT") ?? "";
   const port = process.env.NEPTUNE_PORT ?? "8182";
   if (!endpoint) throw new Error("NEPTUNE_ENDPOINT is not configured");
   return (client ??= new NeptunedataClient({
