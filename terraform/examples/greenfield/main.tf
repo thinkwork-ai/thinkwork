@@ -153,6 +153,12 @@ variable "neptune_cluster_resource_id" {
   description = "Company Brain twin: Neptune cluster resource id for IAM ARNs"
 }
 
+variable "company_brain_enabled" {
+  type        = bool
+  default     = false
+  description = "Company Brain twin tool seam (plan 2026-07-21-001 U7)"
+}
+
 variable "neptune_client_security_group_id" {
   type        = string
   default     = ""
@@ -891,6 +897,7 @@ module "thinkwork" {
   neptune_endpoint                            = var.neptune_endpoint
   neptune_cluster_resource_id                 = var.neptune_cluster_resource_id
   neptune_client_security_group_id            = var.neptune_client_security_group_id
+  company_brain_enabled                       = var.company_brain_enabled
   hindsight_database_name                     = var.hindsight_database_name
   memory_engine                               = var.memory_engine
   twenty_provisioned                          = var.twenty_provisioned

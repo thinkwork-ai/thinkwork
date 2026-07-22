@@ -1391,6 +1391,7 @@ jobs:
             -var "neptune_endpoint=${{ vars.NEPTUNE_ENDPOINT || '' }}"
             -var "neptune_cluster_resource_id=${{ vars.NEPTUNE_CLUSTER_RESOURCE_ID || '' }}"
             -var "neptune_client_security_group_id=${{ vars.NEPTUNE_CLIENT_SG_ID || '' }}"
+            -var "company_brain_enabled=${{ vars.COMPANY_BRAIN_ENABLED || 'false' }}"
             # Governed autonomy — per-tenant self-extension opt-in allowlist.
             # Empty (default) = NO tenant enabled; the two autonomous actions
             # stay inert and fail-closed. Set via the repo variable so the

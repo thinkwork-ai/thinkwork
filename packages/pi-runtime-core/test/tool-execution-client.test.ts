@@ -137,6 +137,39 @@ describe("createToolExecutionEmitter", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("serializes a terminal POST behind its own started POST", async () => {
+    let resolveStarted: (r: Response) => void = () => {};
+    const fetchImpl = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<Response>((resolve) => (resolveStarted = resolve)),
+      )
+      .mockResolvedValue(new Response("{}"));
+    const emitter = createToolExecutionEmitter(
+      readToolExecutionCallbackConfig(PAYLOAD),
+      { fetchImpl: fetchImpl as unknown as typeof fetch },
+    );
+    emitter.emit({
+      eventType: "started",
+      toolUseId: "toolu_fast",
+      operation: "read",
+    });
+    emitter.emit({
+      eventType: "completed",
+      toolUseId: "toolu_fast",
+      operation: "read",
+      durationMs: 8,
+    });
+    await Promise.resolve();
+    // started POST still pending → terminal must not have fired yet.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    resolveStarted(new Response("{}"));
+    await emitter.drain();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const second = JSON.parse(fetchImpl.mock.calls[1]![1].body as string);
+    expect(second.events[0].event_type).toBe("completed");
+  });
+
   it("swallows fetch failures (never throws into the turn)", async () => {
     const fetchImpl = vi.fn().mockRejectedValue(new Error("boom"));
     const logger = vi.fn();

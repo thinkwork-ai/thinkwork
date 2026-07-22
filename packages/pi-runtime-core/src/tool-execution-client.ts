@@ -135,6 +135,12 @@ export function createToolExecutionEmitter(
   const fetchImpl = deps.fetchImpl ?? fetch;
   const attemptTimeoutMs = deps.attemptTimeoutMs ?? DEFAULT_ATTEMPT_TIMEOUT_MS;
   const inFlight = new Set<Promise<void>>();
+  // Per-tool-call ordering: a fast tool's terminal event can otherwise race
+  // its own `started` POST and lose (the ledger's correlation trigger then
+  // skips the orphan terminal — observed live on an 8ms read). Chain each
+  // terminal POST behind its started POST; the chain never rejects because
+  // post() swallows failures.
+  const startedPosts = new Map<string, Promise<void>>();
 
   function post(event: ToolExecutionEmitEvent): Promise<void> {
     const isStarted = event.eventType === "started";
@@ -198,7 +204,18 @@ export function createToolExecutionEmitter(
 
   return {
     emit(event) {
-      const p = post(event).finally(() => inFlight.delete(p));
+      const prior =
+        event.eventType === "started"
+          ? Promise.resolve()
+          : (startedPosts.get(event.toolUseId) ?? Promise.resolve());
+      const p = prior
+        .then(() => post(event))
+        .finally(() => inFlight.delete(p));
+      if (event.eventType === "started") {
+        startedPosts.set(event.toolUseId, p);
+      } else {
+        void p.finally(() => startedPosts.delete(event.toolUseId));
+      }
       inFlight.add(p);
     },
     async drain(timeoutMs = DEFAULT_DRAIN_TIMEOUT_MS) {

@@ -54,6 +54,7 @@ import {
   createDocumentComposerExtension,
   createFetchWorkspaceSourceExtension,
   createIdentityResolutionExtension,
+  createCompanyBrainExtension,
   createKnowledgeGraphExtension,
   createSearchExtension,
   createSkillsExtension,
@@ -191,6 +192,7 @@ import { createApiCanvasProvider } from "./runtime/providers/canvas-provider.js"
 import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
 import { createApiIdentityResolutionProvider } from "./runtime/providers/identity-resolution-provider.js";
 import { createApiKnowledgeGraphProvider } from "./runtime/providers/knowledge-graph-provider.js";
+import { createApiCompanyBrainProvider } from "./runtime/providers/company-brain-provider.js";
 import { createApiSearchProvider } from "./runtime/providers/search-provider.js";
 import { createOkfWikiProvider } from "./runtime/providers/okf-wiki-provider.js";
 import {
@@ -1872,6 +1874,55 @@ export async function buildInvocationResources(
         hasApiUrl: Boolean(kgApiUrl),
         hasApiSecret: Boolean(kgApiSecret),
         hasTurnReference: Boolean(kgThreadTurnId || kgThreadId),
+      });
+    }
+  }
+
+  // Company Brain twin (plan 2026-07-21-001 U7) — twin_get_entity /
+  // twin_neighbors / twin_cohort_query / twin_system_edge over the API's
+  // twin GraphQL queries (typed requests only; the VPC twin-query Lambda
+  // compiles them — no raw graph query surface). Gated on the
+  // `company_brain_enabled` payload flag; skipped in eval mode. Identity is
+  // turn-bound exactly like the knowledge-graph seam above.
+  if (
+    args.payload.eval_mode !== true &&
+    args.payload.company_brain_enabled === true
+  ) {
+    const twinApiUrl = asString(args.payload.thinkwork_api_url);
+    const twinApiSecret = asString(args.payload.thinkwork_api_secret);
+    const twinThreadTurnId = asString(args.payload.thread_turn_id);
+    const twinThreadId = args.identity.threadId;
+    if (twinApiUrl && twinApiSecret && (twinThreadTurnId || twinThreadId)) {
+      addExtension(
+        createCompanyBrainExtension({
+          onError: (error, { phase }) =>
+            logStructured({
+              level: "warn",
+              event: "company_brain_tool_failed",
+              phase,
+              tenantId: args.identity.tenantId,
+              threadId: args.identity.threadId,
+              error: error instanceof Error ? error.message : String(error),
+            }),
+        }),
+        {
+          companyBrain: createApiCompanyBrainProvider({
+            apiUrl: twinApiUrl,
+            apiSecret: twinApiSecret,
+            threadTurnId: twinThreadTurnId || undefined,
+            threadId: twinThreadId || undefined,
+          }),
+        },
+      );
+    } else {
+      logStructured({
+        level: "warn",
+        event: "company_brain_skipped_missing_wiring",
+        tenantId: args.identity.tenantId,
+        threadId: args.identity.threadId,
+        hasApiUrl: Boolean(twinApiUrl),
+        hasApiSecret: Boolean(twinApiSecret),
+        hasTurnReference: Boolean(twinThreadTurnId || twinThreadId),
       });
     }
   }
