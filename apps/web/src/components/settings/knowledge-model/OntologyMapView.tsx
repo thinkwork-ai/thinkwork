@@ -451,6 +451,11 @@ export function OntologyMapView({
       </div>
       <div className="border-border relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border">
         <OntologyGraph
+          loadingFallback={
+            <div className="flex h-full min-h-48 items-center justify-center">
+              <LoadingShimmer />
+            </div>
+          }
           ref={graphRef}
           tenantId={effectiveTenantId}
           searchQuery={searchQuery || undefined}

@@ -86,6 +86,10 @@ const TYPE_PALETTE = [
   "#a3e635", // lime
   "#f87171", // red
 ];
+/** Every node renders the same size — density reads through color and
+ * position, not radius. */
+export const TWIN_NODE_RADIUS = 6;
+
 export function twinTypeColor(typeLabel: string | null): string {
   if (!typeLabel) return NEIGHBOR_COLOR;
   let hash = 0;
@@ -423,6 +427,7 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     const graphDataRef = useRef<TwinGraphData>({ nodes: [], links: [] });
     const lastKeyRef = useRef<string | null>(null);
     const zoomInitRef = useRef(false);
+    const tickCountRef = useRef(0);
 
     // The query identity (mode + types + entity): when it changes, the old
     // dataset is WRONG, not stale-but-refreshing — drop it immediately so
@@ -438,6 +443,7 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
       graphDataRef.current.links.length = 0;
       lastKeyRef.current = null;
       zoomInitRef.current = false;
+      tickCountRef.current = 0;
     }
 
     const payload = overviewMode
@@ -466,8 +472,9 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     const graphData = graphDataRef.current;
 
     // Dense neighborhoods (invoices/items fanning out of one customer)
-    // otherwise stack into a single blob — collision keeps every node
-    // individually visible.
+    // otherwise stack into a single blob. Firm collision + wider link
+    // distance + stronger charge keep uniform nodes separated, and every
+    // data merge reheats the simulation so the layout actually updates.
     useEffect(() => {
       const fg = fgRef.current;
       if (!fg || typeof fg.d3Force !== "function") return;
@@ -475,9 +482,18 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
         "collide",
         d3
           .forceCollide()
-          .radius((node: any) => (node.isCenter ? 12 : 7))
-          .strength(0.9),
+          .radius(TWIN_NODE_RADIUS + 3)
+          .strength(1)
+          .iterations(2),
       );
+      // Weak centering keeps the many disconnected star-clusters of a
+      // 1-hop overview gathered instead of repelling into a sparse
+      // starfield at the canvas corners.
+      fg.d3Force("x", d3.forceX(0).strength(0.1));
+      fg.d3Force("y", d3.forceY(0).strength(0.1));
+      fg.d3Force("charge")?.strength?.(-25);
+      fg.d3Force("link")?.distance?.(28);
+      fg.d3ReheatSimulation?.();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [graphKey, dims]);
 
@@ -500,7 +516,7 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
 
     const nodeCanvasObject = useCallback(
       (node: any, ctx: CanvasRenderingContext2D) => {
-        const r = node.isCenter ? 10 : node.isSystem ? 5 : degreeRadius(1, 2);
+        const r = TWIN_NODE_RADIUS;
         const color = node.isCenter
           ? CENTER_COLOR
           : node.isSystem
@@ -629,17 +645,19 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
           onZoom={({ k }: { k: number }) => {
             zoomKRef.current = k;
           }}
-          onEngineStop={() => {
-            // One-shot framing: depth-change merges never re-frame. Small
-            // neighborhoods (2–3 nodes) make zoomToFit dive to absurd zoom
-            // levels — clamp both ends so nodes stay node-sized.
-            if (zoomInitRef.current) return;
+          onEngineTick={() => {
+            // Frame ONCE, early in the settle (tick ~15, when the layout
+            // has rough shape) — after that the camera is never touched
+            // again: no end-of-settle zoom snap (Eric, 2026-07-22). Clamp
+            // keeps tiny neighborhoods from absurd zoom levels.
+            tickCountRef.current += 1;
+            if (zoomInitRef.current || tickCountRef.current < 15) return;
             zoomInitRef.current = true;
-            fgRef.current?.zoomToFit?.(0, 30);
+            fgRef.current?.zoomToFit?.(0, 20);
             const k = fgRef.current?.zoom?.();
             if (typeof k === "number") {
-              if (k > 1.75) fgRef.current?.zoom?.(1.75, 0);
-              else if (k < 0.5) fgRef.current?.zoom?.(0.5, 0);
+              if (k > 2.5) fgRef.current?.zoom?.(2.5, 0);
+              else if (k < 0.7) fgRef.current?.zoom?.(0.7, 0);
             }
           }}
         />

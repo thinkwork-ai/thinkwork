@@ -248,8 +248,9 @@ describe("TwinGraph", () => {
     };
     const view = render(<TwinGraph tenantId="ten-1" canonicalId="cust-1" />);
     const first = forceGraphCalls.at(-1);
-    first.onEngineStop();
-    first.onEngineStop();
+    // Framing fires once, early in the settle (tick >= 15) — and never
+    // again afterwards (no end-of-settle zoom snap).
+    for (let i = 0; i < 40; i += 1) first.onEngineTick();
     expect(zoomToFit).toHaveBeenCalledTimes(1);
 
     // New payload (depth change) — engine settles again, no re-frame.
@@ -263,7 +264,8 @@ describe("TwinGraph", () => {
     view.rerender(
       <TwinGraph tenantId="ten-1" canonicalId="cust-1" depth={2} />,
     );
-    forceGraphCalls.at(-1).onEngineStop();
+    const third = forceGraphCalls.at(-1);
+    for (let i = 0; i < 40; i += 1) third.onEngineTick();
     expect(zoomToFit).toHaveBeenCalledTimes(1);
   });
 });
