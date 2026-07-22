@@ -216,8 +216,8 @@ export function SettingsMemoryHome() {
       { to: MEMORY, label: "Memory" },
       // THINK-327 U8: Explorer holds the retired wiki "Pages" slot.
       { to: EXPLORER, label: "Explorer" },
-      { to: KNOWLEDGE_BASES, label: "KBs" },
       { to: ONTOLOGY, label: "Ontology" },
+      { to: KNOWLEDGE_BASES, label: "KBs" },
     ],
     action:
       activeTab === "ontology"
