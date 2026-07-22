@@ -13,6 +13,7 @@ import {
   isMobilBrand,
   mapAccount,
   mapContact,
+  mapDispatchCustomer,
   mapCrmComment,
   mapCrmTask,
   mapOrganization,
@@ -86,6 +87,30 @@ describe("normalizeEmail", () => {
   it("lowercases and validates", () => {
     expect(normalizeEmail(" Jane@TEI.com ")).toBe("jane@tei.com");
     expect(normalizeEmail("not-an-email")).toBeNull();
+  });
+});
+
+describe("mapDispatchCustomer", () => {
+  it("maps a cohort customer to a company keyed customer:<id>", () => {
+    const mapped = mapDispatchCustomer(
+      { id: "cust_1", name: "Thunder Well Service", ownerRepId: "rep_jane" },
+      ownerMap,
+    );
+    expect(mapped.input).toMatchObject({
+      name: "Thunder Well Service",
+      accountOwnerId: "member-jane-uuid",
+      sourceId: "customer:cust_1",
+    });
+    expect(mapped.warnings).toEqual([]);
+  });
+
+  it("warns on an unprovisioned owner and keeps the company", () => {
+    const mapped = mapDispatchCustomer(
+      { id: "cust_2", name: "Beta Fuels", ownerRepId: "rep_gone" },
+      ownerMap,
+    );
+    expect(mapped.input).not.toHaveProperty("accountOwnerId");
+    expect(mapped.warnings[0]).toMatch(/rep_gone/);
   });
 });
 

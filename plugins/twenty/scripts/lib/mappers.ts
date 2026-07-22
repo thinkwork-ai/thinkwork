@@ -318,6 +318,35 @@ export interface MappedRecord {
   warnings: string[];
 }
 
+/**
+ * A dispatch customer becomes a company exactly like an account does, keyed
+ * `customer:<id>` — the id spaces never collide, and the caller drops
+ * customers whose name already has an account-sourced company (unique-name
+ * crosswalk) before mapping.
+ */
+export function mapDispatchCustomer(
+  customer: {
+    id: string;
+    name: string | null;
+    ownerRepId: string | null;
+  },
+  ownerMap: ReadonlyMap<string, string>,
+): MappedRecord {
+  const warnings: string[] = [];
+  const accountOwnerId = resolveOwner(customer.ownerRepId, ownerMap);
+  if (customer.ownerRepId && !accountOwnerId) {
+    warnings.push(
+      `owner ${customer.ownerRepId} not provisioned; company has no accountOwner`,
+    );
+  }
+  const input: Record<string, unknown> = {
+    name: customer.name ?? `Customer ${customer.id}`,
+    ...(accountOwnerId ? { accountOwnerId } : {}),
+    sourceId: sourceId("customer", customer.id),
+  };
+  return { sourceId: input.sourceId as string, input, warnings };
+}
+
 export function mapAccount(
   account: LastmileAccount,
   ownerMap: ReadonlyMap<string, string>,
