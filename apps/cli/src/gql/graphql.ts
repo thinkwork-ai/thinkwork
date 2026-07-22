@@ -7507,6 +7507,8 @@ export type OntologySchemaGraph = {
   __typename?: 'OntologySchemaGraph';
   candidates: Array<OntologySchemaGraphCandidate>;
   relationships: Array<OntologySchemaGraphRelationship>;
+  systemLinks: Array<OntologySchemaGraphSystemLink>;
+  systems: Array<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   types: Array<OntologySchemaGraphType>;
 };
@@ -7535,6 +7537,22 @@ export type OntologySchemaGraphRelationship = {
   slug: Scalars['String']['output'];
   sourceTypeSlugs: Array<Scalars['String']['output']>;
   targetTypeSlugs: Array<Scalars['String']['output']>;
+};
+
+/**
+ * External system surfaced on the schema map (treasure-map view): which
+ * systems hold identities and/or clone data for each entity type. Derived
+ * from identity mappings and governed facet declarations — registering a
+ * system's mappings is what makes it appear.
+ */
+export type OntologySchemaGraphSystemLink = {
+  __typename?: 'OntologySchemaGraphSystemLink';
+  /** A declared facet clones data for this type from the system. */
+  data: Scalars['Boolean']['output'];
+  entityTypeSlug: Scalars['String']['output'];
+  /** The system holds identity keys for instances of this type. */
+  identity: Scalars['Boolean']['output'];
+  systemSlug: Scalars['String']['output'];
 };
 
 /**

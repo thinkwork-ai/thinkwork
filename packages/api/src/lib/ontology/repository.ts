@@ -1,7 +1,10 @@
 import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { parseIdentityRules } from "../entity-identity/normalizers.js";
+import { parseTwinFacetDeclarations } from "./twin-declarations.js";
 import {
   activityLog,
+  canonicalEntities,
+  entitySourceMappings,
   kgEntities,
   ontologyCandidateRejections,
   ontologyChangeSetItems,
@@ -270,7 +273,17 @@ const graphEnumValue = (value: string | null | undefined) =>
  */
 export function assembleOntologySchemaGraph(args: {
   tenantId: string;
-  entityRows: Array<{ slug: string; name: string; lifecycle_status: string }>;
+  entityRows: Array<{
+    slug: string;
+    name: string;
+    lifecycle_status: string;
+    twin_facets?: unknown;
+  }>;
+  /** Distinct (entity type, source system) pairs from identity mappings. */
+  identitySystemRows?: Array<{
+    entityTypeSlug: string | null;
+    sourceSystem: string | null;
+  }>;
   relationshipRows: Array<{
     slug: string;
     name: string;
@@ -295,6 +308,56 @@ export function assembleOntologySchemaGraph(args: {
     if (row.slug) countBySlug.set(row.slug, Number(row.count));
   }
   const changeSetById = new Map(args.changeSetRows.map((row) => [row.id, row]));
+  // Treasure-map system links: identity mappings say "this system can
+  // identify instances of the type"; facet declarations say "this system
+  // clones data for the type". Both merge into one link per pair.
+  const approvedSlugs = new Set(
+    args.entityRows
+      .filter((row) => row.lifecycle_status === "approved")
+      .map((row) => row.slug),
+  );
+  const linkByKey = new Map<
+    string,
+    {
+      systemSlug: string;
+      entityTypeSlug: string;
+      identity: boolean;
+      data: boolean;
+    }
+  >();
+  const recordSystemLink = (
+    systemSlug: string,
+    entityTypeSlug: string,
+    kind: "identity" | "data",
+  ) => {
+    if (!approvedSlugs.has(entityTypeSlug)) return;
+    const key = `${systemSlug} ${entityTypeSlug}`;
+    const existing = linkByKey.get(key) ?? {
+      systemSlug,
+      entityTypeSlug,
+      identity: false,
+      data: false,
+    };
+    existing[kind] = true;
+    linkByKey.set(key, existing);
+  };
+  for (const row of args.identitySystemRows ?? []) {
+    if (row.entityTypeSlug && row.sourceSystem) {
+      recordSystemLink(row.sourceSystem, row.entityTypeSlug, "identity");
+    }
+  }
+  for (const row of args.entityRows) {
+    if (row.lifecycle_status !== "approved") continue;
+    for (const facet of parseTwinFacetDeclarations(row.twin_facets)) {
+      recordSystemLink(facet.sourceSystem, row.slug, "data");
+    }
+  }
+  const systemLinks = [...linkByKey.values()].sort(
+    (a, b) =>
+      a.systemSlug.localeCompare(b.systemSlug) ||
+      a.entityTypeSlug.localeCompare(b.entityTypeSlug),
+  );
+  const systems = [...new Set(systemLinks.map((link) => link.systemSlug))];
   const evidenceCountByItemId = new Map<string, number>();
   for (const row of args.evidenceCountRows) {
     if (row.itemId) evidenceCountByItemId.set(row.itemId, Number(row.count));
@@ -302,6 +365,8 @@ export function assembleOntologySchemaGraph(args: {
 
   return {
     tenantId: args.tenantId,
+    systems,
+    systemLinks,
     types: args.entityRows.map((row) => ({
       slug: row.slug,
       name: row.name,
@@ -431,6 +496,22 @@ export async function getOntologySchemaGraph(args: {
           .groupBy(ontologyEvidenceExamples.item_id)
       : [];
 
+  const identitySystemRows = await db
+    .select({
+      entityTypeSlug: canonicalEntities.entity_type_slug,
+      sourceSystem: entitySourceMappings.source_system,
+    })
+    .from(entitySourceMappings)
+    .innerJoin(
+      canonicalEntities,
+      eq(entitySourceMappings.canonical_entity_id, canonicalEntities.id),
+    )
+    .where(eq(entitySourceMappings.tenant_id, args.tenantId))
+    .groupBy(
+      canonicalEntities.entity_type_slug,
+      entitySourceMappings.source_system,
+    );
+
   return assembleOntologySchemaGraph({
     tenantId: args.tenantId,
     entityRows,
@@ -439,6 +520,7 @@ export async function getOntologySchemaGraph(args: {
     changeSetRows,
     candidateItemRows,
     evidenceCountRows,
+    identitySystemRows,
   });
 }
 

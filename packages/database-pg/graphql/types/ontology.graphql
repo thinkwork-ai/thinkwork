@@ -329,11 +329,32 @@ type OntologySchemaGraphCandidate {
   status: OntologyChangeSetStatus!
 }
 
+"""
+External system surfaced on the schema map (treasure-map view): which
+systems hold identities and/or clone data for each entity type. Derived
+from identity mappings and governed facet declarations — registering a
+system's mappings is what makes it appear.
+"""
+type OntologySchemaGraphSystemLink {
+  systemSlug: String!
+  entityTypeSlug: String!
+  """
+  The system holds identity keys for instances of this type.
+  """
+  identity: Boolean!
+  """
+  A declared facet clones data for this type from the system.
+  """
+  data: Boolean!
+}
+
 type OntologySchemaGraph {
   tenantId: ID!
   types: [OntologySchemaGraphType!]!
   relationships: [OntologySchemaGraphRelationship!]!
   candidates: [OntologySchemaGraphCandidate!]!
+  systems: [String!]!
+  systemLinks: [OntologySchemaGraphSystemLink!]!
 }
 
 type OntologyDefinitions {
