@@ -95,6 +95,7 @@ export async function twinCohort(
   // reaches query text.
   const filter = (parseJson(args.filter) ?? {}) as {
     predicates?: TwinPredicate[];
+    nameContains?: string;
     path?: TwinPath;
   };
   return executeTwinQuery({
@@ -103,6 +104,10 @@ export async function twinCohort(
       kind: "cohort",
       entityType: args.entityType,
       predicates: Array.isArray(filter.predicates) ? filter.predicates : [],
+      nameContains:
+        typeof filter.nameContains === "string"
+          ? filter.nameContains
+          : undefined,
       path: filter.path,
       limit: args.limit ?? undefined,
     },

@@ -53,6 +53,7 @@ export type TwinRequest =
       kind: "cohort";
       entityType: string;
       predicates: TwinPredicate[];
+      nameContains?: string;
       path?: TwinPath;
       limit?: number;
     }
@@ -241,6 +242,20 @@ export function compileTwinQuery(
         MAX_COHORT_LIMIT,
       );
       const conditions: string[] = ["n.tenantId = $tenantId"];
+      if (request.nameContains !== undefined) {
+        if (
+          typeof request.nameContains !== "string" ||
+          request.nameContains.length < 1 ||
+          request.nameContains.length > 100
+        ) {
+          throw new TwinCompileError(
+            "nameContains must be a string of 1..100 characters",
+          );
+        }
+        const key = `p${Object.keys(parameters).length}`;
+        parameters[key] = request.nameContains;
+        conditions.push(`toLower(n.displayName) CONTAINS toLower($${key})`);
+      }
       for (const predicate of request.predicates) {
         conditions.push(compilePredicate("n", predicate, parameters));
       }
