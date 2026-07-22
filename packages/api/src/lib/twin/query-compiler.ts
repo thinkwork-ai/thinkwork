@@ -21,7 +21,10 @@ export class TwinCompileError extends Error {}
 
 const SLUG_RE = /^[a-zA-Z][a-zA-Z0-9_]{0,62}$/;
 const MAX_COHORT_LIMIT = 100;
-export const MAX_NEIGHBOR_DEPTH = 2;
+// 3 hops reaches the operational chains end-to-end (customer → ship_to →
+// tank → monitor; customer → order → item → product) while the collect
+// caps keep the response bounded regardless of fan-out.
+export const MAX_NEIGHBOR_DEPTH = 3;
 
 export type TwinPredicateOp =
   | "eq"
