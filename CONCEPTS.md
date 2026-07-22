@@ -169,6 +169,14 @@ How a sub-agent gets capabilities: the presence of a grant folder inside its age
 
 Sub-agent definitions are compiled state: edits take effect at the next capabilities compile + workspace sync boundary, never mid-thread at the next dispatch. The manifest's agent entry pins the compiled `INSTRUCTIONS.md` etag; Pi verifies the synced file against the pin before spawning and skips the profile loudly on mismatch, so the fingerprint recorded on a run (the eval-comparability join key) is always truthful.
 
+### Delegation Card
+
+The user-facing rendering of one sub-agent run in the web thread (THINK-322 visibility slice): an openable card inline at the handoff point showing specialist identity, live run state, and final verdict at a glance; opening it reveals the two-party parent↔specialist exchange — delegated task, each handoff, each send-back with the parent's revise reason, closing verdict. Calm-by-default alternative to always-streaming delegation messages; applies to runs after the provenance schema lands (no historical backfill).
+
+### Send-Back
+
+A user-visible revise cycle inside a delegation: the parent's `revise` verdict on a specialist handoff, rendered with its reason as a distinct entry in the Delegation Card's exchange. Send-back count is the trust signal distinguishing a reviewed answer ("pass, 2 send-backs") from one that passed first try. Maps from the existing 4-verdict handoff machinery; clarification escalations render as send-backs too, without consuming the revise budget (R20).
+
 ### Eve Deviations (recorded)
 
 ThinkWork's workspace aligns with Vercel Eve's model (eve.dev/docs) with three deliberate deviations that future "align with Eve" passes must not churn back: (1) `connectors/` where Eve says `connections/` — dissolves the collision with the legacy `connections` DB table; (2) UPPERCASE marker files (`INSTRUCTIONS.md`, `SKILL.md`, `CONNECTION.md`) where Eve uses lowercase `instructions.md` — house style; (3) grants-by-presence with zero inheritance where Eve copies context into subagents (see Grants-by-Presence).
