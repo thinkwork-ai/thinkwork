@@ -1068,7 +1068,10 @@ locals {
       },
     ] : [],
     # Company Brain twin (plan 2026-07-21-001 U5): Neptune data access for
-    # the identity-graph-projector + twin-query handlers on the SHARED role.
+    # the identity-graph-projector on the SHARED role. twin-query moved to
+    # its DEDICATED read-only role (THINK-327 U5, handlers.tf) — the raw
+    # console's structural fence — so the Write/Delete here never applies
+    # to any caller-supplied query path.
     # Lives in the ai envelope for size balance (data-plane sits ~430 chars
     # under IAM's 6,144 cap). Grouped — not inline — so the no-terraform
     # targeted deploy path (which applies exactly these grouped policies)

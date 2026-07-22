@@ -22,6 +22,8 @@ import {
 } from "../../../lib/twin/suggestions.js";
 import { requireAdminOrServiceCaller } from "../core/authz.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
+import { db } from "../../utils.js";
+import { emitAuditEvent } from "../../../lib/compliance/emit.js";
 
 function parseJson(value: unknown): unknown {
   if (typeof value !== "string") return value;
@@ -141,6 +143,64 @@ export async function twinEntityPage(
   });
 }
 
+/**
+ * Raw openCypher console (THINK-327 U5 / KTD-5). Operator-only, audited,
+ * read-only: the resolver hard-gates on admin/service, writes a
+ * `data.query_executed` audit event per invocation (rejections included),
+ * and forwards `{kind:"raw"}` — the VPC handler strips comments, denylists
+ * write clauses, appends a default LIMIT, executes under the dedicated
+ * read-only Neptune grant, and post-filters results by tenant `~id`
+ * prefix. The server-derived tenantId is the only bound parameter.
+ */
+export async function twinRawQuery(
+  _parent: unknown,
+  args: { tenantId?: string | null; query: string },
+  ctx: GraphQLContext,
+) {
+  const scope = await resolveKnowledgeGraphSearchScope(ctx, args);
+  await requireAdminOrServiceCaller(ctx, scope.tenantId, "twin_raw_query");
+  const actorId = (await resolveCallerUserId(ctx)) ?? "service";
+  const startedAt = Date.now();
+  let result: Awaited<ReturnType<typeof executeTwinQuery>> | null = null;
+  try {
+    result = await executeTwinQuery({
+      tenantId: scope.tenantId,
+      request: { kind: "raw", query: args.query },
+    });
+    return result;
+  } finally {
+    const ok = result?.ok === true;
+    await emitAuditEvent(db, {
+      tenantId: scope.tenantId,
+      actorId,
+      actorType: "user",
+      eventType: "data.query_executed",
+      source: "graphql",
+      resourceType: "twin",
+      action: "twin_raw_query",
+      outcome: ok
+        ? "success"
+        : result && !result.ok && result.reason === "invalid_request"
+          ? "rejected"
+          : "error",
+      payload: {
+        sql: args.query,
+        data_source: "neptune_twin",
+        rows_returned: ok && result?.ok ? result.results.length : 0,
+        duration_ms: Date.now() - startedAt,
+        truncated: (ok && result?.ok && result.truncated) || false,
+        outcome: ok ? "success" : "failure",
+        error:
+          result && !result.ok ? (result.detail ?? result.reason) : undefined,
+      },
+    }).catch((err) => {
+      // The console result still returns if the audit write fails — but
+      // loudly, so a broken outbox never silently drops the trail.
+      console.error("[twinRawQuery] audit emit failed", err);
+    });
+  }
+}
+
 export async function twinMaterializationSuggestions(
   _parent: unknown,
   args: { tenantId?: string | null },
@@ -197,6 +257,7 @@ export const twinQueries = {
   twinSystemEdges,
   twinCohort,
   twinEntityPage,
+  twinRawQuery,
   twinMaterializationSuggestions,
 };
 

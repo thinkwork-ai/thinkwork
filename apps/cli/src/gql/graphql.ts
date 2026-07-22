@@ -8343,6 +8343,16 @@ export type Query = {
   /** Open materialization suggestions (R8) — operator surface (ontology tab). */
   twinMaterializationSuggestions: Scalars['AWSJSON']['output'];
   twinNeighbors: Scalars['AWSJSON']['output'];
+  /**
+   * Raw openCypher console (THINK-327 U5). Operator-only, audited, read-only:
+   * the handler strips comments, refuses write/procedure clauses, appends a
+   * default LIMIT, executes under a dedicated read-only Neptune grant with the
+   * server-derived $tenantId as the only bound parameter, and post-filters
+   * node/edge results outside the caller tenant's ~id prefix (redactedCount);
+   * scalar projections pass through flagged unfenced.
+   * Result: { ok, results, redactedCount, unfenced, truncated } | { ok: false, reason }.
+   */
+  twinRawQuery: Scalars['AWSJSON']['output'];
   twinSystemEdges: Scalars['AWSJSON']['output'];
   unreadThreadCount: Scalars['Int']['output'];
   user?: Maybe<User>;
@@ -9666,6 +9676,12 @@ export type QueryTwinMaterializationSuggestionsArgs = {
 export type QueryTwinNeighborsArgs = {
   canonicalId: Scalars['ID']['input'];
   depth?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryTwinRawQueryArgs = {
+  query: Scalars['String']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
