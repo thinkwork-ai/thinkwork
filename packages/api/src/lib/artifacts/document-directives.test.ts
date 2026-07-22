@@ -411,9 +411,9 @@ describe("tw:sources (per-section provenance)", () => {
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.html).toContain('class="card section-sources"');
+      expect(result.html).toContain('<details class="card section-sources">');
       expect(result.html).toContain(
-        '<span class="sources-label">Data sources</span>',
+        '<summary class="sources-label">Data sources</summary>',
       );
       expect(result.html).toContain(
         "<code>mcp_lastmile-data_query</code> — SELECT stage, count(*) FROM opportunity (12 rows)",
