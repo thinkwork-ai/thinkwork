@@ -18,6 +18,11 @@ const urqlState = vi.hoisted(() => ({
 
 vi.mock("urql", () => ({
   useQuery: vi.fn(() => [urqlState.result, urqlState.reexecute]),
+  useClient: vi.fn(() => ({
+    query: vi.fn(() => ({
+      toPromise: () => new Promise(() => {}),
+    })),
+  })),
 }));
 
 vi.mock("react-force-graph-2d", async () => {

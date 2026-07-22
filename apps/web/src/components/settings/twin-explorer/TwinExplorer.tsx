@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useQuery } from "urql";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useClient, useQuery } from "urql";
 import { useNavigate } from "@tanstack/react-router";
 import { Link2, Search, Shapes, Tag, X } from "lucide-react";
 import {
@@ -150,7 +150,7 @@ const NUMBER_OPERATOR_TO_OP: Record<string, TypedPredicate["op"]> = {
 };
 
 export interface ExplorerFilterModel {
-  entityType: string;
+  entityTypes: string[];
   predicates: TypedPredicate[];
   path: { relationship: string; targetType: string; predicates: [] } | null;
   errors: string[];
@@ -159,6 +159,13 @@ export interface ExplorerFilterModel {
 function singleStringValue(value: DataTableTokenFilterValue): string | null {
   const raw = Array.isArray(value.value) ? value.value[0] : value.value;
   return typeof raw === "string" && raw ? raw : null;
+}
+
+function stringValues(value: DataTableTokenFilterValue): string[] {
+  const raw = Array.isArray(value.value) ? value.value : [value.value];
+  return raw.filter(
+    (entry): entry is string => typeof entry === "string" && entry !== "",
+  );
 }
 
 /**
@@ -175,7 +182,7 @@ export function buildExplorerFilterModel(
     targetTypeSlugs?: string[] | null;
   }>,
 ): ExplorerFilterModel {
-  let entityType = "";
+  let entityTypes: string[] = [];
   let path: ExplorerFilterModel["path"] = null;
   const predicates: TypedPredicate[] = [];
   const errors: string[] = [];
@@ -184,7 +191,7 @@ export function buildExplorerFilterModel(
     if (!isDataTableTokenFilterValue(filter.value)) continue;
     const value = filter.value;
     if (filter.id === ENTITY_TYPE_COLUMN_ID) {
-      entityType = singleStringValue(value) ?? "";
+      entityTypes = stringValues(value);
       continue;
     }
     if (filter.id === PATH_COLUMN_ID) {
@@ -245,7 +252,7 @@ export function buildExplorerFilterModel(
     }
   }
 
-  return { entityType, predicates, path, errors };
+  return { entityTypes, predicates, path, errors };
 }
 
 /**
@@ -299,34 +306,63 @@ export function TwinExplorer({
   const entityTypeFilter = columnFilters.find(
     (filter) => filter.id === ENTITY_TYPE_COLUMN_ID,
   );
-  const entityType = isDataTableTokenFilterValue(entityTypeFilter?.value)
-    ? (singleStringValue(entityTypeFilter.value) ?? "")
-    : "";
+  const selectedTypeSlugs = isDataTableTokenFilterValue(entityTypeFilter?.value)
+    ? stringValues(entityTypeFilter.value)
+    : [];
   // Default data (no filters yet): customer when declared, else the first
   // approved type — the tab shows the twin immediately, like Memory.
   const defaultEntityType =
     entityTypes.find((type) => type.slug === "customer")?.slug ??
     entityTypes[0]?.slug ??
     "";
-  const effectiveEntityType = entityType || defaultEntityType;
-  const selectedType = entityTypes.find(
-    (type) => type.slug === effectiveEntityType,
-  );
-  const facets: ExplorerFacet[] = useMemo(
-    () => parseExplorerFacets(selectedType?.twinFacets),
-    [selectedType],
-  );
+  const effectiveEntityTypes = useMemo(() => {
+    const known = new Set(entityTypes.map((type) => type.slug));
+    const chosen = selectedTypeSlugs.filter((slug) => known.has(slug));
+    if (chosen.length > 0) return chosen;
+    return defaultEntityType ? [defaultEntityType] : [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entityTypes, selectedTypeSlugs.join(","), defaultEntityType]);
+  // Union of the selected types' governed facet declarations — one
+  // (facet, attribute) pair appears once even when several selected types
+  // declare it.
+  const facets: ExplorerFacet[] = useMemo(() => {
+    const bySlug = new Map<string, ExplorerFacet>();
+    for (const slug of effectiveEntityTypes) {
+      const type = entityTypes.find((candidate) => candidate.slug === slug);
+      for (const facet of parseExplorerFacets(type?.twinFacets)) {
+        const existing = bySlug.get(facet.slug);
+        if (!existing) {
+          bySlug.set(facet.slug, {
+            ...facet,
+            attributes: [...facet.attributes],
+          });
+          continue;
+        }
+        for (const attribute of facet.attributes) {
+          if (
+            !existing.attributes.some(
+              (candidate) => candidate.attribute === attribute.attribute,
+            )
+          ) {
+            existing.attributes.push(attribute);
+          }
+        }
+      }
+    }
+    return [...bySlug.values()];
+  }, [entityTypes, effectiveEntityTypes]);
   // Path filters offer only declared relationships whose source includes
-  // the chosen type (R3).
+  // one of the chosen types (R3).
   const pathRelationships = useMemo(
     () =>
       (ontologyData?.ontologyDefinitions?.relationshipTypes ?? []).filter(
         (rel) =>
           (rel.lifecycleStatus ?? "").toUpperCase() === "APPROVED" &&
-          !!effectiveEntityType &&
-          (rel.sourceTypeSlugs ?? []).includes(effectiveEntityType),
+          effectiveEntityTypes.some((slug) =>
+            (rel.sourceTypeSlugs ?? []).includes(slug),
+          ),
       ),
-    [ontologyData, effectiveEntityType],
+    [ontologyData, effectiveEntityTypes],
   );
 
   // Changing the entity type invalidates facet/path selections — drop any
@@ -358,7 +394,6 @@ export function TwinExplorer({
         id: ENTITY_TYPE_COLUMN_ID,
         label: "Entity type",
         type: "option",
-        singleSelect: true,
         icon: <Shapes className="h-4 w-4" aria-hidden="true" />,
         options: entityTypes.map((type) => ({
           value: type.slug,
@@ -371,6 +406,14 @@ export function TwinExplorer({
         columns.push({
           id: `${ATTR_PREFIX}${facet.slug}.${attribute.attribute}`,
           label: `${facet.slug}.${attribute.attribute}`,
+          // Declared facet attributes collapse under one "Property"
+          // subject — dozens of governed attributes would otherwise flood
+          // the top-level list (Eric review, 2026-07-22).
+          group: {
+            id: "property",
+            label: "Property",
+            icon: <Tag className="h-4 w-4" aria-hidden="true" />,
+          },
           type:
             attribute.filterType === "number"
               ? "number"
@@ -387,7 +430,7 @@ export function TwinExplorer({
         });
       }
     }
-    if (effectiveEntityType && pathRelationships.length > 0) {
+    if (effectiveEntityTypes.length > 0 && pathRelationships.length > 0) {
       columns.push({
         id: PATH_COLUMN_ID,
         label: "Related to",
@@ -401,7 +444,7 @@ export function TwinExplorer({
       });
     }
     return columns;
-  }, [entityTypes, facets, effectiveEntityType, pathRelationships]);
+  }, [entityTypes, facets, effectiveEntityTypes, pathRelationships]);
 
   // Headless table purely to drive the standard filter UI (the Memory
   // graphFilterTable pattern) — the cohort query is server-filtered.
@@ -439,31 +482,90 @@ export function TwinExplorer({
     return compiled;
   }, [model, activeNameQuery]);
 
-  const [{ data: cohortData, fetching, error }] = useQuery<{
-    twinCohort?: unknown;
-  }>({
-    query: TwinCohortQuery,
-    variables: {
-      tenantId,
-      entityType: effectiveEntityType,
-      filter: JSON.stringify(filter),
-      limit: COHORT_LIMIT,
-    },
-    pause:
+  // One cohort query per selected type, unioned client-side (the compiler
+  // scopes a cohort to a single label).
+  const client = useClient();
+  const [cohort, setCohort] = useState<{
+    key: string;
+    fetching: boolean;
+    error: string | null;
+    responses: Array<{ entityType: string; payload: unknown }> | null;
+  }>({ key: "", fetching: false, error: null, responses: null });
+  const cohortKey = JSON.stringify([tenantId, effectiveEntityTypes, filter]);
+  const cohortGenRef = useRef(0);
+  useEffect(() => {
+    if (
       !tenantId ||
-      !effectiveEntityType ||
+      effectiveEntityTypes.length === 0 ||
       view !== "table" ||
-      model.errors.length > 0,
-  });
+      model.errors.length > 0
+    ) {
+      return;
+    }
+    const generation = ++cohortGenRef.current;
+    setCohort({ key: cohortKey, fetching: true, error: null, responses: null });
+    void Promise.all(
+      effectiveEntityTypes.map((entityType) =>
+        client
+          .query(TwinCohortQuery, {
+            tenantId,
+            entityType,
+            filter: JSON.stringify(filter),
+            limit: COHORT_LIMIT,
+          })
+          .toPromise()
+          .then((result) => ({
+            entityType,
+            payload: (result.data as { twinCohort?: unknown } | undefined)
+              ?.twinCohort,
+            error: result.error?.message ?? null,
+          })),
+      ),
+    ).then((results) => {
+      if (generation !== cohortGenRef.current) return;
+      setCohort({
+        key: cohortKey,
+        fetching: false,
+        error: results.find((r) => r.error)?.error ?? null,
+        responses: results.map(({ entityType, payload }) => ({
+          entityType,
+          payload,
+        })),
+      });
+    });
+    // `client` is render-stable from the urql Provider — deliberately out
+    // of the deps so a test double returning a fresh object per render
+    // can't loop the effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cohortKey, view, model.errors.length > 0]);
 
-  const rows = useMemo(
-    () => parseTwinCohortRows(cohortData?.twinCohort),
-    [cohortData],
+  const fetching =
+    cohort.fetching || (view === "table" && cohort.key !== cohortKey);
+  const error = cohort.error;
+  const typeNameBySlug = useMemo(
+    () =>
+      new Map(entityTypes.map((type) => [type.slug, type.name ?? type.slug])),
+    [entityTypes],
   );
-  const failure = useMemo(
-    () => parseTwinCohortFailure(cohortData?.twinCohort),
-    [cohortData],
-  );
+  const rows = useMemo(() => {
+    if (!cohort.responses || cohort.key !== cohortKey) return null;
+    const merged: Array<CohortRow & { entityTypeSlug: string }> = [];
+    for (const response of cohort.responses) {
+      const part = parseTwinCohortRows(response.payload);
+      for (const row of part ?? []) {
+        merged.push({ ...row, entityTypeSlug: response.entityType });
+      }
+    }
+    return merged;
+  }, [cohort, cohortKey]);
+  const failure = useMemo(() => {
+    if (!cohort.responses || cohort.key !== cohortKey) return null;
+    for (const response of cohort.responses) {
+      const parsed = parseTwinCohortFailure(response.payload);
+      if (parsed) return parsed;
+    }
+    return null;
+  }, [cohort, cohortKey]);
 
   // Columns: name + each referenced (facet, attribute) value + one state
   // chip per referenced facet (R5).
@@ -482,7 +584,7 @@ export function TwinExplorer({
     [referenced],
   );
 
-  const columns: ColumnDef<CohortRow>[] = useMemo(
+  const columns: ColumnDef<CohortRow & { entityTypeSlug: string }>[] = useMemo(
     () => [
       {
         id: "label",
@@ -493,8 +595,24 @@ export function TwinExplorer({
           </span>
         ),
       },
+      ...(effectiveEntityTypes.length > 1
+        ? [
+            {
+              id: "entityType",
+              header: "Type",
+              cell: ({ row }) => (
+                <span className="flex h-10 items-center px-2">
+                  <Badge variant="outline" className="text-[10px] font-normal">
+                    {typeNameBySlug.get(row.original.entityTypeSlug) ??
+                      row.original.entityTypeSlug}
+                  </Badge>
+                </span>
+              ),
+            } satisfies ColumnDef<CohortRow & { entityTypeSlug: string }>,
+          ]
+        : []),
       ...referenced.map(
-        (pair): ColumnDef<CohortRow> => ({
+        (pair): ColumnDef<CohortRow & { entityTypeSlug: string }> => ({
           id: `${pair.facet}.${pair.attribute}`,
           header: `${pair.facet}.${pair.attribute}`,
           cell: ({ row }) => {
@@ -509,7 +627,7 @@ export function TwinExplorer({
         }),
       ),
       ...referencedFacets.map(
-        (facetSlug): ColumnDef<CohortRow> => ({
+        (facetSlug): ColumnDef<CohortRow & { entityTypeSlug: string }> => ({
           id: `${facetSlug}-state`,
           header: `${facetSlug} state`,
           cell: ({ row }) => {
@@ -525,7 +643,7 @@ export function TwinExplorer({
         }),
       ),
     ],
-    [referenced, referencedFacets],
+    [referenced, referencedFacets, effectiveEntityTypes, typeNameBySlug],
   );
 
   if (!tenantId) {
@@ -582,7 +700,7 @@ export function TwinExplorer({
             className="h-8 w-8 rounded-md"
             aria-label="Search by name"
             data-testid="explorer-search-toggle"
-            disabled={!effectiveEntityType}
+            disabled={effectiveEntityTypes.length === 0}
             onClick={() => setSearchExpanded(true)}
           >
             <Search className="h-4 w-4" aria-hidden="true" />
@@ -641,7 +759,7 @@ export function TwinExplorer({
 
       {consoleOpen ? <CypherConsole /> : null}
 
-      {!effectiveEntityType ? (
+      {effectiveEntityTypes.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           No approved entity types yet — declare one in the Ontology tab.
         </p>
@@ -657,7 +775,7 @@ export function TwinExplorer({
       ) : null}
       {error ? (
         <p className="text-sm text-red-500" role="alert">
-          Query failed: {error.message}
+          Query failed: {error}
         </p>
       ) : null}
       {failure ? (
@@ -680,11 +798,11 @@ export function TwinExplorer({
         )
       ) : null}
 
-      {view === "graph" && effectiveEntityType ? (
+      {view === "graph" && effectiveEntityTypes.length > 0 ? (
         <div className="relative min-h-[28rem] flex-1 overflow-hidden rounded-lg border border-border">
           <TwinGraph
             tenantId={tenantId}
-            subgraphEntityType={effectiveEntityType}
+            subgraphEntityTypes={effectiveEntityTypes}
             subgraphLimit={25}
             depth={2}
             onNodeClick={(node: TwinGraphNode) =>
@@ -710,7 +828,10 @@ export function TwinExplorer({
         </div>
       ) : null}
 
-      {view === "table" && effectiveEntityType && fetching && !cohortData ? (
+      {view === "table" &&
+      effectiveEntityTypes.length > 0 &&
+      fetching &&
+      !rows ? (
         <div className="space-y-2" data-testid="explorer-loading">
           {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="h-10 animate-pulse rounded-md bg-muted" />
@@ -738,7 +859,7 @@ export function TwinExplorer({
                 void navigate({
                   to: "/settings/memory/explorer/$entityType/$canonicalId",
                   params: {
-                    entityType: effectiveEntityType,
+                    entityType: row.entityTypeSlug,
                     canonicalId: row.canonicalId,
                   },
                 });
