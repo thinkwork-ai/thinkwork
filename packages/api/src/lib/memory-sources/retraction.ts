@@ -76,6 +76,7 @@ import {
 } from "@thinkwork/database-pg/schema";
 
 import type { MemoryAdapter } from "../memory/adapter.js";
+import { getConfig } from "@thinkwork/runtime-config";
 import { HindsightRetainError } from "../memory/adapters/hindsight-adapter.js";
 import { deactivateOrphanedClaims } from "./claims.js";
 import { SNAPSHOT_PREFIX } from "./snapshots.js";
@@ -1840,7 +1841,7 @@ async function deleteEvidenceSnapshotObjects(
     import("@thinkwork/runtime-config"),
   ]);
   const bucket =
-    process.env.BRAIN_ARTIFACTS_BUCKET ??
+    getConfig("BRAIN_ARTIFACTS_BUCKET") ??
     runtimeConfig.getConfig("BRAIN_ARTIFACTS_BUCKET");
   if (!bucket) {
     throw new Error(

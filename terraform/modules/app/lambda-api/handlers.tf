@@ -78,6 +78,12 @@ locals {
     # Document, not env: graphql-http's env sits near the 4KB ceiling.
     # Readers use getConfig; env still wins on the VPC twin handlers.
     NEPTUNE_ENDPOINT = var.neptune_endpoint
+    # Same class of bug, second instance (2026-07-22): the ontology-reprocess
+    # post-apply twin-export hook read BRAIN_ARTIFACTS_BUCKET from env it
+    # never had and silently returned skipped_no_bucket on every apply.
+    # Document-served so every api handler resolves it via getConfig; the
+    # handlers that already carry it as env keep winning.
+    BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
     # Governed autonomy — per-tenant opt-in allowlist for autonomous capability
     # self-extension (the two self_admit_connection / self_approve_routine
     # actions on capability-control-service). Comma/space-separated tenant ids;

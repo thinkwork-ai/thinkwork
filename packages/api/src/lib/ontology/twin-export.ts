@@ -24,6 +24,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { getConfig } from "@thinkwork/runtime-config";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { and, eq } from "drizzle-orm";
 import {
@@ -196,7 +197,7 @@ export async function regenerateTwinMappingExport(args: {
   now?: Date;
 }): Promise<TwinExportUploadResult> {
   try {
-    const bucket = args.bucket ?? process.env.BRAIN_ARTIFACTS_BUCKET ?? null;
+    const bucket = args.bucket ?? getConfig("BRAIN_ARTIFACTS_BUCKET") ?? null;
     if (!bucket) {
       return { state: "skipped_no_bucket" };
     }

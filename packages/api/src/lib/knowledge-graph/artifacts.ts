@@ -1,4 +1,5 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getConfig } from "@thinkwork/runtime-config";
 import { brainArtifactManifests } from "@thinkwork/database-pg/schema";
 import { createHash } from "node:crypto";
 import type { Database } from "../db.js";
@@ -16,7 +17,11 @@ export type BrainArtifactManifestKind =
   | "okf_current_manifest";
 
 export type BrainArtifactSourceKind =
-  "thread" | "wiki" | "brain" | "observations" | "okf";
+  | "thread"
+  | "wiki"
+  | "brain"
+  | "observations"
+  | "okf";
 
 type BrainArtifactS3Client = Pick<S3Client, "send">;
 
@@ -90,7 +95,7 @@ const ARTIFACT_ROOTS: Record<BrainArtifactManifestKind, string> = {
 export async function writeKnowledgeGraphIngestArtifacts(
   args: WriteKnowledgeGraphIngestArtifactsArgs,
 ): Promise<BrainArtifactWriteResult> {
-  const bucket = args.bucket ?? process.env.BRAIN_ARTIFACTS_BUCKET ?? null;
+  const bucket = args.bucket ?? getConfig("BRAIN_ARTIFACTS_BUCKET") ?? null;
   if (!bucket) return { enabled: false };
 
   try {
@@ -228,7 +233,7 @@ export async function writeKnowledgeGraphIngestArtifacts(
 export async function writeVaultProjectionArtifact(
   args: WriteVaultProjectionArtifactArgs,
 ): Promise<BrainArtifactWriteResult> {
-  const bucket = args.bucket ?? process.env.BRAIN_ARTIFACTS_BUCKET ?? null;
+  const bucket = args.bucket ?? getConfig("BRAIN_ARTIFACTS_BUCKET") ?? null;
   if (!bucket) return { enabled: false };
 
   try {

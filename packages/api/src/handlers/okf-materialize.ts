@@ -1,4 +1,5 @@
 import { S3Client } from "@aws-sdk/client-s3";
+import { getConfig } from "@thinkwork/runtime-config";
 import { and, eq, isNull } from "drizzle-orm";
 import { wikiPages } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
@@ -51,7 +52,7 @@ export async function handler(
     return result;
   }
 
-  const bucket = process.env.BRAIN_ARTIFACTS_BUCKET;
+  const bucket = getConfig("BRAIN_ARTIFACTS_BUCKET");
   if (!bucket && !result.dryRun) {
     return {
       ...result,

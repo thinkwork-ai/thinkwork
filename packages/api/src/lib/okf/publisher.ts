@@ -1,4 +1,5 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getConfig } from "@thinkwork/runtime-config";
 import { brainArtifactManifests } from "@thinkwork/database-pg/schema";
 import { createHash } from "node:crypto";
 import type { Database } from "../db.js";
@@ -42,7 +43,7 @@ const REGION = process.env.AWS_REGION || "us-east-1";
 export async function publishOkfBundle(
   args: PublishOkfBundleArgs,
 ): Promise<PublishOkfBundleResult> {
-  const bucket = args.bucket ?? process.env.BRAIN_ARTIFACTS_BUCKET ?? null;
+  const bucket = args.bucket ?? getConfig("BRAIN_ARTIFACTS_BUCKET") ?? null;
   if (!bucket) {
     return {
       enabled: false,
