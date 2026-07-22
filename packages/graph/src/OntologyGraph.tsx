@@ -59,7 +59,7 @@ import { useGraphPointer } from "./use-graph-pointer.js";
 /** R18: hard cap on ghost candidates rendered on the canvas at once. */
 export const ONTOLOGY_GHOST_CANDIDATE_CAP = 30;
 
-export type OntologyGraphNodeKind = "type" | "candidate";
+export type OntologyGraphNodeKind = "type" | "candidate" | "system";
 
 export interface OntologyGraphNode {
   id: string;
@@ -80,7 +80,7 @@ export interface OntologyGraphNode {
 
 export interface OntologyGraphLink {
   id: string;
-  kind: "relationship" | "candidate";
+  kind: "relationship" | "candidate" | "system";
   source: GraphEndpoint;
   target: GraphEndpoint;
   label: string;
@@ -194,6 +194,10 @@ interface OntologyGraphProps extends OntologyGraphFilters {
 const APPROVED_COLOR = "#14b8a6";
 /** Ghost candidates render pending-amber (weak/pending tier). */
 const CANDIDATE_COLOR = "#f59e0b";
+/** External systems render violet, matching the instance graph's system
+ * nodes — the treasure-map "where the data lives" layer. */
+const SYSTEM_COLOR = "#a78bfa";
+const SYSTEM_NODE_RADIUS = 7;
 const CANDIDATE_NODE_RADIUS = 9;
 const GHOST_DASH = [3, 2.5];
 
@@ -387,6 +391,48 @@ export function buildOntologyGraphData(
         });
       }
     }
+  }
+
+  // Treasure-map layer: external systems + their identity/data links.
+  for (const systemSlug of graph?.systems ?? []) {
+    if (typeof systemSlug !== "string" || !systemSlug) continue;
+    const node: OntologyGraphNode = {
+      id: `system:${systemSlug}`,
+      kind: "system",
+      slug: systemSlug,
+      label: systemSlug,
+      instanceCount: 0,
+      evidenceCount: 0,
+      lifecycleStatus: null,
+      itemId: null,
+      changeSetId: null,
+      itemType: null,
+      origin: null,
+    };
+    nodes.push(node);
+  }
+  for (const link of graph?.systemLinks ?? []) {
+    if (!link?.systemSlug || !link?.entityTypeSlug) continue;
+    const typeId = nodeIdBySlug.get(link.entityTypeSlug);
+    if (!typeId) continue;
+    const label =
+      link.identity && link.data
+        ? "identity + data"
+        : link.data
+          ? "data"
+          : "identity";
+    links.push({
+      id: `system:${link.systemSlug}->${link.entityTypeSlug}`,
+      kind: "system",
+      source: `system:${link.systemSlug}`,
+      target: typeId,
+      label,
+      slug: link.systemSlug,
+      itemId: null,
+      changeSetId: null,
+      evidenceCount: 0,
+      curvature: 0,
+    });
   }
 
   const renderable = (graph?.candidates ?? []).filter(isRenderableCandidate);
@@ -638,6 +684,7 @@ export const OntologyGraph = forwardRef<
 
   const nodeRadius = useCallback((node: any) => {
     if (node.kind === "candidate") return CANDIDATE_NODE_RADIUS;
+    if (node.kind === "system") return SYSTEM_NODE_RADIUS;
     return degreeRadius(
       (node.instanceCount ?? 0) + 1,
       maxInstanceCountRef.current + 1,
@@ -648,9 +695,9 @@ export const OntologyGraph = forwardRef<
   // alpha through refs; graphData is never rebuilt for either.
   const hasFacetFilter = Boolean(
     (statusFilter && statusFilter.length > 0) ||
-      (originFilter && originFilter.length > 0) ||
-      (evidenceFilter && evidenceFilter.length > 0) ||
-      (activityFilter && activityFilter.length > 0),
+    (originFilter && originFilter.length > 0) ||
+    (evidenceFilter && evidenceFilter.length > 0) ||
+    (activityFilter && activityFilter.length > 0),
   );
   const matchedIds = useMemo(() => {
     if (!searchQuery && !hasFacetFilter) return null; // null = all match
@@ -790,7 +837,12 @@ export const OntologyGraph = forwardRef<
       const state = classifyNode(node.id, classificationRef.current);
       const alpha = state === "matched" ? 1 : 0.15;
       const ghost = node.kind === "candidate";
-      const color = ghost ? CANDIDATE_COLOR : APPROVED_COLOR;
+      const color =
+        node.kind === "system"
+          ? SYSTEM_COLOR
+          : ghost
+            ? CANDIDATE_COLOR
+            : APPROVED_COLOR;
       const r = nodeRadius(node);
 
       ctx.globalAlpha = ghost ? alpha * 0.25 : alpha;
@@ -903,7 +955,12 @@ export const OntologyGraph = forwardRef<
 
       const ghost = link.kind === "candidate";
       const filtering = !!matchedIdsRef.current;
-      const baseColor = ghost ? CANDIDATE_COLOR : APPROVED_COLOR;
+      const baseColor =
+        link.kind === "system"
+          ? SYSTEM_COLOR
+          : ghost
+            ? CANDIDATE_COLOR
+            : APPROVED_COLOR;
       const color = isLinkBright(link)
         ? `${baseColor}${filtering ? "55" : "cc"}`
         : `rgba(148,163,184,${filtering ? "0.05" : "0.15"})`;

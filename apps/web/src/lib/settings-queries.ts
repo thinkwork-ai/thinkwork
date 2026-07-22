@@ -2683,6 +2683,13 @@ export const SettingsOntologySchemaGraphQuery = graphql(`
         origin
         status
       }
+      systems
+      systemLinks {
+        systemSlug
+        entityTypeSlug
+        identity
+        data
+      }
     }
   }
 `);

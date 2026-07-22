@@ -80,6 +80,9 @@ export const FIELD_SPECS: Array<{
     isUnique: true,
   },
   { object: "company", name: "sourceHash", label: "Source Hash", type: "TEXT" },
+  // The customer's P21 account number (dispatch customer.external_id,
+  // e.g. "P21:13028") — TEI's ERP key, visible on the company.
+  { object: "company", name: "p21Code", label: "P21 Code", type: "TEXT" },
   {
     object: "person",
     name: "sourceId",

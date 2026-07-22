@@ -46,6 +46,8 @@ export interface LastmileContact {
 export interface LastmileDispatchCustomer {
   id: string;
   name: string | null;
+  /** dispatch customer.external_id — the P21 account key ("P21:12345"). */
+  p21Code: string | null;
   ownerRepId: string | null;
   /** An `account` row already carries this exact (case-folded) name — the
    * account-sourced company covers it, so the dispatch source skips it. */
@@ -281,6 +283,7 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
         )
         select c.id,
                nullif(trim(c.name), '') as "name",
+               nullif(trim(c.external_id), '') as "p21Code",
                (
                  select s.sales_rep_id from ship_to s
                  where s.customer_id = c.id and s.sales_rep_id is not null
