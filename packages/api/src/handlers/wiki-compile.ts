@@ -90,6 +90,19 @@ function resolveWikiSource(): "planner" | "graph" {
   return process.env.WIKI_SOURCE === "graph" ? "graph" : "planner";
 }
 
+/**
+ * Company Brain U8 (R11): after a successful compile, mirror the tenant's
+ * Topic/Decision pages into twin soft-layer nodes. Best-effort — a twin
+ * write failure never fails the compile (syncTenantSoftLayerNodes never
+ * throws, and it no-ops when NEPTUNE_ENDPOINT is unset).
+ */
+async function maybeSyncSoftLayer(tenantId: string, status: string) {
+  if (status !== "succeeded") return;
+  const { syncTenantSoftLayerNodes } =
+    await import("../lib/twin/soft-layer-writer.js");
+  await syncTenantSoftLayerNodes({ tenantId });
+}
+
 export async function handler(
   event: WikiCompileEvent = {},
 ): Promise<WikiCompileResult> {
@@ -142,6 +155,7 @@ export async function handler(
         tenantId: job.tenant_id,
         status: result.status,
       });
+      await maybeSyncSoftLayer(job.tenant_id, result.status);
       return {
         ok: result.status === "succeeded",
         jobId: result.jobId,
@@ -172,6 +186,7 @@ export async function handler(
       tenantId: claimed.tenant_id,
       status: result.status,
     });
+    await maybeSyncSoftLayer(claimed.tenant_id, result.status);
     return {
       ok: result.status === "succeeded",
       jobId: result.jobId,

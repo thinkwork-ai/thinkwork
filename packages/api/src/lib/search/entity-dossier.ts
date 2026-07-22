@@ -86,6 +86,13 @@ export interface EntityDossier {
   aliases: string[] | null;
   /** Null when the entity has no compiled Entity page (degrade path). */
   wikiPage: GraphQLWikiPage | null;
+  /**
+   * Company Brain U8 dual-read consult: true when the tenant/type has
+   * flipped to the projected page (sections declared + first sync done) —
+   * consumers fetch `twinEntityPage` for the living sections; the compiled
+   * wikiPage above remains the fallback and is never fabricated.
+   */
+  twinProjected: boolean;
   memories: DossierMemoryHit[];
   threads: DossierThreadHit[];
   artifacts: DossierArtifact[];
@@ -205,6 +212,26 @@ export async function assembleEntityDossier(
     }
   }
 
+  // 3b) Dual-read gate consult (Company Brain U8 / AE8): flag — never
+  // replace — so consumers can fetch the projected page while the compiled
+  // page stays the fallback. Best-effort: a gate error means not projected.
+  let twinProjected = false;
+  if (canonicalEntityId && chosen.typeSlug) {
+    try {
+      const { resolveTwinPageGate } = await import("../twin/dual-read-gate.js");
+      // Uses the module-level db (not the caller's) so the injected fake
+      // dbs in dossier tests keep their FIFO select queues aligned; the
+      // catch below makes any resolution failure read as not-projected.
+      const gate = await resolveTwinPageGate({
+        tenantId: args.tenantId,
+        entityTypeSlug: chosen.typeSlug,
+      });
+      twinProjected = gate.projected;
+    } catch {
+      twinProjected = false;
+    }
+  }
+
   // 4) Evidence → candidate thread ids. Fan out across every mirror entity id
   //    sharing the canonical id (or just the matched id when it has none).
   const mirrorEntityIds = canonicalEntityId
@@ -264,6 +291,7 @@ export async function assembleEntityDossier(
       summary: chosen.summary ?? null,
       aliases: chosen.aliases ?? null,
       wikiPage,
+      twinProjected,
       memories,
       threads: accessibleThreads,
       artifacts: dossierArtifacts,

@@ -14,6 +14,14 @@ import type {
   TwinPath,
   TwinPredicate,
 } from "../../../lib/twin/query-compiler.js";
+import { projectEntityPage } from "../../../lib/twin/page-projection.js";
+import {
+  dismissMaterializationSuggestion,
+  listMaterializationSuggestions,
+  recordMaterializationSuggestion,
+} from "../../../lib/twin/suggestions.js";
+import { requireAdminOrServiceCaller } from "../core/authz.js";
+import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 
 function parseJson(value: unknown): unknown {
   if (typeof value !== "string") return value;
@@ -99,9 +107,95 @@ export async function twinCohort(
   });
 }
 
+export async function twinEntityPage(
+  _parent: unknown,
+  args: {
+    tenantId?: string | null;
+    entityType: string;
+    canonicalId: string;
+  },
+  ctx: GraphQLContext,
+) {
+  const scope = await resolveKnowledgeGraphSearchScope(ctx, args);
+  const viewerUserId = (await resolveCallerUserId(ctx)) ?? undefined;
+  // Operator visibility resolves server-side: admins see operators_only
+  // sections, everyone else does not (R14).
+  let viewerIsOperator = false;
+  try {
+    await requireAdminOrServiceCaller(ctx, scope.tenantId, "twin_entity_page");
+    viewerIsOperator = true;
+  } catch {
+    viewerIsOperator = false;
+  }
+  return projectEntityPage({
+    tenantId: scope.tenantId,
+    entityTypeSlug: args.entityType,
+    canonicalId: args.canonicalId,
+    viewerIsOperator,
+    viewerUserId,
+  });
+}
+
+export async function twinMaterializationSuggestions(
+  _parent: unknown,
+  args: { tenantId?: string | null },
+  ctx: GraphQLContext,
+) {
+  const scope = await resolveKnowledgeGraphSearchScope(ctx, args);
+  await requireAdminOrServiceCaller(
+    ctx,
+    scope.tenantId,
+    "twin_materialization_suggestions",
+  );
+  return listMaterializationSuggestions({ tenantId: scope.tenantId });
+}
+
+export async function recordTwinMaterializationSuggestion(
+  _parent: unknown,
+  args: {
+    tenantId?: string | null;
+    entityTypeSlug: string;
+    facetSlug: string;
+    question?: string | null;
+  },
+  ctx: GraphQLContext,
+) {
+  const scope = await resolveKnowledgeGraphSearchScope(ctx, args);
+  return recordMaterializationSuggestion({
+    tenantId: scope.tenantId,
+    entityTypeSlug: args.entityTypeSlug,
+    facetSlug: args.facetSlug,
+    question: args.question ?? null,
+  });
+}
+
+export async function dismissTwinMaterializationSuggestion(
+  _parent: unknown,
+  args: { tenantId?: string | null; suggestionId: string },
+  ctx: GraphQLContext,
+) {
+  const scope = await resolveKnowledgeGraphSearchScope(ctx, args);
+  await requireAdminOrServiceCaller(
+    ctx,
+    scope.tenantId,
+    "dismiss_twin_materialization_suggestion",
+  );
+  return dismissMaterializationSuggestion({
+    tenantId: scope.tenantId,
+    suggestionId: args.suggestionId,
+  });
+}
+
 export const twinQueries = {
   twinEntity,
   twinNeighbors,
   twinSystemEdges,
   twinCohort,
+  twinEntityPage,
+  twinMaterializationSuggestions,
+};
+
+export const twinMutations = {
+  recordTwinMaterializationSuggestion,
+  dismissTwinMaterializationSuggestion,
 };

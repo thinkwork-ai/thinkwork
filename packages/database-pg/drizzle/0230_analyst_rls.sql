@@ -1514,6 +1514,15 @@ BEGIN
   ELSE
     missing := missing || 'trace_source_evidence'::text;
   END IF;
+  IF to_regclass('public.twin_materialization_suggestions') IS NOT NULL THEN
+    ALTER TABLE public.twin_materialization_suggestions ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.twin_materialization_suggestions;
+    CREATE POLICY analyst_tenant_isolation ON public.twin_materialization_suggestions
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'twin_materialization_suggestions'::text;
+  END IF;
   IF to_regclass('public.user_model_approvals') IS NOT NULL THEN
     ALTER TABLE public.user_model_approvals ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS analyst_tenant_isolation ON public.user_model_approvals;

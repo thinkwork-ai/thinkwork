@@ -993,6 +993,11 @@ BEGIN
   ELSE
     missing := missing || 'trace_source_evidence'::text;
   END IF;
+  IF to_regclass('public.twin_materialization_suggestions') IS NOT NULL THEN
+    GRANT SELECT ON public.twin_materialization_suggestions TO analyst_reader;
+  ELSE
+    missing := missing || 'twin_materialization_suggestions'::text;
+  END IF;
   IF to_regclass('public.user_model_approvals') IS NOT NULL THEN
     GRANT SELECT ON public.user_model_approvals TO analyst_reader;
   ELSE
