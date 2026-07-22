@@ -43,7 +43,6 @@ import type {
   SearchLeg,
   SearchResults,
   SearchThreadHit,
-  SearchWikiHit,
 } from "@/gql/graphql";
 
 interface SearchQueryResult {
@@ -71,7 +70,6 @@ const RAIL_LIMIT = 6;
 // (optional) dossier card and the Ask row.
 const RAILS: ReadonlyArray<{ source: SearchSource; label: string }> = [
   { source: SearchSource.Threads, label: "Threads" },
-  { source: SearchSource.Wiki, label: "Wiki" },
   { source: SearchSource.Entities, label: "Entities" },
 ];
 
@@ -86,7 +84,6 @@ export function SearchPalette({
   defaultSpaceIds,
   locallyReadThreadAt,
   onSelectThread,
-  onSelectWiki,
   onSelectEntity,
   onAsk,
   onResearch,
@@ -109,7 +106,6 @@ export function SearchPalette({
   defaultSpaceIds: ReadonlySet<string>;
   locallyReadThreadAt: LocallyReadThreadAt;
   onSelectThread: (thread: PaletteThreadTarget) => void;
-  onSelectWiki: (hit: SearchWikiHit) => void;
   onSelectEntity: (hit: SearchEntityHit) => void;
   onAsk: (query: string) => void;
   /** U9 research escalation: enqueue a background run for the current query. */
@@ -165,7 +161,7 @@ export function SearchPalette({
       open={open}
       onOpenChange={onOpenChange}
       title="Search"
-      description="Search across threads, wiki, and entities"
+      description="Search across threads and entities"
       className="sm:max-w-2xl"
       showCloseButton
     >
@@ -192,7 +188,6 @@ export function SearchPalette({
               query={debouncedQuery}
               locallyReadThreadAt={locallyReadThreadAt}
               onSelectThread={onSelectThread}
-              onSelectWiki={onSelectWiki}
               onSelectEntity={onSelectEntity}
               onAsk={handleAsk}
               onResearch={handleResearch}
@@ -289,7 +284,6 @@ function BrokerRails({
   query,
   locallyReadThreadAt,
   onSelectThread,
-  onSelectWiki,
   onSelectEntity,
   onAsk,
   onResearch,
@@ -299,7 +293,6 @@ function BrokerRails({
   query: string;
   locallyReadThreadAt: LocallyReadThreadAt;
   onSelectThread: (thread: PaletteThreadTarget) => void;
-  onSelectWiki: (hit: SearchWikiHit) => void;
   onSelectEntity: (hit: SearchEntityHit) => void;
   onAsk: () => void;
   onResearch: () => void;
@@ -349,7 +342,6 @@ function BrokerRails({
           label={rail.label}
           locallyReadThreadAt={locallyReadThreadAt}
           onSelectThread={onSelectThread}
-          onSelectWiki={onSelectWiki}
           onSelectEntity={onSelectEntity}
         />
       ))}
@@ -365,7 +357,6 @@ function BrokerRail({
   label,
   locallyReadThreadAt,
   onSelectThread,
-  onSelectWiki,
   onSelectEntity,
 }: {
   tenantId: string | null | undefined;
@@ -375,7 +366,6 @@ function BrokerRail({
   label: string;
   locallyReadThreadAt: LocallyReadThreadAt;
   onSelectThread: (thread: PaletteThreadTarget) => void;
-  onSelectWiki: (hit: SearchWikiHit) => void;
   onSelectEntity: (hit: SearchEntityHit) => void;
 }) {
   const [{ data, fetching, error }] = useQuery<
@@ -411,7 +401,6 @@ function BrokerRail({
         fetching={fetching && !data}
         locallyReadThreadAt={locallyReadThreadAt}
         onSelectThread={onSelectThread}
-        onSelectWiki={onSelectWiki}
         onSelectEntity={onSelectEntity}
       />
     </CommandGroup>
@@ -427,7 +416,6 @@ function RailBody({
   fetching,
   locallyReadThreadAt,
   onSelectThread,
-  onSelectWiki,
   onSelectEntity,
 }: {
   source: SearchSource;
@@ -438,7 +426,6 @@ function RailBody({
   fetching: boolean;
   locallyReadThreadAt: LocallyReadThreadAt;
   onSelectThread: (thread: PaletteThreadTarget) => void;
-  onSelectWiki: (hit: SearchWikiHit) => void;
   onSelectEntity: (hit: SearchEntityHit) => void;
 }) {
   // Distinct per-rail states — one rail's failure never blocks another's.
@@ -468,30 +455,6 @@ function RailBody({
               onSelectThread({ id: hit.id, spaceId: hit.spaceId })
             }
           />
-        ))}
-      </>
-    );
-  }
-
-  if (source === SearchSource.Wiki) {
-    const hits = leg?.wikiHits ?? [];
-    if (hits.length === 0) return <RailNote tone="muted">No matches</RailNote>;
-    return (
-      <>
-        {hits.map((hit: SearchWikiHit) => (
-          <CommandItem
-            key={hit.page.id}
-            value={`wiki ${hit.page.title} ${hit.page.slug} ${hit.matchedAlias ?? ""}`}
-            className="h-10"
-            onSelect={() => onSelectWiki(hit)}
-          >
-            <span className="min-w-0 flex-1 truncate">{hit.page.title}</span>
-            {hit.page.displayType ? (
-              <CommandShortcut className="tracking-normal">
-                {hit.page.displayType}
-              </CommandShortcut>
-            ) : null}
-          </CommandItem>
         ))}
       </>
     );

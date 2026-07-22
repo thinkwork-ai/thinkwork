@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "urql";
 import { useNavigate } from "@tanstack/react-router";
-import { Search, X } from "lucide-react";
+import { Search, Terminal, X } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Badge,
@@ -18,6 +18,7 @@ import {
   TwinExplorerOntologyQuery,
 } from "@/lib/graphql-queries";
 import { useTenant } from "@/context/TenantContext";
+import { CypherConsole } from "./CypherConsole";
 import {
   PredicateBuilder,
   buildTypedPredicate,
@@ -132,6 +133,7 @@ export function TwinExplorer() {
   const [pathPredicateRows, setPathPredicateRows] = useState<
     ExplorerPredicateRow[]
   >([]);
+  const [consoleOpen, setConsoleOpen] = useState(false);
 
   const [{ data: ontologyData }] = useQuery<{
     ontologyDefinitions?: {
@@ -373,7 +375,22 @@ export function TwinExplorer() {
             </button>
           ) : null}
         </div>
+        <button
+          type="button"
+          className={
+            consoleOpen
+              ? "ml-auto flex h-9 items-center gap-1.5 rounded-md border border-border bg-primary/10 px-3 text-xs text-primary"
+              : "ml-auto flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          }
+          aria-pressed={consoleOpen}
+          data-testid="explorer-console-toggle"
+          onClick={() => setConsoleOpen((open) => !open)}
+        >
+          <Terminal className="size-3.5" /> Console
+        </button>
       </div>
+
+      {consoleOpen ? <CypherConsole /> : null}
 
       {entityType ? (
         <PredicateBuilder

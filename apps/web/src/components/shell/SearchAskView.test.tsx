@@ -147,7 +147,7 @@ describe("humanizeAskStep", () => {
     ).toBe("Reading memory");
     expect(
       humanizeAskStep("tool_invocation_started", { tool_name: "wiki_lookup" }),
-    ).toBe("Checking the wiki");
+    ).toBe("Checking knowledge");
   });
 
   it("ignores non-tool events", () => {

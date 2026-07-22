@@ -37,14 +37,13 @@ vi.mock("@thinkwork/ui", () => ({
 }));
 
 import { EntityDossierCard } from "./EntityDossierCard";
-import { WikiPageType } from "@/gql/graphql";
 import type { EntityDossierResult } from "@/gql/graphql";
 
 function renderCard(
   result: EntityDossierResult | null,
   overrides?: Partial<Parameters<typeof EntityDossierCard>[0]>,
 ) {
-  const onOpenWikiPage = vi.fn();
+  const onOpenEntity = vi.fn();
   const onOpenThread = vi.fn();
   const onOpenArtifact = vi.fn();
   const onSelectEntity = vi.fn();
@@ -52,7 +51,7 @@ function renderCard(
     <EntityDossierCard
       result={result}
       fetching={false}
-      onOpenWikiPage={onOpenWikiPage}
+      onOpenEntity={onOpenEntity}
       onOpenThread={onOpenThread}
       onOpenArtifact={onOpenArtifact}
       onSelectEntity={onSelectEntity}
@@ -61,7 +60,7 @@ function renderCard(
   );
   return {
     ...utils,
-    onOpenWikiPage,
+    onOpenEntity,
     onOpenThread,
     onOpenArtifact,
     onSelectEntity,
@@ -81,6 +80,8 @@ function matchResult(match: Record<string, unknown>): EntityDossierResult {
       summary: null,
       aliases: ["Acme"],
       wikiPage: null,
+      canonicalEntityId: null,
+      entityType: null,
       twinProjected: false,
       memories: [],
       threads: [],
@@ -93,16 +94,12 @@ function matchResult(match: Record<string, unknown>): EntityDossierResult {
 describe("EntityDossierCard", () => {
   afterEach(cleanup);
 
-  it("renders a match with a wiki row plus memories, threads, and artifacts", () => {
-    const { onOpenWikiPage, onOpenThread } = renderCard(
+  it("renders a match with an entity open row plus memories, threads, and artifacts", () => {
+    const { onOpenEntity, onOpenThread } = renderCard(
       matchResult({
-        wikiPage: {
-          id: "w1",
-          type: WikiPageType.Entity,
-          slug: "acme",
-          title: "Acme Corp",
-          displayType: "Customer",
-        },
+        canonicalEntityId: "can-acme",
+        entityType: "customer",
+        twinProjected: true,
         memories: [
           {
             memoryRecordId: "m1",
@@ -132,29 +129,31 @@ describe("EntityDossierCard", () => {
       }),
     );
 
-    // Entity label heading + wiki row.
+    // Entity label heading + open row with the Live chip.
     expect(screen.getByTestId("group-heading").textContent).toContain(
       "Acme Corp",
     );
-    expect(screen.getByText("Open Acme Corp page")).toBeTruthy();
+    expect(screen.getByText("Open Acme Corp")).toBeTruthy();
+    expect(screen.getByText("Live")).toBeTruthy();
     expect(screen.getByText("Acme renewed their contract")).toBeTruthy();
     expect(screen.getByText("Acme onboarding")).toBeTruthy();
     expect(screen.getByText("Acme proposal")).toBeTruthy();
 
-    fireEvent.click(screen.getByText("Open Acme Corp page"));
-    expect(onOpenWikiPage).toHaveBeenCalledWith({
-      type: "ENTITY",
-      slug: "acme",
+    fireEvent.click(screen.getByText("Open Acme Corp"));
+    expect(onOpenEntity).toHaveBeenCalledWith({
+      entityType: "customer",
+      canonicalId: "can-acme",
     });
 
     fireEvent.click(screen.getByText("Acme onboarding"));
     expect(onOpenThread).toHaveBeenCalledWith({ id: "t9", spaceId: "space-2" });
   });
 
-  it("degrades to memories/threads when the entity has no wiki page", () => {
+  it("renders without an open action when there is no canonical id (no dead link)", () => {
     renderCard(
       matchResult({
-        wikiPage: null,
+        canonicalEntityId: null,
+        entityType: "customer",
         memories: [
           {
             memoryRecordId: "m1",
@@ -176,7 +175,7 @@ describe("EntityDossierCard", () => {
       }),
     );
 
-    expect(screen.queryByText(/page$/)).toBeNull();
+    expect(screen.queryByText(/^Open /)).toBeNull();
     expect(screen.getByText("A grounded memory")).toBeTruthy();
     expect(screen.getByText("Kickoff")).toBeTruthy();
   });

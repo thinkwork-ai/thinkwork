@@ -117,7 +117,6 @@ function okLeg(source: string, hits: Record<string, unknown>) {
 
 function renderPalette(props?: Partial<Parameters<typeof SearchPalette>[0]>) {
   const onSelectThread = vi.fn();
-  const onSelectWiki = vi.fn();
   const onSelectEntity = vi.fn();
   const onAsk = vi.fn();
   const onResearch = vi.fn();
@@ -133,7 +132,6 @@ function renderPalette(props?: Partial<Parameters<typeof SearchPalette>[0]>) {
       defaultSpaceIds={new Set()}
       locallyReadThreadAt={new Map()}
       onSelectThread={onSelectThread}
-      onSelectWiki={onSelectWiki}
       onSelectEntity={onSelectEntity}
       onAsk={onAsk}
       onResearch={onResearch}
@@ -146,7 +144,6 @@ function renderPalette(props?: Partial<Parameters<typeof SearchPalette>[0]>) {
   return {
     ...utils,
     onSelectThread,
-    onSelectWiki,
     onSelectEntity,
     onAsk,
     onResearch,
@@ -185,23 +182,6 @@ describe("SearchPalette", () => {
       }),
     );
     legResults.set(
-      "WIKI",
-      okLeg("WIKI", {
-        wikiHits: [
-          {
-            score: 1,
-            matchedAlias: "Acme",
-            page: {
-              id: "w1",
-              slug: "acme",
-              title: "Acme Corp",
-              displayType: "Customer",
-            },
-          },
-        ],
-      }),
-    );
-    legResults.set(
       "ENTITIES",
       okLeg("ENTITIES", {
         entityHits: [
@@ -220,11 +200,11 @@ describe("SearchPalette", () => {
     const { onSelectThread } = renderPalette({ search: "acme" });
 
     await waitFor(() => expect(screen.getByText("Threads")).toBeTruthy());
-    expect(screen.getByText("Wiki")).toBeTruthy();
+    // No Wiki rail (THINK-327 U7) — threads + entities only.
+    expect(screen.queryByText("Wiki")).toBeNull();
     expect(screen.getByText("Entities")).toBeTruthy();
     expect(screen.getByText("Acme onboarding")).toBeTruthy();
-    // "Acme Corp" is both the wiki page title and the entity label — one per rail.
-    expect(screen.getAllByText("Acme Corp").length).toBe(2);
+    expect(screen.getAllByText("Acme Corp").length).toBe(1);
 
     fireEvent.click(screen.getByText("Acme onboarding"));
     expect(onSelectThread).toHaveBeenCalledWith({
@@ -246,7 +226,6 @@ describe("SearchPalette", () => {
         ],
       }),
     );
-    legResults.set("WIKI", okLeg("WIKI", { wikiHits: [] }));
     legResults.set("ENTITIES", okLeg("ENTITIES", { entityHits: [] }));
 
     renderPalette({ search: "acme" });
@@ -254,7 +233,7 @@ describe("SearchPalette", () => {
     await waitFor(() =>
       expect(screen.getByText("Acme onboarding")).toBeTruthy(),
     );
-    expect(screen.getAllByText("No matches").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("No matches").length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows distinct timeout and error rail states without blocking others", async () => {
@@ -267,23 +246,22 @@ describe("SearchPalette", () => {
       },
       fetching: false,
     });
-    legResults.set("WIKI", {
+    legResults.set("ENTITIES", {
       data: {
         search: {
           queryId: "q1",
           legs: [
             {
-              source: "WIKI",
+              source: "ENTITIES",
               status: "ERROR",
               error: "boom",
-              wikiHits: [],
+              entityHits: [],
             },
           ],
         },
       },
       fetching: false,
     });
-    legResults.set("ENTITIES", okLeg("ENTITIES", { entityHits: [] }));
 
     renderPalette({ search: "acme" });
 
@@ -302,7 +280,6 @@ describe("SearchPalette", () => {
 
   it("the Ask row activates ask", async () => {
     legResults.set("THREADS", okLeg("THREADS", { threadHits: [] }));
-    legResults.set("WIKI", okLeg("WIKI", { wikiHits: [] }));
     legResults.set("ENTITIES", okLeg("ENTITIES", { entityHits: [] }));
 
     const { onAsk } = renderPalette({ search: "acme" });
@@ -313,7 +290,6 @@ describe("SearchPalette", () => {
 
   it("the Research this row renders on a typed query and activates research", async () => {
     legResults.set("THREADS", okLeg("THREADS", { threadHits: [] }));
-    legResults.set("WIKI", okLeg("WIKI", { wikiHits: [] }));
     legResults.set("ENTITIES", okLeg("ENTITIES", { entityHits: [] }));
 
     const { onResearch } = renderPalette({ search: "acme" });
@@ -324,7 +300,6 @@ describe("SearchPalette", () => {
 
   it("renders the ask view in place of the rails when askView is active", () => {
     legResults.set("THREADS", okLeg("THREADS", { threadHits: [] }));
-    legResults.set("WIKI", okLeg("WIKI", { wikiHits: [] }));
     legResults.set("ENTITIES", okLeg("ENTITIES", { entityHits: [] }));
 
     renderPalette({

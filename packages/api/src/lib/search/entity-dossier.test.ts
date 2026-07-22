@@ -123,6 +123,9 @@ describe("assembleEntityDossier", () => {
     expect(result.match).not.toBeNull();
     expect(result.match?.entityId).toBe("e1");
     expect(result.match?.wikiPage?.id).toBe("page-1");
+    // Twin routing identity (THINK-327 U7) rides the same canonical lookup.
+    expect(result.match?.canonicalEntityId).toBe("canon-1");
+    expect(result.match?.entityType).toBe("organization");
     expect(result.match?.threads.map((t) => t.id)).toEqual(["t1"]);
     expect(result.match?.artifacts).toEqual([
       { id: "a1", title: "Acme report", type: "report", threadId: "t1" },
@@ -167,6 +170,8 @@ describe("assembleEntityDossier", () => {
     const result = await assembleEntityDossier(baseArgs(db));
 
     expect(result.match?.wikiPage).toBeNull();
+    expect(result.match?.canonicalEntityId).toBeNull();
+    expect(result.match?.entityType).toBeNull();
     expect(findPageMock).not.toHaveBeenCalled();
     expect(result.match?.threads.map((t) => t.id)).toEqual(["t1"]);
     expect(result.match?.memories.map((m) => m.memoryRecordId)).toEqual(["m1"]);

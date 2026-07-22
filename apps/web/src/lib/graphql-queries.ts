@@ -2711,13 +2711,8 @@ export const EntityDossierQuery = gql`
         ontologyTypeSlug
         summary
         aliases
-        wikiPage {
-          id
-          type
-          slug
-          title
-          displayType
-        }
+        canonicalEntityId
+        entityType
         twinProjected
         memories {
           memoryRecordId
@@ -2834,6 +2829,16 @@ export const TwinCohortQuery = gql`
       filter: $filter
       limit: $limit
     )
+  }
+`;
+
+/**
+ * Operator Cypher console (THINK-327 U6): raw openCypher, server-guarded —
+ * see twinRawQuery in the schema for the guard order.
+ */
+export const TwinRawQuery = gql`
+  query TwinRaw($tenantId: ID, $query: String!) {
+    twinRawQuery(tenantId: $tenantId, query: $query)
   }
 `;
 

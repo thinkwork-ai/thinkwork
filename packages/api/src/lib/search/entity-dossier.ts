@@ -87,6 +87,12 @@ export interface EntityDossier {
   /** Null when the entity has no compiled Entity page (degrade path). */
   wikiPage: GraphQLWikiPage | null;
   /**
+   * Twin routing identity (THINK-327 U7): Explorer detail route params.
+   * Both null when the match has no canonical identity.
+   */
+  canonicalEntityId: string | null;
+  entityType: string | null;
+  /**
    * Company Brain U8 dual-read consult: true when the tenant/type has
    * flipped to the projected page (sections declared + first sync done) —
    * consumers fetch `twinEntityPage` for the living sections; the compiled
@@ -291,6 +297,11 @@ export async function assembleEntityDossier(
       summary: chosen.summary ?? null,
       aliases: chosen.aliases ?? null,
       wikiPage,
+      // Twin routing identity (THINK-327 U7): the Explorer detail route
+      // takes entityType + canonicalEntityId — already resolved above for
+      // the wiki-page lookup and the dual-read gate.
+      canonicalEntityId,
+      entityType: canonicalEntityId ? (chosen.typeSlug ?? null) : null,
       twinProjected,
       memories,
       threads: accessibleThreads,
