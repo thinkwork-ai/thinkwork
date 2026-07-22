@@ -786,6 +786,7 @@ resource "aws_lambda_function" "handler" {
     "mcp-capability-search",
     # THINK-333: Digital Twin MCP server at /mcp/twin.
     "mcp-twin",
+    "mcp-twin-provision",
     "activity",
     "routines",
     "budgets",
@@ -2043,6 +2044,13 @@ locals {
       # tenant_mcp_servers row so the runtime picks the server up for
       # any agent that gets it assigned via agent_mcp_servers.
       "POST /api/tenants/{tenantId}/mcp-admin-provision" = "mcp-admin-provision"
+
+      # Digital Twin MCP provisioning (THINK-333 U4): mints the tkt_ key,
+      # writes the secret, upserts the approved digital-twin connector row
+      # (url_hash pinned), and materializes connectors/digital-twin/ into
+      # every agent workspace. Re-run = rotate.
+      "POST /api/tenants/{tenantId}/mcp-twin-provision"    = "mcp-twin-provision"
+      "OPTIONS /api/tenants/{tenantId}/mcp-twin-provision" = "mcp-twin-provision"
 
       # MCP server admin approval (plan §U11, SI-5). Externally-sourced MCP
       # servers land with status='pending'; these routes flip them to

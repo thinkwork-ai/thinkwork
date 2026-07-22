@@ -59,7 +59,7 @@ const FIXTURE: TwinMappingExport = {
       binding: null,
     },
   ],
-} as TwinMappingExport;
+} as unknown as TwinMappingExport;
 
 describe("renderTwinOntology (AE6 fitness)", () => {
   it("names every entity type, facet property in f_<facet>__<attr> form, and relationship endpoints", () => {
