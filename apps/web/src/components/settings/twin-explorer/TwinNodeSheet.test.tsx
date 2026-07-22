@@ -27,6 +27,7 @@ const NODE = {
   isSystem: false,
   isCenter: true,
   properties: {
+    canonicalId: "cust-1",
     displayName: "ACME",
     tenantId: "ten-1",
     "~hidden": "x",
@@ -39,7 +40,7 @@ const NODE = {
 };
 
 describe("twinPropertyRows", () => {
-  it("groups facet stamps and hides internals, the tenant fence, and sync bookkeeping", () => {
+  it("groups facet stamps and hides internals, the tenant fence, canonicalId, and sync bookkeeping", () => {
     const rows = twinPropertyRows(NODE.properties);
     expect(rows).toEqual([
       { group: null, key: "displayName", value: "ACME" },

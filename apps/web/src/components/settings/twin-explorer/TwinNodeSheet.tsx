@@ -30,7 +30,8 @@ export function twinPropertyRows(
 ): PropertyRow[] {
   const rows: PropertyRow[] = [];
   for (const [key, raw] of Object.entries(properties)) {
-    if (key.startsWith("~") || key === "tenantId") continue;
+    if (key.startsWith("~") || key === "tenantId" || key === "canonicalId")
+      continue;
     // Facet sync bookkeeping reads like child data — keep the sheet to the
     // entity's actual attributes (state stays: synced/stale is meaningful).
     if (/^f_.+__(batch|seq|synced_at)$/.test(key)) continue;
