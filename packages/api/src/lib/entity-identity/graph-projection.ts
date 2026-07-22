@@ -165,9 +165,17 @@ export function buildCanonicalResyncOps(args: {
     // Retire the loser: mark it, drop its external_identity edges (the
     // relational merge repointed the mappings; the survivor's resync
     // recreates them), and lay the alias edge for traversals.
+    //
+    // BOTH MERGE patterns carry the entity-type label. Neptune's MERGE
+    // treats a label mismatch as create-with-same-~id — "Cannot create
+    // node; id already in use" — so an UNLABELED merge here would mint a
+    // label-less survivor whenever the loser is resynced first, and the
+    // survivor's own labeled resync would then explode (seen live on the
+    // first dev rebuild, 2026-07-22). Merges are same-type, so the loser's
+    // label is the survivor's label.
     ops.push({
       query:
-        `MERGE (n {\`~id\`: $nodeId}) ` +
+        `MERGE (n:${label} {\`~id\`: $nodeId}) ` +
         "SET n.tenantId = $tenantId, n.canonicalId = $canonicalId, " +
         "n.state = 'merged', n.mergedInto = $mergedInto",
       parameters: {
@@ -183,8 +191,8 @@ export function buildCanonicalResyncOps(args: {
     });
     ops.push({
       query:
-        "MERGE (loser {`~id`: $nodeId}) " +
-        "MERGE (survivor {`~id`: $survivorId}) " +
+        `MERGE (loser:${label} {\`~id\`: $nodeId}) ` +
+        `MERGE (survivor:${label} {\`~id\`: $survivorId}) ` +
         "MERGE (loser)-[a:merged_into {`~id`: $aliasId}]->(survivor) " +
         "SET a.tenantId = $tenantId",
       parameters: {
@@ -558,6 +566,15 @@ export async function projectPendingIdentityEvents(args: {
  */
 export async function rebuildTenantGraph(args: {
   tenantId: string;
+  /**
+   * Drop the tenant's ENTIRE subgraph before resyncing. Opt-in because it
+   * also destroys etl-synced facet properties — and the etl twin_batch
+   * ledger is skip-on-hit, so cleared facets stay gone until NEW batches
+   * arrive. Use to recover from mislabeled/orphaned nodes (e.g. the
+   * unlabeled-survivor bug this flag shipped with); leave off for a
+   * routine identity resync.
+   */
+  clearFirst?: boolean;
   db?: DbLike;
   neptune?: NeptuneQueryClient;
   s3?: SnapshotS3Client;
@@ -565,6 +582,23 @@ export async function rebuildTenantGraph(args: {
 }): Promise<{ tenantId: string; resyncedCanonicals: number }> {
   const db = args.db ?? defaultDb;
   const neptune = args.neptune ?? createNeptuneClient();
+
+  if (args.clearFirst) {
+    // Batched DETACH DELETE — Neptune rejects unbounded deletes on large
+    // graphs, and every node this projector (or the etl writer) creates
+    // carries tenantId, so the property match is the tenant firewall.
+    for (let round = 0; round < 200; round += 1) {
+      await neptune.execute(
+        "MATCH (n {tenantId: $tenantId}) WITH n LIMIT 2000 DETACH DELETE n",
+        { tenantId: args.tenantId },
+      );
+      const remaining = (await neptune.execute(
+        "MATCH (n {tenantId: $tenantId}) RETURN count(n) AS c",
+        { tenantId: args.tenantId },
+      )) as { results?: Array<{ c?: number }> };
+      if (!remaining.results?.[0]?.c) break;
+    }
+  }
 
   const allCanonicals = await db
     .select({ id: canonicalEntities.id })
