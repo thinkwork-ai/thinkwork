@@ -94,6 +94,17 @@ export const OntologyGraphQuery = gql`
   }
 `;
 
+/**
+ * Twin neighborhood (THINK-327 U3): AWSJSON envelope
+ * `{ ok, results: [{ node, neighbors, edges }] }` of Neptune openCypher
+ * nodes plus `{rel, sourceId, targetId}` edge triples.
+ */
+export const TwinNeighborsQuery = gql`
+  query TwinNeighbors($tenantId: ID, $canonicalId: ID!, $depth: Int) {
+    twinNeighbors(tenantId: $tenantId, canonicalId: $canonicalId, depth: $depth)
+  }
+`;
+
 export const KnowledgeGraphQuery = gql`
   query KnowledgeGraph($tenantId: ID!, $threadId: ID, $runId: ID) {
     knowledgeGraphGraph(

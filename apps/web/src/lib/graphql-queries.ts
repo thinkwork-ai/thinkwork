@@ -2800,6 +2800,68 @@ export const TwinEntityPageQuery = gql`
   }
 `;
 
+/**
+ * Node identity for the Explorer detail header (THINK-327 U2): the twin
+ * node's displayName without requiring a wiki page or projected sections.
+ */
+export const TwinEntityQuery = gql`
+  query TwinEntity($tenantId: ID, $canonicalId: ID!) {
+    twinEntity(tenantId: $tenantId, canonicalId: $canonicalId)
+  }
+`;
+
+/** Which external systems hold this entity, with external IDs (R7). */
+export const TwinSystemEdgesQuery = gql`
+  query TwinSystemEdges($tenantId: ID, $canonicalId: ID!) {
+    twinSystemEdges(tenantId: $tenantId, canonicalId: $canonicalId)
+  }
+`;
+
+/**
+ * Cohort browse/query for the Twin Explorer (THINK-327 U4). `filter` is the
+ * typed KTD-5 grammar JSON: { predicates, nameContains?, path? }.
+ */
+export const TwinCohortQuery = gql`
+  query TwinCohort(
+    $tenantId: ID
+    $entityType: String!
+    $filter: AWSJSON!
+    $limit: Int
+  ) {
+    twinCohort(
+      tenantId: $tenantId
+      entityType: $entityType
+      filter: $filter
+      limit: $limit
+    )
+  }
+`;
+
+/**
+ * Governed declarations driving the Explorer's pickers (KTD-2): entity
+ * types with their twinFacets (facet slug → attributes + filterType), and
+ * relationship types with their endpoint constraints for path filters.
+ */
+export const TwinExplorerOntologyQuery = gql`
+  query TwinExplorerOntology($tenantId: ID!) {
+    ontologyDefinitions(tenantId: $tenantId) {
+      entityTypes {
+        slug
+        name
+        lifecycleStatus
+        twinFacets
+      }
+      relationshipTypes {
+        slug
+        name
+        lifecycleStatus
+        sourceTypeSlugs
+        targetTypeSlugs
+      }
+    }
+  }
+`;
+
 export const ComputerWikiBacklinksQuery = gql`
   query ComputerWikiBacklinks($pageId: ID!) {
     wikiBacklinks(pageId: $pageId) {
