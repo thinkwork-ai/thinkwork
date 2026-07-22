@@ -24,6 +24,8 @@ export interface TwinQueryOk {
   redactedCount?: number;
   unfenced?: boolean;
   truncated?: boolean;
+  /** Guarded cypher responses only (THINK-333): row clamp bound. */
+  limited?: boolean;
 }
 
 export interface TwinQueryUnavailable {
@@ -32,7 +34,18 @@ export interface TwinQueryUnavailable {
   detail?: string;
 }
 
-export type TwinQueryResult = TwinQueryOk | TwinQueryUnavailable;
+/** Guard rejection for `cypher` requests (THINK-333) — model-readable. */
+export interface TwinQueryRejected {
+  ok: false;
+  reason: "rejected";
+  rule: string;
+  message: string;
+}
+
+export type TwinQueryResult =
+  | TwinQueryOk
+  | TwinQueryUnavailable
+  | TwinQueryRejected;
 
 let lambdaClient: LambdaClient | null = null;
 

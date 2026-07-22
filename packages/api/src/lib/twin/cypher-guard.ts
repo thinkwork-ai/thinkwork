@@ -57,6 +57,13 @@ export type GuardResult =
       parameters: Record<string, unknown>;
       /** True when the row cap rewrote a caller LIMIT down. */
       limited: boolean;
+      /**
+       * The query's total row ceiling — the sum of each top-level arm's
+       * LIMIT (injected default, caller literal, or the cap). Lets the
+       * executor flag "row count reached the ceiling" as a truncation
+       * signal (KTD-6).
+       */
+      effectiveLimit: number;
     }
   | { ok: false; rule: GuardRule; message: string };
 
@@ -446,6 +453,7 @@ export function guardTwinCypher(
   // --- Rewrites ----------------------------------------------------------
   const edits: Edit[] = [];
   let limited = false;
+  let effectiveLimit = 0;
   const fenceEntries: Array<{ property: string; parameter: string }> = [
     { property: "tenantId", parameter: "tenantId" },
     ...aclPredicates.map((p) => ({ property: p.property, parameter: p.parameter })),
@@ -461,6 +469,9 @@ export function guardTwinCypher(
       if (result) {
         edits.push(...result.edits);
         limited = limited || result.limited;
+        // Arms accumulate: a UNION's total row ceiling is the sum of its
+        // per-arm limits.
+        effectiveLimit += result.limit;
       }
     }
   }
@@ -488,7 +499,13 @@ export function guardTwinCypher(
     parameters[predicate.parameter] = predicate.value;
   }
 
-  return { ok: true, query: guarded, parameters, limited };
+  return {
+    ok: true,
+    query: guarded,
+    parameters,
+    limited,
+    effectiveLimit: effectiveLimit || TWIN_CYPHER_DEFAULT_LIMIT,
+  };
 }
 
 /**
@@ -598,7 +615,7 @@ function fenceExistingMap(
 function clampArm(
   arm: Ctx,
   violations: Violation[],
-): { edits: Edit[]; limited: boolean } | null {
+): { edits: Edit[]; limited: boolean; limit: number } | null {
   // The arm's final clause must be RETURN (Neptune read queries always are);
   // find the last ReturnClauseContext that is a direct clause of this arm.
   const clauses = ((arm.children ?? []) as Ctx[]).filter(
@@ -636,6 +653,7 @@ function clampArm(
         { start: insertAt, end: insertAt, text: ` LIMIT ${TWIN_CYPHER_DEFAULT_LIMIT}` },
       ],
       limited: false,
+      limit: TWIN_CYPHER_DEFAULT_LIMIT,
     };
   }
 
@@ -660,7 +678,8 @@ function clampArm(
         },
       ],
       limited: true,
+      limit: TWIN_CYPHER_MAX_LIMIT,
     };
   }
-  return { edits: [], limited: false };
+  return { edits: [], limited: false, limit: Number(valueText) };
 }

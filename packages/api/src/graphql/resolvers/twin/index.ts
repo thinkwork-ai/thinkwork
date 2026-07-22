@@ -217,7 +217,10 @@ export async function twinRawQuery(
         truncated: (ok && result?.ok && result.truncated) || false,
         outcome: ok ? "success" : "failure",
         error:
-          result && !result.ok ? (result.detail ?? result.reason) : undefined,
+          result && !result.ok
+            ? ((result.reason === "rejected" ? result.message : result.detail) ??
+              result.reason)
+            : undefined,
       },
     }).catch((err) => {
       // The console result still returns if the audit write fails — but

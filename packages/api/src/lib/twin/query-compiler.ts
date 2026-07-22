@@ -1,7 +1,10 @@
 /**
  * Twin typed query compiler (Company Brain U6 / KTD-5, KTD-6).
  *
- * The ONLY producer of openCypher on the product read path. Takes typed
+ * One of exactly TWO producers of openCypher on the product read path —
+ * the other is the tenant-fencing cypher guard (`cypher-guard.ts`), which
+ * rewrites agent-authored text for the twin MCP server (THINK-333); both
+ * execute only inside the VPC twin-query Lambda. Takes typed
  * requests — entity get, neighbors (bounded depth), cohort filter, system
  * edges — and emits parameterized openCypher with the tenant closure
  * injected from server-derived context. No caller-supplied query strings
@@ -67,7 +70,17 @@ export type TwinRequest =
       limit?: number;
       depth?: number;
     }
-  | { kind: "raw"; query: string };
+  | { kind: "raw"; query: string }
+  | {
+      /**
+       * Agent-authored openCypher (THINK-333). NOT compiled here — the
+       * twin-query handler runs it through `guardTwinCypher` (parse,
+       * allowlist, tenant fence, clamps) before execution.
+       */
+      kind: "cypher";
+      query: string;
+      parameters?: Record<string, unknown>;
+    };
 
 export interface CompiledTwinQuery {
   query: string;
@@ -335,6 +348,11 @@ export function compileTwinQuery(
           "collect(DISTINCT p)[0..300] AS paths",
         parameters,
       };
+    }
+    case "cypher": {
+      throw new TwinCompileError(
+        "cypher requests are guarded in the twin-query handler, not compiled",
+      );
     }
     case "raw": {
       // Operator console passthrough (THINK-327 U5): guarded text, with the
