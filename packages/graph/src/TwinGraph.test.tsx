@@ -125,6 +125,62 @@ describe("buildTwinGraphData", () => {
   });
 });
 
+describe("buildTwinGraphData — subgraph paths", () => {
+  it("extracts labeled, property-carrying edges from path arrays", () => {
+    const payload = JSON.stringify({
+      ok: true,
+      results: [
+        {
+          roots: [NODE("t#ten-1#e#cust-1", "ACME")],
+          neighbors: [NODE("t#ten-1#e#tank-9", "Tank 9", "tank")],
+          paths: [
+            [
+              NODE("t#ten-1#e#cust-1", "ACME"),
+              {
+                "~id": "t#ten-1#r#x1",
+                "~entityType": "relationship",
+                "~type": "customer_has_tank",
+                "~start": "t#ten-1#e#cust-1",
+                "~end": "t#ten-1#e#tank-9",
+                "~properties": { since: "2024" },
+              },
+              NODE("t#ten-1#e#tank-9", "Tank 9", "tank"),
+            ],
+          ],
+        },
+      ],
+    });
+    const data = buildTwinGraphData(payload);
+    expect(data.nodes).toHaveLength(2);
+    expect(data.nodes[0]!.isCenter).toBe(true);
+    expect(data.links).toEqual([
+      expect.objectContaining({
+        label: "customer_has_tank",
+        properties: { since: "2024" },
+      }),
+    ]);
+  });
+
+  it("renders isolated roots (OPTIONAL MATCH) without edges", () => {
+    const payload = JSON.stringify({
+      ok: true,
+      results: [
+        {
+          roots: [
+            NODE("t#ten-1#e#cust-1", "ACME"),
+            NODE("t#ten-1#e#cust-2", "MORT"),
+          ],
+          neighbors: [],
+          paths: [],
+        },
+      ],
+    });
+    const data = buildTwinGraphData(payload);
+    expect(data.nodes).toHaveLength(2);
+    expect(data.links).toEqual([]);
+  });
+});
+
 describe("mergeTwinGraphData", () => {
   it("keeps surviving node object identity across merges", () => {
     const target: TwinGraphData = { nodes: [], links: [] };

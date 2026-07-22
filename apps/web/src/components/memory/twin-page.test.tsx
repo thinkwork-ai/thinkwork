@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
@@ -134,28 +132,5 @@ describe("TwinSectionBody", () => {
       />,
     );
     expect(screen.getByText(/rest of the page is unaffected/)).toBeTruthy();
-  });
-});
-
-describe("WikiPageView dual-read wiring (AE2/AE8)", () => {
-  const source = readFileSync(join(__dirname, "WikiPageView.tsx"), "utf-8");
-
-  it("asks for the projected page only for entity pages with twin keys", () => {
-    expect(source).toContain("TwinEntityPageQuery");
-    expect(source).toContain("pause: !canAskTwin");
-    expect(source).toContain('page?.type === "ENTITY"');
-  });
-
-  it("falls back to compiled sections when not projected (AE8)", () => {
-    // Projected render is a ternary OVER the compiled block — never a
-    // replacement, so an unflipped tenant renders exactly as before.
-    expect(source).toContain("projectedSections ? (");
-    expect(source).toContain("sortedSections.length > 0 ? (");
-  });
-
-  it("umbrella naming: breadcrumb reads Pages", () => {
-    expect(source).toContain(
-      '{ label: "Pages", href: "/settings/memory/wiki" }',
-    );
   });
 });

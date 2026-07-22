@@ -22,6 +22,17 @@ extend type Query {
     limit: Int = 25
   ): AWSJSON!
   """
+  Type-level overview graph (THINK-327 Explorer graph view): a bounded
+  sample of the type's instances (roots<=25) plus their 1..2-hop
+  neighborhoods and labeled edge triples, one round trip.
+  """
+  twinSubgraph(
+    tenantId: ID
+    entityType: String!
+    limit: Int = 25
+    depth: Int = 2
+  ): AWSJSON!
+  """
   Projected entity page (U8 / KTD-8): the entity's operator-declared
   sections, each resolved independently to OK/STALE/TIMEOUT/ERROR with age
   and provenance — or { projected: false, reason } when the tenant/type

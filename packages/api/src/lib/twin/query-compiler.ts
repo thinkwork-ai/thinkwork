@@ -58,6 +58,12 @@ export type TwinRequest =
       limit?: number;
     }
   | { kind: "system_edges"; canonicalId: string }
+  | {
+      kind: "subgraph";
+      entityType: string;
+      limit?: number;
+      depth?: number;
+    }
   | { kind: "raw"; query: string };
 
 export interface CompiledTwinQuery {
@@ -217,15 +223,20 @@ export function compileTwinQuery(
       parameters.nodeId = `t#${tenantId}#e#${request.canonicalId}`;
       return {
         // Depth is a VALIDATED LITERAL (Neptune VLP bounds are constant-only).
-        // Edge triples ride along (THINK-327 U3) so graph consumers can draw
-        // labeled relationships; additive — node/neighbors keys unchanged.
+        // external_identity is FENCED OUT of traversal (THINK-327 review):
+        // system nodes are shared hubs — passing through one would pull in
+        // every entity in the tenant. System identity renders in the detail
+        // page's Systems panel instead; the graph is entity↔entity only.
+        // Edge triples carry properties so the UI can show them in the
+        // side sheet.
         query:
           "MATCH (n {`~id`: $nodeId}) WHERE n.tenantId = $tenantId " +
           `MATCH p = (n)-[r*1..${depth}]-(m) WHERE m.tenantId = $tenantId ` +
+          "AND NONE(rel IN relationships(p) WHERE type(rel) = 'external_identity') " +
           "UNWIND relationships(p) AS rel " +
           "RETURN n AS node, collect(DISTINCT m)[0..50] AS neighbors, " +
           "collect(DISTINCT {rel: type(rel), sourceId: id(startNode(rel)), " +
-          "targetId: id(endNode(rel))})[0..200] AS edges",
+          "targetId: id(endNode(rel)), props: properties(rel)})[0..200] AS edges",
         parameters,
       };
     }
@@ -286,6 +297,36 @@ export function compileTwinQuery(
           `MATCH (n:${label}) WHERE ${conditions.join(" AND ")} ` +
           pathMatch +
           `RETURN n AS node${pathReturn} LIMIT ${limit}`,
+        parameters,
+      };
+    }
+    case "subgraph": {
+      // Type-level overview graph (THINK-327 Explorer graph view): a
+      // bounded sample of the type's instances plus their neighborhoods.
+      // All bounds are validated literals; caps keep the pooled cluster
+      // safe (roots<=25, depth<=2, neighbors/edges collect-capped).
+      const label = slug(request.entityType, "entity type slug");
+      const limit = Math.min(Math.max(1, Math.trunc(request.limit ?? 25)), 25);
+      const depth = request.depth ?? 2;
+      if (!Number.isInteger(depth) || depth < 1 || depth > MAX_NEIGHBOR_DEPTH) {
+        throw new TwinCompileError(
+          `depth must be an integer 1..${MAX_NEIGHBOR_DEPTH}`,
+        );
+      }
+      return {
+        // OPTIONAL MATCH: roots with no entity relationships still render
+        // (isolated nodes), and external_identity is fenced out of
+        // traversal — the graph is entity↔entity only (system identity
+        // lives in the detail page's Systems panel).
+        query:
+          `MATCH (n:${label}) WHERE n.tenantId = $tenantId ` +
+          `WITH n LIMIT ${limit} ` +
+          `OPTIONAL MATCH p = (n)-[r*1..${depth}]-(m) ` +
+          "WHERE m.tenantId = $tenantId " +
+          "AND NONE(rel IN relationships(p) WHERE type(rel) = 'external_identity') " +
+          `RETURN collect(DISTINCT n)[0..${limit}] AS roots, ` +
+          "collect(DISTINCT m)[0..150] AS neighbors, " +
+          "collect(DISTINCT p)[0..300] AS paths",
         parameters,
       };
     }

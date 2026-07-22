@@ -1,18 +1,33 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "urql";
 import { useNavigate } from "@tanstack/react-router";
-import { Search, Terminal, X } from "lucide-react";
-import type { ColumnDef } from "@tanstack/react-table";
+import { Link2, Search, Shapes, Tag, X } from "lucide-react";
+import {
+  getCoreRowModel,
+  getFilteredRowModel,
+  useReactTable,
+  type ColumnDef,
+  type ColumnFiltersState,
+} from "@tanstack/react-table";
 import {
   Badge,
+  Button,
   DataTable,
+  DataTableTokenFilter,
   Input,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  ToggleGroup,
+  ToggleGroupItem,
+  dataTableTokenFilterFns,
+  isDataTableTokenFilterValue,
+  type DataTableTokenFilterColumn,
+  type DataTableTokenFilterValue,
 } from "@thinkwork/ui";
+import {
+  TwinGraph,
+  type TwinGraphLink,
+  type TwinGraphNode,
+} from "@thinkwork/graph";
+import { TwinNodeSheet, type TwinSheetSelection } from "./TwinNodeSheet";
 import {
   TwinCohortQuery,
   TwinExplorerOntologyQuery,
@@ -20,11 +35,8 @@ import {
 import { useTenant } from "@/context/TenantContext";
 import { CypherConsole } from "./CypherConsole";
 import {
-  PredicateBuilder,
-  buildTypedPredicate,
   parseExplorerFacets,
   type ExplorerFacet,
-  type ExplorerPredicateRow,
   type TypedPredicate,
 } from "./PredicateBuilder";
 
@@ -49,6 +61,16 @@ export interface CohortRow {
   canonicalId: string | null;
   label: string;
   properties: Record<string, unknown>;
+}
+
+/**
+ * Header actions the Explorer publishes for SettingsMemoryHome (the
+ * Ontology/KBs controller pattern): the console lives behind a page-header
+ * TooltipIconButton, not an in-body button.
+ */
+export interface TwinExplorerHeaderController {
+  consoleOpen: boolean;
+  toggleConsole: () => void;
 }
 
 function parseAwsJson(value: unknown): Record<string, unknown> | null {
@@ -114,26 +136,147 @@ export function parseTwinCohortFailure(
   };
 }
 
+export const ENTITY_TYPE_COLUMN_ID = "entityType";
+export const PATH_COLUMN_ID = "relatedTo";
+const ATTR_PREFIX = "attr:";
+
+const NUMBER_OPERATOR_TO_OP: Record<string, TypedPredicate["op"]> = {
+  is: "eq",
+  is_not: "ne",
+  greater_than: "gt",
+  greater_or_equal: "gte",
+  less_than: "lt",
+  less_or_equal: "lte",
+};
+
+export interface ExplorerFilterModel {
+  entityType: string;
+  predicates: TypedPredicate[];
+  path: { relationship: string; targetType: string; predicates: [] } | null;
+  errors: string[];
+}
+
+function singleStringValue(value: DataTableTokenFilterValue): string | null {
+  const raw = Array.isArray(value.value) ? value.value[0] : value.value;
+  return typeof raw === "string" && raw ? raw : null;
+}
+
 /**
- * Twin Explorer browse/query surface (THINK-327 U4, R1–R5): governed type
- * picker, AND-only predicate builder, declared-relationship path filter,
- * name search, and a cohort results table linking into the entity detail.
+ * Compile the standard token-filter state into the typed cohort filter
+ * (KTD-5 grammar): entity type + facet-attribute predicates + optional
+ * declared-relationship path. Values are typed by the governed
+ * declaration's filterType, so numbers go out as JSON numbers (R2).
  */
-export function TwinExplorer() {
+export function buildExplorerFilterModel(
+  columnFilters: ColumnFiltersState,
+  facets: ExplorerFacet[],
+  relationships: Array<{
+    slug: string;
+    targetTypeSlugs?: string[] | null;
+  }>,
+): ExplorerFilterModel {
+  let entityType = "";
+  let path: ExplorerFilterModel["path"] = null;
+  const predicates: TypedPredicate[] = [];
+  const errors: string[] = [];
+
+  for (const filter of columnFilters) {
+    if (!isDataTableTokenFilterValue(filter.value)) continue;
+    const value = filter.value;
+    if (filter.id === ENTITY_TYPE_COLUMN_ID) {
+      entityType = singleStringValue(value) ?? "";
+      continue;
+    }
+    if (filter.id === PATH_COLUMN_ID) {
+      const relationshipSlug = singleStringValue(value);
+      const relationship = relationships.find(
+        (rel) => rel.slug === relationshipSlug,
+      );
+      const targetType = relationship?.targetTypeSlugs?.[0];
+      if (relationship && targetType) {
+        path = { relationship: relationship.slug, targetType, predicates: [] };
+      }
+      continue;
+    }
+    if (!filter.id.startsWith(ATTR_PREFIX)) continue;
+    const [facetSlug, attributeName] = filter.id
+      .slice(ATTR_PREFIX.length)
+      .split(".", 2);
+    const attribute = facets
+      .find((facet) => facet.slug === facetSlug)
+      ?.attributes.find((a) => a.attribute === attributeName);
+    if (!facetSlug || !attributeName || !attribute) continue;
+
+    if (attribute.filterType === "number") {
+      const op = NUMBER_OPERATOR_TO_OP[value.operator];
+      const numeric = Number(
+        Array.isArray(value.value) ? value.value[0] : value.value,
+      );
+      if (!op || !Number.isFinite(numeric)) {
+        errors.push(`${facetSlug}.${attributeName}: enter a number`);
+        continue;
+      }
+      predicates.push({
+        facet: facetSlug,
+        attribute: attributeName,
+        op,
+        value: numeric,
+      });
+      continue;
+    }
+    if (attribute.filterType === "boolean") {
+      const raw = Array.isArray(value.value) ? value.value[0] : value.value;
+      predicates.push({
+        facet: facetSlug,
+        attribute: attributeName,
+        op: value.operator === "is_not" ? "ne" : "eq",
+        value: raw === true || raw === "true",
+      });
+      continue;
+    }
+    const text = singleStringValue(value);
+    if (text) {
+      predicates.push({
+        facet: facetSlug,
+        attribute: attributeName,
+        op: "contains",
+        value: text,
+      });
+    }
+  }
+
+  return { entityType, predicates, path, errors };
+}
+
+/**
+ * Twin Explorer browse/query surface (THINK-327 U4, R1–R5): the STANDARD
+ * DataTableTokenFilter drives everything — entity type, declared facet
+ * attributes (typed by filterType), and the declared-relationship path —
+ * matching the Memory-tab toolbar idiom (collapsible search + funnel).
+ */
+export function TwinExplorer({
+  onHeaderControllerChange,
+}: {
+  onHeaderControllerChange?: (
+    controller: TwinExplorerHeaderController | null,
+  ) => void;
+}) {
   const { tenantId } = useTenant();
   const navigate = useNavigate();
-  const [entityType, setEntityType] = useState("");
   const [nameQuery, setNameQuery] = useState("");
   const [activeNameQuery, setActiveNameQuery] = useState("");
-  const [predicateRows, setPredicateRows] = useState<ExplorerPredicateRow[]>(
-    [],
-  );
-  const [pathRelationship, setPathRelationship] = useState("");
-  const [pathTargetType, setPathTargetType] = useState("");
-  const [pathPredicateRows, setPathPredicateRows] = useState<
-    ExplorerPredicateRow[]
-  >([]);
+  const [searchExpanded, setSearchExpanded] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
+  const [view, setView] = useState<"graph" | "table">("graph");
+  const [sheetSelection, setSheetSelection] =
+    useState<TwinSheetSelection | null>(null);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+
+  const toggleConsole = useCallback(() => setConsoleOpen((open) => !open), []);
+  useEffect(() => {
+    onHeaderControllerChange?.({ consoleOpen, toggleConsole });
+    return () => onHeaderControllerChange?.(null);
+  }, [onHeaderControllerChange, consoleOpen, toggleConsole]);
 
   const [{ data: ontologyData }] = useQuery<{
     ontologyDefinitions?: {
@@ -149,11 +292,26 @@ export function TwinExplorer() {
   const entityTypes = useMemo(
     () =>
       (ontologyData?.ontologyDefinitions?.entityTypes ?? []).filter(
-        (type) => type.lifecycleStatus === "approved",
+        (type) => (type.lifecycleStatus ?? "").toUpperCase() === "APPROVED",
       ),
     [ontologyData],
   );
-  const selectedType = entityTypes.find((type) => type.slug === entityType);
+  const entityTypeFilter = columnFilters.find(
+    (filter) => filter.id === ENTITY_TYPE_COLUMN_ID,
+  );
+  const entityType = isDataTableTokenFilterValue(entityTypeFilter?.value)
+    ? (singleStringValue(entityTypeFilter.value) ?? "")
+    : "";
+  // Default data (no filters yet): customer when declared, else the first
+  // approved type — the tab shows the twin immediately, like Memory.
+  const defaultEntityType =
+    entityTypes.find((type) => type.slug === "customer")?.slug ??
+    entityTypes[0]?.slug ??
+    "";
+  const effectiveEntityType = entityType || defaultEntityType;
+  const selectedType = entityTypes.find(
+    (type) => type.slug === effectiveEntityType,
+  );
   const facets: ExplorerFacet[] = useMemo(
     () => parseExplorerFacets(selectedType?.twinFacets),
     [selectedType],
@@ -164,65 +322,122 @@ export function TwinExplorer() {
     () =>
       (ontologyData?.ontologyDefinitions?.relationshipTypes ?? []).filter(
         (rel) =>
-          rel.lifecycleStatus === "approved" &&
-          !!entityType &&
-          (rel.sourceTypeSlugs ?? []).includes(entityType),
+          (rel.lifecycleStatus ?? "").toUpperCase() === "APPROVED" &&
+          !!effectiveEntityType &&
+          (rel.sourceTypeSlugs ?? []).includes(effectiveEntityType),
       ),
-    [ontologyData, entityType],
-  );
-  const selectedRelationship = pathRelationships.find(
-    (rel) => rel.slug === pathRelationship,
-  );
-  const pathTargetTypes = selectedRelationship?.targetTypeSlugs ?? [];
-  const pathTargetFacets: ExplorerFacet[] = useMemo(
-    () =>
-      parseExplorerFacets(
-        entityTypes.find((type) => type.slug === pathTargetType)?.twinFacets,
-      ),
-    [entityTypes, pathTargetType],
+    [ontologyData, effectiveEntityType],
   );
 
-  // Build the typed filter; rows that don't validate surface inline and
-  // keep the query on its last valid shape (pause on error).
-  const build = useMemo(() => {
-    const errors: string[] = [];
-    const predicates: TypedPredicate[] = [];
-    for (const row of predicateRows) {
-      const built = buildTypedPredicate(row, facets);
-      if (built.ok) predicates.push(built.predicate);
-      else errors.push(built.error);
-    }
-    const filter: Record<string, unknown> = { predicates };
-    if (activeNameQuery) filter.nameContains = activeNameQuery;
-    if (pathRelationship && pathTargetType) {
-      const pathPredicates: TypedPredicate[] = [];
-      for (const row of pathPredicateRows) {
-        const built = buildTypedPredicate(row, pathTargetFacets);
-        if (built.ok) pathPredicates.push(built.predicate);
-        else errors.push(built.error);
+  // Changing the entity type invalidates facet/path selections — drop any
+  // filter the new type doesn't declare.
+  useEffect(() => {
+    setColumnFilters((current) =>
+      current.filter((filter) => {
+        if (filter.id === ENTITY_TYPE_COLUMN_ID) return true;
+        if (filter.id === PATH_COLUMN_ID) return pathRelationships.length > 0;
+        if (!filter.id.startsWith(ATTR_PREFIX)) return true;
+        const [facetSlug, attributeName] = filter.id
+          .slice(ATTR_PREFIX.length)
+          .split(".", 2);
+        return facets.some(
+          (facet) =>
+            facet.slug === facetSlug &&
+            facet.attributes.some((a) => a.attribute === attributeName),
+        );
+      }),
+    );
+  }, [facets, pathRelationships]);
+
+  // The STANDARD filter columns (KTD-2): entity type first, then one
+  // column per declared facet attribute, then the declared-relationship
+  // path — all governed, nothing free-form.
+  const filterColumns: DataTableTokenFilterColumn[] = useMemo(() => {
+    const columns: DataTableTokenFilterColumn[] = [
+      {
+        id: ENTITY_TYPE_COLUMN_ID,
+        label: "Entity type",
+        type: "option",
+        singleSelect: true,
+        icon: <Shapes className="h-4 w-4" aria-hidden="true" />,
+        options: entityTypes.map((type) => ({
+          value: type.slug,
+          label: type.name ?? type.slug,
+        })),
+      },
+    ];
+    for (const facet of facets) {
+      for (const attribute of facet.attributes) {
+        columns.push({
+          id: `${ATTR_PREFIX}${facet.slug}.${attribute.attribute}`,
+          label: `${facet.slug}.${attribute.attribute}`,
+          type:
+            attribute.filterType === "number"
+              ? "number"
+              : attribute.filterType === "boolean"
+                ? "boolean"
+                : "text",
+          // The compiler has no negated-contains — offer what it can run.
+          operators:
+            attribute.filterType === "number" ||
+            attribute.filterType === "boolean"
+              ? undefined
+              : ["contains"],
+          icon: <Tag className="h-4 w-4" aria-hidden="true" />,
+        });
       }
-      filter.path = {
-        relationship: pathRelationship,
-        targetType: pathTargetType,
-        predicates: pathPredicates,
-      };
     }
-    return { filter, errors };
-  }, [
-    predicateRows,
-    facets,
-    activeNameQuery,
-    pathRelationship,
-    pathTargetType,
-    pathPredicateRows,
-    pathTargetFacets,
-  ]);
+    if (effectiveEntityType && pathRelationships.length > 0) {
+      columns.push({
+        id: PATH_COLUMN_ID,
+        label: "Related to",
+        type: "option",
+        singleSelect: true,
+        icon: <Link2 className="h-4 w-4" aria-hidden="true" />,
+        options: pathRelationships.map((rel) => ({
+          value: rel.slug,
+          label: rel.name ?? rel.slug,
+        })),
+      });
+    }
+    return columns;
+  }, [entityTypes, facets, effectiveEntityType, pathRelationships]);
 
-  const hasQuery =
-    !!entityType &&
-    (build.filter.predicates as TypedPredicate[]).length +
-      (activeNameQuery ? 1 : 0) >=
-      0; // browsing with zero predicates is a valid cohort (list the type)
+  // Headless table purely to drive the standard filter UI (the Memory
+  // graphFilterTable pattern) — the cohort query is server-filtered.
+  const filterTableColumns = useMemo(
+    () =>
+      filterColumns.map(
+        (column): ColumnDef<Record<string, unknown>> => ({
+          id: column.id,
+          filterFn:
+            dataTableTokenFilterFns[
+              column.type as keyof typeof dataTableTokenFilterFns
+            ],
+        }),
+      ),
+    [filterColumns],
+  );
+  const filterTable = useReactTable({
+    data: [] as Array<Record<string, unknown>>,
+    columns: filterTableColumns,
+    state: { columnFilters },
+    onColumnFiltersChange: setColumnFilters,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+  });
+
+  const model = useMemo(
+    () => buildExplorerFilterModel(columnFilters, facets, pathRelationships),
+    [columnFilters, facets, pathRelationships],
+  );
+
+  const filter = useMemo(() => {
+    const compiled: Record<string, unknown> = { predicates: model.predicates };
+    if (activeNameQuery) compiled.nameContains = activeNameQuery;
+    if (model.path) compiled.path = model.path;
+    return compiled;
+  }, [model, activeNameQuery]);
 
   const [{ data: cohortData, fetching, error }] = useQuery<{
     twinCohort?: unknown;
@@ -230,11 +445,15 @@ export function TwinExplorer() {
     query: TwinCohortQuery,
     variables: {
       tenantId,
-      entityType,
-      filter: JSON.stringify(build.filter),
+      entityType: effectiveEntityType,
+      filter: JSON.stringify(filter),
       limit: COHORT_LIMIT,
     },
-    pause: !tenantId || !hasQuery || build.errors.length > 0,
+    pause:
+      !tenantId ||
+      !effectiveEntityType ||
+      view !== "table" ||
+      model.errors.length > 0,
   });
 
   const rows = useMemo(
@@ -250,16 +469,14 @@ export function TwinExplorer() {
   // chip per referenced facet (R5).
   const referenced = useMemo(() => {
     const pairs = new Map<string, { facet: string; attribute: string }>();
-    for (const row of predicateRows) {
-      if (row.facet && row.attribute) {
-        pairs.set(`${row.facet}.${row.attribute}`, {
-          facet: row.facet,
-          attribute: row.attribute,
-        });
-      }
+    for (const predicate of model.predicates) {
+      pairs.set(`${predicate.facet}.${predicate.attribute}`, {
+        facet: predicate.facet,
+        attribute: predicate.attribute,
+      });
     }
     return [...pairs.values()];
-  }, [predicateRows]);
+  }, [model.predicates]);
   const referencedFacets = useMemo(
     () => [...new Set(referenced.map((pair) => pair.facet))],
     [referenced],
@@ -321,175 +538,121 @@ export function TwinExplorer() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-4">
-      <div className="flex shrink-0 flex-wrap items-center gap-3">
-        <Select
-          value={entityType || undefined}
-          onValueChange={(slug) => {
-            setEntityType(slug);
-            setPredicateRows([]);
-            setPathRelationship("");
-            setPathTargetType("");
-            setPathPredicateRows([]);
-          }}
-        >
-          <SelectTrigger
-            className="h-9 w-44"
-            aria-label="Entity type"
-            data-testid="explorer-entity-type"
-          >
-            <SelectValue placeholder="Entity type" />
-          </SelectTrigger>
-          <SelectContent>
-            {entityTypes.map((type) => (
-              <SelectItem key={type.slug} value={type.slug}>
-                {type.name ?? type.slug}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="h-9 w-64 pl-8"
-            placeholder="Search by name…"
-            aria-label="Search by name"
-            data-testid="explorer-name-search"
-            value={nameQuery}
-            onChange={(event) => setNameQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") setActiveNameQuery(nameQuery.trim());
+      <div className="shrink-0 space-y-1">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            Explorer
+          </h1>
+          <ToggleGroup
+            type="single"
+            value={view}
+            onValueChange={(next) => {
+              if (next === "graph" || next === "table") setView(next);
             }}
-            disabled={!entityType}
-          />
-          {activeNameQuery ? (
+            className="rounded-full border border-border p-0.5"
+          >
+            <ToggleGroupItem
+              value="graph"
+              className="h-7 rounded-full px-3 text-xs"
+              aria-label="Graph view"
+            >
+              Graph
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="table"
+              className="h-7 rounded-full px-3 text-xs"
+              aria-label="Table view"
+            >
+              Table
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Browse the digital twin — live entities projected from your source
+          systems.
+        </p>
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {/* Collapsible search — the Memory tab's toolbar idiom. */}
+        {!(searchExpanded || nameQuery.length > 0) ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            className="h-8 w-8 rounded-md"
+            aria-label="Search by name"
+            data-testid="explorer-search-toggle"
+            disabled={!effectiveEntityType}
+            onClick={() => setSearchExpanded(true)}
+          >
+            <Search className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        ) : (
+          <div className="relative flex h-8 w-[min(20rem,calc(100vw-2rem))] items-center">
+            <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              autoFocus
+              type="search"
+              className="h-8 rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              placeholder="Search by name..."
+              aria-label="Search by name"
+              data-testid="explorer-name-search"
+              value={nameQuery}
+              onBlur={() => {
+                if (!nameQuery) setSearchExpanded(false);
+              }}
+              onChange={(event) => setNameQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") setActiveNameQuery(nameQuery.trim());
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setNameQuery("");
+                  setActiveNameQuery("");
+                  setSearchExpanded(false);
+                }
+              }}
+            />
             <button
               type="button"
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              className="absolute right-2 text-muted-foreground hover:text-foreground"
               aria-label="Clear name search"
+              onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 setNameQuery("");
                 setActiveNameQuery("");
+                setSearchExpanded(false);
               }}
             >
               <X className="size-3.5" />
             </button>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          className={
-            consoleOpen
-              ? "ml-auto flex h-9 items-center gap-1.5 rounded-md border border-border bg-primary/10 px-3 text-xs text-primary"
-              : "ml-auto flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-          }
-          aria-pressed={consoleOpen}
-          data-testid="explorer-console-toggle"
-          onClick={() => setConsoleOpen((open) => !open)}
-        >
-          <Terminal className="size-3.5" /> Console
-        </button>
+          </div>
+        )}
+        <DataTableTokenFilter
+          table={filterTable}
+          columns={filterColumns}
+          addLabel="Filter"
+          showAddLabel={false}
+          clearLabel="Clear filters"
+          flattenToolbar
+          className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+          popoverClassName="w-[min(18rem,calc(100vw-2rem))]"
+        />
       </div>
 
       {consoleOpen ? <CypherConsole /> : null}
 
-      {entityType ? (
-        <PredicateBuilder
-          facets={facets}
-          rows={predicateRows}
-          onChange={setPredicateRows}
-        />
-      ) : (
+      {!effectiveEntityType ? (
         <p className="text-sm text-muted-foreground">
-          Pick an entity type to browse the twin.
+          No approved entity types yet — declare one in the Ontology tab.
         </p>
-      )}
-
-      {entityType && pathRelationships.length > 0 ? (
-        <div className="space-y-2" data-testid="explorer-path-filter">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs uppercase tracking-wider text-muted-foreground">
-              Related to
-            </span>
-            <Select
-              value={pathRelationship || undefined}
-              onValueChange={(slug) => {
-                setPathRelationship(slug);
-                const targets =
-                  pathRelationships.find((rel) => rel.slug === slug)
-                    ?.targetTypeSlugs ?? [];
-                setPathTargetType(targets.length === 1 ? targets[0]! : "");
-                setPathPredicateRows([]);
-              }}
-            >
-              <SelectTrigger
-                className="h-8 w-48 text-xs"
-                aria-label="Relationship"
-                data-testid="explorer-path-relationship"
-              >
-                <SelectValue placeholder="Relationship (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                {pathRelationships.map((rel) => (
-                  <SelectItem key={rel.slug} value={rel.slug}>
-                    {rel.name ?? rel.slug}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {pathRelationship && pathTargetTypes.length > 1 ? (
-              <Select
-                value={pathTargetType || undefined}
-                onValueChange={setPathTargetType}
-              >
-                <SelectTrigger
-                  className="h-8 w-40 text-xs"
-                  aria-label="Target type"
-                >
-                  <SelectValue placeholder="Target type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {pathTargetTypes.map((slug) => (
-                    <SelectItem key={slug} value={slug}>
-                      {slug}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : null}
-            {pathRelationship ? (
-              <button
-                type="button"
-                className="text-xs text-muted-foreground hover:text-foreground"
-                aria-label="Clear path filter"
-                onClick={() => {
-                  setPathRelationship("");
-                  setPathTargetType("");
-                  setPathPredicateRows([]);
-                }}
-              >
-                Clear
-              </button>
-            ) : null}
-          </div>
-          {pathRelationship && pathTargetType ? (
-            <div className="pl-6">
-              <PredicateBuilder
-                facets={pathTargetFacets}
-                rows={pathPredicateRows}
-                onChange={setPathPredicateRows}
-                idPrefix="path-predicate"
-              />
-            </div>
-          ) : null}
-        </div>
       ) : null}
 
-      {build.errors.length > 0 ? (
+      {model.errors.length > 0 ? (
         <p
           className="text-sm text-amber-600"
           data-testid="explorer-build-errors"
         >
-          {build.errors.join(" · ")}
+          {model.errors.join(" · ")}
         </p>
       ) : null}
       {error ? (
@@ -517,7 +680,37 @@ export function TwinExplorer() {
         )
       ) : null}
 
-      {entityType && fetching && !cohortData ? (
+      {view === "graph" && effectiveEntityType ? (
+        <div className="relative min-h-[28rem] flex-1 overflow-hidden rounded-lg border border-border">
+          <TwinGraph
+            tenantId={tenantId}
+            subgraphEntityType={effectiveEntityType}
+            subgraphLimit={25}
+            depth={2}
+            onNodeClick={(node: TwinGraphNode) =>
+              setSheetSelection({ kind: "node", node })
+            }
+            onLinkClick={(link: TwinGraphLink) =>
+              setSheetSelection({ kind: "edge", link })
+            }
+          />
+          <TwinNodeSheet
+            selection={sheetSelection}
+            onOpenChange={(open) => {
+              if (!open) setSheetSelection(null);
+            }}
+            onOpenEntity={(target) => {
+              setSheetSelection(null);
+              void navigate({
+                to: "/settings/memory/explorer/$entityType/$canonicalId",
+                params: target,
+              });
+            }}
+          />
+        </div>
+      ) : null}
+
+      {view === "table" && effectiveEntityType && fetching && !cohortData ? (
         <div className="space-y-2" data-testid="explorer-loading">
           {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} className="h-10 animate-pulse rounded-md bg-muted" />
@@ -525,7 +718,7 @@ export function TwinExplorer() {
         </div>
       ) : null}
 
-      {rows ? (
+      {view === "table" && rows ? (
         rows.length > 0 ? (
           <div className="min-h-0 flex-1">
             {rows.length >= COHORT_LIMIT ? (
@@ -545,7 +738,7 @@ export function TwinExplorer() {
                 void navigate({
                   to: "/settings/memory/explorer/$entityType/$canonicalId",
                   params: {
-                    entityType,
+                    entityType: effectiveEntityType,
                     canonicalId: row.canonicalId,
                   },
                 });

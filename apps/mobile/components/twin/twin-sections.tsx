@@ -17,7 +17,7 @@ import {
   labelizeTwinKey,
   formatTwinValue,
   type ProjectedTwinSection,
-} from "@/lib/wiki/twin-page";
+} from "@/lib/twin/twin-page";
 
 type ThemeColors = (typeof COLORS)["dark"];
 

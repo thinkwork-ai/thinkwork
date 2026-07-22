@@ -33,16 +33,14 @@ import {
 import { HOME_SEGMENTS } from "./segments";
 
 describe("home segments", () => {
-  it("registers exactly the three badge-free home segments in order", () => {
+  it("registers exactly the two badge-free home segments in order", () => {
     expect(HOME_SEGMENTS.map((segment) => segment.key)).toEqual([
       "threads",
       "work-items",
-      "wiki",
     ]);
     expect(HOME_SEGMENTS.map((segment) => segment.label)).toEqual([
       "Threads",
       "Work Items",
-      "Wiki",
     ]);
     for (const segment of HOME_SEGMENTS) {
       expect("badge" in segment).toBe(false);
@@ -65,10 +63,10 @@ describe("home segments", () => {
     const outerChildren = React.Children.toArray(element.props.children);
     const pillContainer = outerChildren[0] as React.ReactElement<any>;
     const pills = React.Children.toArray(pillContainer.props.children);
-    expect(pills).toHaveLength(4);
+    expect(pills).toHaveLength(3);
 
-    const fourthPill = pills[3] as React.ReactElement<any>;
-    fourthPill.props.onPress();
+    const appendedPill = pills[2] as React.ReactElement<any>;
+    appendedPill.props.onPress();
     expect(onChange).toHaveBeenCalledWith("later");
   });
 
@@ -91,7 +89,7 @@ describe("home segments", () => {
       },
     });
 
-    expect(renderCalls).toEqual(["threads", "work-items", "wiki", "later"]);
+    expect(renderCalls).toEqual(["threads", "work-items", "later"]);
     expect(externalDraftState.get("threads")).toBe("keep this draft");
     expect(segmentPanelStyle("threads", "work-items")).toMatchObject({
       display: "none",

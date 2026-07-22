@@ -2597,51 +2597,9 @@ export const ComputerMemorySystemConfigQuery = gql`
   }
 `;
 
-export const ComputerRecentWikiPagesQuery = gql`
-  query ComputerRecentWikiPages($tenantId: ID, $userId: ID, $limit: Int) {
-    recentWikiPages(tenantId: $tenantId, userId: $userId, limit: $limit) {
-      id
-      type
-      slug
-      title
-      summary
-      lastCompiledAt
-      updatedAt
-    }
-  }
-`;
-
-export const ComputerWikiSearchQuery = gql`
-  query ComputerWikiSearch(
-    $tenantId: ID!
-    $userId: ID
-    $query: String!
-    $limit: Int
-  ) {
-    wikiSearch(
-      tenantId: $tenantId
-      userId: $userId
-      query: $query
-      limit: $limit
-    ) {
-      score
-      matchedAlias
-      page {
-        id
-        type
-        slug
-        title
-        summary
-        lastCompiledAt
-        updatedAt
-      }
-    }
-  }
-`;
-
 /**
  * THINK-263 U4 — unified fan-out search broker as a palette rail query. Fired
- * once per source rail (Threads / Wiki / Entities) so each rail hydrates and
+ * once per source rail (Threads / Entities) so each rail hydrates and
  * renders its own pending / empty / timeout / error state independently. The
  * memory leg is intentionally never requested on keystrokes (find rung).
  */
@@ -2747,38 +2705,6 @@ export const EntityDossierQuery = gql`
   }
 `;
 
-export const ComputerWikiPageQuery = gql`
-  query ComputerWikiPage(
-    $tenantId: ID!
-    $userId: ID
-    $type: WikiPageType!
-    $slug: String!
-  ) {
-    wikiPage(tenantId: $tenantId, userId: $userId, type: $type, slug: $slug) {
-      id
-      type
-      entitySubtype
-      canonicalEntityId
-      slug
-      title
-      summary
-      bodyMd
-      status
-      lastCompiledAt
-      updatedAt
-      aliases
-      sections {
-        id
-        sectionSlug
-        heading
-        bodyMd
-        position
-        lastSourceAt
-      }
-    }
-  }
-`;
-
 /**
  * Projected twin page for an entity (Company Brain U9 / KTD-8). AWSJSON
  * payload: `{ projected: true, sections: [...] }` with per-section
@@ -2863,42 +2789,6 @@ export const TwinExplorerOntologyQuery = gql`
         sourceTypeSlugs
         targetTypeSlugs
       }
-    }
-  }
-`;
-
-export const ComputerWikiBacklinksQuery = gql`
-  query ComputerWikiBacklinks($pageId: ID!) {
-    wikiBacklinks(pageId: $pageId) {
-      id
-      type
-      slug
-      title
-      summary
-    }
-  }
-`;
-
-/**
- * Pages linked to/from one page, in one round-trip — the full-page reader
- * matches relationship-badge labels against these titles/aliases to turn
- * badges into wiki navigation (THINK-270 repair).
- */
-export const ComputerWikiPageLinksQuery = gql`
-  query ComputerWikiPageLinks($pageId: ID!) {
-    wikiConnectedPages(pageId: $pageId) {
-      id
-      type
-      slug
-      title
-      aliases
-    }
-    wikiBacklinks(pageId: $pageId) {
-      id
-      type
-      slug
-      title
-      aliases
     }
   }
 `;

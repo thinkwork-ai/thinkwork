@@ -25,7 +25,7 @@ import {
 } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import { useQuery } from "urql";
-import { TwinNeighborsQuery } from "./queries.js";
+import { TwinNeighborsQuery, TwinSubgraphQuery } from "./queries.js";
 import {
   degreeRadius,
   endpointId,
@@ -41,7 +41,12 @@ export interface TwinGraphNode {
   label: string;
   /** Entity type from the node's `~labels`. */
   typeLabel: string | null;
+  /** External-system node (`t#<tenant>#sys#<slug>`) — not navigable. */
+  isSystem: boolean;
   isCenter: boolean;
+  /** The node's flat property map (facet stamps included) — the host's
+   *  property side sheet renders these. */
+  properties: Record<string, unknown>;
 }
 
 export interface TwinGraphLink {
@@ -49,6 +54,8 @@ export interface TwinGraphLink {
   source: string | { id: string };
   target: string | { id: string };
   label: string;
+  /** Relationship properties for the side sheet (may be empty). */
+  properties: Record<string, unknown>;
 }
 
 export interface TwinGraphData {
@@ -62,10 +69,17 @@ export interface TwinGraphHandle {
 
 const CENTER_COLOR = "#0ea5e9";
 const NEIGHBOR_COLOR = "#64748b";
+const SYSTEM_COLOR = "#a78bfa";
 
 /** `t#<tenant>#e#<canonicalId>` → canonicalId. */
 export function twinCanonicalIdFromNodeId(nodeId: string): string | null {
   const match = /^t#[^#]+#e#(.+)$/.exec(nodeId);
+  return match ? match[1]! : null;
+}
+
+/** `t#<tenant>#sys#<systemSlug>` → systemSlug (external-system nodes). */
+export function twinSystemSlugFromNodeId(nodeId: string): string | null {
+  const match = /^t#[^#]+#sys#(.+)$/.exec(nodeId);
   return match ? match[1]! : null;
 }
 
@@ -96,6 +110,7 @@ function mapNeptuneNode(raw: unknown, isCenter: boolean): TwinGraphNode | null {
       ? (node["~properties"] as Record<string, unknown>)
       : {};
   const canonicalId = twinCanonicalIdFromNodeId(id);
+  const systemSlug = twinSystemSlugFromNodeId(id);
   const displayName = properties.displayName;
   return {
     id,
@@ -103,9 +118,11 @@ function mapNeptuneNode(raw: unknown, isCenter: boolean): TwinGraphNode | null {
     label:
       typeof displayName === "string" && displayName
         ? displayName
-        : (canonicalId ?? id),
-    typeLabel,
+        : (canonicalId ?? systemSlug ?? id),
+    typeLabel: systemSlug ? "system" : typeLabel,
+    isSystem: systemSlug !== null,
     isCenter,
+    properties,
   };
 }
 
@@ -118,10 +135,17 @@ export function buildTwinGraphData(payload: unknown): TwinGraphData {
 
   const nodes: TwinGraphNode[] = [];
   const seen = new Set<string>();
-  const center = mapNeptuneNode(row.node, true);
-  if (center) {
-    nodes.push(center);
-    seen.add(center.id);
+  const roots = Array.isArray(row.roots)
+    ? row.roots
+    : row.node !== undefined
+      ? [row.node]
+      : [];
+  for (const root of roots) {
+    const center = mapNeptuneNode(root, true);
+    if (center && !seen.has(center.id)) {
+      nodes.push(center);
+      seen.add(center.id);
+    }
   }
   for (const neighbor of Array.isArray(row.neighbors) ? row.neighbors : []) {
     const mapped = mapNeptuneNode(neighbor, false);
@@ -133,9 +157,28 @@ export function buildTwinGraphData(payload: unknown): TwinGraphData {
 
   const links: TwinGraphLink[] = [];
   const linkIds = new Set<string>();
+  const addLink = (
+    rel: string,
+    sourceId: string,
+    targetId: string,
+    properties: Record<string, unknown>,
+  ) => {
+    // Both endpoints must be on the canvas (the neighbor list is capped).
+    if (!seen.has(sourceId) || !seen.has(targetId)) return;
+    const id = `${rel}:${sourceId}->${targetId}`;
+    if (linkIds.has(id)) return;
+    linkIds.add(id);
+    links.push({
+      id,
+      source: sourceId,
+      target: targetId,
+      label: rel,
+      properties,
+    });
+  };
   for (const edge of Array.isArray(row.edges) ? row.edges : []) {
     if (!edge || typeof edge !== "object") continue;
-    const { rel, sourceId, targetId } = edge as Record<string, unknown>;
+    const { rel, sourceId, targetId, props } = edge as Record<string, unknown>;
     if (
       typeof rel !== "string" ||
       typeof sourceId !== "string" ||
@@ -143,12 +186,42 @@ export function buildTwinGraphData(payload: unknown): TwinGraphData {
     ) {
       continue;
     }
-    // Both endpoints must be on the canvas (the neighbor list is capped).
-    if (!seen.has(sourceId) || !seen.has(targetId)) continue;
-    const id = `${rel}:${sourceId}->${targetId}`;
-    if (linkIds.has(id)) continue;
-    linkIds.add(id);
-    links.push({ id, source: sourceId, target: targetId, label: rel });
+    addLink(
+      rel,
+      sourceId,
+      targetId,
+      props && typeof props === "object"
+        ? (props as Record<string, unknown>)
+        : {},
+    );
+  }
+  // Subgraph payloads return whole paths — arrays of alternating
+  // node/relationship objects; relationships carry ~start/~end/~type.
+  for (const path of Array.isArray(row.paths) ? row.paths : []) {
+    if (!Array.isArray(path)) continue;
+    for (const element of path) {
+      if (!element || typeof element !== "object") continue;
+      const record = element as Record<string, unknown>;
+      if (record["~entityType"] !== "relationship") continue;
+      const relType = record["~type"];
+      const start = record["~start"];
+      const end = record["~end"];
+      if (
+        typeof relType !== "string" ||
+        typeof start !== "string" ||
+        typeof end !== "string"
+      ) {
+        continue;
+      }
+      addLink(
+        relType,
+        start,
+        end,
+        record["~properties"] && typeof record["~properties"] === "object"
+          ? (record["~properties"] as Record<string, unknown>)
+          : {},
+      );
+    }
   }
   return { nodes, links };
 }
@@ -170,6 +243,7 @@ export function mergeTwinGraphData(
     existing.label = node.label;
     existing.typeLabel = node.typeLabel;
     existing.isCenter = node.isCenter;
+    existing.properties = node.properties;
     return existing;
   });
   target.nodes.splice(0, target.nodes.length, ...mergedNodes);
@@ -181,7 +255,15 @@ export function mergeTwinGraphData(
 
 export interface TwinGraphProps {
   tenantId: string;
-  canonicalId: string;
+  /** Entity-neighborhood mode: the entity whose neighborhood renders. */
+  canonicalId?: string;
+  /**
+   * Type-overview mode (Explorer graph view): a bounded sample of the
+   * type's instances + neighborhoods. Used when `canonicalId` is absent.
+   */
+  subgraphEntityType?: string;
+  /** Root sample size for type-overview mode (compiler-capped at 25). */
+  subgraphLimit?: number;
   /** Neighborhood depth (compiler-bounded 1..2). Default 1. */
   depth?: number;
   /**
@@ -190,6 +272,8 @@ export interface TwinGraphProps {
    * nodes whose id doesn't parse.
    */
   onNodeClick?: (node: TwinGraphNode) => void;
+  /** Edge click — the host renders the relationship's property sheet. */
+  onLinkClick?: (link: TwinGraphLink) => void;
   loadingFallback?: React.ReactNode;
   emptyFallback?: React.ReactNode;
   errorFallback?: (message: string, retry: () => void) => React.ReactNode;
@@ -200,8 +284,11 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     {
       tenantId,
       canonicalId,
+      subgraphEntityType,
+      subgraphLimit,
       depth = 1,
       onNodeClick,
+      onLinkClick,
       loadingFallback,
       emptyFallback,
       errorFallback,
@@ -212,10 +299,18 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     const fgRef = useRef<any>(null);
     const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
 
+    const overviewMode = !canonicalId && !!subgraphEntityType;
     const [result, reexecute] = useQuery({
-      query: TwinNeighborsQuery,
-      variables: { tenantId, canonicalId, depth },
-      pause: !tenantId || !canonicalId,
+      query: overviewMode ? TwinSubgraphQuery : TwinNeighborsQuery,
+      variables: overviewMode
+        ? {
+            tenantId,
+            entityType: subgraphEntityType,
+            limit: subgraphLimit,
+            depth,
+          }
+        : { tenantId, canonicalId, depth },
+      pause: !tenantId || (!canonicalId && !subgraphEntityType),
     });
     const refetch = useCallback(
       () => reexecute({ requestPolicy: "network-only" }),
@@ -227,7 +322,9 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     // wrapper per merge so it re-ingests without a layout restart.
     const graphDataRef = useRef<TwinGraphData>({ nodes: [], links: [] });
     const lastKeyRef = useRef<string | null>(null);
-    const payload = result.data?.twinNeighbors ?? null;
+    const payload =
+      (overviewMode ? result.data?.twinSubgraph : result.data?.twinNeighbors) ??
+      null;
     const graphKey =
       payload === null
         ? null
@@ -267,8 +364,12 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
 
     const nodeCanvasObject = useCallback(
       (node: any, ctx: CanvasRenderingContext2D) => {
-        const r = node.isCenter ? 10 : degreeRadius(1, 2);
-        const color = node.isCenter ? CENTER_COLOR : NEIGHBOR_COLOR;
+        const r = node.isCenter ? 10 : node.isSystem ? 5 : degreeRadius(1, 2);
+        const color = node.isCenter
+          ? CENTER_COLOR
+          : node.isSystem
+            ? SYSTEM_COLOR
+            : NEIGHBOR_COLOR;
         ctx.beginPath();
         ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
         ctx.fillStyle = color;
@@ -319,8 +420,12 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     if (result.error && graphData.nodes.length === 0) {
       return (
         errorFallback?.(result.error.message, refetch) ?? (
-          <div className="flex flex-col items-center gap-2 py-16 text-center">
-            <p className="text-sm font-medium">Neighborhood could not load.</p>
+          <div className="flex h-full min-h-48 flex-col items-center justify-center gap-2 py-16 text-center">
+            <p className="text-sm font-medium">
+              {overviewMode
+                ? "Graph could not load."
+                : "Neighborhood could not load."}
+            </p>
             <p className="max-w-sm text-sm text-muted-foreground">
               {result.error.message}
             </p>
@@ -345,7 +450,7 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
         emptyFallback ?? (
           <div
             data-testid="twin-graph-empty"
-            className="flex flex-col items-center gap-2 py-16 text-center"
+            className="flex h-full min-h-48 flex-col items-center justify-center gap-2 py-16 text-center"
           >
             <p className="max-w-sm text-sm text-muted-foreground">
               No connected entities yet.
@@ -379,14 +484,22 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
           onNodeClick={(node: any) => {
             if (node?.canonicalId) onNodeClick?.(node as TwinGraphNode);
           }}
+          onLinkClick={(link: any) => onLinkClick?.(link as TwinGraphLink)}
           onZoom={({ k }: { k: number }) => {
             zoomKRef.current = k;
           }}
           onEngineStop={() => {
-            // One-shot framing: depth-change merges never re-frame.
+            // One-shot framing: depth-change merges never re-frame. Small
+            // neighborhoods (2–3 nodes) make zoomToFit dive to absurd zoom
+            // levels — clamp both ends so nodes stay node-sized.
             if (zoomInitRef.current) return;
             zoomInitRef.current = true;
             fgRef.current?.zoomToFit?.(0, 30);
+            const k = fgRef.current?.zoom?.();
+            if (typeof k === "number") {
+              if (k > 1.75) fgRef.current?.zoom?.(1.75, 0);
+              else if (k < 0.5) fgRef.current?.zoom?.(0.5, 0);
+            }
           }}
         />
       </div>

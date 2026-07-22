@@ -19,7 +19,11 @@ import {
 import { Separator } from "./separator.js";
 import { cn } from "../../lib/utils.js";
 
-export type DataTableTokenFilterColumnType = "text" | "option" | "boolean";
+export type DataTableTokenFilterColumnType =
+  | "text"
+  | "number"
+  | "option"
+  | "boolean";
 
 export type DataTableTokenFilterOperator =
   | "contains"
@@ -27,7 +31,11 @@ export type DataTableTokenFilterOperator =
   | "is"
   | "is_not"
   | "is_any_of"
-  | "is_none_of";
+  | "is_none_of"
+  | "greater_than"
+  | "greater_or_equal"
+  | "less_than"
+  | "less_or_equal";
 
 export interface DataTableTokenFilterValue {
   operator: DataTableTokenFilterOperator;
@@ -58,6 +66,8 @@ export interface DataTableTokenFilterColumn<
    * profile) rather than a set.
    */
   singleSelect?: boolean;
+  /** Restrict the operator choices for this column (subset of the type's). */
+  operators?: DataTableTokenFilterOperator[];
   loading?: boolean;
   loadingMessage?: string;
   emptyMessage?: string;
@@ -84,6 +94,10 @@ const operatorLabels = {
   is_not: "is not",
   is_any_of: "is any of",
   is_none_of: "is none of",
+  greater_than: ">",
+  greater_or_equal: "\u2265",
+  less_than: "<",
+  less_or_equal: "\u2264",
 } satisfies Record<DataTableTokenFilterOperator, string>;
 
 const booleanOptions: DataTableTokenFilterOption[] = [
@@ -93,6 +107,11 @@ const booleanOptions: DataTableTokenFilterOption[] = [
 
 export const dataTableTokenFilterFns = {
   text: ((row, columnId, filterValue) =>
+    matchesDataTableTokenFilter(
+      row.getValue(columnId),
+      filterValue,
+    )) satisfies FilterFn<any>,
+  number: ((row, columnId, filterValue) =>
     matchesDataTableTokenFilter(
       row.getValue(columnId),
       filterValue,
@@ -121,6 +140,21 @@ export function matchesDataTableTokenFilter(
     return String(rowValue ?? "")
       .toLocaleLowerCase()
       .includes(needle);
+  }
+
+  if (
+    filterValue.operator === "greater_than" ||
+    filterValue.operator === "greater_or_equal" ||
+    filterValue.operator === "less_than" ||
+    filterValue.operator === "less_or_equal"
+  ) {
+    const bound = Number(firstFilterValue(filterValue.value));
+    const actual = Number(rowValue);
+    if (!Number.isFinite(bound) || !Number.isFinite(actual)) return true;
+    if (filterValue.operator === "greater_than") return actual > bound;
+    if (filterValue.operator === "greater_or_equal") return actual >= bound;
+    if (filterValue.operator === "less_than") return actual < bound;
+    return actual <= bound;
   }
 
   if (filterValue.operator === "does_not_contain") {
@@ -162,6 +196,10 @@ export function isDataTableTokenFilterValue(
       "is_not",
       "is_any_of",
       "is_none_of",
+      "greater_than",
+      "greater_or_equal",
+      "less_than",
+      "less_or_equal",
     ].includes(candidate.operator) &&
     isValidFilterValue(candidate.value)
   );
@@ -622,9 +660,10 @@ function FilterValueEditor({
         </div>
       ) : null}
 
-      {column.type === "text" ? (
+      {column.type === "text" || column.type === "number" ? (
         <TextValueEditor
           label={`${column.label} value`}
+          inputType={column.type === "number" ? "number" : "text"}
           value={textValue}
           onValueChange={setTextValue}
           onCancel={onCancel}
@@ -653,12 +692,14 @@ function FilterValueEditor({
 function TextValueEditor({
   label,
   value,
+  inputType = "text",
   onValueChange,
   onApply,
   onCancel,
 }: {
   label: string;
   value: string;
+  inputType?: "text" | "number";
   onValueChange: (value: string) => void;
   onApply: () => void;
   onCancel: () => void;
@@ -667,6 +708,7 @@ function TextValueEditor({
     <div className="grid gap-2">
       <Input
         aria-label={label}
+        type={inputType}
         value={value}
         autoFocus
         onChange={(event) => onValueChange(event.target.value)}
@@ -976,21 +1018,33 @@ function OptionStateMessage({ children }: { children: React.ReactNode }) {
 function operatorsFor(
   column: DataTableTokenFilterColumn,
 ): DataTableTokenFilterOperator[] {
-  if (column.type === "text") return ["contains", "does_not_contain"];
-  if (column.type === "option") {
-    return column.singleSelect ? ["is"] : ["is_any_of", "is_none_of"];
-  }
-  return ["is", "is_not"];
+  const base =
+    column.type === "text"
+      ? (["contains", "does_not_contain"] as const)
+      : column.type === "number"
+        ? ([
+            "is",
+            "is_not",
+            "greater_than",
+            "greater_or_equal",
+            "less_than",
+            "less_or_equal",
+          ] as const)
+        : column.type === "option"
+          ? column.singleSelect
+            ? (["is"] as const)
+            : (["is_any_of", "is_none_of"] as const)
+          : (["is", "is_not"] as const);
+  const allowed = column.operators;
+  return allowed
+    ? base.filter((operator) => allowed.includes(operator))
+    : [...base];
 }
 
 function defaultOperatorFor(
   column: DataTableTokenFilterColumn,
 ): DataTableTokenFilterOperator {
-  if (column.type === "text") return "contains";
-  if (column.type === "option") {
-    return column.singleSelect ? "is" : "is_any_of";
-  }
-  return "is";
+  return operatorsFor(column)[0] ?? "is";
 }
 
 function getFilterValue<TData extends RowData>(

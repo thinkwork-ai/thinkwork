@@ -78,6 +78,32 @@ export async function twinSystemEdges(
   });
 }
 
+/**
+ * Type-level overview graph (THINK-327 Explorer graph view): bounded
+ * sample of a type's instances + neighborhoods in one round trip.
+ */
+export async function twinSubgraph(
+  _parent: unknown,
+  args: {
+    tenantId?: string | null;
+    entityType: string;
+    limit?: number | null;
+    depth?: number | null;
+  },
+  ctx: GraphQLContext,
+) {
+  const scope = await resolveKnowledgeGraphSearchScope(ctx, args);
+  return executeTwinQuery({
+    tenantId: scope.tenantId,
+    request: {
+      kind: "subgraph",
+      entityType: args.entityType,
+      limit: args.limit ?? undefined,
+      depth: args.depth ?? undefined,
+    },
+  });
+}
+
 export async function twinCohort(
   _parent: unknown,
   args: {
@@ -256,6 +282,7 @@ export const twinQueries = {
   twinNeighbors,
   twinSystemEdges,
   twinCohort,
+  twinSubgraph,
   twinEntityPage,
   twinRawQuery,
   twinMaterializationSuggestions,

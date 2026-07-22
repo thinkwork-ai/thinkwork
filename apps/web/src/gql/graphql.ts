@@ -8353,6 +8353,12 @@ export type Query = {
    * Result: { ok, results, redactedCount, unfenced, truncated } | { ok: false, reason }.
    */
   twinRawQuery: Scalars['AWSJSON']['output'];
+  /**
+   * Type-level overview graph (THINK-327 Explorer graph view): a bounded
+   * sample of the type's instances (roots<=25) plus their 1..2-hop
+   * neighborhoods and labeled edge triples, one round trip.
+   */
+  twinSubgraph: Scalars['AWSJSON']['output'];
   twinSystemEdges: Scalars['AWSJSON']['output'];
   unreadThreadCount: Scalars['Int']['output'];
   user?: Maybe<User>;
@@ -9682,6 +9688,14 @@ export type QueryTwinNeighborsArgs = {
 
 export type QueryTwinRawQueryArgs = {
   query: Scalars['String']['input'];
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryTwinSubgraphArgs = {
+  depth?: InputMaybe<Scalars['Int']['input']>;
+  entityType: Scalars['String']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 

@@ -37,32 +37,6 @@ export const MemoryGraphQuery = gql`
   }
 `;
 
-export const WikiGraphQuery = gql`
-  query WikiGraph($tenantId: ID!, $userId: ID) {
-    wikiGraph(tenantId: $tenantId, userId: $userId) {
-      nodes {
-        id
-        label
-        type
-        entityType
-        entitySubtype
-        displayType
-        slug
-        strategy
-        edgeCount
-        latestThreadId
-      }
-      edges {
-        source
-        target
-        kind
-        label
-        weight
-      }
-    }
-  }
-`;
-
 export const OntologyGraphQuery = gql`
   query OntologySchemaGraph($tenantId: ID!) {
     ontologySchemaGraph(tenantId: $tenantId) {
@@ -102,6 +76,23 @@ export const OntologyGraphQuery = gql`
 export const TwinNeighborsQuery = gql`
   query TwinNeighbors($tenantId: ID, $canonicalId: ID!, $depth: Int) {
     twinNeighbors(tenantId: $tenantId, canonicalId: $canonicalId, depth: $depth)
+  }
+`;
+
+/** Type-level twin overview: `{ ok, results: [{ roots, neighbors, edges }] }`. */
+export const TwinSubgraphQuery = gql`
+  query TwinSubgraph(
+    $tenantId: ID
+    $entityType: String!
+    $limit: Int
+    $depth: Int
+  ) {
+    twinSubgraph(
+      tenantId: $tenantId
+      entityType: $entityType
+      limit: $limit
+      depth: $depth
+    )
   }
 `;
 

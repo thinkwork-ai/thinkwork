@@ -88,11 +88,6 @@ export default function AgentConfigScreen() {
               }
               colors={colors}
               disabled={!activeAgent}
-            />
-            <NavRow
-              label="Wiki"
-              onPress={() => router.push("/(tabs)?segment=wiki")}
-              colors={colors}
               isLast
             />
           </View>

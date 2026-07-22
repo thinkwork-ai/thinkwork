@@ -2,10 +2,9 @@
 //
 // Hosts:
 //   - MemoryGraph — Hindsight memory + entity graph (used by Brain).
-//   - WikiGraph — compiled wiki-page graph (used by Pages).
 //   - KnowledgeGraph — Bedrock thread graph with trust/provenance styling.
 //
-// The Memory/Wiki components were ported out of the app layer to keep graph
+// The components were ported out of the app layer to keep graph
 // rendering behavior reusable and versioned in one package.
 //
 // Performance invariants (in-place opacity mute on filter, one-shot camera
@@ -14,9 +13,6 @@
 
 export { MemoryGraph } from "./MemoryGraph.js";
 export type { MemoryGraphHandle, MemoryGraphNode } from "./MemoryGraph.js";
-
-export { WikiGraph, buildConnectedWikiGraphData } from "./WikiGraph.js";
-export type { WikiGraphHandle, WikiGraphNode } from "./WikiGraph.js";
 
 export {
   KnowledgeGraph,
@@ -87,20 +83,9 @@ export {
 } from "./palettes/memory-palette.js";
 
 export {
-  PAGE_TYPES,
-  PAGE_TYPE_LABELS,
-  PAGE_TYPE_BADGE_CLASSES,
-  PAGE_TYPE_BORDER_CLASSES,
-  PAGE_TYPE_FORCE_COLORS,
-  PAGE_TYPE_DEFAULT_FORCE_COLOR,
-  pageTypeLabel,
-} from "./palettes/wiki-palette.js";
-export type { WikiPageType } from "./palettes/wiki-palette.js";
-
-export {
   KnowledgeGraphQuery,
   MemoryGraphQuery,
   OntologyGraphQuery,
   TwinNeighborsQuery,
-  WikiGraphQuery,
+  TwinSubgraphQuery,
 } from "./queries.js";

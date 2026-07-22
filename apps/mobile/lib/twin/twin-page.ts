@@ -1,7 +1,7 @@
 /**
  * Projected twin-page section model (Company Brain U9 / KTD-8) — mobile
  * mirror of `apps/web/src/components/memory/twin-page.tsx`'s parse/format
- * logic. Presentation lives in `components/wiki/twin-sections.tsx`.
+ * logic. Presentation lives in `components/twin/twin-sections.tsx`.
  */
 
 export type TwinSectionState = "OK" | "STALE" | "TIMEOUT" | "ERROR";

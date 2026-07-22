@@ -5,10 +5,8 @@ import { describe, expect, it } from "vitest";
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
 const source = read("src/components/settings/SettingsMemoryHome.tsx");
 const memoryRoute = read("src/routes/_authed/settings.memory.tsx");
-const wikiRoute = read("src/routes/_authed/settings.wiki.tsx");
 const kbRoute = read("src/routes/_authed/settings.knowledge-bases.index.tsx");
 const kgRoute = read("src/routes/_authed/settings.knowledge-graph.tsx");
-const memoryWikiRoute = read("src/routes/_authed/settings.memory.wiki.tsx");
 const memoryKbRoute = read(
   "src/routes/_authed/settings.memory.knowledge-bases.tsx",
 );
@@ -28,7 +26,9 @@ describe("SettingsMemoryHome", () => {
   it("publishes the Knowledge tabs into the page header", () => {
     expect(source).toContain("tabs: [");
     expect(source).toContain('{ to: MEMORY, label: "Memory" }');
-    expect(source).toContain('{ to: WIKI, label: "Pages" }');
+    // THINK-327 U8: Explorer replaced the wiki "Pages" tab in its slot.
+    expect(source).toContain('{ to: EXPLORER, label: "Explorer" }');
+    expect(source).not.toContain('label: "Pages"');
     expect(source).toContain('{ to: KNOWLEDGE_BASES, label: "KBs" }');
     expect(source).toContain('{ to: ONTOLOGY, label: "Ontology" }');
     expect(source).not.toContain('{ to: ONTOLOGY, label: "Model" }');
@@ -80,7 +80,7 @@ describe("SettingsMemoryHome", () => {
     expect(source).toMatch(/<SettingsMemory\s+[\s\S]*?\bembedded\b/);
     expect(source).toMatch(/<SettingsKnowledgeBases\s+[\s\S]*?\bembedded\b/);
     expect(source).toContain("<KnowledgeModelTab");
-    expect(source).toContain("<SettingsWiki embedded");
+    expect(source).toContain("<TwinExplorer");
     // No in-body tab strip — the tabs live in the header now.
     expect(source).not.toContain("TabsList");
   });
@@ -95,7 +95,6 @@ describe("SettingsMemoryHome", () => {
 
   it("mounts the combined page across the Memory sub-routes", () => {
     expect(memoryRoute).toContain("SettingsMemoryHome");
-    expect(memoryWikiRoute).toContain("SettingsMemoryHome");
     expect(memoryKbRoute).toContain("SettingsMemoryHome");
     expect(memoryOntologyRoute).toContain("SettingsMemoryHome");
     expect(memoryKgRoute).toContain(
@@ -104,7 +103,6 @@ describe("SettingsMemoryHome", () => {
   });
 
   it("redirects retired memory routes into the matching tab", () => {
-    expect(wikiRoute).toContain('redirect({ to: "/settings/memory" })');
     expect(kbRoute).toContain(
       'redirect({ to: "/settings/memory/knowledge-bases" })',
     );
