@@ -27,8 +27,12 @@ import { COLORS } from "@/lib/theme";
 import { WikiDetailSubgraph } from "@/components/wiki/graph";
 import {
   MemoryRecordsByIdsQuery,
+  TwinEntityPageQuery,
   WikiPageSourceMemoryIdsQuery,
+  WikiPageTwinKeysQuery,
 } from "@/lib/graphql-queries";
+import { parseTwinEntityPage } from "@/lib/wiki/twin-page";
+import { TwinProjectedSections } from "@/components/wiki/twin-sections";
 import type { WikiPageType as GqlWikiPageType } from "@/lib/gql/graphql";
 import {
   resolveSourceRows,
@@ -172,6 +176,40 @@ export default function WikiPageScreen() {
     [sourceMemoryIds, sourceRecordsData?.memoryRecordsByIds],
   );
   const sourcesLoading = sourceIdsFetching || sourceRecordsFetching;
+
+  // Living page (Company Brain U9 / AE2): entity pages ask for the projected
+  // twin render; the SERVER's dual-read gate decides. `projected: false` or
+  // any fetch failure keeps the compiled sections unchanged (AE8).
+  const [{ data: twinKeysData }] = useQuery({
+    query: WikiPageTwinKeysQuery,
+    variables: {
+      tenantId: tenantId!,
+      userId,
+      type: type! as GqlWikiPageType,
+      slug: slug!,
+    },
+    pause: !tenantId || type !== "ENTITY" || !slug,
+  });
+  const twinKeys = twinKeysData?.wikiPage;
+  const canAskTwin =
+    !!tenantId && !!twinKeys?.canonicalEntityId && !!twinKeys?.entitySubtype;
+  const [{ data: twinData }] = useQuery({
+    query: TwinEntityPageQuery,
+    variables: {
+      tenantId,
+      entityType: twinKeys?.entitySubtype ?? "",
+      canonicalId: twinKeys?.canonicalEntityId ?? "",
+    },
+    pause: !canAskTwin,
+  });
+  const twinPage = useMemo(
+    () => (canAskTwin ? parseTwinEntityPage(twinData?.twinEntityPage) : null),
+    [canAskTwin, twinData],
+  );
+  const projectedSections =
+    twinPage?.projected && (twinPage.sections?.length ?? 0) > 0
+      ? twinPage.sections!
+      : null;
 
   const markdownStyles = useMemo(
     () => buildMarkdownStyles(colors, isDark),
@@ -465,22 +503,29 @@ export default function WikiPageScreen() {
               ) : null}
             </View>
 
-            {page.sections.map((section) => (
-              <View key={section.id} style={{ gap: 8 }}>
-                <Text
-                  style={{
-                    color: colors.foreground,
-                    fontSize: 17,
-                    fontWeight: "600",
-                  }}
-                >
-                  {section.heading}
-                </Text>
-                <Markdown style={markdownStyles} onLinkPress={onLinkPress}>
-                  {section.bodyMd}
-                </Markdown>
-              </View>
-            ))}
+            {projectedSections ? (
+              <TwinProjectedSections
+                sections={projectedSections}
+                colors={colors}
+              />
+            ) : (
+              page.sections.map((section) => (
+                <View key={section.id} style={{ gap: 8 }}>
+                  <Text
+                    style={{
+                      color: colors.foreground,
+                      fontSize: 17,
+                      fontWeight: "600",
+                    }}
+                  >
+                    {section.heading}
+                  </Text>
+                  <Markdown style={markdownStyles} onLinkPress={onLinkPress}>
+                    {section.bodyMd}
+                  </Markdown>
+                </View>
+              ))
+            )}
 
             {page.children && page.children.length > 0 ? (
               <View style={{ gap: 8, marginTop: 12 }}>

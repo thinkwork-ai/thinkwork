@@ -163,6 +163,13 @@ type EntityDossier {
   aliases: [String!]
   "Compiled Entity page; null when the entity has no page (degrade path)."
   wikiPage: WikiPage
+  """
+  Dual-read gate verdict (Company Brain U9 / AE8): true when this entity's
+  tenant/type has flipped to the projected twin page, so search consumers
+  can route to the living render; the compiled `wikiPage` stays the
+  fallback either way.
+  """
+  twinProjected: Boolean!
   memories: [SearchMemoryHit!]!
   threads: [SearchThreadHit!]!
   artifacts: [DossierArtifact!]!

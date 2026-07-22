@@ -20,15 +20,15 @@ const memoryOntologyRoute = read(
 );
 
 describe("SettingsMemoryHome", () => {
-  it("owns a single stable Memory breadcrumb", () => {
-    expect(source).toContain('title: "Memory"');
-    expect(source).toContain('breadcrumbs: [{ label: "Memory" }]');
+  it("owns a single stable Knowledge breadcrumb (U9 umbrella naming)", () => {
+    expect(source).toContain('title: "Knowledge"');
+    expect(source).toContain('breadcrumbs: [{ label: "Knowledge" }]');
   });
 
-  it("publishes the Memory tabs into the page header", () => {
+  it("publishes the Knowledge tabs into the page header", () => {
     expect(source).toContain("tabs: [");
     expect(source).toContain('{ to: MEMORY, label: "Memory" }');
-    expect(source).toContain('{ to: WIKI, label: "Wiki" }');
+    expect(source).toContain('{ to: WIKI, label: "Pages" }');
     expect(source).toContain('{ to: KNOWLEDGE_BASES, label: "KBs" }');
     expect(source).toContain('{ to: ONTOLOGY, label: "Ontology" }');
     expect(source).not.toContain('{ to: ONTOLOGY, label: "Model" }');

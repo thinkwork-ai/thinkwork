@@ -81,6 +81,7 @@ function matchResult(match: Record<string, unknown>): EntityDossierResult {
       summary: null,
       aliases: ["Acme"],
       wikiPage: null,
+      twinProjected: false,
       memories: [],
       threads: [],
       artifacts: [],
