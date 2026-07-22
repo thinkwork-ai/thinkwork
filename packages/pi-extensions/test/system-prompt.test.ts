@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { toExtensionFactory } from "../src/define-extension.js";
 import {
+  buildDocumentPlatesContract,
   buildTurnContextBlock,
   composeSystemPrompt,
   createSystemPromptExtension,
@@ -497,5 +498,101 @@ describe("buildTurnContextBlock (THINK-324 C2b)", () => {
     const block = buildTurnContextBlock({}, new Date("2026-05-05T12:00:00Z"));
     expect(block).toContain("Current date:");
     expect(block).not.toContain("<current_requester>");
+  });
+});
+
+describe("document plates contract injection (plates provenance 2026-07)", () => {
+  const PLATES_PAYLOAD = [
+    {
+      slug: "sales-rep-review",
+      displayName: "Sales Rep Review",
+      useFor: "A sales rep performance review.",
+      authoringInstructions: "Write for sales leadership.",
+      sections: [
+        {
+          id: "pipeline-health",
+          title: "Pipeline Health",
+          tier: "required-if-material",
+          guidance:
+            "Pull data from Twenty CRM: funnel stages with conversion rates.",
+          suggestedDirectives: [{ kind: "chart", chartType: "funnel" }],
+        },
+        { id: "summary", title: "Summary", tier: "required" },
+      ],
+      analyses: [
+        {
+          key: "pipeline-conversion",
+          op: "funnel_conversion",
+          inputHint: "ordered stages: [{ label, count }]",
+          guidance: "Current quarter only.",
+        },
+      ],
+    },
+  ];
+
+  it("includes the plates block when emit_document is available, with untruncated guidance", () => {
+    const block = buildDocumentPlatesContract(
+      { document_plates: PLATES_PAYLOAD },
+      ["emit_document", "bash"],
+    );
+    expect(block).toContain("## Document plates (report contracts)");
+    expect(block).toContain(
+      "governs BOTH your research and the final document",
+    );
+    expect(block).toContain("you MUST query that source for that section");
+    expect(block).toContain("tw:sources");
+    expect(block).toContain("### Sales Rep Review (`sales-rep-review`)");
+    expect(block).toContain("A sales rep performance review.");
+    expect(block).toContain(
+      "Operator instructions: Write for sales leadership.",
+    );
+    expect(block).toContain("Sections (a floor, NOT the full outline):");
+    expect(block).toContain(
+      '- "Pipeline Health" [required-if-material — waive via tw:waiver when the data is genuinely unavailable] — Pull data from Twenty CRM: funnel stages with conversion rates. (suggested visualization: chart funnel)',
+    );
+    expect(block).toContain('- "Summary" [required]');
+    expect(block).toContain(
+      "pipeline-conversion (funnel_conversion: ordered stages: [{ label, count }]) — Current quarter only.",
+    );
+  });
+
+  it("omits the block without emit_document or without payload plates", () => {
+    expect(
+      buildDocumentPlatesContract({ document_plates: PLATES_PAYLOAD }, [
+        "bash",
+      ]),
+    ).toBe("");
+    expect(buildDocumentPlatesContract({}, ["emit_document"])).toBe("");
+    expect(
+      buildDocumentPlatesContract({ document_plates: "junk" }, [
+        "emit_document",
+      ]),
+    ).toBe("");
+  });
+
+  it("composeSystemPrompt places the block after the Runtime Tool Policy", async () => {
+    const prompt = await composeSystemPrompt({
+      payload: { document_plates: PLATES_PAYLOAD },
+      workspaceDir: "/ws",
+      availableToolNames: ["emit_document"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "INSTRUCTIONS.md": "INSTRUCTIONS BODY" }),
+    });
+    expect(prompt).toContain("## Document plates (report contracts)");
+    expect(prompt.indexOf("## Runtime Tool Policy")).toBeLessThan(
+      prompt.indexOf("## Document plates (report contracts)"),
+    );
+    expect(
+      prompt.indexOf("## Document plates (report contracts)"),
+    ).toBeLessThan(prompt.indexOf("INSTRUCTIONS BODY"));
+
+    const withoutTool = await composeSystemPrompt({
+      payload: { document_plates: PLATES_PAYLOAD },
+      workspaceDir: "/ws",
+      availableToolNames: ["bash"],
+      now: FIXED_NOW,
+      fileReader: readerFor({ "INSTRUCTIONS.md": "INSTRUCTIONS BODY" }),
+    });
+    expect(withoutTool).not.toContain("## Document plates (report contracts)");
   });
 });

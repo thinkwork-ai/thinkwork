@@ -5,6 +5,11 @@ import {
   threadJsonRenderPrimitiveComponentNames,
 } from "@thinkwork/thread-json-render";
 
+import {
+  normalizeDocumentPlates,
+  type DocumentPlateSummary,
+} from "./document-plates.js";
+
 // Per-domain-component usage lines for the Generated Thread UI policy. The
 // catalog's zod prop schemas are strict, so the model MUST see each
 // component's description + a valid example — names alone caused live
@@ -27,6 +32,9 @@ export interface PiInvocationPayload {
   current_user_name?: unknown;
   eval_mode?: unknown;
   agent_profiles?: unknown;
+  /** Tenant plate summaries (KTD4 dispatch field) — the turn-start plate
+   * contract block (plates provenance 2026-07) reads them here. */
+  document_plates?: unknown;
 }
 
 // System-prompt composition order. LLM attention is strongest at the start
@@ -229,6 +237,75 @@ function buildRuntimeToolPolicy(
   ].join("\n");
 }
 
+/**
+ * Turn-start plate-contract injection (plates provenance 2026-07): the plate
+ * contract used to surface only in the emit_document tool description, so
+ * section guidance naming a required data source ("Pull data from Twenty
+ * CRM") was invisible during the agent's RESEARCH phase — the model gathered
+ * data from whatever source was handy, then authored the document. This block
+ * puts the full contract (untruncated operator guidance, same fidelity as the
+ * tool surface) into the system prompt so it governs research, not just
+ * emission. Gated on emit_document being available AND real payload plates —
+ * no fallback surface here (the tool description already covers the core
+ * four, which carry no operator guidance).
+ */
+export function buildDocumentPlatesContract(
+  payload: PiInvocationPayload,
+  toolNames: readonly string[] | undefined,
+): string {
+  if (!new Set(toolNames ?? []).has("emit_document")) return "";
+  let plates: DocumentPlateSummary[] | null;
+  try {
+    plates = normalizeDocumentPlates(payload.document_plates);
+  } catch {
+    plates = null;
+  }
+  if (!plates || plates.length === 0) return "";
+
+  const plateBlocks = plates.map((plate) => {
+    const lines: string[] = [
+      `### ${plate.displayName} (\`${plate.slug}\`)${plate.useFor ? ` — ${plate.useFor}` : ""}`,
+    ];
+    if (plate.authoringInstructions) {
+      lines.push(`Operator instructions: ${plate.authoringInstructions}`);
+    }
+    if (plate.sections?.length) {
+      lines.push("Sections (a floor, NOT the full outline):");
+      for (const section of plate.sections) {
+        const waiveNote =
+          section.tier === "required-if-material"
+            ? "required-if-material — waive via tw:waiver when the data is genuinely unavailable"
+            : "required";
+        const suggested = (section.suggestedDirectives ?? [])
+          .map((d) => (d.chartType ? `${d.kind} ${d.chartType}` : d.kind))
+          .join(", ");
+        lines.push(
+          `- "${section.title}" [${waiveNote}]${section.guidance ? ` — ${section.guidance}` : ""}${suggested ? ` (suggested visualization: ${suggested})` : ""}`,
+        );
+      }
+    }
+    if (plate.analyses?.length) {
+      lines.push(
+        `Declared analyses (author \`\`\`tw:analysis blocks with raw inputs; the server computes): ${plate.analyses
+          .map(
+            (a) =>
+              `${a.key} (${a.op}${a.inputHint ? `: ${a.inputHint}` : ""})${a.guidance ? ` — ${a.guidance}` : ""}`,
+          )
+          .join("; ")}`,
+      );
+    }
+    return lines.join("\n");
+  });
+
+  return [
+    "## Document plates (report contracts)",
+    "",
+    "When a request asks for one of these document genres, the plate contract below governs BOTH your research and the final document. BEFORE drafting: gather data per each section's guidance. If a section's guidance names a data source or connector (e.g. \"Pull data from Twenty CRM\"), you MUST query that source for that section — do not substitute another source. Every data-backed section must cite its sources in a tw:sources fence (see the emit_document tool); cited tools are verified against the tools you actually invoked.",
+    "",
+    ...plateBlocks,
+  ].join("\n");
+}
+
 function buildAgentProfileRoutingPolicy(
   payload: PiInvocationPayload,
   toolNames: readonly string[] | undefined,
@@ -354,6 +431,15 @@ export async function composeSystemPromptFromFiles(
   const requesterProfilePolicy = buildRequesterProfilePolicy(includeUserMd);
   if (requesterProfilePolicy) parts.push(requesterProfilePolicy);
   parts.push(buildRuntimeToolPolicy(args.availableToolNames));
+  // Policy-adjacent: plate contracts ride directly after the runtime tool
+  // policy so genre-shaped requests plan their research against the contract
+  // (plates provenance 2026-07). Empty when emit_document is unavailable or
+  // the payload carries no plates.
+  const documentPlatesContract = buildDocumentPlatesContract(
+    args.payload,
+    args.availableToolNames,
+  );
+  if (documentPlatesContract) parts.push(documentPlatesContract);
   const agentProfilePolicy = buildAgentProfileRoutingPolicy(
     args.payload,
     args.availableToolNames,

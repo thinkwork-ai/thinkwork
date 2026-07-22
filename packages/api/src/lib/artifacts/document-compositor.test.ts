@@ -1252,3 +1252,204 @@ describe("internal-link policy (THINK-272 U3)", () => {
     expect(a.renderHtml).toBe(b.renderHtml);
   });
 });
+
+describe("tw:sources provenance (plates provenance 2026-07)", () => {
+  const MANIFEST_PLATE: CompositorPlate = {
+    slug: "rep-check",
+    eyebrow: "REP CHECK",
+    tokensLight: {},
+    tokensDark: {},
+    allowedDirectives: ["stats"],
+    sections: [
+      {
+        id: "summary",
+        title: "Summary",
+        tier: "required",
+        guidance: "Headline outcome.",
+      },
+      {
+        id: "pipeline-health",
+        title: "Pipeline Health",
+        tier: "required-if-material",
+        guidance: "Pull data from Twenty CRM.",
+      },
+      {
+        id: "extras",
+        title: "Extras",
+        tier: "suggested",
+        guidance: "Anything else.",
+      },
+    ],
+  };
+  const CUSTOMIZED_PLATE: CompositorPlate = {
+    ...MANIFEST_PLATE,
+    customized: true,
+    origin: "platform",
+  };
+
+  const SOURCED_DOC = `## Summary
+
+Attainment held at 82%.
+
+\`\`\`tw:sources
+section: summary
+- tool: twenty--crm.search_records — attainment records (12 rows)
+\`\`\`
+
+## Pipeline Health
+
+Funnel narrative.
+
+\`\`\`tw:sources
+section: pipeline-health
+- none: narrative synthesis of the summary above
+\`\`\`
+`;
+
+  it("renders the sources card in place and ships the sources CSS only when a fence exists", () => {
+    const withSources = compileOk(SOURCED_DOC, { plate: MANIFEST_PLATE });
+    expect(withSources.renderHtml).toContain('class="card section-sources"');
+    expect(withSources.renderHtml).toContain(".card.section-sources{");
+    expect(withSources.renderHtml).toContain(
+      "<code>twenty--crm.search_records</code>",
+    );
+
+    const withoutSources = compileOk(
+      "## Summary\n\nText.\n\n## Pipeline Health\n\nText.\n",
+      { plate: MANIFEST_PLATE },
+    );
+    expect(withoutSources.renderHtml).not.toContain(".card.section-sources{");
+  });
+
+  it("tw:sources is structural: it compiles even when allowedDirectives excludes it", () => {
+    // MANIFEST_PLATE allows only tw:stats; the fence must still route.
+    const result = compileOk(SOURCED_DOC, { plate: MANIFEST_PLATE });
+    expect(result.renderHtml).toContain("section-sources");
+  });
+
+  it("section facts carry the claimed sources (conformance propagation)", () => {
+    const result = compileOk(SOURCED_DOC, { plate: MANIFEST_PLATE });
+    const summary = result.sectionFacts!.sections.find(
+      (s) => s.id === "summary",
+    )!;
+    expect(summary.sources).toEqual([
+      {
+        kind: "tool",
+        tool: "twenty--crm.search_records",
+        detail: "attainment records (12 rows)",
+      },
+    ]);
+    const pipeline = result.sectionFacts!.sections.find(
+      (s) => s.id === "pipeline-health",
+    )!;
+    expect(pipeline.sources).toEqual([
+      { kind: "none", detail: "narrative synthesis of the summary above" },
+    ]);
+    const extras = result.sectionFacts!.sections.find(
+      (s) => s.id === "extras",
+    )!;
+    expect(extras.sources).toBeUndefined();
+  });
+
+  it("uncustomized plates never require sources (golden-parity posture)", () => {
+    const result = compileDocument({
+      plate: MANIFEST_PLATE,
+      title: "T",
+      abstract: "",
+      markdownBody: "## Summary\n\nText.\n\n## Pipeline Health\n\nText.\n",
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("customized plates reject present required sections without a tw:sources fence (SECTION_MISSING_SOURCES)", () => {
+    const result = compileDocument({
+      plate: CUSTOMIZED_PLATE,
+      title: "T",
+      abstract: "",
+      markdownBody: "## Summary\n\nText.\n\n## Pipeline Health\n\nText.\n",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      const codes = result.diagnostics.map((d) => d.code);
+      expect(codes).toEqual([
+        "SECTION_MISSING_SOURCES",
+        "SECTION_MISSING_SOURCES",
+      ]);
+      expect(result.diagnostics[0].location).toBe("section:summary");
+      expect(result.diagnostics[0].message).toContain('"Summary"');
+      expect(result.diagnostics[0].message).toContain("```tw:sources");
+      expect(result.diagnostics[0].message).toContain("section: summary");
+    }
+  });
+
+  it("tenant-origin plates enforce sources too", () => {
+    const result = compileDocument({
+      plate: { ...MANIFEST_PLATE, origin: "tenant" },
+      title: "T",
+      abstract: "",
+      markdownBody: "## Summary\n\nText.\n\n## Pipeline Health\n\nText.\n",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(
+        result.diagnostics.every((d) => d.code === "SECTION_MISSING_SOURCES"),
+      ).toBe(true);
+    }
+  });
+
+  it("customized enforcement: waived sections need no sources, suggested-tier never checked, sourced doc passes", () => {
+    const waived = compileDocument({
+      plate: CUSTOMIZED_PLATE,
+      title: "T",
+      abstract: "",
+      markdownBody: `## Summary
+
+Text.
+
+\`\`\`tw:sources
+section: summary
+- tool: some_tool — a query (3 rows)
+\`\`\`
+
+\`\`\`tw:waiver
+section: pipeline-health
+reason: No pipeline data connected.
+\`\`\`
+
+## Extras
+
+Suggested-tier body without sources.
+`,
+    });
+    expect(waived.ok).toBe(true);
+
+    const sourced = compileDocument({
+      plate: CUSTOMIZED_PLATE,
+      title: "T",
+      abstract: "",
+      markdownBody: SOURCED_DOC,
+    });
+    expect(sourced.ok).toBe(true);
+  });
+
+  it("an invalid tw:sources fence rejects with DIRECTIVE_INVALID", () => {
+    const result = compileDocument({
+      plate: MANIFEST_PLATE,
+      title: "T",
+      abstract: "",
+      markdownBody:
+        "## Summary\n\nText.\n\n```tw:sources\nsection: not-in-manifest\n- tool: x — y\n```\n\n## Pipeline Health\n\nText.\n",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics[0].code).toBe("DIRECTIVE_INVALID");
+      expect(result.diagnostics[0].location).toBe("tw:sources");
+    }
+  });
+
+  it("determinism: sourced compiles are byte-identical", () => {
+    const a = compileOk(SOURCED_DOC, { plate: MANIFEST_PLATE }).renderHtml;
+    const b = compileOk(SOURCED_DOC, { plate: MANIFEST_PLATE }).renderHtml;
+    expect(a).toBe(b);
+  });
+});

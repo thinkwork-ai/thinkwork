@@ -31,12 +31,22 @@ import { parse as parseYaml } from "yaml";
 import {
   renderAnalysisDirective,
   renderDocumentDirective,
+  renderSourcesDirective,
   renderWaiverDirective,
+  type CollectedSectionSources,
   type CollectedWaiver,
+  type SectionSourceEntry,
 } from "./document-directives.js";
-import { renderDocumentShell } from "./document-templates.js";
+import {
+  renderDocumentShell,
+  SECTION_SOURCES_CSS,
+} from "./document-templates.js";
 
-export type { CollectedWaiver } from "./document-directives.js";
+export type {
+  CollectedSectionSources,
+  CollectedWaiver,
+  SectionSourceEntry,
+} from "./document-directives.js";
 
 /** Mirrors the DocSpector diagnostic shape so rejects surface in-turn (R2). */
 export interface CompositorDiagnostic {
@@ -58,6 +68,11 @@ export interface SectionFact {
   /** Markdown source chars attributed to this section (0 when not present). */
   bodyChars: number;
   suggestedDirectives: { kind: string; chartType?: string; used: boolean }[];
+  /**
+   * Data-source provenance claimed via tw:sources fences naming this section
+   * (plates provenance 2026-07). Absent when the document declared none.
+   */
+  sources?: SectionSourceEntry[];
 }
 
 /** Declared-analysis facts: computed = rendered via tw:analysis (THINK-189). */
@@ -139,6 +154,16 @@ export interface CompositorPlate {
   sections?: readonly CompositorPlateSection[];
   /** Content contract: declared analyses (THINK-183; absent = none). */
   analyses?: readonly CompositorPlateAnalysis[];
+  /**
+   * Provenance enforcement gate (plates provenance 2026-07): true when the
+   * plate carries a tenant delta layer (ResolvedPlate.customized flows here
+   * structurally). Together with `origin: "tenant"` it turns on the
+   * SECTION_MISSING_SOURCES check; the four uncustomized core platform
+   * plates stay byte-identical (golden parity).
+   */
+  customized?: boolean;
+  /** "platform" or "tenant" — tenant-created plates also enforce sources. */
+  origin?: "platform" | "tenant";
 }
 
 /** Fence info-string prefix that routes a fenced block to the engine. */
@@ -367,6 +392,8 @@ interface CompileState {
   headingIdByToken: Map<Tokens.Heading, string>;
   /** Waivers collected from tw:waiver blocks (THINK-183 KTD3). */
   waivers: CollectedWaiver[];
+  /** Provenance claims collected from tw:sources blocks. */
+  sources: CollectedSectionSources[];
 }
 
 function buildMarked(state: CompileState): Marked {
@@ -561,6 +588,7 @@ function collectSectionFacts(input: {
   headingIds: string[];
   headingIdByToken: Map<Tokens.Heading, string>;
   waivers: CollectedWaiver[];
+  sources: CollectedSectionSources[];
 }): CompositorSectionFacts {
   const manifest = input.plate.sections ?? [];
   const manifestIds = new Set(manifest.map((s) => s.id));
@@ -615,6 +643,14 @@ function collectSectionFacts(input: {
 
   const presentIds = new Set(input.headingIds);
   const waivedIds = new Set(input.waivers.map((w) => w.sectionId));
+  // tw:sources attribution rides the fence's own `section:` field (not fence
+  // placement); multiple fences for one section merge in declaration order.
+  const sourcesBySection = new Map<string, SectionSourceEntry[]>();
+  for (const claim of input.sources) {
+    const entries = sourcesBySection.get(claim.sectionId) ?? [];
+    entries.push(...claim.entries);
+    sourcesBySection.set(claim.sectionId, entries);
+  }
   const sections: SectionFact[] = manifest.map((section) => {
     const status = presentIds.has(section.id)
       ? ("present" as const)
@@ -622,6 +658,7 @@ function collectSectionFacts(input: {
         ? ("waived" as const)
         : ("missing" as const);
     const used = directivesBySection.get(section.id);
+    const sources = sourcesBySection.get(section.id);
     return {
       id: section.id,
       tier: section.tier,
@@ -632,6 +669,7 @@ function collectSectionFacts(input: {
         ...(d.chartType !== undefined ? { chartType: d.chartType } : {}),
         used: used?.has(d.kind) ?? false,
       })),
+      ...(sources !== undefined ? { sources } : {}),
     };
   });
 
@@ -729,6 +767,15 @@ export function compileDocument(
       state.waivers.push(result.waiver);
       return { ok: true, html: result.html, containsSvg: false };
     }
+    if (directiveInput.kind === "sources") {
+      const result = renderSourcesDirective({
+        body: directiveInput.body,
+        sections: input.plate.sections,
+      });
+      if (!result.ok) return result;
+      state.sources.push(result.sources);
+      return { ok: true, html: result.html, containsSvg: false };
+    }
     return gated(directiveInput);
   };
 
@@ -745,6 +792,7 @@ export function compileDocument(
     headingIds: [],
     headingIdByToken: new Map(),
     waivers: [],
+    sources: [],
   };
 
   const marked = buildMarked(state);
@@ -789,6 +837,30 @@ export function compileDocument(
         message: `This plate requires a "${section.title}" section and the document has neither the heading nor a waiver. Author a "## ${section.title}" heading (its id compiles to "${section.id}"). Guidance: ${section.guidance}${suggested ? ` Suggested directives: ${suggested}.` : ""} ${waiverPath}`,
         location: `section:${section.id}`,
       });
+    }
+
+    // Provenance enforcement (plates provenance 2026-07): CUSTOMIZED plates
+    // only — a tenant layer (delta row or tenant-created plate) turns the
+    // check on; the uncustomized core plates compile exactly as before
+    // (golden parity). Every present required / required-if-material section
+    // must carry a tw:sources fence; waived sections don't, suggested-tier is
+    // never checked. Diagnostics ride the same COMPILE_REJECTED self-repair
+    // path as the section-contract check above.
+    const sourcesEnforced =
+      input.plate.customized === true || input.plate.origin === "tenant";
+    if (sourcesEnforced) {
+      const sourcedIds = new Set(state.sources.map((s) => s.sectionId));
+      const presentIds = new Set(state.headingIds);
+      for (const section of manifest) {
+        if (section.tier === "suggested") continue;
+        if (!presentIds.has(section.id)) continue; // missing/waived: no check.
+        if (sourcedIds.has(section.id)) continue;
+        state.errors.push({
+          code: "SECTION_MISSING_SOURCES",
+          message: `The "${section.title}" section (id "${section.id}") has no data-source provenance. Every required section must declare where its data came from: add a tw:sources fence inside the section listing the exact tools + queries you used, e.g.:\n\`\`\`tw:sources\nsection: ${section.id}\n- tool: <tool-name-you-called> — <query/filter + row count>\n\`\`\`\nFor a narrative-only section use \`- none: <reason>\` instead of a tool line. Only cite tools you actually invoked this turn.`,
+          location: `section:${section.id}`,
+        });
+      }
     }
   }
 
@@ -843,6 +915,10 @@ export function compileDocument(
     footerHtml,
     tokensLight: input.plate.tokensLight,
     tokensDark: input.plate.tokensDark,
+    // Sources-card styling ships only when a tw:sources fence rendered —
+    // a document without one compiles byte-identical to before (golden
+    // parity for the uncustomized core plates).
+    ...(state.sources.length > 0 ? { extraCss: SECTION_SOURCES_CSS } : {}),
   });
 
   // Structural conformance facts (THINK-189): manifest plates only —
@@ -855,6 +931,7 @@ export function compileDocument(
           headingIds: state.headingIds,
           headingIdByToken: state.headingIdByToken,
           waivers: state.waivers,
+          sources: state.sources,
         })
       : undefined;
 

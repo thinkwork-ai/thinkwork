@@ -1106,6 +1106,10 @@ export async function handleDocumentEmission(
                 ?.title ?? fact.id,
             tier: fact.tier,
             status: fact.status,
+            // Per-section provenance from tw:sources fences (plates
+            // provenance 2026-07): surfaced to the model's success details
+            // and to the thread card so readers can trace every number.
+            ...(fact.sources !== undefined ? { sources: fact.sources } : {}),
           })),
         }
       : {}),
@@ -1458,6 +1462,7 @@ export async function handleDocumentEmission(
     abstract: doc.abstract,
     status,
     headVersion,
+    sections: "sections" in plateOutcome ? plateOutcome.sections : undefined,
   });
   await deps
     .appendCardEvent({
@@ -1491,6 +1496,19 @@ export async function handleDocumentEmission(
   };
 }
 
+/** Per-section outcome + provenance carried on the thread card. */
+export interface DocumentCardSection {
+  id: string;
+  title: string;
+  tier: "required" | "required-if-material" | "suggested";
+  status: "present" | "missing" | "waived";
+  sources?: Array<{ kind: "tool" | "none"; tool?: string; detail: string }>;
+}
+
+/** Ceiling on each source detail carried by the card — the card is a compact
+ * pointer; the full detail lives in the render and the conformance row. */
+const CARD_SOURCE_DETAIL_MAX = 120;
+
 /** Build the ≤10KB thread card; truncates the abstract to fit (R4). */
 export function buildDocumentCard(input: {
   artifactId: string;
@@ -1505,7 +1523,24 @@ export function buildDocumentCard(input: {
   abstract: string;
   status: "draft" | "final";
   headVersion: number;
+  /** Section outcomes + tw:sources provenance (manifest plates only). */
+  sections?: DocumentCardSection[];
 }): Record<string, unknown> {
+  const sections = (input.sections ?? []).map((section) => ({
+    id: section.id,
+    title: boundedCanvasText(section.title, 160),
+    tier: section.tier,
+    status: section.status,
+    ...(section.sources !== undefined
+      ? {
+          sources: section.sources.map((source) => ({
+            kind: source.kind,
+            ...(source.tool !== undefined ? { tool: source.tool } : {}),
+            detail: boundedCanvasText(source.detail, CARD_SOURCE_DETAIL_MAX),
+          })),
+        }
+      : {}),
+  }));
   const base = {
     artifactId: input.artifactId,
     ...(input.documentId ? { documentId: input.documentId } : {}),
@@ -1513,9 +1548,10 @@ export function buildDocumentCard(input: {
     genre: input.genre,
     status: input.status,
     headVersion: input.headVersion,
+    ...(sections.length > 0 ? { sections } : {}),
   };
   let abstract = input.abstract.trim();
-  let card = { ...base, abstract };
+  let card: Record<string, unknown> = { ...base, abstract };
   // JSON size includes the envelope; shrink the abstract until it fits.
   while (
     Buffer.byteLength(JSON.stringify(card), "utf8") > DOCUMENT_CARD_MAX_BYTES &&
@@ -1523,6 +1559,22 @@ export function buildDocumentCard(input: {
   ) {
     abstract = abstract.slice(0, Math.floor(abstract.length / 2)).trimEnd();
     card = { ...base, abstract: abstract ? `${abstract}…` : "" };
+  }
+  // Degenerate ceiling ladder: sources first, then the whole sections array —
+  // the card must always fit (R4); the render keeps the full provenance.
+  if (
+    Buffer.byteLength(JSON.stringify(card), "utf8") > DOCUMENT_CARD_MAX_BYTES
+  ) {
+    card = {
+      ...card,
+      sections: sections.map(({ sources: _sources, ...rest }) => rest),
+    };
+  }
+  if (
+    Buffer.byteLength(JSON.stringify(card), "utf8") > DOCUMENT_CARD_MAX_BYTES
+  ) {
+    const { sections: _dropped, ...withoutSections } = card;
+    card = withoutSections;
   }
   return card;
 }

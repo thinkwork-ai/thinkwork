@@ -9,6 +9,22 @@
 
 import { ArtifactCard } from "@/components/artifacts/ArtifactCard";
 
+/** One tw:sources provenance entry carried on the document card. */
+export interface DocumentCardSourceEntry {
+  kind: "tool" | "none";
+  tool?: string;
+  detail?: string;
+}
+
+/** Per-section contract outcome + provenance from the emission card payload. */
+export interface DocumentCardSection {
+  id: string;
+  title: string;
+  tier?: string;
+  status?: string;
+  sources?: DocumentCardSourceEntry[];
+}
+
 export interface DocumentCardData {
   artifactId: string;
   /** Logical document id — self-heal key when artifactId no longer resolves. */
@@ -20,6 +36,16 @@ export interface DocumentCardData {
   headVersion?: number;
   /** Emission time of the folded document.card event — the card's freshness. */
   updatedAt?: string;
+  /** Section outcomes + tw:sources provenance (manifest plates only). */
+  sections?: DocumentCardSection[];
+}
+
+/** "tool-a, tool-b" / "narrative" summary for one section's sources line. */
+function sourcesSummary(sources: DocumentCardSourceEntry[]): string {
+  const parts = sources.map((source) =>
+    source.kind === "none" ? "narrative" : (source.tool ?? "tool"),
+  );
+  return [...new Set(parts)].join(", ");
 }
 
 export function DocumentCard({
@@ -34,17 +60,44 @@ export function DocumentCard({
     card.status === "final"
       ? `Final${card.headVersion ? ` · v${card.headVersion}` : ""}`
       : "Draft";
+  const sourcedSections = (card.sections ?? []).filter(
+    (section) => (section.sources?.length ?? 0) > 0,
+  );
   return (
-    <ArtifactCard
-      artifact={{
-        id: card.artifactId,
-        title: card.title,
-        updatedAt: card.updatedAt ?? null,
-      }}
-      badge={card.genre ?? null}
-      statusLabel={statusLabel}
-      testId="document-card"
-      onOpen={onOpen}
-    />
+    <div>
+      <ArtifactCard
+        artifact={{
+          id: card.artifactId,
+          title: card.title,
+          updatedAt: card.updatedAt ?? null,
+        }}
+        badge={card.genre ?? null}
+        statusLabel={statusLabel}
+        testId="document-card"
+        onOpen={onOpen}
+      />
+      {sourcedSections.length > 0 ? (
+        <ul
+          className="not-prose mt-0.5 space-y-0.5 pl-3"
+          data-testid="document-card-sources"
+        >
+          {sourcedSections.map((section) => (
+            <li
+              key={section.id}
+              className="truncate text-[10px] text-muted-foreground"
+              title={(section.sources ?? [])
+                .map((source) =>
+                  source.kind === "none"
+                    ? `narrative — ${source.detail ?? ""}`
+                    : `${source.tool ?? "tool"}${source.detail ? ` — ${source.detail}` : ""}`,
+                )
+                .join("\n")}
+            >
+              {section.title} · Sources: {sourcesSummary(section.sources ?? [])}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }

@@ -232,4 +232,59 @@ describe("DocumentCard (delegates to ArtifactCard)", () => {
     // No genre → no badge at all (not an "Artifact" fallback badge).
     expect(screen.queryByText("Artifact")).toBeNull();
   });
+
+  it("renders a compact per-section sources line when the card carries tw:sources provenance", () => {
+    render(
+      <DocumentCard
+        card={{
+          artifactId: "doc-3",
+          title: "Rep review",
+          genre: "sales-rep-review",
+          status: "draft",
+          sections: [
+            {
+              id: "pipeline-health",
+              title: "Pipeline Health",
+              status: "present",
+              sources: [
+                {
+                  kind: "tool",
+                  tool: "twenty--crm.search_records",
+                  detail: "opportunities for the rep (72 records)",
+                },
+                { kind: "none", detail: "narrative synthesis" },
+              ],
+            },
+            // No sources → no line for this section.
+            { id: "summary", title: "Summary", status: "present" },
+          ],
+        }}
+      />,
+    );
+
+    const sources = screen.getByTestId("document-card-sources");
+    expect(sources.textContent).toContain(
+      "Pipeline Health · Sources: twenty--crm.search_records, narrative",
+    );
+    expect(sources.textContent).not.toContain("Summary");
+    // Full details ride the tooltip, not the visible line.
+    const line = sources.querySelector("li");
+    expect(line?.getAttribute("title")).toContain(
+      "opportunities for the rep (72 records)",
+    );
+  });
+
+  it("renders no sources block when sections carry no provenance", () => {
+    render(
+      <DocumentCard
+        card={{
+          artifactId: "doc-4",
+          title: "Plain doc",
+          status: "draft",
+          sections: [{ id: "summary", title: "Summary", status: "present" }],
+        }}
+      />,
+    );
+    expect(screen.queryByTestId("document-card-sources")).toBeNull();
+  });
 });

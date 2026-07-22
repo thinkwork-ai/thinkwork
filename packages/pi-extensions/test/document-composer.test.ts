@@ -6,6 +6,7 @@ import {
   EMIT_DOCUMENT_TOOL_NAME,
   EMIT_DOCUMENT_DIGEST_MAX_BYTES,
 } from "../src/document-composer.js";
+import { parseSourcesClaims, toolNamesMatch } from "../src/document-plates.js";
 import { collectExtensionToolNames } from "../src/define-extension.js";
 
 const CONFIG = {
@@ -22,10 +23,50 @@ interface RegisteredTool {
   execute: (
     id: string,
     params: Record<string, unknown>,
+    signal?: undefined,
+    onUpdate?: undefined,
+    ctx?: unknown,
   ) => Promise<{
     content: Array<{ type: string; text: string }>;
     details?: Record<string, unknown>;
   }>;
+}
+
+/** Fake ExtensionContext whose session branch invoked the given tools. */
+function ctxWithInvokedTools(toolNames: string[]): unknown {
+  return {
+    sessionManager: {
+      getBranch: () =>
+        toolNames.flatMap((name, i) => [
+          {
+            type: "message",
+            id: `a${i}`,
+            parentId: null,
+            timestamp: "t",
+            message: {
+              role: "assistant",
+              content: [
+                { type: "text", text: "calling" },
+                { type: "toolCall", id: `call-${i}`, name, arguments: {} },
+              ],
+            },
+          },
+          {
+            type: "message",
+            id: `r${i}`,
+            parentId: `a${i}`,
+            timestamp: "t",
+            message: {
+              role: "toolResult",
+              toolCallId: `call-${i}`,
+              toolName: name,
+              content: [],
+              isError: false,
+            },
+          },
+        ]),
+    },
+  };
 }
 
 function register(
@@ -449,5 +490,399 @@ describe("plate content contracts on the tool surface (THINK-183 U6)", () => {
     });
     const tool = tools[0] as unknown as { description: string };
     expect(tool.description).not.toContain("tw:waiver");
+  });
+});
+
+describe("tw:sources ledger cross-check (plates provenance 2026-07)", () => {
+  /** Minimal fake ExtensionContext whose session invoked the given tools. */
+  function ctxWithInvoked(toolNames: string[]): never {
+    const entries = [
+      ...toolNames.map((name, i) => ({
+        type: "message",
+        id: `a-${i}`,
+        parentId: null,
+        timestamp: "t",
+        message: {
+          role: "assistant",
+          content: [
+            { type: "text", text: "calling" },
+            { type: "toolCall", id: `call-${i}`, name, arguments: {} },
+          ],
+        },
+      })),
+      ...toolNames.map((name, i) => ({
+        type: "message",
+        id: `r-${i}`,
+        parentId: `a-${i}`,
+        timestamp: "t",
+        message: {
+          role: "toolResult",
+          toolCallId: `call-${i}`,
+          toolName: name,
+          content: [],
+          isError: false,
+        },
+      })),
+    ];
+    return {
+      sessionManager: { getBranch: () => entries },
+    } as never;
+  }
+
+  const SOURCED_MARKDOWN = `## Summary
+
+Numbers up 18%.
+
+\`\`\`tw:sources
+section: summary
+- tool: twenty--crm.search_records — opportunities for the rep (72 records)
+\`\`\`
+`;
+
+  const PARAMS = {
+    ...VALID_PARAMS,
+    digest_markdown: SOURCED_MARKDOWN,
+  };
+
+  const OK_BODY = {
+    ok: true,
+    artifactId: "artifact-1",
+    documentId: "doc-1",
+    status: "draft",
+    headVersion: 0,
+  };
+
+  async function execute(
+    params: Record<string, unknown>,
+    ctx: unknown,
+    fetchImpl: typeof fetch = okFetch(OK_BODY),
+  ) {
+    const { tools } = register({ documentComposerConfig: CONFIG, fetchImpl });
+    const tool = tools[0] as unknown as {
+      execute: (
+        id: string,
+        params: Record<string, unknown>,
+        signal?: unknown,
+        onUpdate?: unknown,
+        ctx?: unknown,
+      ) => Promise<{
+        content: Array<{ type: string; text: string }>;
+        details?: Record<string, unknown>;
+      }>;
+    };
+    return {
+      result: await tool.execute("call-1", params, undefined, undefined, ctx),
+      fetchImpl,
+    };
+  }
+
+  it("accepts claims that match invoked tools exactly and POSTs", async () => {
+    const { result, fetchImpl } = await execute(
+      PARAMS,
+      ctxWithInvoked(["twenty--crm.search_records"]),
+    );
+    expect(result.content[0].text).toContain("Document saved");
+    expect(
+      (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls,
+    ).toHaveLength(1);
+  });
+
+  it("accepts leniently: a namespaced MCP invocation matches the claimed suffix form", async () => {
+    const { result } = await execute(
+      PARAMS,
+      ctxWithInvoked(["mcp_twenty--crm_search_records"]),
+    );
+    expect(result.content[0].text).toContain("Document saved");
+  });
+
+  it("rejects unmatched claims with SOURCES_UNVERIFIED and does NOT POST", async () => {
+    const fetchImpl = okFetch(OK_BODY);
+    const { result } = await execute(
+      PARAMS,
+      ctxWithInvoked(["bash", "mcp_lastmile-data_query"]),
+      fetchImpl,
+    );
+    expect(result.details?.code).toBe("REJECTED");
+    const diagnostics = result.details?.diagnostics as Array<
+      Record<string, unknown>
+    >;
+    expect(diagnostics[0].code).toBe("SOURCES_UNVERIFIED");
+    expect(String(diagnostics[0].message)).toContain(
+      "twenty--crm.search_records",
+    );
+    expect(String(diagnostics[0].message)).toContain("mcp_lastmile-data_query");
+    expect(String(diagnostics[0].message)).toContain(
+      "Only cite tools you actually called",
+    );
+    expect(
+      (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls,
+    ).toHaveLength(0);
+  });
+
+  it("`- none:` entries skip verification entirely", async () => {
+    const { result } = await execute(
+      {
+        ...VALID_PARAMS,
+        digest_markdown:
+          "## Summary\n\nText.\n\n```tw:sources\nsection: summary\n- none: narrative synthesis\n```\n",
+      },
+      ctxWithInvoked([]),
+    );
+    expect(result.content[0].text).toContain("Document saved");
+  });
+
+  it("skips gracefully when ctx/sessionManager is unavailable (logs, still POSTs)", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const { result, fetchImpl } = await execute(PARAMS, undefined);
+      expect(result.content[0].text).toContain("Document saved");
+      expect(
+        (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls,
+      ).toHaveLength(1);
+      const logged = logSpy.mock.calls
+        .map((c) => String(c[0]))
+        .find((line) => line.includes("document_sources_crosscheck_skipped"));
+      expect(logged).toBeTruthy();
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("skips gracefully when the session manager throws", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const throwingCtx = {
+        sessionManager: {
+          getBranch: () => {
+            throw new Error("session exploded");
+          },
+        },
+      } as never;
+      const { result } = await execute(PARAMS, throwingCtx);
+      expect(result.content[0].text).toContain("Document saved");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("documents tw:sources on the tool surface", () => {
+    const { tools } = register({
+      documentComposerConfig: CONFIG,
+      fetchImpl: okFetch({ ok: true }),
+    });
+    const tool = tools[0] as unknown as { description: string };
+    expect(tool.description).toContain("tw:sources");
+    expect(tool.description).toContain("- none:");
+    expect(tool.description).toContain("VERIFIED against the tools");
+  });
+});
+
+describe("parseSourcesClaims + toolNamesMatch (document-plates)", () => {
+  it("extracts tool names from canonical and untyped tw:sources fences", () => {
+    const markdown = [
+      "## A",
+      "",
+      "```tw:sources",
+      "section: a",
+      "- tool: alpha_tool — q1",
+      "- none: narrative",
+      "```",
+      "",
+      "```",
+      "tw:sources",
+      "section: b",
+      "- tool: beta.tool: q2",
+      "```",
+      "",
+      "```sql",
+      "SELECT 1 -- not a sources fence",
+      "```",
+    ].join("\n");
+    expect(parseSourcesClaims(markdown)).toEqual([
+      { sectionId: "a", tools: ["alpha_tool"] },
+      { sectionId: "b", tools: ["beta.tool"] },
+    ]);
+  });
+
+  it("matches tool names leniently across namespacing, case, and separators", () => {
+    expect(toolNamesMatch("some_tool", "some_tool")).toBe(true);
+    expect(toolNamesMatch("Some-Tool", "some_tool")).toBe(true);
+    expect(
+      toolNamesMatch(
+        "twenty--crm.search_records",
+        "mcp_twenty--crm_search_records",
+      ),
+    ).toBe(true);
+    expect(
+      toolNamesMatch(
+        "mcp_twenty--crm_search_records",
+        "twenty--crm.search_records",
+      ),
+    ).toBe(true);
+    expect(toolNamesMatch("unrelated_tool", "some_tool")).toBe(false);
+    expect(toolNamesMatch("", "some_tool")).toBe(false);
+  });
+});
+
+describe("tw:sources ledger cross-check (plates provenance 2026-07)", () => {
+  const SOURCED_PARAMS = {
+    genre: "report",
+    title: "Q3 Report",
+    abstract: "Numbers are up.",
+    digest_markdown: `## Summary
+
+Numbers up 18% this quarter.
+
+\`\`\`tw:sources
+section: summary
+- tool: twenty--crm.search_records — opportunities for the rep (72 records)
+\`\`\`
+`,
+  };
+
+  it("documents tw:sources on the tool description", () => {
+    const { tools } = register({ documentComposerConfig: CONFIG });
+    const tool = tools[0] as unknown as { description: string };
+    expect(tool.description).toContain("tw:sources");
+    expect(tool.description).toContain("- none:");
+    expect(tool.description).toContain("VERIFIED against the tools");
+  });
+
+  it("accepts claims matching invoked tools (exact and namespaced forms)", async () => {
+    const fetchImpl = okFetch({
+      ok: true,
+      artifactId: "artifact-1",
+      documentId: "doc-1",
+      status: "draft",
+      headVersion: 0,
+    });
+    const { tools } = register({ documentComposerConfig: CONFIG, fetchImpl });
+    const result = await tools[0].execute(
+      "call-1",
+      SOURCED_PARAMS,
+      undefined,
+      undefined,
+      // Namespaced MCP form of the claimed tool: must still match.
+      ctxWithInvokedTools(["mcp_twenty--crm_search_records"]),
+    );
+    expect(result.content[0].text).toContain("Document saved");
+    expect(
+      (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls,
+    ).toHaveLength(1);
+  });
+
+  it("rejects unmatched claims with SOURCES_UNVERIFIED and does not POST", async () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const { tools } = register({ documentComposerConfig: CONFIG, fetchImpl });
+    const result = await tools[0].execute(
+      "call-1",
+      SOURCED_PARAMS,
+      undefined,
+      undefined,
+      ctxWithInvokedTools(["web_search", "bash"]),
+    );
+    expect(result.details?.code).toBe("REJECTED");
+    const diagnostics = result.details?.diagnostics as Array<
+      Record<string, unknown>
+    >;
+    expect(diagnostics[0].code).toBe("SOURCES_UNVERIFIED");
+    expect(String(diagnostics[0].message)).toContain(
+      "twenty--crm.search_records",
+    );
+    expect(String(diagnostics[0].message)).toContain("web_search");
+    expect(
+      (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls,
+    ).toHaveLength(0);
+  });
+
+  it("`- none:` entries need no invocation and skip verification", async () => {
+    const fetchImpl = okFetch({
+      ok: true,
+      artifactId: "artifact-1",
+      documentId: "doc-1",
+      status: "draft",
+      headVersion: 0,
+    });
+    const { tools } = register({ documentComposerConfig: CONFIG, fetchImpl });
+    const result = await tools[0].execute(
+      "call-1",
+      {
+        ...SOURCED_PARAMS,
+        digest_markdown:
+          "## Summary\n\nText.\n\n```tw:sources\nsection: summary\n- none: narrative only\n```\n",
+      },
+      undefined,
+      undefined,
+      ctxWithInvokedTools([]),
+    );
+    expect(result.content[0].text).toContain("Document saved");
+  });
+
+  it("skips the cross-check gracefully without ctx / sessionManager", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const fetchImpl = okFetch({
+        ok: true,
+        artifactId: "artifact-1",
+        documentId: "doc-1",
+        status: "draft",
+        headVersion: 0,
+      });
+      const { tools } = register({ documentComposerConfig: CONFIG, fetchImpl });
+      // No 5th argument at all — legacy hosts and unit harnesses.
+      const result = await tools[0].execute("call-1", SOURCED_PARAMS);
+      expect(result.content[0].text).toContain("Document saved");
+      const logged = logSpy.mock.calls
+        .map((c) => String(c[0]))
+        .find((line) => line.includes("document_sources_crosscheck_skipped"));
+      expect(logged).toBeTruthy();
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+});
+
+describe("parseSourcesClaims / toolNamesMatch", () => {
+  it("extracts claims from canonical and untyped fences", () => {
+    const markdown = [
+      "## A",
+      "",
+      "```tw:sources",
+      "section: a",
+      "- tool: tool_one — q1",
+      "- none: narrative",
+      "```",
+      "",
+      "```",
+      "tw:sources",
+      "section: b",
+      "- tool: tool_two: q2",
+      "```",
+      "",
+      "```sql",
+      "SELECT 1; -- not a sources fence",
+      "```",
+    ].join("\n");
+    expect(parseSourcesClaims(markdown)).toEqual([
+      { sectionId: "a", tools: ["tool_one"] },
+      { sectionId: "b", tools: ["tool_two"] },
+    ]);
+  });
+
+  it("matches leniently across MCP namespacing, but never on substrings", () => {
+    expect(toolNamesMatch("bash", "bash")).toBe(true);
+    expect(
+      toolNamesMatch(
+        "twenty--crm.search_records",
+        "mcp_twenty--crm_search_records",
+      ),
+    ).toBe(true);
+    expect(
+      toolNamesMatch("mcp_lastmile-data_query", "lastmile-data.query"),
+    ).toBe(true);
+    expect(toolNamesMatch("search_records", "web_search")).toBe(false);
+    // Mid-name fragments never match — only boundary-aligned prefix/suffix.
+    expect(toolNamesMatch("crm", "twenty_crm_search")).toBe(false);
+    expect(toolNamesMatch("made_up_tool", "bash")).toBe(false);
   });
 });
