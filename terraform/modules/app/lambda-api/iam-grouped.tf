@@ -1067,6 +1067,40 @@ locals {
         Resource = aws_sqs_queue.eval_fanout_dlq[0].arn
       },
     ] : [],
+    # Company Brain twin (plan 2026-07-21-001 U5): Neptune data access for
+    # the identity-graph-projector + twin-query handlers on the SHARED role.
+    # Lives in the ai envelope for size balance (data-plane sits ~430 chars
+    # under IAM's 6,144 cap). Grouped — not inline — so the no-terraform
+    # targeted deploy path (which applies exactly these grouped policies)
+    # self-heals the grant; the original inline resource never survived a
+    # superseded full apply. Data actions are condition-pinned to openCypher,
+    # mirroring the etl-side policies.
+    # (Two segments, not one: the data statement carries a Condition the
+    # status statement can't — mixed shapes in one conditional tuple fail
+    # Terraform's type unification.)
+    var.neptune_cluster_resource_id == "" ? [] : [
+      {
+        Sid    = "TwinNeptuneData"
+        Effect = "Allow"
+        Action = [
+          "neptune-db:ReadDataViaQuery",
+          "neptune-db:WriteDataViaQuery",
+          "neptune-db:DeleteDataViaQuery",
+        ]
+        Resource = "arn:aws:neptune-db:${var.region}:${var.account_id}:${var.neptune_cluster_resource_id}/*"
+        Condition = {
+          StringEquals = { "neptune-db:QueryLanguage" = "OpenCypher" }
+        }
+      },
+    ],
+    var.neptune_cluster_resource_id == "" ? [] : [
+      {
+        Sid      = "TwinEngineStatus"
+        Effect   = "Allow"
+        Action   = ["neptune-db:GetEngineStatus", "neptune-db:GetGraphSummary"]
+        Resource = "arn:aws:neptune-db:${var.region}:${var.account_id}:${var.neptune_cluster_resource_id}/*"
+      },
+    ],
   )
 
   api_observability_statements = concat(local.api_observability_sqs_statements, [
@@ -1313,44 +1347,3 @@ moved {
 }
 
 
-# ---------------------------------------------------------------------------
-# Company Brain U5: Neptune twin data access for the identity-graph-projector.
-#
-# Attached to the SHARED handler role (the projector runs under it), gated on
-# the cluster resource id being configured. DEVIATION from the plan's strict
-# writer/reader IAM split (KTD-9): a dedicated projector role would isolate
-# the write grant from the other shared-role handlers — deferred; recorded on
-# the arc's Linear issue. Data actions are condition-pinned to openCypher,
-# mirroring the etl-side policies.
-# ---------------------------------------------------------------------------
-
-resource "aws_iam_role_policy" "lambda_neptune_twin" {
-  count = var.neptune_cluster_resource_id == "" ? 0 : 1
-  name  = "thinkwork-${var.stage}-api-neptune-twin"
-  role  = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "TwinProjectorWrite"
-        Effect = "Allow"
-        Action = [
-          "neptune-db:ReadDataViaQuery",
-          "neptune-db:WriteDataViaQuery",
-          "neptune-db:DeleteDataViaQuery",
-        ]
-        Resource = "arn:aws:neptune-db:${var.region}:${var.account_id}:${var.neptune_cluster_resource_id}/*"
-        Condition = {
-          StringEquals = { "neptune-db:QueryLanguage" = "OpenCypher" }
-        }
-      },
-      {
-        Sid      = "TwinEngineStatus"
-        Effect   = "Allow"
-        Action   = ["neptune-db:GetEngineStatus", "neptune-db:GetGraphSummary"]
-        Resource = "arn:aws:neptune-db:${var.region}:${var.account_id}:${var.neptune_cluster_resource_id}/*"
-      },
-    ]
-  })
-}
