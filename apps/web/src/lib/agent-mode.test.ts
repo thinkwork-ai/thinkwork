@@ -3,7 +3,9 @@ import {
   deriveAgentDefault,
   deriveAgentDispatch,
   deriveAgentMode,
+  resolveDraftMentions,
   type AgentDispatchRequestValue,
+  type DraftMentionTarget,
 } from "./agent-mode";
 
 const me = "user-me";
@@ -146,6 +148,51 @@ describe("deriveAgentDefault", () => {
       expect(result.agentDefaultOn).toBe(false);
     });
 
+    it("draft user-mention outranks server AGENT mode (THINK-328 defect)", () => {
+      // The defect: an existing single-player thread (server mode AGENT) whose
+      // follow-up draft @mentions another human left the toggle checked.
+      const result = deriveAgentDefault({
+        currentUserId: me,
+        serverMode: "AGENT",
+        threadMessages: [{ role: "USER", senderId: me, senderType: "user" }],
+        draftMentions: [{ targetType: "USER", targetId: "user-scott" }],
+      });
+      expect(result.mode).toBe("multi");
+      expect(result.agentDefaultOn).toBe(false);
+    });
+
+    it("server AGENT still wins over a draft self-mention", () => {
+      const result = deriveAgentDefault({
+        currentUserId: me,
+        serverMode: "AGENT",
+        draftMentions: [{ targetType: "USER", targetId: me }],
+      });
+      expect(result.mode).toBe("single");
+      expect(result.agentDefaultOn).toBe(true);
+    });
+
+    it("server AGENT still wins over agent and agent-profile draft mentions", () => {
+      for (const targetType of ["AGENT", "AGENT_PROFILE"] as const) {
+        const result = deriveAgentDefault({
+          currentUserId: me,
+          serverMode: "AGENT",
+          draftMentions: [{ targetType, targetId: "agent-thing" }],
+        });
+        expect(result.mode).toBe("single");
+        expect(result.agentDefaultOn).toBe(true);
+      }
+    });
+
+    it("server MULTIPLAYER stays multi with a draft user-mention", () => {
+      const result = deriveAgentDefault({
+        currentUserId: me,
+        serverMode: "MULTIPLAYER",
+        draftMentions: [{ targetType: "USER", targetId: "user-scott" }],
+      });
+      expect(result.mode).toBe("multi");
+      expect(result.agentDefaultOn).toBe(false);
+    });
+
     it("falls back to the heuristic when server mode is absent (legacy data)", () => {
       expect(
         deriveAgentDefault({
@@ -167,6 +214,136 @@ describe("deriveAgentDefault", () => {
   });
 });
 
+describe("resolveDraftMentions", () => {
+  const targets: DraftMentionTarget[] = [
+    { targetType: "USER", targetId: "user-bob", displayName: "Bob Smith" },
+    {
+      targetType: "USER",
+      targetId: "user-al",
+      displayName: "Al Green",
+      aliases: ["al"],
+    },
+    { targetType: "USER", targetId: me, displayName: "Current User" },
+    { targetType: "AGENT", targetId: "agent-1", displayName: "Marco" },
+    {
+      targetType: "AGENT_PROFILE",
+      targetId: "profile-research",
+      displayName: "Research",
+      aliases: ["research"],
+    },
+  ];
+
+  it("keeps a structured mention while its rawText is in the text", () => {
+    expect(
+      resolveDraftMentions({
+        text: "hey @Bob Smith can you look",
+        structuredMentions: [
+          { targetType: "USER", targetId: "user-bob", rawText: "@Bob Smith" },
+        ],
+        currentUserId: me,
+      }),
+    ).toEqual([{ targetType: "USER", targetId: "user-bob" }]);
+  });
+
+  it("drops a structured mention whose rawText was deleted (R2)", () => {
+    expect(
+      resolveDraftMentions({
+        text: "hey can you look",
+        structuredMentions: [
+          { targetType: "USER", targetId: "user-bob", rawText: "@Bob Smith" },
+        ],
+        currentUserId: me,
+      }),
+    ).toEqual([]);
+  });
+
+  it("drops a structured mention on partial deletion of its rawText", () => {
+    expect(
+      resolveDraftMentions({
+        text: "hey @Bob Sm can you look",
+        structuredMentions: [
+          { targetType: "USER", targetId: "user-bob", rawText: "@Bob Smith" },
+        ],
+        currentUserId: me,
+      }),
+    ).toEqual([]);
+  });
+
+  describe("typed plain-text scan (R7, mirrors server findTextMentions)", () => {
+    const resolve = (text: string, currentUserId: string | null = me) =>
+      resolveDraftMentions({ text, mentionTargets: targets, currentUserId });
+
+    it("matches a typed display name case-insensitively at the start", () => {
+      expect(resolve("@bob smith please review")).toEqual([
+        { targetType: "USER", targetId: "user-bob" },
+      ]);
+    });
+
+    it("matches at a whitespace boundary", () => {
+      expect(resolve("please review @Bob Smith")).toEqual([
+        { targetType: "USER", targetId: "user-bob" },
+      ]);
+    });
+
+    it("matches with a punctuation terminator", () => {
+      expect(resolve("@Al, take a look")).toEqual([
+        { targetType: "USER", targetId: "user-al" },
+      ]);
+    });
+
+    it("does not match without a boundary before the @ (emails)", () => {
+      expect(resolve("mail me at email@al.example")).toEqual([]);
+    });
+
+    it("does not match a longer word sharing the alias prefix", () => {
+      // Trailing-boundary lookahead: "@Albert" must not match alias "Al".
+      expect(resolve("@Albert is someone else")).toEqual([]);
+    });
+
+    it("matches an alias", () => {
+      expect(resolve("hey @al can you check")).toEqual([
+        { targetType: "USER", targetId: "user-al" },
+      ]);
+    });
+
+    it("never matches the current user's own name", () => {
+      expect(resolve("@Current User please")).toEqual([]);
+    });
+
+    it("never returns AGENT or AGENT_PROFILE targets", () => {
+      expect(resolve("@Marco and #Research and @research")).toEqual([]);
+    });
+
+    it("counts typed USER matches when the current user is unknown", () => {
+      // Pins deriveAgentMode's semantics: any user mention is "other" when the
+      // current user is unknown.
+      expect(resolve("@Bob Smith please", null)).toEqual([
+        { targetType: "USER", targetId: "user-bob" },
+      ]);
+      expect(
+        resolveDraftMentions({
+          text: "@Current User please",
+          mentionTargets: targets,
+          currentUserId: null,
+        }),
+      ).toEqual([{ targetType: "USER", targetId: me }]);
+    });
+  });
+
+  it("dedupes a structured + typed mention of the same target", () => {
+    expect(
+      resolveDraftMentions({
+        text: "hey @Bob Smith can you look",
+        structuredMentions: [
+          { targetType: "USER", targetId: "user-bob", rawText: "@Bob Smith" },
+        ],
+        mentionTargets: targets,
+        currentUserId: me,
+      }),
+    ).toEqual([{ targetType: "USER", targetId: "user-bob" }]);
+  });
+});
+
 describe("deriveAgentDispatch", () => {
   const cases: Array<{
     name: string;
@@ -174,10 +351,30 @@ describe("deriveAgentDispatch", () => {
     enabled: boolean;
     expected: AgentDispatchRequestValue;
   }> = [
-    { name: "untouched → AUTO (enabled)", overridden: false, enabled: true, expected: "AUTO" },
-    { name: "untouched → AUTO (disabled)", overridden: false, enabled: false, expected: "AUTO" },
-    { name: "manual ON → FORCE_ON", overridden: true, enabled: true, expected: "FORCE_ON" },
-    { name: "manual OFF → FORCE_OFF", overridden: true, enabled: false, expected: "FORCE_OFF" },
+    {
+      name: "untouched → AUTO (enabled)",
+      overridden: false,
+      enabled: true,
+      expected: "AUTO",
+    },
+    {
+      name: "untouched → AUTO (disabled)",
+      overridden: false,
+      enabled: false,
+      expected: "AUTO",
+    },
+    {
+      name: "manual ON → FORCE_ON",
+      overridden: true,
+      enabled: true,
+      expected: "FORCE_ON",
+    },
+    {
+      name: "manual OFF → FORCE_OFF",
+      overridden: true,
+      enabled: false,
+      expected: "FORCE_OFF",
+    },
   ];
 
   for (const { name, overridden, enabled, expected } of cases) {
