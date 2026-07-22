@@ -87,6 +87,7 @@ import {
   dedupeContactEmails,
   deriveRepEmail,
   mapAccount,
+  mapDispatchCustomer,
   mapContact,
   mapCrmComment,
   mapCustomerNote,
@@ -361,6 +362,44 @@ async function runMigration(options: {
     }
   }
   report.companies = "pending";
+
+  // Phase D': dispatch customers as companies (opt-in) ---------------------
+  // TEI wants the CRM to carry real, active customers — not just the ~800
+  // accounts with opportunity history. Gated by env
+  // TWENTY_DISPATCH_CUSTOMER_COHORT_DAYS (e.g. "5"): dispatch customers with
+  // an order inside that window become companies keyed customer:<id>.
+  // Customers whose name already has an account-sourced company are skipped
+  // (the unique-name crosswalk) so no duplicate companies appear.
+  const dispatchCustomerCounters = emptyCounters();
+  const cohortDaysRaw = process.env.TWENTY_DISPATCH_CUSTOMER_COHORT_DAYS;
+  if (cohortDaysRaw) {
+    const cohortDays = Number(cohortDaysRaw);
+    log(`records: loading dispatch customer cohort (${cohortDays}d)...`);
+    const cohort = await reader.readOrderCohortCustomers(cohortDays);
+    const fresh = cohort.filter((customer) => !customer.hasAccountNameMatch);
+    log(
+      `records: dispatch cohort ${cohort.length} customers, ` +
+        `${cohort.length - fresh.length} already covered by account companies`,
+    );
+    const mappedCustomers = fresh.map((customer) =>
+      mapDispatchCustomer(customer, ownerIndex),
+    );
+    const customerIdBySourceId = await upsertRecords({
+      client,
+      entity: COMPANY,
+      mapped: mappedCustomers,
+      dryRun,
+      counters: dispatchCustomerCounters,
+    });
+    for (const [key, value] of customerIdBySourceId) {
+      companyIdBySourceId.set(key, value);
+    }
+    report.dispatchCustomers = {
+      cohort: cohort.length,
+      skippedAccountCovered: cohort.length - fresh.length,
+      ...summarizeCounters(dispatchCustomerCounters),
+    };
+  }
 
   log("records: loading people...");
   const rawContacts = await reader.readContacts();
