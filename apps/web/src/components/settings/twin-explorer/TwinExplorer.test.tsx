@@ -83,6 +83,7 @@ vi.mock("@thinkwork/graph", () => {
     },
     TwinNeighborSummaryQuery: doc("TwinNeighborSummary"),
     TwinNeighborMembersQuery: doc("TwinNeighborMembers"),
+    twinTypeColor: () => "#2dd4bf",
     mapNeptuneNode: (raw: unknown, isCenter: boolean) => {
       const node = raw as Record<string, unknown>;
       const id = node?.["~id"];
@@ -728,7 +729,7 @@ describe("TwinExplorer traversal (twin-traversal plan U4/U5)", () => {
       targetType: "tank",
       direction: "out",
       offset: 0,
-      limit: 20,
+      limit: 5,
     });
     const nodes = lastGraphProps().data.nodes as Array<any>;
     expect(nodes.map((node) => node.id)).toContain("t#tenant-1#e#tank-1");
@@ -784,5 +785,137 @@ describe("TwinExplorer traversal (twin-traversal plan U4/U5)", () => {
       "cust-0",
       "cust-1",
     ]);
+  });
+});
+
+describe("TwinExplorer traversal mind-map view", () => {
+  const SUMMARY_PAYLOAD = JSON.stringify({
+    ok: true,
+    results: [
+      {
+        relationship: "customer_has_tank",
+        direction: "out",
+        targetType: "tank",
+        count: 2,
+      },
+    ],
+  });
+  const MEMBERS_PAYLOAD = JSON.stringify({
+    ok: true,
+    results: [
+      {
+        members: [
+          {
+            "~id": "t#tenant-1#e#tank-1",
+            "~labels": ["tank"],
+            "~properties": { displayName: "Tank 1" },
+          },
+        ],
+        edges: [
+          {
+            rel: "customer_has_tank",
+            sourceId: "t#tenant-1#e#cust-0",
+            targetId: "t#tenant-1#e#tank-1",
+          },
+        ],
+      },
+    ],
+  });
+
+  beforeEach(() => {
+    cohortCalls.length = 0;
+    summaryCalls.length = 0;
+    memberCalls.length = 0;
+    twinGraphProps.length = 0;
+    navigateMock.mockClear();
+    nextFilters.value = [];
+    filterColumnsSeen.value = [];
+    urqlState.ontology = { fetching: false, data: ONTOLOGY_DATA, error: null };
+    urqlState.cohort = {
+      fetching: false,
+      data: { twinCohort: cohortPayload(2) },
+      error: null,
+    };
+    urqlState.summary = SUMMARY_PAYLOAD;
+    urqlState.members = MEMBERS_PAYLOAD;
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  function switchToTraversal() {
+    fireEvent.click(screen.getByRole("radio", { name: "Traversal view" }));
+  }
+
+  it("offers the third view and shows the empty prompt until a root exists", () => {
+    render(<TwinExplorer />);
+    switchToTraversal();
+    expect(screen.getByTestId("mindmap-empty")).toBeTruthy();
+    expect(screen.queryByTestId("twin-mindmap")).toBeNull();
+    // The server-backed entity picker is available in this view too.
+    fireEvent.click(screen.getByTestId("explorer-search-toggle"));
+    expect(screen.getByTestId("traversal-entity-search")).toBeTruthy();
+  });
+
+  it("a search pick roots the mind map: root pill + summary ring", async () => {
+    vi.useFakeTimers();
+    render(<TwinExplorer />);
+    switchToTraversal();
+    fireEvent.click(screen.getByTestId("explorer-search-toggle"));
+    fireEvent.change(screen.getByTestId("traversal-entity-search"), {
+      target: { value: "Customer" },
+    });
+    await React.act(async () => {
+      await vi.advanceTimersByTimeAsync(350);
+    });
+    const results = screen.getByTestId("traversal-search-results");
+    await React.act(async () => {
+      fireEvent.click(results.querySelector("button")!);
+    });
+    expect(screen.getByTestId("twin-mindmap")).toBeTruthy();
+    expect(screen.getByTestId("mindmap-root").textContent).toContain(
+      "Customer 0",
+    );
+    const summary = screen.getByTestId("mindmap-summary");
+    expect(summary.textContent).toContain("Tank");
+    expect(summary.textContent).toContain("2");
+  });
+
+  it("summary pill click unfolds members and '+N more…'; Clear resets", async () => {
+    render(<TwinExplorer />);
+    switchToTraversal();
+    // Root via the table-independent path: overview click routing is
+    // graph-view-only, so drive rootTraversal through the search picker.
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByTestId("explorer-search-toggle"));
+    fireEvent.change(screen.getByTestId("traversal-entity-search"), {
+      target: { value: "Customer" },
+    });
+    await React.act(async () => {
+      await vi.advanceTimersByTimeAsync(350);
+    });
+    await React.act(async () => {
+      fireEvent.click(
+        screen.getByTestId("traversal-search-results").querySelector("button")!,
+      );
+    });
+
+    await React.act(async () => {
+      fireEvent.click(screen.getByTestId("mindmap-summary"));
+    });
+    expect(memberCalls.at(-1)).toMatchObject({
+      canonicalId: "cust-0",
+      relationship: "customer_has_tank",
+      offset: 0,
+    });
+    const entities = screen.getAllByTestId("mindmap-entity");
+    expect(entities.map((el) => el.textContent)).toContain("Tank 1");
+    expect(screen.getByTestId("mindmap-more").textContent).toContain(
+      "+1 more…",
+    );
+
+    fireEvent.click(screen.getByTestId("mindmap-clear"));
+    expect(screen.getByTestId("mindmap-empty")).toBeTruthy();
   });
 });

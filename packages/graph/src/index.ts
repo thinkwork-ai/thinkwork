@@ -53,6 +53,7 @@ export {
   mergeTwinGraphData,
   mapNeptuneNode,
   twinCanonicalIdFromNodeId,
+  twinTypeColor,
 } from "./TwinGraph.js";
 export type {
   TwinGraphData,
