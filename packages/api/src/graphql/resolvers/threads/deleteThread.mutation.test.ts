@@ -183,7 +183,7 @@ describe("deleteThread", () => {
     expect(operations.map((op) => `${op.type}:${op.table}`)).toEqual([
       "delete:message_artifacts",
       "update:artifacts",
-      "update:artifacts",
+      "delete:artifacts",
       "update:documents",
       "update:recipes",
       "update:retry_queue",
@@ -194,16 +194,17 @@ describe("deleteThread", () => {
     expect(operations.find((op) => op.table === "documents")?.values).toEqual({
       thread_id: null,
     });
-    // Living Artifacts R12: a canvas survives its thread — deletion nulls the
-    // artifact's thread provenance rather than deleting/cascading the row.
+    // Supersedes Living Artifacts R12: thread deletion now cascade-deletes
+    // the thread's artifacts (the delete dialog states this), while artifacts
+    // merely SOURCED from this thread's messages are detached, not deleted.
     const artifactUpdates = operations.filter(
       (op) => op.type === "update" && op.table === "artifacts",
     );
     expect(
-      artifactUpdates.some(
+      artifactUpdates.every(
         (op) =>
-          (op.values as Record<string, unknown> | undefined)?.thread_id ===
-          null,
+          (op.values as Record<string, unknown> | undefined)
+            ?.source_message_id === null,
       ),
     ).toBe(true);
   });

@@ -26,8 +26,6 @@ import {
   clearUserMcpToken,
   deleteMcpServer,
   getMcpServiceCredentialStatus,
-  getAgentCoreOAuthStatus,
-  completeAgentCoreOAuth,
   isPluginInstalledMcpServer,
   listMcpServers,
   listRuntimeMcpTools,
@@ -35,8 +33,6 @@ import {
   resolveMcpOAuthAuthorizeUrl,
   saveMcpServiceCredential,
   setMcpServerEnabled,
-  startAgentCoreOAuth,
-  type AgentCoreOAuthStatus,
   type McpServer,
   type McpServiceCredentialStatus,
   type RuntimeMcpTool,
@@ -82,9 +78,6 @@ export function SettingsMcpServerDetail() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [agentCoreAuthStatus, setAgentCoreAuthStatus] =
-    useState<AgentCoreOAuthStatus | null>(null);
-  const [agentCoreAuthLoading, setAgentCoreAuthLoading] = useState(false);
   const [toolSearch, setToolSearch] = useState("");
   const [toolLimit, setToolLimit] = useState(TOOL_PAGE_SIZE);
   const [runtimeTools, setRuntimeTools] = useState<DisplayTool[] | null>(null);
@@ -185,81 +178,6 @@ export function SettingsMcpServerDetail() {
       tools: userServer.tools ?? tenantServer.tools,
     };
   }, [servers, serverId, userServers]);
-
-  const isTwenty = isTwentyServer(server);
-
-  useEffect(() => {
-    if (!tenantSlug || !isTwenty) return;
-    let cancelled = false;
-    setAgentCoreAuthLoading(true);
-    getAgentCoreOAuthStatus(tenantSlug)
-      .then((result) => {
-        if (!cancelled) setAgentCoreAuthStatus(result.status);
-      })
-      .catch((cause) => {
-        if (!cancelled) {
-          setError(
-            cause instanceof Error
-              ? `AgentCore connection check failed: ${cause.message}`
-              : "AgentCore connection check failed.",
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setAgentCoreAuthLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isTwenty, tenantSlug]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const oauthStatus = params.get("agentcoreOAuth");
-    if (oauthStatus === "success") {
-      setAgentCoreAuthStatus("connected");
-      setNotice("AgentCore Identity connected.");
-      const nextUrl = new URL(window.location.href);
-      nextUrl.searchParams.delete("agentcoreOAuth");
-      window.history.replaceState({}, "", nextUrl.toString());
-      return;
-    }
-    if (oauthStatus !== "pending" || !tenantSlug) return;
-    const sessionId = params.get("agentcoreSessionId");
-    const state = params.get("agentcoreState");
-    const nextUrl = new URL(window.location.href);
-    nextUrl.searchParams.delete("agentcoreOAuth");
-    nextUrl.searchParams.delete("agentcoreSessionId");
-    nextUrl.searchParams.delete("agentcoreState");
-    window.history.replaceState({}, "", nextUrl.toString());
-    if (!sessionId || !state) {
-      setError("AgentCore authorization callback was incomplete.");
-      return;
-    }
-    let cancelled = false;
-    setAgentCoreAuthLoading(true);
-    completeAgentCoreOAuth(tenantSlug, sessionId, state)
-      .then(() => {
-        if (cancelled) return;
-        setAgentCoreAuthStatus("connected");
-        setNotice("AgentCore Identity connected.");
-        setError(null);
-      })
-      .catch((cause) => {
-        if (cancelled) return;
-        setError(
-          cause instanceof Error
-            ? `AgentCore authorization failed: ${cause.message}`
-            : "AgentCore authorization failed.",
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setAgentCoreAuthLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tenantSlug]);
 
   const loadRuntimeTools = useCallback(async () => {
     if (!server || !runtimeAgentId) return;
@@ -405,33 +323,6 @@ export function SettingsMcpServerDetail() {
       );
       setNotice(null);
       setPending(false);
-    }
-  }
-
-  async function authenticateAgentCore() {
-    if (!tenantSlug || !isTwenty) return;
-    setAgentCoreAuthLoading(true);
-    setError(null);
-    setNotice("Opening AgentCore Identity authorization...");
-    try {
-      const result = await startAgentCoreOAuth(tenantSlug, mcpOAuthReturnTo());
-      if (result.status === "connected") {
-        setAgentCoreAuthStatus("connected");
-        setNotice("AgentCore Identity connected.");
-        return;
-      }
-      if (!result.authorizationUrl) {
-        throw new Error("authorization URL was not returned");
-      }
-      window.location.assign(result.authorizationUrl);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? `AgentCore authorization failed to start: ${cause.message}`
-          : "AgentCore authorization failed to start.",
-      );
-      setNotice(null);
-      setAgentCoreAuthLoading(false);
     }
   }
 
@@ -700,12 +591,8 @@ export function SettingsMcpServerDetail() {
         {server.authType === "oauth" || server.authType === "per_user_oauth" ? (
           <SettingsSection label="Authentication">
             <SettingsRow
-              label={isTwenty ? "Pi access" : "User access"}
-              description={
-                isTwenty
-                  ? "Legacy per-user connection retained while Pi and AgentCore run in parallel."
-                  : "Authorize this MCP server with your ThinkWork user account."
-              }
+              label="User access"
+              description="Authorize this MCP server with your ThinkWork user account."
             >
               <Badge
                 variant={
@@ -747,46 +634,6 @@ export function SettingsMcpServerDetail() {
                 </Button>
               ) : null}
             </SettingsRow>
-            {isTwenty ? (
-              <SettingsRow
-                label="AgentCore access"
-                description="Authorize Twenty through AgentCore Identity. The user grant is stored in AgentCore Token Vault."
-              >
-                <Badge
-                  variant={
-                    agentCoreAuthStatus === "connected"
-                      ? "outline"
-                      : "secondary"
-                  }
-                  className={
-                    agentCoreAuthStatus === "connected"
-                      ? "border-emerald-500/40 text-emerald-400"
-                      : undefined
-                  }
-                >
-                  {agentCoreAuthLoading
-                    ? "Checking"
-                    : agentCoreAuthStatus === "connected"
-                      ? "Connected"
-                      : "Not connected"}
-                </Badge>
-                <Button
-                  size="sm"
-                  disabled={agentCoreAuthLoading}
-                  onClick={() => void authenticateAgentCore()}
-                  className="gap-2"
-                >
-                  {agentCoreAuthLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="h-4 w-4" />
-                  )}
-                  {agentCoreAuthStatus === "connected"
-                    ? "Reconnect"
-                    : "Connect AgentCore"}
-                </Button>
-              </SettingsRow>
-            ) : null}
           </SettingsSection>
         ) : null}
 
@@ -1155,12 +1002,6 @@ function runtimeToolMatchesServer(tool: RuntimeMcpTool, server: McpServer) {
   const runtimeServer = normalizeServerKey(tool.server);
   const runtimeNamePrefix = normalizeServerKey(tool.name.split("__")[0] ?? "");
   return candidates.has(runtimeServer) || candidates.has(runtimeNamePrefix);
-}
-
-function isTwentyServer(server: McpServer | null) {
-  if (!server) return false;
-  const key = normalizeServerKey(server.slug ?? server.name);
-  return key === "twenty--crm" || server.url.includes("crm.thinkwork.ai/mcp");
 }
 
 function mcpOAuthReturnTo() {

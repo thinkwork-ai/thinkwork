@@ -431,7 +431,7 @@ function BudgetProgress({ budget }: { budget: BudgetStatusRow }) {
       </div>
       <div className="mt-1 truncate text-xs text-muted-foreground tabular-nums">
         {formatUsd(budget.visibleSpendUsd)} of{" "}
-        {formatUsd(budget.policy.limitUsd, 0)}
+        {formatUsd(budget.policy.limitUsd, 0)} this month
       </div>
     </div>
   );

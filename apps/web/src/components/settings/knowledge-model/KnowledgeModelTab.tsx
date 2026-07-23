@@ -30,7 +30,7 @@ const VIEW_TITLES: Record<
   { title: string; description: string }
 > = {
   map: {
-    title: "Living Map",
+    title: "Schema",
     description:
       "Your domain's schema graph. Ghost nodes are pending candidates — focus one to review its evidence, or add a triple directly on the canvas.",
   },
@@ -59,7 +59,7 @@ const VIEW_OPTIONS: ReadonlyArray<{
   value: KnowledgeModelView;
   label: string;
 }> = [
-  { value: "map", label: "Living Map" },
+  { value: "map", label: "Schema" },
   { value: "packs", label: "Starter Packs" },
   { value: "definitions", label: "Definitions" },
   { value: "identity", label: "Identity" },

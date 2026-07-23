@@ -142,7 +142,7 @@ export function TwinEntityDetail({
     title: headerTitle,
     breadcrumbs: [
       { label: "Knowledge", href: "/settings/memory" },
-      { label: "Explorer", href: "/settings/memory/explorer" },
+      { label: "Digital Twin", href: "/settings/memory/explorer" },
       { label: headerTitle },
     ],
     backHref: "/settings/memory/explorer",

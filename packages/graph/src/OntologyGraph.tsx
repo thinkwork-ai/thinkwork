@@ -1139,7 +1139,7 @@ export const OntologyGraph = forwardRef<
   if (graphData.nodes.length === 0) {
     return (
       emptyFallback ?? (
-        <div className="flex flex-col items-center gap-2 py-16 text-center">
+        <div className="flex h-full flex-col items-center justify-center gap-2 py-16 text-center">
           <p className="max-w-sm text-sm text-muted-foreground">
             No ontology types yet. Approve a change set or install a starter
             pack to seed the map.

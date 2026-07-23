@@ -214,8 +214,8 @@ export function SettingsMemoryHome() {
     breadcrumbs: [{ label: "Knowledge" }],
     tabs: [
       { to: MEMORY, label: "Memory" },
-      // THINK-327 U8: Explorer holds the retired wiki "Pages" slot.
-      { to: EXPLORER, label: "Explorer" },
+      // THINK-327 U8: Digital Twin holds the retired wiki "Pages" slot.
+      { to: EXPLORER, label: "Digital Twin" },
       { to: ONTOLOGY, label: "Ontology" },
       { to: KNOWLEDGE_BASES, label: "KBs" },
     ],

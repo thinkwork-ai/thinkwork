@@ -22,12 +22,6 @@ import {
   listConnections,
   type ConnectionRow,
 } from "@/lib/connections-api";
-import {
-  completeAgentCoreOAuth,
-  getAgentCoreOAuthStatus,
-  startAgentCoreOAuth,
-  type AgentCoreOAuthStatus,
-} from "@/lib/mcp-api";
 
 /**
  * Connections tab — the per-user integrations surface (web counterpart of
@@ -143,17 +137,13 @@ function StatusPill({ status }: { status: ConnectionStatus }) {
 
 export function SettingsConnections() {
   const { user } = useAuth();
-  const { tenant, tenantId, userId } = useTenant();
-  const tenantSlug = tenant?.slug ?? null;
+  const { tenantId, userId } = useTenant();
   const principalId = userId ?? user?.sub ?? null;
 
   const [connections, setConnections] = useState<ConnectionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [agentCoreStatus, setAgentCoreStatus] =
-    useState<AgentCoreOAuthStatus | null>(null);
-  const [agentCorePending, setAgentCorePending] = useState(false);
   const [confirm, setConfirm] = useState<{
     kind: "connection" | "slack";
     id: string;
@@ -184,23 +174,6 @@ export function SettingsConnections() {
     load();
   }, [load]);
 
-  const loadAgentCoreStatus = useCallback(() => {
-    if (!tenantSlug) return;
-    getAgentCoreOAuthStatus(tenantSlug)
-      .then((result) => setAgentCoreStatus(result.status))
-      .catch((cause) =>
-        setError(
-          cause instanceof Error
-            ? `AgentCore connection check failed: ${cause.message}`
-            : "AgentCore connection check failed.",
-        ),
-      );
-  }, [tenantSlug]);
-
-  useEffect(() => {
-    loadAgentCoreStatus();
-  }, [loadAgentCoreStatus]);
-
   // OAuth deep-link return: the callback lands back here with
   // `?status=connected&provider=…` (or `status=error&reason=…`). Surface the
   // outcome once, then strip the params so refresh/bookmark stays clean.
@@ -223,50 +196,6 @@ export function SettingsConnections() {
     }
     window.history.replaceState({}, "", connectionsReturnUrl());
   }, []);
-
-  // AgentCore redirects through a public AWS callback first, then returns the
-  // opaque session id here. Complete the binding only from this authenticated
-  // page so the active ThinkWork user must match the user that started it.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const oauthStatus = params.get("agentcoreOAuth");
-    if (oauthStatus !== "pending" || !tenantSlug) return;
-    const sessionId = params.get("agentcoreSessionId");
-    const state = params.get("agentcoreState");
-    const nextUrl = new URL(window.location.href);
-    nextUrl.searchParams.delete("agentcoreOAuth");
-    nextUrl.searchParams.delete("agentcoreSessionId");
-    nextUrl.searchParams.delete("agentcoreState");
-    window.history.replaceState({}, "", nextUrl.toString());
-    if (!sessionId || !state) {
-      setError("AgentCore authorization callback was incomplete.");
-      return;
-    }
-    let cancelled = false;
-    setAgentCorePending(true);
-    completeAgentCoreOAuth(tenantSlug, sessionId, state)
-      .then(() => {
-        if (cancelled) return;
-        setAgentCoreStatus("connected");
-        setNotice("Twenty CRM connected to AgentCore.");
-        setError(null);
-      })
-      .catch((cause) => {
-        if (cancelled) return;
-        setError(
-          cause instanceof Error
-            ? `AgentCore authorization failed: ${cause.message}`
-            : "AgentCore authorization failed.",
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setAgentCorePending(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tenantSlug]);
 
   // Refetch when the tab regains focus — covers OAuth flows finished in
   // another tab/window and long-lived pages in general.
@@ -291,37 +220,6 @@ export function SettingsConnections() {
     },
     [principalId, tenantId],
   );
-
-  const startAgentCoreTwentyOAuth = useCallback(async () => {
-    if (!tenantSlug) return;
-    setAgentCorePending(true);
-    setError(null);
-    setNotice("Opening Twenty CRM authorization…");
-    try {
-      const result = await startAgentCoreOAuth(
-        tenantSlug,
-        connectionsReturnUrl(),
-      );
-      setAgentCoreStatus(result.status);
-      if (result.status === "connected") {
-        setNotice("Twenty CRM is already connected to AgentCore.");
-        return;
-      }
-      if (!result.authorizationUrl) {
-        throw new Error("AgentCore did not return an authorization URL");
-      }
-      window.location.assign(result.authorizationUrl);
-    } catch (cause) {
-      setError(
-        cause instanceof Error
-          ? `AgentCore authorization failed to start: ${cause.message}`
-          : "AgentCore authorization failed to start.",
-      );
-      setNotice(null);
-    } finally {
-      setAgentCorePending(false);
-    }
-  }, [tenantSlug]);
 
   async function onConfirmDisconnect() {
     if (!confirm || !tenantId) return;
@@ -472,41 +370,6 @@ export function SettingsConnections() {
               })
             }
           />
-          <li className="flex flex-wrap items-center gap-3 px-4 py-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">Twenty CRM</span>
-                <StatusPill
-                  status={
-                    agentCoreStatus === "connected"
-                      ? "active"
-                      : agentCoreStatus === "in_progress"
-                        ? "pending"
-                        : "none"
-                  }
-                />
-              </div>
-              <p className="truncate text-xs text-muted-foreground">
-                Personal AgentCore Identity grant for CRM tools
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Button
-                size="sm"
-                variant={
-                  agentCoreStatus === "connected" ? "outline" : "default"
-                }
-                disabled={agentCorePending || !tenantSlug}
-                onClick={startAgentCoreTwentyOAuth}
-              >
-                {agentCorePending
-                  ? "Connecting…"
-                  : agentCoreStatus === "connected"
-                    ? "Reconnect"
-                    : "Connect"}
-              </Button>
-            </div>
-          </li>
         </ul>
       )}
 

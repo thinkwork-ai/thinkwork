@@ -14,9 +14,6 @@ const mocks = vi.hoisted(() => ({
   disconnectConnection: vi.fn(),
   unlinkSlack: vi.fn(),
   refetchSlackLinks: vi.fn(),
-  getAgentCoreOAuthStatus: vi.fn(),
-  startAgentCoreOAuth: vi.fn(),
-  completeAgentCoreOAuth: vi.fn(),
   slackLinksQuery: {
     data: { mySlackLinks: [] } as { mySlackLinks: unknown[] } | undefined,
     fetching: false,
@@ -51,12 +48,6 @@ vi.mock("@/lib/connections-api", async (importOriginal) => {
     disconnectConnection: mocks.disconnectConnection,
   };
 });
-
-vi.mock("@/lib/mcp-api", () => ({
-  getAgentCoreOAuthStatus: mocks.getAgentCoreOAuthStatus,
-  startAgentCoreOAuth: mocks.startAgentCoreOAuth,
-  completeAgentCoreOAuth: mocks.completeAgentCoreOAuth,
-}));
 
 import {
   SettingsConnections,
@@ -104,12 +95,6 @@ beforeEach(() => {
   mocks.disconnectConnection.mockReset();
   mocks.unlinkSlack.mockReset();
   mocks.refetchSlackLinks.mockReset();
-  mocks.getAgentCoreOAuthStatus.mockReset();
-  mocks.startAgentCoreOAuth.mockReset();
-  mocks.completeAgentCoreOAuth.mockReset();
-  mocks.getAgentCoreOAuthStatus.mockResolvedValue({
-    status: "authorization_required",
-  });
   mocks.slackLinksQuery = {
     data: { mySlackLinks: [] },
     fetching: false,
@@ -167,9 +152,8 @@ describe("SettingsConnections", () => {
     expect(await screen.findByText("Google Workspace")).toBeTruthy();
     expect(screen.getByText("Microsoft 365")).toBeTruthy();
     expect(screen.getByText("Slack")).toBeTruthy();
-    expect(screen.getByText("Twenty CRM")).toBeTruthy();
-    expect(screen.getAllByText("not connected")).toHaveLength(4);
-    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(4);
+    expect(screen.getAllByText("not connected")).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(3);
     expect(mocks.listConnections).toHaveBeenCalledWith("tenant-1", "user-1");
   });
 
@@ -184,7 +168,7 @@ describe("SettingsConnections", () => {
     expect(screen.getByText("calendar")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
     // The other providers stay connectable.
-    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(2);
   });
 
   it("shows expired connections with a Reconnect action that starts OAuth", async () => {
@@ -217,7 +201,7 @@ describe("SettingsConnections", () => {
     render(<SettingsConnections />);
 
     expect(await screen.findByText("pending")).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(3);
   });
 
   it("starts the Connect OAuth flow for a provider", async () => {
@@ -229,43 +213,6 @@ describe("SettingsConnections", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Connect" })[1]!);
     const url = new URL(locationAssign.mock.calls[0]![0] as string);
     expect(url.searchParams.get("provider")).toBe("microsoft_365");
-  });
-
-  it("starts per-user Twenty authorization through AgentCore Identity", async () => {
-    mocks.listConnections.mockResolvedValue([]);
-    mocks.startAgentCoreOAuth.mockResolvedValue({
-      status: "authorization_required",
-      authorizationUrl: "https://agentcore.example.com/authorize",
-    });
-
-    render(<SettingsConnections />);
-    await screen.findByText("Twenty CRM");
-
-    const twentyRow = screen.getByText("Twenty CRM").closest("li")!;
-    fireEvent.click(within(twentyRow).getByRole("button", { name: "Connect" }));
-
-    await waitFor(() =>
-      expect(mocks.startAgentCoreOAuth).toHaveBeenCalledWith(
-        "thinkwork",
-        "https://app.example.com/settings/mcp-servers",
-      ),
-    );
-    expect(locationAssign).toHaveBeenCalledWith(
-      "https://agentcore.example.com/authorize",
-    );
-  });
-
-  it("renders a connected AgentCore Twenty grant as reconnectable", async () => {
-    mocks.listConnections.mockResolvedValue([]);
-    mocks.getAgentCoreOAuthStatus.mockResolvedValue({ status: "connected" });
-
-    render(<SettingsConnections />);
-
-    const twentyRow = (await screen.findByText("Twenty CRM")).closest("li")!;
-    expect(within(twentyRow).getByText("active")).toBeTruthy();
-    expect(
-      within(twentyRow).getByRole("button", { name: "Reconnect" }),
-    ).toBeTruthy();
   });
 
   it("disconnects only after the confirmation dialog", async () => {
@@ -354,37 +301,6 @@ describe("SettingsConnections", () => {
     render(<SettingsConnections />);
 
     expect(await screen.findByText("Google Workspace connected.")).toBeTruthy();
-    expect(replaceState).toHaveBeenCalledWith(
-      {},
-      "",
-      "https://app.example.com/settings/mcp-servers",
-    );
-  });
-
-  it("completes AgentCore session binding from the authenticated return page", async () => {
-    mocks.listConnections.mockResolvedValue([]);
-    mocks.completeAgentCoreOAuth.mockResolvedValue({ status: "connected" });
-    setWindowLocation(
-      "https://app.example.com/settings/mcp-servers?agentcoreOAuth=pending&agentcoreSessionId=urn%3Aagentcore%3Asession&agentcoreState=signed-state",
-    );
-    const replaceState = vi.fn();
-    Object.defineProperty(window, "history", {
-      configurable: true,
-      value: { replaceState },
-    });
-
-    render(<SettingsConnections />);
-
-    await waitFor(() =>
-      expect(mocks.completeAgentCoreOAuth).toHaveBeenCalledWith(
-        "thinkwork",
-        "urn:agentcore:session",
-        "signed-state",
-      ),
-    );
-    expect(
-      await screen.findByText("Twenty CRM connected to AgentCore."),
-    ).toBeTruthy();
     expect(replaceState).toHaveBeenCalledWith(
       {},
       "",

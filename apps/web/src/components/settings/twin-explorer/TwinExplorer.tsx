@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useClient, useQuery } from "urql";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
+import { SettingsPageTitle } from "@/components/settings/SettingsContent";
 import { useNavigate } from "@tanstack/react-router";
 import { Link2, Search, Shapes, Tag, X } from "lucide-react";
 import {
@@ -656,232 +657,232 @@ export function TwinExplorer({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto p-4">
-      <div className="shrink-0 space-y-1">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Explorer
-          </h1>
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto p-6">
+      <SettingsPageTitle
+        title="Digital Twin"
+        description="Browse the digital twin — live entities projected from your source systems."
+        badge={
           <ToggleGroup
             type="single"
             value={view}
             onValueChange={(next) => {
               if (next === "graph" || next === "table") setView(next);
             }}
-            className="rounded-full border border-border p-0.5"
+            variant="outline"
+            className="ml-4 h-8 overflow-hidden rounded-full border bg-background shadow-sm"
           >
             <ToggleGroupItem
               value="graph"
-              className="h-7 rounded-full px-3 text-xs"
+              className="h-full rounded-none border-0 px-3 text-sm font-medium"
               aria-label="Graph view"
             >
               Graph
             </ToggleGroupItem>
             <ToggleGroupItem
               value="table"
-              className="h-7 rounded-full px-3 text-xs"
+              className="h-full rounded-none border-0 border-l border-border px-3 text-sm font-medium"
               aria-label="Table view"
             >
               Table
             </ToggleGroupItem>
           </ToggleGroup>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Browse the digital twin — live entities projected from your source
-          systems.
-        </p>
-      </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
-        {/* Collapsible search — the Memory tab's toolbar idiom. */}
-        {!(searchExpanded || nameQuery.length > 0) ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            className="h-8 w-8 rounded-md"
-            aria-label="Search by name"
-            data-testid="explorer-search-toggle"
-            disabled={effectiveEntityTypes.length === 0}
-            onClick={() => setSearchExpanded(true)}
-          >
-            <Search className="h-4 w-4" aria-hidden="true" />
-          </Button>
-        ) : (
-          <div className="relative flex h-8 w-[min(20rem,calc(100vw-2rem))] items-center">
-            <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              autoFocus
-              type="search"
-              className="h-8 rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-              placeholder="Search by name..."
+        }
+      />
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {/* Collapsible search — the Memory tab's toolbar idiom. */}
+          {!(searchExpanded || nameQuery.length > 0) ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="h-8 w-8 rounded-md"
               aria-label="Search by name"
-              data-testid="explorer-name-search"
-              value={nameQuery}
-              onBlur={() => {
-                if (!nameQuery) setSearchExpanded(false);
-              }}
-              onChange={(event) => setNameQuery(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") setActiveNameQuery(nameQuery.trim());
-                if (event.key === "Escape") {
-                  event.preventDefault();
+              data-testid="explorer-search-toggle"
+              disabled={effectiveEntityTypes.length === 0}
+              onClick={() => setSearchExpanded(true)}
+            >
+              <Search className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          ) : (
+            <div className="relative flex h-8 w-[min(20rem,calc(100vw-2rem))] items-center">
+              <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                autoFocus
+                type="search"
+                className="h-8 rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                placeholder="Search by name..."
+                aria-label="Search by name"
+                data-testid="explorer-name-search"
+                value={nameQuery}
+                onBlur={() => {
+                  if (!nameQuery) setSearchExpanded(false);
+                }}
+                onChange={(event) => setNameQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter")
+                    setActiveNameQuery(nameQuery.trim());
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setNameQuery("");
+                    setActiveNameQuery("");
+                    setSearchExpanded(false);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="absolute right-2 text-muted-foreground hover:text-foreground"
+                aria-label="Clear name search"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
                   setNameQuery("");
                   setActiveNameQuery("");
                   setSearchExpanded(false);
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="absolute right-2 text-muted-foreground hover:text-foreground"
-              aria-label="Clear name search"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                setNameQuery("");
-                setActiveNameQuery("");
-                setSearchExpanded(false);
-              }}
-            >
-              <X className="size-3.5" />
-            </button>
-          </div>
-        )}
-        <DataTableTokenFilter
-          table={filterTable}
-          columns={filterColumns}
-          addLabel="Filter"
-          showAddLabel={false}
-          clearLabel="Clear filters"
-          flattenToolbar
-          className="max-w-full [&_[data-token-filter-token]]:shrink-0"
-          popoverClassName="w-[min(18rem,calc(100vw-2rem))]"
-        />
-      </div>
+                }}
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          )}
+          <DataTableTokenFilter
+            table={filterTable}
+            columns={filterColumns}
+            addLabel="Filter"
+            showAddLabel={false}
+            clearLabel="Clear filters"
+            flattenToolbar
+            className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+            popoverClassName="w-[min(18rem,calc(100vw-2rem))]"
+          />
+        </div>
 
-      {consoleOpen ? <CypherConsole /> : null}
+        {consoleOpen ? <CypherConsole /> : null}
 
-      {effectiveEntityTypes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No approved entity types yet — declare one in the Ontology tab.
-        </p>
-      ) : null}
+        {effectiveEntityTypes.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No approved entity types yet — declare one in the Ontology tab.
+          </p>
+        ) : null}
 
-      {model.errors.length > 0 ? (
-        <p
-          className="text-sm text-amber-600"
-          data-testid="explorer-build-errors"
-        >
-          {model.errors.join(" · ")}
-        </p>
-      ) : null}
-      {error ? (
-        <p className="text-sm text-red-500" role="alert">
-          Query failed: {error}
-        </p>
-      ) : null}
-      {failure ? (
-        failure.reason === "invalid_request" ? (
+        {model.errors.length > 0 ? (
           <p
             className="text-sm text-amber-600"
-            data-testid="explorer-compile-error"
+            data-testid="explorer-build-errors"
           >
-            The twin rejected this filter
-            {failure.detail ? `: ${failure.detail}` : "."}
+            {model.errors.join(" · ")}
           </p>
-        ) : (
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="explorer-unavailable"
-          >
-            The twin isn&apos;t available right now
-            {failure.detail ? ` (${failure.detail})` : ""} — try again shortly.
+        ) : null}
+        {error ? (
+          <p className="text-sm text-red-500" role="alert">
+            Query failed: {error}
           </p>
-        )
-      ) : null}
+        ) : null}
+        {failure ? (
+          failure.reason === "invalid_request" ? (
+            <p
+              className="text-sm text-amber-600"
+              data-testid="explorer-compile-error"
+            >
+              The twin rejected this filter
+              {failure.detail ? `: ${failure.detail}` : "."}
+            </p>
+          ) : (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="explorer-unavailable"
+            >
+              The twin isn&apos;t available right now
+              {failure.detail ? ` (${failure.detail})` : ""} — try again
+              shortly.
+            </p>
+          )
+        ) : null}
 
-      {view === "graph" && effectiveEntityTypes.length > 0 ? (
-        <div className="relative min-h-[28rem] flex-1 overflow-hidden rounded-lg border border-border">
-          <TwinGraph
-            tenantId={tenantId}
-            loadingFallback={
-              <div className="flex h-full min-h-48 items-center justify-center">
-                <LoadingShimmer />
-              </div>
-            }
-            subgraphEntityTypes={effectiveEntityTypes}
-            subgraphLimit={25}
-            depth={1}
-            onNodeClick={(node: TwinGraphNode) =>
-              setSheetSelection({ kind: "node", node })
-            }
-            onLinkClick={(link: TwinGraphLink) =>
-              setSheetSelection({ kind: "edge", link })
-            }
-          />
-          <TwinNodeSheet
-            selection={sheetSelection}
-            onOpenChange={(open) => {
-              if (!open) setSheetSelection(null);
-            }}
-            onOpenEntity={(target) => {
-              setSheetSelection(null);
-              void navigate({
-                to: "/settings/memory/explorer/$entityType/$canonicalId",
-                params: target,
-              });
-            }}
-          />
-        </div>
-      ) : null}
-
-      {view === "table" &&
-      effectiveEntityTypes.length > 0 &&
-      fetching &&
-      !rows ? (
-        <div
-          className="flex min-h-40 flex-1 items-center justify-center"
-          data-testid="explorer-loading"
-        >
-          <LoadingShimmer />
-        </div>
-      ) : null}
-
-      {view === "table" && rows ? (
-        rows.length > 0 ? (
-          <div className="min-h-0 flex-1">
-            {rows.length >= COHORT_LIMIT ? (
-              <p
-                className="mb-2 text-xs text-muted-foreground"
-                data-testid="explorer-limit-note"
-              >
-                Showing the first {COHORT_LIMIT} matches — narrow the filter to
-                see the rest.
-              </p>
-            ) : null}
-            <DataTable
-              columns={columns}
-              data={rows}
-              onRowClick={(row) => {
-                if (!row.canonicalId) return;
+        {view === "graph" && effectiveEntityTypes.length > 0 ? (
+          <div className="relative min-h-[28rem] flex-1 overflow-hidden rounded-lg border border-border">
+            <TwinGraph
+              tenantId={tenantId}
+              loadingFallback={
+                <div className="flex h-full min-h-48 items-center justify-center">
+                  <LoadingShimmer />
+                </div>
+              }
+              subgraphEntityTypes={effectiveEntityTypes}
+              subgraphLimit={25}
+              depth={1}
+              onNodeClick={(node: TwinGraphNode) =>
+                setSheetSelection({ kind: "node", node })
+              }
+              onLinkClick={(link: TwinGraphLink) =>
+                setSheetSelection({ kind: "edge", link })
+              }
+            />
+            <TwinNodeSheet
+              selection={sheetSelection}
+              onOpenChange={(open) => {
+                if (!open) setSheetSelection(null);
+              }}
+              onOpenEntity={(target) => {
+                setSheetSelection(null);
                 void navigate({
                   to: "/settings/memory/explorer/$entityType/$canonicalId",
-                  params: {
-                    entityType: row.entityTypeSlug,
-                    canonicalId: row.canonicalId,
-                  },
+                  params: target,
                 });
               }}
             />
           </div>
-        ) : (
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="explorer-empty"
+        ) : null}
+
+        {view === "table" &&
+        effectiveEntityTypes.length > 0 &&
+        fetching &&
+        !rows ? (
+          <div
+            className="flex min-h-40 flex-1 items-center justify-center"
+            data-testid="explorer-loading"
           >
-            No matching entities.
-          </p>
-        )
-      ) : null}
+            <LoadingShimmer />
+          </div>
+        ) : null}
+
+        {view === "table" && rows ? (
+          rows.length > 0 ? (
+            <div className="min-h-0 flex-1">
+              {rows.length >= COHORT_LIMIT ? (
+                <p
+                  className="mb-2 text-xs text-muted-foreground"
+                  data-testid="explorer-limit-note"
+                >
+                  Showing the first {COHORT_LIMIT} matches — narrow the filter
+                  to see the rest.
+                </p>
+              ) : null}
+              <DataTable
+                columns={columns}
+                data={rows}
+                onRowClick={(row) => {
+                  if (!row.canonicalId) return;
+                  void navigate({
+                    to: "/settings/memory/explorer/$entityType/$canonicalId",
+                    params: {
+                      entityType: row.entityTypeSlug,
+                      canonicalId: row.canonicalId,
+                    },
+                  });
+                }}
+              />
+            </div>
+          ) : (
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="explorer-empty"
+            >
+              No matching entities.
+            </p>
+          )
+        ) : null}
+      </div>
     </div>
   );
 }

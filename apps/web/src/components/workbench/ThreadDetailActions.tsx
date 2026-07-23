@@ -15,16 +15,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   Button,
-  Checkbox,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Label,
 } from "@thinkwork/ui";
 import {
-  DeleteArtifactMutation,
   DeleteThreadMutation,
   PinThreadMutation,
   UnpinThreadMutation,
@@ -236,8 +233,6 @@ export function ThreadDeleteDialog({
 }: ThreadDeleteDialogProps) {
   const navigate = useNavigate();
   const [, deleteThread] = useMutation(DeleteThreadMutation);
-  const [, deleteArtifact] = useMutation(DeleteArtifactMutation);
-  const [cascadeArtifacts, setCascadeArtifacts] = useState(false);
   const [working, setWorking] = useState(false);
 
   const artifactCount = attachedArtifacts.length;
@@ -247,17 +242,6 @@ export function ThreadDeleteDialog({
     setWorking(true);
     setThreadDeletePending(threadId, true);
     try {
-      let deletedArtifactCount = 0;
-      if (cascadeArtifacts && hasAttached) {
-        const results = await Promise.allSettled(
-          attachedArtifacts.map((a) => deleteArtifact({ id: a.id })),
-        );
-        deletedArtifactCount = results.filter(
-          (r) =>
-            r.status === "fulfilled" && !(r.value as { error?: unknown }).error,
-        ).length;
-      }
-
       const result = await deleteThread({ id: threadId });
       if (result.error) {
         setThreadDeletePending(threadId, false);
@@ -265,21 +249,13 @@ export function ThreadDeleteDialog({
         return;
       }
 
-      if (cascadeArtifacts && hasAttached) {
-        if (deletedArtifactCount === artifactCount) {
-          toast.success(
-            `Thread deleted along with ${artifactCount} artifact${
+      toast.success(
+        hasAttached
+          ? `Thread deleted along with ${artifactCount} artifact${
               artifactCount === 1 ? "" : "s"
-            }.`,
-          );
-        } else {
-          toast.warning(
-            `Thread deleted. ${deletedArtifactCount} of ${artifactCount} attached artifacts removed; the rest can be deleted from the artifacts list.`,
-          );
-        }
-      } else {
-        toast.success("Thread deleted.");
-      }
+            }.`
+          : "Thread deleted.",
+      );
       onOpenChange(false);
       window.dispatchEvent(
         new CustomEvent("thinkwork:thread-deleted", {
@@ -302,14 +278,8 @@ export function ThreadDeleteDialog({
     }
   }
 
-  // Reset checkbox each time the dialog re-opens so it never starts checked.
-  function handleOpenChange(next: boolean) {
-    if (next) setCascadeArtifacts(false);
-    onOpenChange(next);
-  }
-
   return (
-    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent data-testid="thread-delete-dialog">
         <AlertDialogHeader>
           <AlertDialogTitle>Delete this thread?</AlertDialogTitle>
@@ -319,20 +289,12 @@ export function ThreadDeleteDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         {hasAttached ? (
-          <div className="flex items-start gap-3 rounded-md border border-border/60 bg-muted/40 p-3">
-            <Checkbox
-              id="cascade-artifacts"
-              data-testid="thread-delete-cascade"
-              checked={cascadeArtifacts}
-              onCheckedChange={(value) => setCascadeArtifacts(value === true)}
-            />
-            <Label
-              htmlFor="cascade-artifacts"
-              className="text-sm font-normal leading-snug"
-            >
-              Also delete the {artifactCount} attached artifact
-              {artifactCount === 1 ? "" : "s"}.
-            </Label>
+          <div
+            className="rounded-md border border-border/60 bg-muted/40 p-3 text-sm leading-snug text-muted-foreground"
+            data-testid="thread-delete-cascade-notice"
+          >
+            The {artifactCount} artifact{artifactCount === 1 ? "" : "s"} linked
+            to this thread will be deleted as well.
           </div>
         ) : null}
         <AlertDialogFooter>

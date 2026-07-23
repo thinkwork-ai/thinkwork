@@ -3222,7 +3222,13 @@ describe("TaskThreadView", () => {
       );
 
       expect(screen.getByText("Working…")).toBeTruthy();
-      expect(screen.getByText("20s")).toBeTruthy();
+      // The live timer rides inside the per-character shimmer span, so match
+      // on the assembled text content rather than a single text node.
+      expect(
+        screen.getByText(
+          (_, element) => element?.textContent === "Working… 20s",
+        ),
+      ).toBeTruthy();
     } finally {
       vi.useRealTimers();
     }

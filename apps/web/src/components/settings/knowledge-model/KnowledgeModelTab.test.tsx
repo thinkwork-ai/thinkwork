@@ -82,18 +82,18 @@ describe("KnowledgeModelTab", () => {
 
   it("swaps title and description from the per-view map", () => {
     expect(tabSource).toContain("VIEW_TITLES");
-    expect(tabSource).toContain('title: "Living Map"');
+    expect(tabSource).toContain('title: "Schema"');
     expect(tabSource).toContain('title: "Definitions"');
     expect(tabSource).toContain('title: "Identity"');
     expect(tabSource).toContain('title: "Resolution Queue"');
   });
 
-  it("lands on the Living Map by default (KTD-8)", () => {
+  it("lands on the Schema map by default (KTD-8)", () => {
     render(<KnowledgeModelTab />);
 
     expect(screen.getByText("Living map content")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Ontology view: Living Map" }),
+      screen.getByRole("button", { name: "Ontology view: Schema" }),
     ).toBeTruthy();
     expect(screen.queryByText("Definitions content")).toBeNull();
   });
@@ -102,7 +102,7 @@ describe("KnowledgeModelTab", () => {
     render(<KnowledgeModelTab />);
 
     const trigger = screen.getByRole("button", {
-      name: "Ontology view: Living Map",
+      name: "Ontology view: Schema",
     });
     fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" });
     fireEvent.click(
@@ -127,7 +127,7 @@ describe("KnowledgeModelTab", () => {
 
     expect(screen.getByText("Living map content")).toBeTruthy();
     const trigger = screen.getByRole("button", {
-      name: "Ontology view: Living Map",
+      name: "Ontology view: Schema",
     });
 
     fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" });
@@ -147,7 +147,7 @@ describe("KnowledgeModelTab", () => {
     render(<KnowledgeModelTab />);
 
     const trigger = screen.getByRole("button", {
-      name: "Ontology view: Living Map",
+      name: "Ontology view: Schema",
     });
     fireEvent.keyDown(trigger, { key: "Enter", code: "Enter" });
     fireEvent.click(
