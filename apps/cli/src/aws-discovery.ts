@@ -45,7 +45,13 @@ export function getApiEndpoint(stage: string, region: string): string | null {
   const raw = runAws(
     `apigatewayv2 get-apis --region ${region} --query "Items[?Name=='thinkwork-${stage}-api'].ApiEndpoint|[0]" --output text`,
   );
-  return raw && raw !== "None" ? raw : null;
+  // get-apis paginates; the CLI applies the JMESPath per page, so accounts
+  // with many APIs return "None" lines for the pages without the match.
+  const first = (raw ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l && l !== "None");
+  return first ?? null;
 }
 
 export interface DiscoveredThinkworkStageUrls {
