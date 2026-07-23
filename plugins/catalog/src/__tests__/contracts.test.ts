@@ -6,14 +6,91 @@ import {
   type PluginManifest,
   type PluginVersion,
 } from "../contracts";
-import { lastmileManifest } from "../registry";
+
+/**
+ * Local fixture manifest exercising the richest contract surface: three
+ * OAuth MCP servers plus a bundled skill. (Shape preserved from the
+ * retired LastMile catalog entry, THINK-334 U6.)
+ */
+const FIXTURE_AUTH_DOMAIN = "https://fixture-auth.example.invalid";
+const FIXTURE_MCP_BASE = "https://fixture-mcp.example.invalid";
+
+const fixtureManifest = {
+  pluginKey: "fixture-crm",
+  displayName: "Fixture CRM",
+  description:
+    "Contract-test fixture plugin with CRM, task, and routing MCP servers.",
+  versions: [
+    {
+      version: "0.1.0",
+      requiredOauthScopes: ["openid", "email", "profile", "offline_access"],
+      components: [
+        {
+          type: "mcp-server",
+          key: "crm",
+          displayName: "Fixture CRM",
+          description: "Customer accounts and sales opportunities.",
+          endpointUrl: `${FIXTURE_MCP_BASE}/crm`,
+          auth: {
+            mode: "oauth",
+            authDomain: FIXTURE_AUTH_DOMAIN,
+            resourceIndicator: `${FIXTURE_MCP_BASE}/crm`,
+          },
+        },
+        {
+          type: "mcp-server",
+          key: "tasks",
+          displayName: "Fixture Tasks",
+          description: "Work orders and task assignments.",
+          endpointUrl: `${FIXTURE_MCP_BASE}/tasks`,
+          auth: {
+            mode: "oauth",
+            authDomain: FIXTURE_AUTH_DOMAIN,
+            resourceIndicator: `${FIXTURE_MCP_BASE}/tasks`,
+          },
+        },
+        {
+          type: "mcp-server",
+          key: "routing",
+          displayName: "Fixture Routing",
+          description: "Route planning and technician dispatch.",
+          endpointUrl: `${FIXTURE_MCP_BASE}/routing`,
+          auth: {
+            mode: "oauth",
+            authDomain: FIXTURE_AUTH_DOMAIN,
+            resourceIndicator: `${FIXTURE_MCP_BASE}/routing`,
+          },
+        },
+        {
+          type: "skills",
+          key: "skills",
+          skills: [
+            {
+              slug: "fixture-crm--crm-basics",
+              skillMd: [
+                "---",
+                "name: fixture-crm--crm-basics",
+                "description: Fixture skill for contract validation tests.",
+                "---",
+                "",
+                "# Fixture CRM basics",
+                "",
+                "Work CRM requests through the fixture MCP tools.",
+              ].join("\n"),
+            },
+          ],
+        },
+      ],
+    },
+  ],
+} as unknown as PluginManifest;
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function manifest(mutate?: (manifest: PluginManifest) => void): PluginManifest {
-  const copy = clone(lastmileManifest);
+  const copy = clone(fixtureManifest);
   mutate?.(copy);
   return copy;
 }
@@ -23,9 +100,9 @@ function version(m: PluginManifest): PluginVersion {
 }
 
 describe("validatePluginManifest", () => {
-  it("validates the LastMile manifest (three OAuth MCP servers + skills)", () => {
-    const validated = validatePluginManifest(lastmileManifest);
-    expect(validated.pluginKey).toBe("lastmile");
+  it("validates the fixture manifest (three OAuth MCP servers + skills)", () => {
+    const validated = validatePluginManifest(fixtureManifest);
+    expect(validated.pluginKey).toBe("fixture-crm");
     const components = validated.versions[0].components;
     expect(
       components.filter((component) => component.type === "mcp-server"),
@@ -38,7 +115,7 @@ describe("validatePluginManifest", () => {
 
   it("rejects non-object input", () => {
     expect(() => validatePluginManifest(null)).toThrow(PluginManifestError);
-    expect(() => validatePluginManifest("lastmile")).toThrow(
+    expect(() => validatePluginManifest("fixture-crm")).toThrow(
       PluginManifestError,
     );
   });
@@ -52,13 +129,13 @@ describe("validatePluginManifest", () => {
   it("validates premium metadata for key-gated plugins", () => {
     const ok = manifest((m) => {
       m.premium = {
-        entitlementProductKey: "lastmile",
+        entitlementProductKey: "fixture-crm",
         installKeyRequired: true,
         installKeyPrompt: "Enter the install key provided by ThinkWork.",
       };
     });
     expect(validatePluginManifest(ok).premium).toEqual({
-      entitlementProductKey: "lastmile",
+      entitlementProductKey: "fixture-crm",
       installKeyRequired: true,
       installKeyPrompt: "Enter the install key provided by ThinkWork.",
     });
@@ -67,7 +144,7 @@ describe("validatePluginManifest", () => {
   it("rejects premium metadata without a true install-key requirement", () => {
     const bad = manifest((m) => {
       m.premium = {
-        entitlementProductKey: "lastmile",
+        entitlementProductKey: "fixture-crm",
         installKeyRequired: true,
         installKeyPrompt: "Enter the install key provided by ThinkWork.",
       };
@@ -82,7 +159,7 @@ describe("validatePluginManifest", () => {
   it("rejects premium metadata without an entitlement product key", () => {
     const bad = manifest((m) => {
       m.premium = {
-        entitlementProductKey: "lastmile",
+        entitlementProductKey: "fixture-crm",
         installKeyRequired: true,
         installKeyPrompt: "Enter the install key provided by ThinkWork.",
       };
@@ -116,7 +193,7 @@ describe("validatePluginManifest", () => {
       (component) => component.type === "skills",
     );
     if (skills?.type !== "skills") throw new Error("missing skills component");
-    skills.skills[0].slug = "lastmile/crm-basics";
+    skills.skills[0].slug = "fixture-crm/crm-basics";
     expect(() => validatePluginManifest(bad)).toThrow(/skill slug/);
   });
 
@@ -648,18 +725,18 @@ describe("validatePluginManifest", () => {
         {
           type: "ui-surface",
           key: "dashboard",
-          displayName: "LastMile dashboard",
+          displayName: "Fixture CRM dashboard",
           intendedMount: "settings.plugins.detail.tab",
           launch: {
             schemaVersion: 1,
             type: "app",
-            appKey: "lastmile-dashboard",
+            appKey: "fixture-crm-dashboard",
             routeSegment: "dashboard",
             mount: "main-shell",
             runtime: "trusted-bundled-react",
             description: "Account engagement dashboard.",
             icon: "layout-dashboard",
-            entitlementProductKey: "lastmile",
+            entitlementProductKey: "fixture-crm",
           },
         },
       );
@@ -672,7 +749,7 @@ describe("validatePluginManifest", () => {
       m.versions[0].components.push({
         type: "ui-surface",
         key: "settings",
-        displayName: "LastMile settings",
+        displayName: "Fixture CRM settings",
         intendedMount: "settings.plugins.detail.tab",
       });
     });
@@ -683,7 +760,7 @@ describe("validatePluginManifest", () => {
     expect(surface).toMatchObject({
       type: "ui-surface",
       key: "settings",
-      displayName: "LastMile settings",
+      displayName: "Fixture CRM settings",
       intendedMount: "settings.plugins.detail.tab",
     });
     expect(surface?.type === "ui-surface" ? surface.launch : undefined).toBe(
@@ -765,7 +842,7 @@ describe("validatePluginManifest", () => {
       m.versions[0].components.push({
         type: "ui-surface",
         key: "dashboard",
-        displayName: "LastMile dashboard",
+        displayName: "Fixture CRM dashboard",
         intendedMount: "",
       });
     });
@@ -778,7 +855,7 @@ describe("validatePluginManifest", () => {
       {
         schemaVersion: 2,
         type: "app",
-        appKey: "lastmile-dashboard",
+        appKey: "fixture-crm-dashboard",
         routeSegment: "dashboard",
         mount: "main-shell",
         runtime: "trusted-bundled-react",
@@ -786,7 +863,7 @@ describe("validatePluginManifest", () => {
       {
         schemaVersion: 1,
         type: "widget",
-        appKey: "lastmile-dashboard",
+        appKey: "fixture-crm-dashboard",
         routeSegment: "dashboard",
         mount: "main-shell",
         runtime: "trusted-bundled-react",
@@ -794,7 +871,7 @@ describe("validatePluginManifest", () => {
       {
         schemaVersion: 1,
         type: "app",
-        appKey: "LastMile",
+        appKey: "Fixture_CRM",
         routeSegment: "dashboard",
         mount: "main-shell",
         runtime: "trusted-bundled-react",
@@ -802,7 +879,7 @@ describe("validatePluginManifest", () => {
       {
         schemaVersion: 1,
         type: "app",
-        appKey: "lastmile-dashboard",
+        appKey: "fixture-crm-dashboard",
         routeSegment: "/dashboard",
         mount: "main-shell",
         runtime: "trusted-bundled-react",
@@ -810,7 +887,7 @@ describe("validatePluginManifest", () => {
       {
         schemaVersion: 1,
         type: "app",
-        appKey: "lastmile-dashboard",
+        appKey: "fixture-crm-dashboard",
         routeSegment: "dashboard",
         mount: "settings",
         runtime: "trusted-bundled-react",
@@ -818,7 +895,7 @@ describe("validatePluginManifest", () => {
       {
         schemaVersion: 1,
         type: "app",
-        appKey: "lastmile-dashboard",
+        appKey: "fixture-crm-dashboard",
         routeSegment: "dashboard",
         mount: "main-shell",
         runtime: "remote-url",
@@ -826,7 +903,7 @@ describe("validatePluginManifest", () => {
       {
         schemaVersion: 1,
         type: "app",
-        appKey: "lastmile-dashboard",
+        appKey: "fixture-crm-dashboard",
         routeSegment: "dashboard",
         mount: "main-shell",
         runtime: "trusted-bundled-react",
@@ -837,7 +914,7 @@ describe("validatePluginManifest", () => {
         m.versions[0].components.push({
           type: "ui-surface",
           key: "dashboard",
-          displayName: "LastMile dashboard",
+          displayName: "Fixture CRM dashboard",
           intendedMount: "settings.plugins.detail.tab",
           launch,
         } as never);

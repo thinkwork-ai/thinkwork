@@ -15,19 +15,9 @@ const DEFAULT_SCAN_ROOTS = [
   "scripts",
   "terraform",
 ];
-const PLUGIN_KEYS = [
-  "company-data",
-  "company-etl",
-  "email-channel",
-  "lastmile",
-  "n8n",
-  "twenty",
-];
+const PLUGIN_KEYS = ["email-channel", "n8n", "twenty"];
 const PLUGIN_SOURCE_ROOTS = new Map([
-  ["company-data", ["plugins/company-data/"]],
-  ["company-etl", ["plugins/company-etl/"]],
   ["email-channel", ["plugins/email-channel/"]],
-  ["lastmile", ["plugins/lastmile/"]],
   ["n8n", ["plugins/n8n/"]],
   ["twenty", ["plugins/twenty/"]],
 ]);

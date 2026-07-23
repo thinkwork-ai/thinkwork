@@ -56,7 +56,7 @@ describe("getPluginCatalog", () => {
         throw new Error("must not be called in unsigned mode");
       },
     });
-    expect(catalog.plugins.map((p) => p.pluginKey)).toContain("lastmile");
+    expect(catalog.plugins.map((p) => p.pluginKey)).toContain("twenty");
   });
 
   it("signed mode: verifies a properly signed document", async () => {
@@ -66,7 +66,7 @@ describe("getPluginCatalog", () => {
       readTrustedPublicKey: async () => publicKeyPem,
       loadSignedDocument: async () => document,
     });
-    expect(catalog.plugins.map((p) => p.pluginKey)).toContain("lastmile");
+    expect(catalog.plugins.map((p) => p.pluginKey)).toContain("twenty");
   });
 
   it("signed mode with GitHub config: loads the verified release artifact", async () => {
@@ -123,7 +123,7 @@ describe("getPluginCatalog", () => {
       "0123456789abcdef0123456789abcdef01234567",
     );
     expect(snapshot.catalog.plugins.map((p) => p.pluginKey)).toContain(
-      "lastmile",
+      "twenty",
     );
   });
 
@@ -166,7 +166,7 @@ describe("getPluginCatalog", () => {
 
     expect(snapshot.source).toBe("bundled-signed");
     expect(snapshot.catalog.plugins.map((p) => p.pluginKey)).toContain(
-      "lastmile",
+      "twenty",
     );
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining("GitHub catalog unavailable"),
@@ -298,19 +298,19 @@ describe("getPluginVersion / semver helpers", () => {
   const unsigned = { readTrustedPublicKey: async () => null };
 
   it("resolves the latest version by default and a pinned version explicitly", async () => {
-    const latest = await getPluginVersion("lastmile", null, unsigned);
+    const latest = await getPluginVersion("twenty", null, unsigned);
     expect(latest).not.toBeNull();
     expect(latest!.versionEntry.payload.components.length).toBeGreaterThan(0);
 
     const pinned = await getPluginVersion(
-      "lastmile",
+      "twenty",
       latest!.versionEntry.version,
       unsigned,
     );
     expect(pinned!.versionEntry.version).toBe(latest!.versionEntry.version);
 
     expect(await getPluginVersion("nope", null, unsigned)).toBeNull();
-    expect(await getPluginVersion("lastmile", "99.0.0", unsigned)).toBeNull();
+    expect(await getPluginVersion("twenty", "99.0.0", unsigned)).toBeNull();
   });
 
   it("compareSemverDesc sorts newest first, prerelease below release", () => {

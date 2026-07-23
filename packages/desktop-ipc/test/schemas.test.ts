@@ -295,11 +295,11 @@ describe("desktop IPC schemas", () => {
     expect(
       DeepLinkCallbackSchema.parse({
         type: "app-route",
-        path: "/settings/plugins/lastmile?pluginOAuth=success",
+        path: "/settings/plugins/acme?pluginOAuth=success",
       }),
     ).toEqual({
       type: "app-route",
-      path: "/settings/plugins/lastmile?pluginOAuth=success",
+      path: "/settings/plugins/acme?pluginOAuth=success",
     });
     expect(() =>
       DeepLinkCallbackSchema.parse({

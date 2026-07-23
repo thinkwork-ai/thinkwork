@@ -12,7 +12,7 @@ const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
     desktopState: {
       bridge: null as null | { getDesktopConfig: ReturnType<typeof vi.fn> },
     },
-    paramsState: { pluginKey: "lastmile" },
+    paramsState: { pluginKey: "acme" },
     mocks: {
       activate: vi.fn(),
       activateCredentials: vi.fn(),
@@ -241,7 +241,7 @@ beforeEach(() => {
   refreshCatalog.mockReset();
   refreshInstalls.mockReset();
   refreshActivations.mockReset();
-  paramsState.pluginKey = "lastmile";
+  paramsState.pluginKey = "acme";
   tenantState.isOperator = true;
   tenantState.roleResolved = true;
   desktopState.bridge = null;
@@ -273,7 +273,7 @@ beforeEach(() => {
       activatePluginWithCredentials: {
         id: "act-credentials",
         pluginInstallId: "install-credentials",
-        pluginKey: "lastmile",
+        pluginKey: "acme",
         status: "active",
       },
     },
@@ -282,8 +282,8 @@ beforeEach(() => {
     data: { deactivatePlugin: { id: "act-1", status: "revoked" } },
   });
   mockQueries();
-  paramsState.pluginKey = "lastmile";
-  window.history.replaceState({}, "", "/settings/plugins/lastmile");
+  paramsState.pluginKey = "acme";
+  window.history.replaceState({}, "", "/settings/plugins/acme");
 });
 
 afterEach(cleanup);
@@ -347,13 +347,11 @@ describe("PluginDetail", () => {
     expect(screen.getByText("Partially installed")).toBeTruthy();
     expect(screen.getByText("S3 prefix seed failed")).toBeTruthy();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /retry lastmile-skills/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /retry acme-skills/i }));
 
     await waitFor(() => {
       expect(mocks.retry).toHaveBeenCalledWith({
-        input: { installId: "install-1", componentKey: "lastmile-skills" },
+        input: { installId: "install-1", componentKey: "acme-skills" },
       });
     });
   });
@@ -399,7 +397,7 @@ describe("PluginDetail", () => {
       expect(mocks.activate).toHaveBeenCalledWith({
         input: {
           installId: "install-1",
-          returnTo: "http://localhost:3000/settings/plugins/lastmile",
+          returnTo: "http://localhost:3000/settings/plugins/acme",
         },
       });
     });
@@ -427,7 +425,7 @@ describe("PluginDetail", () => {
       expect(mocks.activate).toHaveBeenCalledWith({
         input: {
           installId: "install-1",
-          returnTo: "thinkwork-canary://app/settings/plugins/lastmile",
+          returnTo: "thinkwork-canary://app/settings/plugins/acme",
         },
       });
     });
@@ -437,7 +435,7 @@ describe("PluginDetail", () => {
     window.history.replaceState(
       {},
       "",
-      "/settings/plugins/lastmile?pluginOAuth=success",
+      "/settings/plugins/acme?pluginOAuth=success",
     );
     render(<PluginDetail />);
 
@@ -463,11 +461,11 @@ describe("PluginDetail", () => {
       .find((button) => (button as HTMLButtonElement).disabled);
     expect(confirm).toBeTruthy();
 
-    const input = screen.getByPlaceholderText("lastmile");
+    const input = screen.getByPlaceholderText("acme");
     fireEvent.change(input, { target: { value: "wrong-key" } });
     expect((confirm as HTMLButtonElement).disabled).toBe(true);
 
-    fireEvent.change(input, { target: { value: "lastmile" } });
+    fireEvent.change(input, { target: { value: "acme" } });
     expect((confirm as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(confirm as HTMLButtonElement);
@@ -475,7 +473,7 @@ describe("PluginDetail", () => {
       expect(mocks.uninstall).toHaveBeenCalledWith({
         input: {
           installId: "install-1",
-          destructiveConfirmation: "lastmile",
+          destructiveConfirmation: "acme",
         },
       });
     });
@@ -492,8 +490,8 @@ describe("PluginDetail", () => {
     render(<PluginDetail />);
 
     fireEvent.click(screen.getByRole("button", { name: /retry uninstall/i }));
-    fireEvent.change(screen.getByPlaceholderText("lastmile"), {
-      target: { value: "lastmile" },
+    fireEvent.change(screen.getByPlaceholderText("acme"), {
+      target: { value: "acme" },
     });
     fireEvent.click(
       screen.getByRole("button", { name: /^uninstall plugin$/i }),
@@ -503,7 +501,7 @@ describe("PluginDetail", () => {
       expect(mocks.uninstall).toHaveBeenCalledWith({
         input: {
           installId: "install-1",
-          destructiveConfirmation: "lastmile",
+          destructiveConfirmation: "acme",
         },
       });
     });
@@ -844,7 +842,7 @@ describe("PluginDetail", () => {
 const baseInstall = {
   __typename: "PluginInstall" as const,
   id: "install-1",
-  pluginKey: "lastmile",
+  pluginKey: "acme",
   pinnedVersion: "1.0.0",
   state: "partially_installed",
   lastTransitionAt: "2026-06-12T12:00:00Z",
@@ -854,7 +852,7 @@ const baseInstall = {
     {
       __typename: "PluginComponent" as const,
       id: "component-1",
-      componentKey: "lastmile-mcp",
+      componentKey: "acme-mcp",
       componentType: "mcp-server",
       state: "provisioned",
       lastError: null,
@@ -862,7 +860,7 @@ const baseInstall = {
     {
       __typename: "PluginComponent" as const,
       id: "component-2",
-      componentKey: "lastmile-skills",
+      componentKey: "acme-skills",
       componentType: "skills",
       state: "failed",
       lastError: "S3 prefix seed failed",
@@ -909,7 +907,7 @@ const needsReauthActivation = {
   __typename: "UserPluginActivation" as const,
   id: "act-1",
   pluginInstallId: "install-1",
-  pluginKey: "lastmile",
+  pluginKey: "acme",
   status: "needs_reauth",
   grantedScopes: ["read"],
   grantedAt: "2026-06-10T12:00:00Z",
@@ -918,9 +916,9 @@ const needsReauthActivation = {
 
 const catalogEntry = {
   __typename: "PluginCatalogEntry" as const,
-  pluginKey: "lastmile",
-  displayName: "LastMile",
-  description: "LastMile logistics tools and skills.",
+  pluginKey: "acme",
+  displayName: "Acme",
+  description: "Acme logistics tools and skills.",
   latestVersion: "1.1.0",
   updateAvailable: true,
   versions: [
@@ -930,11 +928,11 @@ const catalogEntry = {
       requiredOauthScopes: ["read", "write", "admin"],
       components: [
         {
-          key: "lastmile-mcp",
+          key: "acme-mcp",
           type: "mcp-server",
-          displayName: "LastMile MCP",
+          displayName: "Acme MCP",
         },
-        { key: "lastmile-skills", type: "skills", displayName: null },
+        { key: "acme-skills", type: "skills", displayName: null },
       ],
     },
     {
@@ -943,11 +941,11 @@ const catalogEntry = {
       requiredOauthScopes: ["read", "write"],
       components: [
         {
-          key: "lastmile-mcp",
+          key: "acme-mcp",
           type: "mcp-server",
-          displayName: "LastMile MCP",
+          displayName: "Acme MCP",
         },
-        { key: "lastmile-skills", type: "skills", displayName: null },
+        { key: "acme-skills", type: "skills", displayName: null },
       ],
     },
   ],

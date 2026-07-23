@@ -261,17 +261,17 @@ describe("PluginsPage", () => {
 
   it("shows a Reconnect needed badge when the user's activation needs reauth", () => {
     mockQueries({
-      activations: [{ pluginKey: "lastmile", status: "needs_reauth" }],
+      activations: [{ pluginKey: "acme", status: "needs_reauth" }],
     });
     render(<PluginsPage />);
 
-    const lastmileRow = screen.getByRole("link", { name: "Open LastMile" });
-    expect(within(lastmileRow).getByText("Reconnect needed")).toBeTruthy();
+    const acmeRow = screen.getByRole("link", { name: "Open Acme" });
+    expect(within(acmeRow).getByText("Reconnect needed")).toBeTruthy();
   });
 
   it("does not show Reconnect needed for an active activation", () => {
     mockQueries({
-      activations: [{ pluginKey: "lastmile", status: "active" }],
+      activations: [{ pluginKey: "acme", status: "active" }],
     });
     render(<PluginsPage />);
 
@@ -288,8 +288,8 @@ describe("PluginsPage", () => {
         Boolean(label?.startsWith("Open ") && !label.includes("application")),
       );
     expect(rowLabels).toEqual([
+      "Open Acme",
       "Open Docs Sync",
-      "Open LastMile",
       "Open SendGrid Email",
       "Open Twenty CRM",
     ]);
@@ -321,9 +321,9 @@ describe("PluginsPage", () => {
     expect(screen.queryByText("Bundled unsigned")).toBeNull();
     expect(headerConfigRef.current?.actionKey).toContain("abcdef0123456789");
 
-    const lastmileRow = screen.getByRole("link", { name: "Open LastMile" });
+    const acmeRow = screen.getByRole("link", { name: "Open Acme" });
     expect(
-      within(lastmileRow).getByText(/Installed v1\.0\.0 · Latest v1\.1\.0/),
+      within(acmeRow).getByText(/Installed v1\.0\.0 · Latest v1\.1\.0/),
     ).toBeTruthy();
   });
 
@@ -378,7 +378,7 @@ describe("PluginsPage", () => {
     expect(
       screen.queryByRole("link", { name: "Open SendGrid Email" }),
     ).toBeNull();
-    expect(screen.getByRole("link", { name: "Open LastMile" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open Acme" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open Docs Sync" })).toBeTruthy();
   });
 
@@ -386,7 +386,7 @@ describe("PluginsPage", () => {
     tenantState.isOperator = false;
     render(<PluginsPage />);
 
-    expect(screen.getByRole("link", { name: "Open LastMile" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open Acme" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Open Twenty CRM" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open Docs Sync" })).toBeNull();
     expect(screen.queryByRole("button", { name: /^install$/i })).toBeNull();
@@ -443,15 +443,15 @@ describe("PluginsPage", () => {
     const openMock = vi.spyOn(window, "open").mockImplementation(() => null);
     render(<PluginsPage />);
 
-    const lastmileRow = screen.getByRole("link", { name: "Open LastMile" });
+    const acmeRow = screen.getByRole("link", { name: "Open Acme" });
     fireEvent.click(
-      within(lastmileRow).getByRole("button", {
-        name: "Open LastMile application",
+      within(acmeRow).getByRole("button", {
+        name: "Open Acme application",
       }),
     );
 
     expect(openMock).toHaveBeenCalledWith(
-      "https://lastmile.example.com",
+      "https://acme.example.com",
       "_blank",
       "noopener,noreferrer",
     );
@@ -493,7 +493,7 @@ const installedPlugins = [
   {
     __typename: "PluginInstall" as const,
     id: "install-1",
-    pluginKey: "lastmile",
+    pluginKey: "acme",
     pinnedVersion: "1.0.0",
     state: "installed",
     lastTransitionAt: "2026-06-12T12:00:00Z",
@@ -535,11 +535,11 @@ const catalogMetadata = {
 const catalogEntries = [
   {
     __typename: "PluginCatalogEntry" as const,
-    pluginKey: "lastmile",
-    displayName: "LastMile",
-    description: "LastMile logistics tools and skills.",
+    pluginKey: "acme",
+    displayName: "Acme",
+    description: "Acme logistics tools and skills.",
     latestVersion: "1.1.0",
-    launchUrl: "https://lastmile.example.com",
+    launchUrl: "https://acme.example.com",
     updateAvailable: true,
     versions: [
       {

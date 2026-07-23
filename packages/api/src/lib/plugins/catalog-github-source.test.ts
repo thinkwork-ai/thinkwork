@@ -149,7 +149,7 @@ describe("loadGitHubPluginCatalog", () => {
 
     expect(
       snapshot.catalog.plugins.map((plugin) => plugin.pluginKey),
-    ).toContain("lastmile");
+    ).toContain("twenty");
     expect(snapshot.status).toMatchObject({
       source: "github-release",
       repository: "thinkwork-ai/thinkwork",

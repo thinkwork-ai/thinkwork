@@ -33,15 +33,18 @@ describe("buildSignedCatalogJson", () => {
       trustedPublicKeyPem: keys.publicKeyPem,
     });
     expect(verified.plugins.map((plugin) => plugin.pluginKey)).toEqual([
-      "lastmile",
       "n8n",
       "email-channel",
       "sendgrid",
-      "company-data",
-      "company-etl",
       "twenty",
     ]);
     expect(verified.generatedAt).toBe("2026-06-12T00:00:00.000Z");
+    // AE5 (THINK-334 U6): the built catalog must not carry the superseded data plugins.
+    for (const removedKey of ["lastmile", "company-data", "company-etl"]) {
+      expect(verified.plugins.map((plugin) => plugin.pluginKey)).not.toContain(
+        removedKey,
+      );
+    }
   });
 
   it("includes source provenance when provided by the publisher", () => {

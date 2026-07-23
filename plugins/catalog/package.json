@@ -21,10 +21,7 @@
     "build:catalog": "tsx scripts/generate-plugin-registry.ts --check && tsx scripts/build-catalog.ts"
   },
   "dependencies": {
-    "@thinkwork/plugin-company-data": "workspace:*",
-    "@thinkwork/plugin-company-etl": "workspace:*",
     "@thinkwork/plugin-email-channel": "workspace:*",
-    "@thinkwork/plugin-lastmile": "workspace:*",
     "@thinkwork/plugin-n8n": "workspace:*",
     "@thinkwork/plugin-sendgrid": "workspace:*",
     "@thinkwork/plugin-twenty": "workspace:*"

@@ -14,7 +14,7 @@ import {
   type SignedPluginCatalogDocument,
 } from "../catalog";
 import type { PluginManifest } from "../contracts";
-import { lastmileManifest, n8nManifest } from "../registry";
+import { n8nManifest, twentyManifest } from "../registry";
 
 function keyPair() {
   const pair = generateKeyPairSync("ed25519");
@@ -36,7 +36,7 @@ function clone<T>(value: T): T {
 
 function signedDocument(privateKeyPem: string): SignedPluginCatalogDocument {
   const catalog = buildPluginCatalog({
-    manifests: [lastmileManifest],
+    manifests: [twentyManifest],
     generatedAt: "2026-06-12T00:00:00.000Z",
     source: {
       repository: "thinkwork-ai/thinkwork",
@@ -53,19 +53,19 @@ function signedDocument(privateKeyPem: string): SignedPluginCatalogDocument {
 
 describe("buildPluginCatalog", () => {
   it("builds an entry per manifest with per-version payload digests", () => {
-    const catalog = buildPluginCatalog({ manifests: [lastmileManifest] });
+    const catalog = buildPluginCatalog({ manifests: [twentyManifest] });
     expect(catalog.schemaVersion).toBe(PLUGIN_CATALOG_SCHEMA_VERSION);
     expect(catalog.plugins).toHaveLength(1);
     const entry = catalog.plugins[0];
-    expect(entry.pluginKey).toBe("lastmile");
+    expect(entry.pluginKey).toBe("twenty");
     expect(entry.versions[0].version).toBe("0.1.0");
     expect(entry.versions[0].payloadSha256).toMatch(/^[a-f0-9]{64}$/);
-    expect(entry.versions[0].payload).toEqual(lastmileManifest.versions[0]);
+    expect(entry.versions[0].payload).toEqual(twentyManifest.versions[0]);
   });
 
   it("optionally signs GitHub source provenance", () => {
     const catalog = buildPluginCatalog({
-      manifests: [lastmileManifest],
+      manifests: [twentyManifest],
       generatedAt: "2026-06-12T00:00:00.000Z",
       source: {
         repository: "thinkwork-ai/thinkwork",
@@ -82,7 +82,7 @@ describe("buildPluginCatalog", () => {
 
   it("keeps source provenance optional for bundled fallback catalogs", () => {
     const catalog = buildPluginCatalog({
-      manifests: [lastmileManifest],
+      manifests: [twentyManifest],
       generatedAt: "2026-06-12T00:00:00.000Z",
     });
     expect(catalog.source).toBeUndefined();
@@ -90,41 +90,41 @@ describe("buildPluginCatalog", () => {
 
   it("rejects duplicate plugin keys in a catalog", () => {
     expect(() =>
-      buildPluginCatalog({ manifests: [lastmileManifest, lastmileManifest] }),
-    ).toThrow(/Duplicate plugin key in catalog: lastmile/);
+      buildPluginCatalog({ manifests: [twentyManifest, twentyManifest] }),
+    ).toThrow(/Duplicate plugin key in catalog: twenty/);
   });
 
   it("sorts catalog plugins alphabetically by display name", () => {
     const catalog = buildPluginCatalog({
-      manifests: [n8nManifest, lastmileManifest],
+      manifests: [twentyManifest, n8nManifest],
     });
 
     expect(catalog.plugins.map((plugin) => plugin.displayName)).toEqual([
-      "LastMile",
       "n8n",
+      "Twenty CRM",
     ]);
   });
 
   it("preserves premium metadata on catalog entries", () => {
     const premiumManifest: PluginManifest = {
-      ...lastmileManifest,
+      ...twentyManifest,
       premium: {
-        entitlementProductKey: "lastmile-premium",
+        entitlementProductKey: "twenty-premium",
         installKeyRequired: true,
         installKeyPrompt: "Enter the install key.",
       },
     };
     const catalog = buildPluginCatalog({ manifests: [premiumManifest] });
-    expect(catalog.plugins[0].pluginKey).toBe("lastmile");
+    expect(catalog.plugins[0].pluginKey).toBe("twenty");
     expect(catalog.plugins[0].premium).toEqual({
-      entitlementProductKey: "lastmile-premium",
+      entitlementProductKey: "twenty-premium",
       installKeyRequired: true,
       installKeyPrompt: "Enter the install key.",
     });
   });
 
   it("rejects invalid manifests", () => {
-    const bad = clone(lastmileManifest);
+    const bad = clone(twentyManifest);
     bad.versions[0].version = "not-semver";
     expect(() => buildPluginCatalog({ manifests: [bad] })).toThrow(
       /not valid semver/,
@@ -134,7 +134,7 @@ describe("buildPluginCatalog", () => {
   it("rejects invalid source provenance shape", () => {
     expect(() =>
       buildPluginCatalog({
-        manifests: [lastmileManifest],
+        manifests: [twentyManifest],
         source: {
           repository: "not-owner-name",
           ref: "main",
@@ -144,7 +144,7 @@ describe("buildPluginCatalog", () => {
     ).toThrow(/owner\/name/);
     expect(() =>
       buildPluginCatalog({
-        manifests: [lastmileManifest],
+        manifests: [twentyManifest],
         source: {
           repository: "thinkwork-ai/thinkwork",
           ref: "main",
@@ -163,7 +163,7 @@ describe("sign → verify round-trip", () => {
       document,
       trustedPublicKeyPem: keys.publicKeyPem,
     });
-    expect(verified.plugins[0].pluginKey).toBe("lastmile");
+    expect(verified.plugins[0].pluginKey).toBe("twenty");
     expect(verified.source).toEqual({
       repository: "thinkwork-ai/thinkwork",
       ref: "main",
@@ -194,8 +194,8 @@ describe("verification fails closed", () => {
     const document = signedDocument(keys.privateKeyPem);
     const tampered = clone(document);
     const component = tampered.catalog.plugins[0].versions[0].payload
-      .components[0] as { endpointUrl?: string };
-    component.endpointUrl = "https://evil.example.invalid/mcp";
+      .components[0] as { displayName?: string };
+    component.displayName = "Tampered CRM";
     expect(() =>
       verifyPluginCatalog({
         document: tampered,

@@ -158,8 +158,6 @@ import {
 } from "./queries.js";
 
 const CTX = { auth: { tenantId: null } } as never; // Google-federated shape
-const COMPANY_ETL_PAYLOAD_SHA256 =
-  "49681471c865d81257872da252538f84345f42b43299c27764fc2714bb2e8abf";
 
 const fixtureVersion: PluginVersion = {
   version: "0.1.0",
@@ -376,63 +374,16 @@ describe("pluginCatalogMetadata", () => {
 });
 
 describe("pluginCatalog", () => {
-  it("canonicalizes a legacy Data Integrations install onto the ThinkWork ETL catalog entry", async () => {
-    store.seedInstall({
-      tenant_id: "tenant-1",
-      plugin_key: "data-integrations",
-      pinned_version: "0.1.0",
-      pinned_payload_sha256: COMPANY_ETL_PAYLOAD_SHA256,
-      state: "installed",
-    });
-
+  it("no longer offers the superseded data plugins (THINK-334 U6)", async () => {
     const result = (await pluginCatalog(null, {} as never, CTX)) as Array<{
       pluginKey: string;
-      displayName: string;
-      install: { pluginKey: string; pinnedPayloadSha256: string } | null;
     }>;
 
-    const companyEtl = result.find(
-      (entry) => entry.pluginKey === "company-etl",
-    );
-    expect(companyEtl).toBeDefined();
-    expect(companyEtl).toMatchObject({
-      pluginKey: "company-etl",
-      displayName: "ThinkWork ETL",
-      install: {
-        pluginKey: "company-etl",
-        pinnedPayloadSha256: COMPANY_ETL_PAYLOAD_SHA256,
-      },
-    });
-    expect(
-      result.some((entry) => entry.pluginKey === "data-integrations"),
-    ).toBe(false);
-  });
-
-  it("canonicalizes legacy Data Integrations activations to ThinkWork ETL", async () => {
-    const install = store.seedInstall({
-      tenant_id: "tenant-1",
-      plugin_key: "data-integrations",
-      pinned_version: "0.1.0",
-      pinned_payload_sha256: COMPANY_ETL_PAYLOAD_SHA256,
-      state: "installed",
-    });
-    store.seedActivation({
-      user_id: "user-1",
-      plugin_install_id: install.id,
-      granted_scopes: [],
-    });
-
-    const result = (await myPluginActivations(
-      null,
-      {} as never,
-      CTX,
-    )) as unknown as Array<{ pluginKey: string; pluginInstallId: string }>;
-
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
-      pluginKey: "company-etl",
-      pluginInstallId: install.id,
-    });
+    const keys = result.map((entry) => entry.pluginKey);
+    expect(keys.length).toBeGreaterThan(0);
+    expect(keys).not.toContain("lastmile");
+    expect(keys).not.toContain("company-data");
+    expect(keys).not.toContain("company-etl");
   });
 });
 

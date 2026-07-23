@@ -19,24 +19,9 @@ describe("generated first-party plugin registry", () => {
       })),
     ).toEqual([
       {
-        packageKey: "company-data",
-        packageName: "@thinkwork/plugin-company-data",
-        exportName: "companyDataPluginPackage",
-      },
-      {
-        packageKey: "company-etl",
-        packageName: "@thinkwork/plugin-company-etl",
-        exportName: "companyEtlPluginPackage",
-      },
-      {
         packageKey: "email-channel",
         packageName: "@thinkwork/plugin-email-channel",
         exportName: "emailChannelPluginPackage",
-      },
-      {
-        packageKey: "lastmile",
-        packageName: "@thinkwork/plugin-lastmile",
-        exportName: "lastmilePluginPackage",
       },
       {
         packageKey: "n8n",

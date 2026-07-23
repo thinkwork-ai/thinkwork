@@ -32,11 +32,6 @@ export const sharedPluginTermAllowlist = [
       "CLI structural fixture coverage validates plugin-owned Terraform packaging from the platform bundle.",
   },
   {
-    path: "apps/web/src/routes/_authed/settings.plugins.data-integrations.tsx",
-    reason:
-      "legacy settings URL redirect only; Company ETL UI source is owned by the canonical company-etl plugin detail.",
-  },
-  {
     path: "packages/database-pg/src/schema/email-channel.ts",
     reason:
       "shared platform schema for existing email reply tokens; THNK-35 U2 expands it generically for channel state.",

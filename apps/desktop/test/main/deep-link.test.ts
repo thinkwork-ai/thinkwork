@@ -94,14 +94,14 @@ describe("desktop deep links", () => {
   it("parses stage-scoped app route deep links for plugin OAuth completion", () => {
     expect(
       parseDeepLinkCallback(
-        "thinkwork-canary://app/settings/plugins/lastmile?pluginOAuth=success",
+        "thinkwork-canary://app/settings/plugins/acme?pluginOAuth=success",
         {
           allowedSchemes: ["thinkwork-canary"],
         },
       ),
     ).toEqual({
       type: "app-route",
-      path: "/settings/plugins/lastmile?pluginOAuth=success",
+      path: "/settings/plugins/acme?pluginOAuth=success",
     });
   });
 
