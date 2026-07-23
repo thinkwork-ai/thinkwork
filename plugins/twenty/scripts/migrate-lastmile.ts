@@ -374,8 +374,20 @@ async function runMigration(options: {
   const cohortDaysRaw = process.env.TWENTY_DISPATCH_CUSTOMER_COHORT_DAYS;
   if (cohortDaysRaw) {
     const cohortDays = Number(cohortDaysRaw);
-    log(`records: loading dispatch customer cohort (${cohortDays}d)...`);
-    const cohort = await reader.readOrderCohortCustomers(cohortDays);
+    // TWENTY_DISPATCH_CUSTOMER_OPEN_INVOICES=1 widens the cohort to customers
+    // holding an open invoice (any age) — the twin carries ALL open invoices,
+    // so their customers must have CRM records even without a recent order.
+    const includeOpenInvoices = ["1", "true"].includes(
+      (process.env.TWENTY_DISPATCH_CUSTOMER_OPEN_INVOICES ?? "").toLowerCase(),
+    );
+    log(
+      `records: loading dispatch customer cohort (${cohortDays}d` +
+        `${includeOpenInvoices ? " + open invoices" : ""})...`,
+    );
+    const cohort = await reader.readOrderCohortCustomers(
+      cohortDays,
+      includeOpenInvoices,
+    );
     const fresh = cohort.filter((customer) => !customer.hasAccountNameMatch);
     log(
       `records: dispatch cohort ${cohort.length} customers, ` +
