@@ -1177,6 +1177,10 @@ module "api" {
   neptune_cluster_resource_id = var.neptune_cluster_resource_id
   neptune_subnet_ids          = var.neptune_client_security_group_id != "" ? module.vpc.private_subnet_ids : []
   neptune_security_group_ids  = var.neptune_client_security_group_id != "" ? [var.neptune_client_security_group_id, aws_security_group.twin_lambda_egress[0].id] : []
+  # Bulk-rebuild lane (THINK-331): loader staging bucket + cluster loader
+  # role, both default-empty (ship inert, KTD-9).
+  neptune_load_bucket     = var.neptune_load_bucket
+  neptune_loader_role_arn = var.neptune_loader_role_arn
   # Company Brain U7: twin tool seam flag (KTD-5 rollout posture).
   okf_efs_mount_target_ids         = var.okf_wiki_efs_enabled ? aws_efs_mount_target.okf_wiki[*].id : []
   okf_efs_file_system_arn          = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""

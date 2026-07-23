@@ -110,7 +110,7 @@ export function systemEdgeId(
   return `t#${tenantId}#x#${canonicalId}#${systemSlug}${namespace ? `#${namespace}` : ""}`;
 }
 
-function safeLabel(slug: string): string {
+export function safeLabel(slug: string): string {
   if (!SLUG_RE.test(slug)) {
     // Governed slugs should never hit this; a malformed one must not reach
     // query text. Fall back to the generic label rather than fail identity
@@ -593,159 +593,43 @@ export function readSingleCount(result: unknown): number | null {
 }
 
 /**
- * Full rebuild (first-class recovery command): resync EVERY canonical
- * entity for the tenant from the relational store, then cut a fresh
- * snapshot and fast-forward the cursor to the newest event. The graph is
- * rebuildable, never authoritative.
+ * Drop a tenant's ENTIRE twin subgraph. Batched DETACH DELETE, fenced by
+ * the tenant's deterministic ~id PREFIX rather than a property match: the
+ * pre-label-fix loser path minted survivor nodes with NO properties at
+ * all, and a {tenantId: …} match walks straight past those ghosts (which
+ * is how the first clearing rebuild still collided). The id prefix is the
+ * tenant firewall by construction.
+ *
+ * Destroys etl-synced facet properties — the etl twin_batch ledger is
+ * skip-on-hit, so cleared facets stay gone until NEW batches arrive; pair
+ * clear-rebuilds with a facet re-sync. Shared machinery kept from the
+ * retired replay rebuild (THINK-331 KTD-2); the only caller today is the
+ * bulk-rebuild lane's `clear: true` path.
+ *
+ * `shouldStop` is the caller's deadline guard — checked before each batch;
+ * a trip returns { cleared: false } with the remaining subgraph intact.
  */
-export async function rebuildTenantGraph(args: {
+export async function clearTenantSubgraph(args: {
   tenantId: string;
-  /**
-   * Drop the tenant's ENTIRE subgraph before resyncing. Opt-in because it
-   * also destroys etl-synced facet properties — and the etl twin_batch
-   * ledger is skip-on-hit, so cleared facets stay gone until NEW batches
-   * arrive. Use to recover from mislabeled/orphaned nodes (e.g. the
-   * unlabeled-survivor bug this flag shipped with); leave off for a
-   * routine identity resync.
-   */
-  clearFirst?: boolean;
-  db?: DbLike;
   neptune?: NeptuneQueryClient;
-  s3?: SnapshotS3Client;
-  now?: Date;
-}): Promise<{ tenantId: string; resyncedCanonicals: number }> {
-  const db = args.db ?? defaultDb;
+  shouldStop?: () => boolean;
+}): Promise<{ cleared: boolean }> {
   const neptune = args.neptune ?? createNeptuneClient();
-
-  if (args.clearFirst) {
-    // Batched DETACH DELETE, fenced by the tenant's deterministic ~id
-    // PREFIX rather than a property match: the pre-label-fix loser path
-    // minted survivor nodes with NO properties at all, and a
-    // {tenantId: …} match walks straight past those ghosts (which is how
-    // the first clearing rebuild still collided). The id prefix is the
-    // tenant firewall by construction.
-    const idPrefix = `t#${args.tenantId}#`;
-    for (let round = 0; round < 200; round += 1) {
-      await neptune.execute(
-        "MATCH (n) WHERE id(n) STARTS WITH $idPrefix " +
-          "WITH n LIMIT 2000 DETACH DELETE n",
-        { idPrefix },
-      );
-      const remaining = await neptune.execute(
-        "MATCH (n) WHERE id(n) STARTS WITH $idPrefix RETURN count(n) AS c",
-        { idPrefix },
-      );
-      if (readSingleCount(remaining) === 0) break;
-    }
+  const idPrefix = `t#${args.tenantId}#`;
+  for (let round = 0; round < 200; round += 1) {
+    if (args.shouldStop?.()) return { cleared: false };
+    await neptune.execute(
+      "MATCH (n) WHERE id(n) STARTS WITH $idPrefix " +
+        "WITH n LIMIT 2000 DETACH DELETE n",
+      { idPrefix },
+    );
+    const remaining = await neptune.execute(
+      "MATCH (n) WHERE id(n) STARTS WITH $idPrefix RETURN count(n) AS c",
+      { idPrefix },
+    );
+    if (readSingleCount(remaining) === 0) break;
   }
-
-  const allCanonicals = await db
-    .select({ id: canonicalEntities.id })
-    .from(canonicalEntities)
-    .where(eq(canonicalEntities.tenant_id, args.tenantId));
-
-  let resynced = 0;
-  for (let i = 0; i < allCanonicals.length; i += RESYNC_CHUNK) {
-    const chunkIds = allCanonicals.slice(i, i + RESYNC_CHUNK).map((r) => r.id);
-    const canonicalRows = await db
-      .select({
-        id: canonicalEntities.id,
-        entity_type_slug: canonicalEntities.entity_type_slug,
-        display_name: canonicalEntities.display_name,
-        status: canonicalEntities.status,
-        merged_into_id: canonicalEntities.merged_into_id,
-      })
-      .from(canonicalEntities)
-      .where(
-        and(
-          eq(canonicalEntities.tenant_id, args.tenantId),
-          inArray(canonicalEntities.id, chunkIds),
-        ),
-      );
-    const mappingRows = await db
-      .select({
-        canonical_entity_id: entitySourceMappings.canonical_entity_id,
-        source_system: entitySourceMappings.source_system,
-        namespace: entitySourceMappings.namespace,
-        external_id: entitySourceMappings.external_id,
-        visibility: entitySourceMappings.visibility,
-      })
-      .from(entitySourceMappings)
-      .where(
-        and(
-          eq(entitySourceMappings.tenant_id, args.tenantId),
-          inArray(entitySourceMappings.canonical_entity_id, chunkIds),
-        ),
-      );
-    const mappingsByCanonical = new Map<string, MappingRowForSync[]>();
-    for (const row of mappingRows) {
-      const list = mappingsByCanonical.get(row.canonical_entity_id) ?? [];
-      list.push(row);
-      mappingsByCanonical.set(row.canonical_entity_id, list);
-    }
-    for (const canonical of canonicalRows) {
-      const ops = buildCanonicalResyncOps({
-        tenantId: args.tenantId,
-        canonical,
-        mappings: mappingsByCanonical.get(canonical.id) ?? [],
-      });
-      for (const op of ops) {
-        await neptune.execute(op.query, op.parameters);
-      }
-      resynced += 1;
-    }
-  }
-
-  // Fast-forward the cursor to the newest event and publish a fresh
-  // snapshot — the rebuild reflected everything up to now.
-  const [latest] = await db
-    .select({
-      id: entityResolutionEvents.id,
-      created_at: entityResolutionEvents.created_at,
-    })
-    .from(entityResolutionEvents)
-    .where(eq(entityResolutionEvents.tenant_id, args.tenantId))
-    .orderBy(
-      sql`${entityResolutionEvents.created_at} DESC`,
-      sql`${entityResolutionEvents.id} DESC`,
-    )
-    .limit(1);
-  const cursor = latest
-    ? `${latest.created_at.toISOString()}#${latest.id}`
-    : "rebuild#empty";
-  const snapshot = await buildIdentitySnapshot({
-    tenantId: args.tenantId,
-    cursor,
-    db,
-    now: args.now,
-  });
-  await uploadIdentitySnapshot({ snapshot, s3: args.s3 });
-  // SQL-side timestamp for the same reason as projectPendingIdentityEvents:
-  // a truncated fast-forward cursor would leave every event sharing the
-  // newest millisecond perpetually "pending" for the next nudge.
-  const latestCreatedAtExact = latest
-    ? (sql`(SELECT created_at FROM identity.entity_resolution_events WHERE id = ${latest.id})` as unknown as Date)
-    : null;
-  await db
-    .insert(identityGraphProjectionCursors)
-    .values({
-      tenant_id: args.tenantId,
-      last_event_created_at: latestCreatedAtExact,
-      last_event_id: latest?.id ?? null,
-      last_snapshot_cursor: cursor,
-      updated_at: args.now ?? new Date(),
-    })
-    .onConflictDoUpdate({
-      target: [identityGraphProjectionCursors.tenant_id],
-      set: {
-        last_event_created_at: latestCreatedAtExact,
-        last_event_id: latest?.id ?? null,
-        last_snapshot_cursor: cursor,
-        updated_at: args.now ?? new Date(),
-      },
-    });
-
-  return { tenantId: args.tenantId, resyncedCanonicals: resynced };
+  return { cleared: true };
 }
 
 // ---------------------------------------------------------------------------

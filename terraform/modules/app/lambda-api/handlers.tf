@@ -522,6 +522,10 @@ locals {
       NEPTUNE_ENDPOINT       = var.neptune_endpoint
       NEPTUNE_PORT           = "8182"
       BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
+      # Bulk-rebuild lane (THINK-331): loader staging coordinates. Empty =
+      # bulk-rebuild mode returns a structured "not configured" error.
+      NEPTUNE_LOAD_BUCKET     = var.neptune_load_bucket
+      NEPTUNE_LOADER_ROLE_ARN = var.neptune_loader_role_arn
     }
     # Company Brain U6: reader coordinates for the twin graph-query Lambda.
     "twin-query" = {

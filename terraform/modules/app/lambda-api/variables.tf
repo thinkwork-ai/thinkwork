@@ -1033,3 +1033,20 @@ variable "neptune_security_group_ids" {
   default     = []
   description = "SGs for the projector (the etl neptune stack's neptune-client SG)"
 }
+
+# Bulk-rebuild lane (THINK-331 U4): Neptune bulk-loader staging. Both
+# default-empty — bulk-rebuild returns a structured "not configured" error
+# until the etl-platform neptune stack's load bucket + loader role are
+# supplied.
+
+variable "neptune_load_bucket" {
+  type        = string
+  default     = ""
+  description = "Neptune bulk-load staging bucket name (etl-platform neptune stack; empty = bulk-rebuild disabled)"
+}
+
+variable "neptune_loader_role_arn" {
+  type        = string
+  default     = ""
+  description = "IAM role ARN the Neptune cluster assumes to read the load bucket (etl-platform neptune stack; empty = bulk-rebuild disabled)"
+}

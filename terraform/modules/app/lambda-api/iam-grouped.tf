@@ -1104,6 +1104,29 @@ locals {
         Resource = "arn:aws:neptune-db:${var.region}:${var.account_id}:${var.neptune_cluster_resource_id}/*"
       },
     ],
+    # Bulk-rebuild lane (THINK-331 U4): the projector stages openCypher CSVs
+    # under the tenant-scoped thinkwork-identity/ prefix of the etl-platform
+    # load bucket (Put for upload, Delete for the terminal-state cleanup)
+    # and drives the loader job API. A NEW statement group — the existing
+    # TwinNeptuneData statement is condition-pinned to QueryLanguage=
+    # OpenCypher, which the loader actions don't satisfy. Gated on the
+    # bulk-loader variables so stages without the twin stack ship inert
+    # (KTD-9). No iam:PassRole needed: the loader role is assumed by the
+    # Neptune service via its cluster association, not passed by this role.
+    var.neptune_load_bucket == "" || var.neptune_loader_role_arn == "" || var.neptune_cluster_resource_id == "" ? [] : [
+      {
+        Sid      = "TwinBulkLoaderStage"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:AbortMultipartUpload", "s3:DeleteObject"]
+        Resource = "arn:aws:s3:::${var.neptune_load_bucket}/thinkwork-identity/*"
+      },
+      {
+        Sid      = "TwinBulkLoaderJobs"
+        Effect   = "Allow"
+        Action   = ["neptune-db:StartLoaderJob", "neptune-db:GetLoaderJobStatus", "neptune-db:CancelLoaderJob"]
+        Resource = "arn:aws:neptune-db:${var.region}:${var.account_id}:${var.neptune_cluster_resource_id}/*"
+      },
+    ],
   )
 
   api_observability_statements = concat(local.api_observability_sqs_statements, [
