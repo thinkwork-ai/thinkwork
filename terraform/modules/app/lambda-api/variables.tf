@@ -1050,3 +1050,9 @@ variable "neptune_loader_role_arn" {
   default     = ""
   description = "IAM role ARN the Neptune cluster assumes to read the load bucket (etl-platform neptune stack; empty = bulk-rebuild disabled)"
 }
+
+variable "lambda_max_memory_mb" {
+  type        = number
+  default     = 10240
+  description = "Account-level Lambda memory ceiling. Legacy AWS accounts cap function memory at 3008 MB (raised only via support case); handlers that request more are clamped to this value so deploys on capped accounts don't fail mid-apply."
+}

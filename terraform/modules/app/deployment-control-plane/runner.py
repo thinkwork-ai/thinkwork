@@ -4563,6 +4563,15 @@ def write_runner_files(payload, runner_secrets):
         "deployment_terraform_module_source": terraform_module_source,
         "deployment_terraform_module_version": terraform_module_version,
         "agentcore_pi_source_image_uri": resolve_agentcore_pi_source_image_uri(payload),
+        # Account-level Lambda memory ceiling. Legacy AWS accounts cap
+        # function memory at 3008 MB (raised only via support case); set the
+        # runner-secrets key lambdaMaxMemoryMb on such accounts so handlers
+        # that request more are clamped instead of failing mid-apply.
+        "lambda_max_memory_mb": safe_get(
+            runner_secrets,
+            "lambdaMaxMemoryMb",
+            default=safe_get(reviewed_payload, "lambdaMaxMemoryMb", default=10240),
+        ),
         # Digital Twin Neptune wiring (THINK-334): values come from the
         # etl-platform neptune stack outputs, written into the runner-secrets
         # document by `thinkwork twin install`. Empty = twin disabled.
@@ -4724,6 +4733,11 @@ variable "analyst_lambda_vpc_egress" {{
 variable "hindsight_database_name" {{
   type    = string
   default = ""
+}}
+
+variable "lambda_max_memory_mb" {{
+  type    = number
+  default = 10240
 }}
 
 variable "neptune_endpoint" {{
@@ -5191,6 +5205,7 @@ module "thinkwork" {{
   enable_hindsight               = var.enable_hindsight
   analyst_lambda_vpc_egress      = var.analyst_lambda_vpc_egress
   hindsight_database_name        = var.hindsight_database_name
+  lambda_max_memory_mb             = var.lambda_max_memory_mb
   neptune_endpoint                 = var.neptune_endpoint
   neptune_cluster_resource_id      = var.neptune_cluster_resource_id
   neptune_client_security_group_id = var.neptune_client_security_group_id
