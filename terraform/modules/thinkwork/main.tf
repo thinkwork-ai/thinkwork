@@ -1173,6 +1173,7 @@ module "api" {
   # egress SG below — without it a VPC-attached Lambda cannot reach
   # Aurora/Secrets/S3 and every DB connection times out (seen live on the
   # first dev rebuild invoke).
+  lambda_max_memory_mb        = var.lambda_max_memory_mb
   neptune_endpoint            = var.neptune_endpoint
   neptune_cluster_resource_id = var.neptune_cluster_resource_id
   neptune_subnet_ids          = var.neptune_client_security_group_id != "" ? module.vpc.private_subnet_ids : []
