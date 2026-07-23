@@ -51,6 +51,7 @@ export {
   TwinGraph,
   buildTwinGraphData,
   mergeTwinGraphData,
+  mapNeptuneNode,
   twinCanonicalIdFromNodeId,
 } from "./TwinGraph.js";
 export type {
@@ -87,5 +88,17 @@ export {
   MemoryGraphQuery,
   OntologyGraphQuery,
   TwinNeighborsQuery,
+  TwinNeighborSummaryQuery,
+  TwinNeighborMembersQuery,
   TwinSubgraphQuery,
 } from "./queries.js";
+
+export {
+  paintNodeDisc,
+  paintLinkLine,
+  applySettleFit,
+  makeEarlyTickFramer,
+} from "./renderer-core.js";
+export type { NodePaintSpec, LinkPaintSpec } from "./renderer-core.js";
+
+export { useGraphPointer } from "./use-graph-pointer.js";

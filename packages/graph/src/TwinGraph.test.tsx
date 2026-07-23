@@ -32,15 +32,34 @@ vi.mock("react-force-graph-2d", async () => {
       ReactActual.useImperativeHandle(ref, () => ({
         zoomToFit,
         zoom: () => 1,
+        // Screen coords == graph coords for these tests (zoom k = 1); the
+        // geometric pointer resolves clicks through this.
+        screen2GraphCoords: (x: number, y: number) => ({ x, y }),
+        graph2ScreenCoords: (x: number, y: number) => ({ x, y }),
+        d3Force: () => undefined,
+        d3ReheatSimulation: () => undefined,
       }));
+      // The sim doesn't run under the mock — pin deterministic positions
+      // so geometric hit-testing has coordinates (node i at x = i * 100).
+      props.graphData.nodes.forEach((node: any, index: number) => {
+        node.x = index * 100;
+        node.y = 0;
+      });
       forceGraphCalls.push(props);
-      return ReactActual.createElement("button", {
+      return ReactActual.createElement("canvas", {
         "data-testid": "force-graph",
-        onClick: () => props.onNodeClick?.(props.graphData.nodes[1]),
       });
     }),
   };
 });
+
+/** Geometric click: pointerdown/up on the canvas then the click event. */
+function clickCanvas(canvas: Element, x: number, y: number) {
+  const opts = { bubbles: true, cancelable: true, clientX: x, clientY: y };
+  canvas.dispatchEvent(new MouseEvent("pointerdown", { ...opts, button: 0 }));
+  window.dispatchEvent(new MouseEvent("pointerup", { ...opts, button: 0 }));
+  canvas.dispatchEvent(new MouseEvent("click", { ...opts, button: 0 }));
+}
 
 const NODE = (id: string, displayName: string, label = "customer") => ({
   "~id": id,
@@ -220,7 +239,7 @@ describe("TwinGraph", () => {
     expect(screen.getByTestId("twin-graph-empty")).toBeTruthy();
   });
 
-  it("fires onNodeClick with the parsed canonical id", () => {
+  it("fires onNodeClick via geometric picking, canonical id parsed", () => {
     urqlState.result = {
       fetching: false,
       error: null,
@@ -234,9 +253,84 @@ describe("TwinGraph", () => {
         onNodeClick={onNodeClick}
       />,
     );
-    fireEvent.click(screen.getByTestId("force-graph"));
+    clickCanvas(screen.getByTestId("force-graph"), 100, 0);
     expect(onNodeClick).toHaveBeenCalledWith(
       expect.objectContaining({ canonicalId: "tank-9" }),
+    );
+  });
+
+  it("R4: a node WITHOUT a canonical id (system node) still reports clicks", () => {
+    urqlState.result = {
+      fetching: false,
+      error: null,
+      data: {
+        twinNeighbors: JSON.stringify({
+          ok: true,
+          results: [
+            {
+              node: NODE("t#ten-1#e#cust-1", "ACME"),
+              neighbors: [
+                {
+                  "~id": "t#ten-1#sys#lastmile",
+                  "~labels": [],
+                  "~properties": {},
+                },
+              ],
+              edges: [
+                {
+                  rel: "external_identity",
+                  sourceId: "t#ten-1#e#cust-1",
+                  targetId: "t#ten-1#sys#lastmile",
+                },
+              ],
+            },
+          ],
+        }),
+      },
+    };
+    const onNodeClick = vi.fn();
+    render(
+      <TwinGraph
+        tenantId="ten-1"
+        canonicalId="cust-1"
+        onNodeClick={onNodeClick}
+      />,
+    );
+    clickCanvas(screen.getByTestId("force-graph"), 100, 0);
+    expect(onNodeClick).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "t#ten-1#sys#lastmile", isSystem: true }),
+    );
+  });
+
+  it("routes double-clicks and edge clicks through the geometric pointer", () => {
+    urqlState.result = {
+      fetching: false,
+      error: null,
+      data: { twinNeighbors: PAYLOAD },
+    };
+    const onNodeDoubleClick = vi.fn();
+    const onLinkClick = vi.fn();
+    render(
+      <TwinGraph
+        tenantId="ten-1"
+        canonicalId="cust-1"
+        onNodeDoubleClick={onNodeDoubleClick}
+        onLinkClick={onLinkClick}
+      />,
+    );
+    const canvas = screen.getByTestId("force-graph");
+    clickCanvas(canvas, 100, 0);
+    clickCanvas(canvas, 100, 0);
+    expect(onNodeDoubleClick).toHaveBeenCalledWith(
+      expect.objectContaining({ canonicalId: "tank-9" }),
+    );
+    // Midpoint of the cust-1 (x=0) → tank-9 (x=100) link, off both discs.
+    const link = forceGraphCalls.at(-1).graphData.links[0];
+    link.source = forceGraphCalls.at(-1).graphData.nodes[0];
+    link.target = forceGraphCalls.at(-1).graphData.nodes[1];
+    clickCanvas(canvas, 50, 0);
+    expect(onLinkClick).toHaveBeenCalledWith(
+      expect.objectContaining({ label: "customer_has_tank" }),
     );
   });
 

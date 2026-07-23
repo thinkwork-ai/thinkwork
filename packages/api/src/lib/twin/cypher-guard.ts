@@ -263,8 +263,9 @@ type Ctx = ParserRuleContext & {
   getText(): string;
 };
 
-const RULE_NAMES: string[] =
-  (cypher.CypherParser as unknown as { ruleNames: string[] }).ruleNames;
+const RULE_NAMES: string[] = (
+  cypher.CypherParser as unknown as { ruleNames: string[] }
+).ruleNames;
 
 /**
  * Grammar rule name for a parse-tree node ("nodePattern", "matchClause"…).
@@ -346,12 +347,12 @@ export function guardTwinCypher(
     parser.removeErrorListeners();
     // The antlr4 JS typings for addErrorListener are narrower than what the
     // runtime accepts; the listener shape above is the documented one.
-    (lexer as unknown as { addErrorListener(l: unknown): void }).addErrorListener(
-      errorListener,
-    );
-    (parser as unknown as { addErrorListener(l: unknown): void }).addErrorListener(
-      errorListener,
-    );
+    (
+      lexer as unknown as { addErrorListener(l: unknown): void }
+    ).addErrorListener(errorListener);
+    (
+      parser as unknown as { addErrorListener(l: unknown): void }
+    ).addErrorListener(errorListener);
     tree = parser.statementsOrCommands() as unknown as Ctx;
   } catch (error) {
     return {
@@ -387,7 +388,9 @@ export function guardTwinCypher(
     if ((MUTATION_CONTEXTS as readonly string[]).includes(name)) {
       violations.push({
         rule: "mutation_clause",
-        message: `${constructLabel(name).replace(/Clause$|Action$/, "").toUpperCase()} is not allowed: the twin is read-only`,
+        message: `${constructLabel(name)
+          .replace(/Clause$|Action$/, "")
+          .toUpperCase()} is not allowed: the twin is read-only`,
       });
       return; // no need to descend into a rejected construct
     }
@@ -464,7 +467,10 @@ export function guardTwinCypher(
   let effectiveLimit = 0;
   const fenceEntries: Array<{ property: string; parameter: string }> = [
     { property: "tenantId", parameter: "tenantId" },
-    ...aclPredicates.map((p) => ({ property: p.property, parameter: p.parameter })),
+    ...aclPredicates.map((p) => ({
+      property: p.property,
+      parameter: p.parameter,
+    })),
   ];
 
   if (violations.length === 0) {
@@ -496,7 +502,8 @@ export function guardTwinCypher(
   edits.sort((a, b) => b.start - a.start || b.end - a.end);
   let guarded = query;
   for (const edit of edits) {
-    guarded = guarded.slice(0, edit.start) + edit.text + guarded.slice(edit.end);
+    guarded =
+      guarded.slice(0, edit.start) + edit.text + guarded.slice(edit.end);
   }
 
   const parameters: Record<string, unknown> = {
@@ -527,9 +534,7 @@ function fenceNodePattern(
   violations: Violation[],
 ): Edit[] | null {
   const children = (nodePattern.children ?? []) as Ctx[];
-  const propertiesCtx = children.find(
-    (c) => ctxName(c) === "properties",
-  );
+  const propertiesCtx = children.find((c) => ctxName(c) === "properties");
 
   if (propertiesCtx) {
     const inner = ((propertiesCtx.children ?? []) as Ctx[])[0];
@@ -604,7 +609,9 @@ function fenceExistingMap(
     const openBrace = children.find(
       (c) => !isContext(c) && c.symbol?.text === "{",
     );
-    const insertAt = ((openBrace?.symbol?.stop as number) ?? mapCtx.start?.stop as number) + 1;
+    const insertAt =
+      ((openBrace?.symbol?.stop as number) ?? (mapCtx.start?.stop as number)) +
+      1;
     const hasEntries = children.some(
       (c) => isContext(c) && ctxName(c) === "propertyKeyName",
     );
@@ -658,7 +665,11 @@ function clampArm(
     const insertAt = (arm.stop?.stop as number) + 1;
     return {
       edits: [
-        { start: insertAt, end: insertAt, text: ` LIMIT ${TWIN_CYPHER_DEFAULT_LIMIT}` },
+        {
+          start: insertAt,
+          end: insertAt,
+          text: ` LIMIT ${TWIN_CYPHER_DEFAULT_LIMIT}`,
+        },
       ],
       limited: false,
       limit: TWIN_CYPHER_DEFAULT_LIMIT,

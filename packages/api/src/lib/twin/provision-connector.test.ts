@@ -157,7 +157,11 @@ describe("twin connector row values", () => {
     expect(authConfig).toMatchObject({
       secretRef: SECRET_REF,
       headers: [
-        { name: "Authorization", secretJsonKey: "token", valuePrefix: "Bearer " },
+        {
+          name: "Authorization",
+          secretJsonKey: "token",
+          valuePrefix: "Bearer ",
+        },
       ],
     });
   });
@@ -193,9 +197,8 @@ describe("provisionTwinConnector", () => {
     expect(insertCalls[0]!.key_hash).toMatch(/^[0-9a-f]{64}$/);
     // Secret written once with the raw key.
     expect(smSends.length).toBe(1);
-    const secretString = (
-      smSends[0] as { input: { SecretString: string } }
-    ).input.SecretString;
+    const secretString = (smSends[0] as { input: { SecretString: string } })
+      .input.SecretString;
     expect(JSON.parse(secretString).token).toMatch(/^tkt_/);
     expect(JSON.parse(secretString).tenantId).toBe(INPUT.tenantId);
     // Registry row insert carries the pinned hash.

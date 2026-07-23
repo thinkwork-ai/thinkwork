@@ -66,6 +66,59 @@ export async function twinNeighbors(
   });
 }
 
+/**
+ * Traversal ring aggregation (traversal explorer): grouped distinct-neighbor
+ * counts by (relationship, direction, targetType), 1 hop, external_identity
+ * fenced out in the compiled query.
+ */
+export async function twinNeighborSummary(
+  _parent: unknown,
+  args: { tenantId?: string | null; canonicalId: string },
+  ctx: GraphQLContext,
+) {
+  const scope = await resolveKnowledgeGraphSearchScope(ctx, args);
+  return executeTwinQuery({
+    tenantId: scope.tenantId,
+    request: { kind: "neighbor_summary", canonicalId: args.canonicalId },
+  });
+}
+
+/**
+ * One ordered batch of a traversal summary group's members plus connecting
+ * edge triples. Ordering, offset, and limit are validated inside the VPC
+ * compiler (display-name order, limit clamped <=25).
+ */
+export async function twinNeighborMembers(
+  _parent: unknown,
+  args: {
+    tenantId?: string | null;
+    canonicalId: string;
+    relationship: string;
+    targetType: string;
+    direction?: string | null;
+    offset?: number | null;
+    limit?: number | null;
+  },
+  ctx: GraphQLContext,
+) {
+  const scope = await resolveKnowledgeGraphSearchScope(ctx, args);
+  return executeTwinQuery({
+    tenantId: scope.tenantId,
+    request: {
+      kind: "neighbor_members",
+      canonicalId: args.canonicalId,
+      relationship: args.relationship,
+      targetType: args.targetType,
+      direction:
+        args.direction === "in" || args.direction === "out"
+          ? args.direction
+          : undefined,
+      offset: args.offset ?? undefined,
+      limit: args.limit ?? undefined,
+    },
+  });
+}
+
 export async function twinSystemEdges(
   _parent: unknown,
   args: { tenantId?: string | null; canonicalId: string },
@@ -218,8 +271,9 @@ export async function twinRawQuery(
         outcome: ok ? "success" : "failure",
         error:
           result && !result.ok
-            ? ((result.reason === "rejected" ? result.message : result.detail) ??
-              result.reason)
+            ? ((result.reason === "rejected"
+                ? result.message
+                : result.detail) ?? result.reason)
             : undefined,
       },
     }).catch((err) => {
@@ -283,6 +337,8 @@ export async function dismissTwinMaterializationSuggestion(
 export const twinQueries = {
   twinEntity,
   twinNeighbors,
+  twinNeighborSummary,
+  twinNeighborMembers,
   twinSystemEdges,
   twinCohort,
   twinSubgraph,

@@ -79,6 +79,42 @@ export const TwinNeighborsQuery = gql`
   }
 `;
 
+/**
+ * Traversal ring aggregation:
+ * `{ ok, results: [{ relationship, direction, targetType, count }] }`.
+ */
+export const TwinNeighborSummaryQuery = gql`
+  query TwinNeighborSummary($tenantId: ID, $canonicalId: ID!) {
+    twinNeighborSummary(tenantId: $tenantId, canonicalId: $canonicalId)
+  }
+`;
+
+/**
+ * One ordered traversal batch: `{ ok, results: [{ members, edges }] }` —
+ * Neptune nodes plus `{rel, sourceId, targetId, props}` edge triples.
+ */
+export const TwinNeighborMembersQuery = gql`
+  query TwinNeighborMembers(
+    $tenantId: ID
+    $canonicalId: ID!
+    $relationship: String!
+    $targetType: String!
+    $direction: String
+    $offset: Int
+    $limit: Int
+  ) {
+    twinNeighborMembers(
+      tenantId: $tenantId
+      canonicalId: $canonicalId
+      relationship: $relationship
+      targetType: $targetType
+      direction: $direction
+      offset: $offset
+      limit: $limit
+    )
+  }
+`;
+
 /** Type-level twin overview: `{ ok, results: [{ roots, neighbors, edges }] }`. */
 export const TwinSubgraphQuery = gql`
   query TwinSubgraph(

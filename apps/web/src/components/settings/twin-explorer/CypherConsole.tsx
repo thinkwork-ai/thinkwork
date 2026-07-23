@@ -117,15 +117,9 @@ export function CypherConsole() {
       className="space-y-2 rounded-lg border border-border p-3"
       data-testid="cypher-console"
     >
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-foreground">
-          Cypher console
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Read-only · results outside your tenant are redacted · bind your
-          tenant with <code className="font-mono">$tenantId</code>
-        </p>
-      </div>
+      {/* Just the input and Run (R2) — no heading, no read-only caption;
+          the redaction/unfenced banners still explain fencing when it
+          actually bites. */}
       <textarea
         className="min-h-24 w-full rounded-md border border-border bg-background p-2 font-mono text-xs text-foreground"
         aria-label="openCypher query"

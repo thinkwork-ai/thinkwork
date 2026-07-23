@@ -4,10 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ColumnFiltersState } from "@tanstack/react-table";
 
 const cohortCalls = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+const summaryCalls = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+const memberCalls = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 const urqlState = vi.hoisted(() => ({
   ontology: { fetching: false, data: null as unknown, error: null },
   cohort: { fetching: false, data: null as unknown, error: null },
+  summary: null as unknown,
+  members: null as unknown,
 }));
+const twinGraphProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 const navigateMock = vi.hoisted(() => vi.fn());
 // The mocked standard filter applies this state to the REAL table instance
 // when clicked — tests drive the component through its actual filter state.
@@ -26,7 +31,7 @@ vi.mock("urql", () => ({
     if (name === "TwinExplorerOntology") return [urqlState.ontology, vi.fn()];
     return [{ fetching: false }, vi.fn()];
   },
-  // Cohort queries fan out per selected type through the client.
+  // Cohort/summary/member queries route through the client by name.
   useClient: () => ({
     query: (
       query: { definitions?: Array<{ name?: { value?: string } }> },
@@ -34,14 +39,23 @@ vi.mock("urql", () => ({
     ) => {
       const name = query?.definitions?.[0]?.name?.value;
       if (name === "TwinCohort") cohortCalls.push(variables ?? {});
+      if (name === "TwinNeighborSummary") summaryCalls.push(variables ?? {});
+      if (name === "TwinNeighborMembers") memberCalls.push(variables ?? {});
       return {
         toPromise: () =>
           Promise.resolve({
-            data: {
-              twinCohort: (
-                urqlState.cohort.data as { twinCohort?: unknown } | null
-              )?.twinCohort,
-            },
+            data:
+              name === "TwinNeighborSummary"
+                ? { twinNeighborSummary: urqlState.summary }
+                : name === "TwinNeighborMembers"
+                  ? { twinNeighborMembers: urqlState.members }
+                  : {
+                      twinCohort: (
+                        urqlState.cohort.data as {
+                          twinCohort?: unknown;
+                        } | null
+                      )?.twinCohort,
+                    },
             error: undefined,
           }),
       };
@@ -52,9 +66,42 @@ vi.mock("urql", () => ({
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
 }));
-vi.mock("@thinkwork/graph", () => ({
-  TwinGraph: () => <div data-testid="twin-overview-graph" />,
-}));
+vi.mock("@thinkwork/graph", () => {
+  const doc = (value: string) => ({ definitions: [{ name: { value } }] });
+  return {
+    // Captures props so tests can drive traversal click routing; renders
+    // controlled mode distinctly from the self-fetching overview.
+    TwinGraph: (props: Record<string, unknown>) => {
+      twinGraphProps.push(props);
+      return (
+        <div
+          data-testid={
+            props.data ? "twin-traversal-graph" : "twin-overview-graph"
+          }
+        />
+      );
+    },
+    TwinNeighborSummaryQuery: doc("TwinNeighborSummary"),
+    TwinNeighborMembersQuery: doc("TwinNeighborMembers"),
+    mapNeptuneNode: (raw: unknown, isCenter: boolean) => {
+      const node = raw as Record<string, unknown>;
+      const id = node?.["~id"];
+      if (typeof id !== "string") return null;
+      const properties = (node["~properties"] as Record<string, unknown>) ?? {};
+      const labels = Array.isArray(node["~labels"]) ? node["~labels"] : [];
+      const match = /^t#[^#]+#e#(.+)$/.exec(id);
+      return {
+        id,
+        canonicalId: match ? match[1] : null,
+        label: (properties.displayName as string) ?? id,
+        typeLabel: (labels[0] as string) ?? null,
+        isSystem: false,
+        isCenter,
+        properties,
+      };
+    },
+  };
+});
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => ({ tenantId: "tenant-1" }),
 }));
@@ -86,24 +133,36 @@ vi.mock("@thinkwork/ui", async () => {
     },
     DataTable: ({
       data,
+      columns,
       onRowClick,
     }: {
       data: Array<{ label: string }>;
+      columns?: Array<{
+        id?: string;
+        cell?: (ctx: { row: { original: unknown } }) => React.ReactNode;
+      }>;
       onRowClick?: (row: unknown) => void;
-    }) => (
-      <div data-testid="data-table">
-        {data.map((row, index) => (
-          <button
-            key={index}
-            type="button"
-            data-testid="data-row"
-            onClick={() => onRowClick?.(row)}
-          >
-            {row.label}
-          </button>
-        ))}
-      </div>
-    ),
+    }) => {
+      // Render the traversal select column's real cell so checkbox tests
+      // drive the actual toggle wiring.
+      const selectColumn = columns?.find((column) => column.id === "select");
+      return (
+        <div data-testid="data-table">
+          {data.map((row, index) => (
+            <div key={index} className="flex items-center">
+              {selectColumn?.cell?.({ row: { original: row } })}
+              <button
+                type="button"
+                data-testid="data-row"
+                onClick={() => onRowClick?.(row)}
+              >
+                {row.label}
+              </button>
+            </div>
+          ))}
+        </div>
+      );
+    },
   };
 });
 
@@ -487,5 +546,243 @@ describe("cohort payload parsing", () => {
       ),
     ).toEqual({ reason: "invalid_request", detail: "bad" });
     expect(parseTwinCohortFailure(cohortPayload(1))).toBeNull();
+  });
+});
+
+describe("TwinExplorer traversal (twin-traversal plan U4/U5)", () => {
+  const SUMMARY_PAYLOAD = JSON.stringify({
+    ok: true,
+    results: [
+      {
+        relationship: "customer_has_tank",
+        direction: "out",
+        targetType: "tank",
+        count: 2,
+      },
+    ],
+  });
+  const MEMBERS_PAYLOAD = JSON.stringify({
+    ok: true,
+    results: [
+      {
+        members: [
+          {
+            "~id": "t#tenant-1#e#tank-1",
+            "~labels": ["tank"],
+            "~properties": { displayName: "Tank 1" },
+          },
+        ],
+        edges: [
+          {
+            rel: "customer_has_tank",
+            sourceId: "t#tenant-1#e#cust-0",
+            targetId: "t#tenant-1#e#tank-1",
+          },
+        ],
+      },
+    ],
+  });
+
+  beforeEach(() => {
+    cohortCalls.length = 0;
+    summaryCalls.length = 0;
+    memberCalls.length = 0;
+    twinGraphProps.length = 0;
+    navigateMock.mockClear();
+    nextFilters.value = [];
+    filterColumnsSeen.value = [];
+    urqlState.ontology = { fetching: false, data: ONTOLOGY_DATA, error: null };
+    urqlState.cohort = {
+      fetching: false,
+      data: { twinCohort: cohortPayload(2) },
+      error: null,
+    };
+    urqlState.summary = SUMMARY_PAYLOAD;
+    urqlState.members = MEMBERS_PAYLOAD;
+  });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  function lastGraphProps(): Record<string, any> {
+    return twinGraphProps.at(-1)!;
+  }
+
+  it("AE4/R1: opening the console hides the search/filter toolbar; closing restores it", () => {
+    let controller: { toggleConsole: () => void } | null = null;
+    render(
+      <TwinExplorer
+        onHeaderControllerChange={(next) => {
+          controller = next as { toggleConsole: () => void };
+        }}
+      />,
+    );
+    expect(screen.getByTestId("explorer-search-toggle")).toBeTruthy();
+    expect(screen.getByTestId("token-filter")).toBeTruthy();
+    React.act(() => controller!.toggleConsole());
+    expect(screen.queryByTestId("explorer-search-toggle")).toBeNull();
+    expect(screen.queryByTestId("token-filter")).toBeNull();
+    React.act(() => controller!.toggleConsole());
+    expect(screen.getByTestId("explorer-search-toggle")).toBeTruthy();
+    expect(screen.getByTestId("token-filter")).toBeTruthy();
+  });
+
+  it("R2: the console renders without the heading and read-only caption", () => {
+    let controller: { toggleConsole: () => void } | null = null;
+    render(
+      <TwinExplorer
+        onHeaderControllerChange={(next) => {
+          controller = next as { toggleConsole: () => void };
+        }}
+      />,
+    );
+    React.act(() => controller!.toggleConsole());
+    expect(screen.getByTestId("cypher-console")).toBeTruthy();
+    expect(screen.getByTestId("console-input")).toBeTruthy();
+    expect(screen.getByTestId("console-run")).toBeTruthy();
+    expect(screen.queryByText(/Cypher console/)).toBeNull();
+    expect(screen.queryByText(/Read-only/)).toBeNull();
+  });
+
+  it("search picker fetches results from the server and a pick roots traversal", async () => {
+    vi.useFakeTimers();
+    render(<TwinExplorer />);
+    fireEvent.click(screen.getByTestId("explorer-search-toggle"));
+    const input = screen.getByTestId("traversal-entity-search");
+    fireEvent.change(input, { target: { value: "Customer" } });
+    // Debounced server search: nothing until the window elapses.
+    expect(cohortCalls).toHaveLength(0);
+    await React.act(async () => {
+      await vi.advanceTimersByTimeAsync(350);
+    });
+    // Fans out across ALL approved types (specific customers findable even
+    // when no type filter is checked), server-limited per type.
+    expect(cohortCalls.map((call) => call.entityType).sort()).toEqual([
+      "customer",
+      "tank",
+    ]);
+    expect(cohortCalls.every((call) => call.limit === 10)).toBe(true);
+    expect(JSON.parse(cohortCalls[0]!.filter as string).nameContains).toBe(
+      "Customer",
+    );
+
+    const results = screen.getByTestId("traversal-search-results");
+    expect(results).toBeTruthy();
+    const first = results.querySelector("button")!;
+    await React.act(async () => {
+      fireEvent.click(first);
+    });
+    expect(screen.getByTestId("twin-traversal-graph")).toBeTruthy();
+    expect(summaryCalls.at(-1)).toMatchObject({
+      tenantId: "tenant-1",
+      canonicalId: "cust-0",
+    });
+  });
+
+  it("KTD-7: an overview node click roots traversal and fetches the ring", async () => {
+    render(<TwinExplorer />);
+    const overview = lastGraphProps();
+    await React.act(async () => {
+      overview.onNodeClick?.({
+        id: "t#tenant-1#e#cust-0",
+        canonicalId: "cust-0",
+        label: "Customer 0",
+        typeLabel: "customer",
+        isSystem: false,
+        isCenter: false,
+        properties: {},
+      });
+    });
+    expect(screen.getByTestId("twin-traversal-graph")).toBeTruthy();
+    expect(summaryCalls.at(-1)).toMatchObject({ canonicalId: "cust-0" });
+    const traversal = lastGraphProps();
+    const summaryNode = (traversal.data.nodes as Array<any>).find(
+      (node) => node.kind === "summary",
+    );
+    expect(summaryNode.label).toBe("Tank (2)");
+  });
+
+  it("R6/R11: summary click fetches the first member batch; R10: clear returns to overview", async () => {
+    render(<TwinExplorer />);
+    await React.act(async () => {
+      lastGraphProps().onNodeClick?.({
+        id: "t#tenant-1#e#cust-0",
+        canonicalId: "cust-0",
+        label: "Customer 0",
+        typeLabel: "customer",
+        isSystem: false,
+        isCenter: false,
+        properties: {},
+      });
+    });
+    const summaryNode = (lastGraphProps().data.nodes as Array<any>).find(
+      (node) => node.kind === "summary",
+    );
+    await React.act(async () => {
+      lastGraphProps().onNodeClick?.(summaryNode);
+    });
+    expect(memberCalls.at(-1)).toMatchObject({
+      canonicalId: "cust-0",
+      relationship: "customer_has_tank",
+      targetType: "tank",
+      direction: "out",
+      offset: 0,
+      limit: 20,
+    });
+    const nodes = lastGraphProps().data.nodes as Array<any>;
+    expect(nodes.map((node) => node.id)).toContain("t#tenant-1#e#tank-1");
+
+    fireEvent.click(screen.getByTestId("traversal-clear"));
+    expect(screen.getByTestId("twin-overview-graph")).toBeTruthy();
+  });
+
+  it("R8: double-clicking an entity navigates to the detail view", async () => {
+    render(<TwinExplorer />);
+    await React.act(async () => {
+      lastGraphProps().onNodeClick?.({
+        id: "t#tenant-1#e#cust-0",
+        canonicalId: "cust-0",
+        label: "Customer 0",
+        typeLabel: "customer",
+        isSystem: false,
+        isCenter: false,
+        properties: {},
+      });
+    });
+    await React.act(async () => {
+      lastGraphProps().onNodeDoubleClick?.({
+        id: "t#tenant-1#e#cust-0",
+        canonicalId: "cust-0",
+        label: "Customer 0",
+        typeLabel: "customer",
+        isSystem: false,
+        isCenter: true,
+        properties: {},
+      });
+    });
+    expect(navigateMock).toHaveBeenCalledWith({
+      to: "/settings/memory/explorer/$entityType/$canonicalId",
+      params: { entityType: "customer", canonicalId: "cust-0" },
+    });
+  });
+
+  it("R9: table checkboxes accumulate traversal roots", async () => {
+    render(<TwinExplorer />);
+    await React.act(async () => {
+      switchToTable();
+    });
+    const checkboxes = screen.getAllByRole("checkbox");
+    expect(checkboxes.length).toBeGreaterThan(0);
+    await React.act(async () => {
+      fireEvent.click(checkboxes[0]!);
+    });
+    await React.act(async () => {
+      fireEvent.click(screen.getAllByRole("checkbox")[1]!);
+    });
+    expect(summaryCalls.map((call) => call.canonicalId)).toEqual([
+      "cust-0",
+      "cust-1",
+    ]);
   });
 });

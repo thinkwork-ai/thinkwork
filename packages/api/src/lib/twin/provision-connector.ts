@@ -135,7 +135,10 @@ export interface TwinProvisionResult {
   secretRef: string;
   url: string;
   provisioned: "created" | "rotated";
-  workspaces: { agents: number; skipped: Array<{ agentId: string; reason: string }> };
+  workspaces: {
+    agents: number;
+    skipped: Array<{ agentId: string; reason: string }>;
+  };
 }
 
 export interface TwinProvisionDeps {
@@ -218,7 +221,8 @@ export async function provisionTwinConnector(
       .insert(tenantMcpServers)
       .values(values)
       .returning({ id: tenantMcpServers.id });
-    if (!inserted) throw new Error("twin provision: server insert returned no row");
+    if (!inserted)
+      throw new Error("twin provision: server insert returned no row");
     tenantMcpServerId = inserted.id;
     provisioned = "created";
   }

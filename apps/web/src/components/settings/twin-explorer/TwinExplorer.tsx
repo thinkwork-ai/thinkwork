@@ -14,6 +14,7 @@ import {
 import {
   Badge,
   Button,
+  Checkbox,
   DataTable,
   DataTableTokenFilter,
   Input,
@@ -26,6 +27,10 @@ import {
 } from "@thinkwork/ui";
 import {
   TwinGraph,
+  TwinNeighborMembersQuery,
+  TwinNeighborSummaryQuery,
+  mapNeptuneNode,
+  type TwinGraphData,
   type TwinGraphLink,
   type TwinGraphNode,
 } from "@thinkwork/graph";
@@ -34,6 +39,19 @@ import {
   TwinCohortQuery,
   TwinExplorerOntologyQuery,
 } from "@/lib/graphql-queries";
+import {
+  TRAVERSAL_BATCH_SIZE,
+  addMembers,
+  addRoot,
+  buildTraversalGraphData,
+  createTraversal,
+  groupKeyFromSyntheticId,
+  removeRoot,
+  setGroupExpanded,
+  setSummary,
+  type TraversalState,
+  type TraversalSummaryRow,
+} from "./TwinTraversal";
 import { useTenant } from "@/context/TenantContext";
 import { CypherConsole } from "./CypherConsole";
 import {
@@ -136,6 +154,74 @@ export function parseTwinCohortFailure(
       typeof envelope.reason === "string" ? envelope.reason : "unavailable",
     detail: typeof envelope.detail === "string" ? envelope.detail : null,
   };
+}
+
+/** `twinNeighborSummary` envelope → traversal ring rows (null when not ok). */
+export function parseTwinSummaryRows(
+  payload: unknown,
+): TraversalSummaryRow[] | null {
+  const envelope = parseAwsJson(payload);
+  if (!envelope || envelope.ok !== true) return null;
+  const results = Array.isArray(envelope.results) ? envelope.results : [];
+  return results.flatMap((row) => {
+    const record = row as Record<string, unknown>;
+    const relationship = record.relationship;
+    const direction = record.direction;
+    const targetType = record.targetType;
+    const count = record.count;
+    if (
+      typeof relationship !== "string" ||
+      (direction !== "in" && direction !== "out") ||
+      typeof targetType !== "string" ||
+      typeof count !== "number"
+    ) {
+      return [];
+    }
+    return [{ relationship, direction, targetType, count }];
+  });
+}
+
+/** `twinNeighborMembers` envelope → member nodes + edge links (null when not ok). */
+export function parseTwinMemberBatch(payload: unknown): {
+  nodes: TwinGraphNode[];
+  links: TwinGraphLink[];
+} | null {
+  const envelope = parseAwsJson(payload);
+  if (!envelope || envelope.ok !== true) return null;
+  const results = Array.isArray(envelope.results) ? envelope.results : [];
+  const row = (results[0] ?? {}) as Record<string, unknown>;
+  const nodes: TwinGraphNode[] = [];
+  for (const member of Array.isArray(row.members) ? row.members : []) {
+    const mapped = mapNeptuneNode(member, false);
+    if (mapped) nodes.push(mapped);
+  }
+  const links: TwinGraphLink[] = [];
+  const linkIds = new Set<string>();
+  for (const edge of Array.isArray(row.edges) ? row.edges : []) {
+    if (!edge || typeof edge !== "object") continue;
+    const { rel, sourceId, targetId, props } = edge as Record<string, unknown>;
+    if (
+      typeof rel !== "string" ||
+      typeof sourceId !== "string" ||
+      typeof targetId !== "string"
+    ) {
+      continue;
+    }
+    const id = `${rel}:${sourceId}->${targetId}`;
+    if (linkIds.has(id)) continue;
+    linkIds.add(id);
+    links.push({
+      id,
+      source: sourceId,
+      target: targetId,
+      label: rel,
+      properties:
+        props && typeof props === "object"
+          ? (props as Record<string, unknown>)
+          : {},
+    });
+  }
+  return { nodes, links };
 }
 
 export const ENTITY_TYPE_COLUMN_ID = "entityType";
@@ -255,6 +341,157 @@ export function buildExplorerFilterModel(
   }
 
   return { entityTypes, predicates, path, errors };
+}
+
+/**
+ * Server-backed entity search picker (traversal entry, KTD-7). Typing
+ * fires debounced `twinCohort` queries with `nameContains` across the
+ * searchable types — results come from the SERVER, capped per type; the
+ * twin's thousands of entities are never loaded into the popover. Picking
+ * a result roots a traversal on that entity (customer, person, any type).
+ */
+export function TwinEntitySearchPicker({
+  tenantId,
+  typeSlugs,
+  typeNameBySlug,
+  onPick,
+  onClose,
+}: {
+  tenantId: string;
+  typeSlugs: string[];
+  typeNameBySlug: Map<string, string>;
+  onPick: (node: TwinGraphNode) => void;
+  onClose: () => void;
+}) {
+  const client = useClient();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Array<
+    CohortRow & { entityTypeSlug: string }
+  > | null>(null);
+  const [searching, setSearching] = useState(false);
+  const genRef = useRef(0);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      genRef.current += 1;
+      setResults(null);
+      setSearching(false);
+      return;
+    }
+    const generation = ++genRef.current;
+    setSearching(true);
+    const timer = setTimeout(() => {
+      void Promise.all(
+        typeSlugs.map((entityType) =>
+          client
+            .query(TwinCohortQuery, {
+              tenantId,
+              entityType,
+              filter: JSON.stringify({
+                predicates: [],
+                nameContains: trimmed,
+              }),
+              limit: 10,
+            })
+            .toPromise()
+            .then((result) => ({
+              entityType,
+              rows:
+                parseTwinCohortRows(
+                  (result.data as { twinCohort?: unknown } | undefined)
+                    ?.twinCohort,
+                ) ?? [],
+            })),
+        ),
+      ).then((parts) => {
+        if (generation !== genRef.current) return;
+        const merged = parts.flatMap((part) =>
+          part.rows
+            .filter((row) => row.canonicalId)
+            .map((row) => ({ ...row, entityTypeSlug: part.entityType })),
+        );
+        merged.sort((a, b) => a.label.localeCompare(b.label));
+        setResults(merged.slice(0, 20));
+        setSearching(false);
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+    // `client` is render-stable from the urql Provider — kept out of the
+    // deps so test doubles can't loop the effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, tenantId, typeSlugs.join(",")]);
+
+  return (
+    <div className="relative flex h-8 w-[min(20rem,calc(100vw-2rem))] items-center">
+      <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" />
+      <Input
+        autoFocus
+        type="search"
+        className="h-8 rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+        placeholder="Find an entity..."
+        aria-label="Find an entity"
+        data-testid="traversal-entity-search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+          }
+        }}
+      />
+      <button
+        type="button"
+        className="absolute right-2 text-muted-foreground hover:text-foreground"
+        aria-label="Close entity search"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={onClose}
+      >
+        <X className="size-3.5" />
+      </button>
+      {query.trim().length >= 2 ? (
+        <div
+          className="absolute left-0 top-9 z-30 max-h-72 w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md"
+          data-testid="traversal-search-results"
+        >
+          {searching && !results ? (
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">
+              Searching…
+            </p>
+          ) : results && results.length > 0 ? (
+            results.map((row) => (
+              <button
+                key={`${row.entityTypeSlug}:${row.canonicalId}`}
+                type="button"
+                className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+                onClick={() =>
+                  onPick({
+                    id: `t#${tenantId}#e#${row.canonicalId}`,
+                    canonicalId: row.canonicalId,
+                    label: row.label,
+                    typeLabel: row.entityTypeSlug,
+                    isSystem: false,
+                    isCenter: true,
+                    properties: row.properties,
+                  })
+                }
+              >
+                <span className="truncate">{row.label}</span>
+                <Badge variant="outline" className="text-[10px] font-normal">
+                  {typeNameBySlug.get(row.entityTypeSlug) ?? row.entityTypeSlug}
+                </Badge>
+              </button>
+            ))
+          ) : (
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">
+              No matching entities.
+            </p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 /**
@@ -487,6 +724,183 @@ export function TwinExplorer({
   // One cohort query per selected type, unioned client-side (the compiler
   // scopes a cohort to a single label).
   const client = useClient();
+
+  // ── Traversal (twin-traversal plan U4) ──────────────────────────────
+  // State lives in a mutable model (TwinTraversal.ts); `traversalRev`
+  // bumps re-render the derived graph, `traversalEpoch` remounts the
+  // graph (fresh camera) when the canvas is REPLACED rather than grown.
+  const traversalRef = useRef<TraversalState>(createTraversal());
+  const [traversalRev, setTraversalRev] = useState(0);
+  const [traversalEpoch, setTraversalEpoch] = useState(0);
+  const [traversalError, setTraversalError] = useState<string | null>(null);
+  const bumpTraversal = useCallback(() => setTraversalRev((r) => r + 1), []);
+  const traversalActive = traversalRef.current.rootIds.length > 0;
+
+  // Fetch an entity's summary ring (R5/R7). Pending guard blocks
+  // double-fires; a query error surfaces as a toast-style alert and
+  // leaves traversal state unchanged.
+  const fetchSummary = useCallback(
+    (node: TwinGraphNode) => {
+      const state = traversalRef.current;
+      if (
+        !tenantId ||
+        !node.canonicalId ||
+        state.summaries.has(node.id) ||
+        state.pending.has(node.id)
+      ) {
+        return;
+      }
+      state.pending.add(node.id);
+      bumpTraversal();
+      void client
+        .query(TwinNeighborSummaryQuery, {
+          tenantId,
+          canonicalId: node.canonicalId,
+        })
+        .toPromise()
+        .then((result) => {
+          state.pending.delete(node.id);
+          const rows = parseTwinSummaryRows(
+            (result.data as { twinNeighborSummary?: unknown } | undefined)
+              ?.twinNeighborSummary,
+          );
+          if (rows) {
+            setSummary(state, node.id, rows);
+            setTraversalError(null);
+          } else {
+            setTraversalError(
+              result.error?.message ?? "Could not load relations.",
+            );
+          }
+          bumpTraversal();
+        });
+    },
+    [client, tenantId, bumpTraversal],
+  );
+
+  // Fetch the next member batch for a summary group (R6/R11).
+  const fetchMembers = useCallback(
+    (key: string) => {
+      const state = traversalRef.current;
+      const group = state.groups.get(key);
+      if (!tenantId || !group || state.pending.has(key)) return;
+      const focal = state.nodesById.get(group.focalId);
+      if (!focal?.canonicalId) return;
+      state.pending.add(key);
+      bumpTraversal();
+      void client
+        .query(TwinNeighborMembersQuery, {
+          tenantId,
+          canonicalId: focal.canonicalId,
+          relationship: group.relationship,
+          targetType: group.targetType,
+          direction: group.direction,
+          offset: group.loadedOffset,
+          limit: TRAVERSAL_BATCH_SIZE,
+        })
+        .toPromise()
+        .then((result) => {
+          state.pending.delete(key);
+          const batch = parseTwinMemberBatch(
+            (result.data as { twinNeighborMembers?: unknown } | undefined)
+              ?.twinNeighborMembers,
+          );
+          if (batch) {
+            addMembers(state, key, batch.nodes, batch.links);
+            setGroupExpanded(state, key, true);
+            setTraversalError(null);
+          } else {
+            setTraversalError(
+              result.error?.message ?? "Could not load the group.",
+            );
+          }
+          bumpTraversal();
+        });
+    },
+    [client, tenantId, bumpTraversal],
+  );
+
+  /**
+   * Traversal entry (KTD-7): a search pick or overview-node click REPLACES
+   * the canvas; filter/table checkboxes accumulate roots (R9).
+   */
+  const rootTraversal = useCallback(
+    (node: TwinGraphNode, options?: { replace?: boolean }) => {
+      if (options?.replace) {
+        traversalRef.current = createTraversal();
+        setTraversalEpoch((epoch) => epoch + 1);
+      }
+      addRoot(traversalRef.current, { ...node, isCenter: true });
+      bumpTraversal();
+      fetchSummary(node);
+    },
+    [bumpTraversal, fetchSummary],
+  );
+
+  const clearTraversal = useCallback(() => {
+    traversalRef.current = createTraversal();
+    setTraversalError(null);
+    setTraversalEpoch((epoch) => epoch + 1);
+    bumpTraversal();
+  }, [bumpTraversal]);
+
+  const toggleTraversalRoot = useCallback(
+    (node: TwinGraphNode) => {
+      const state = traversalRef.current;
+      if (state.rootIds.includes(node.id)) {
+        removeRoot(state, node.id);
+        bumpTraversal();
+      } else {
+        rootTraversal(node);
+      }
+    },
+    [bumpTraversal, rootTraversal],
+  );
+
+  // Click routing (R6/R7/R11): summary → expand/collapse; "+N more…" →
+  // next batch; entity → attach its own ring.
+  const handleTraversalNodeClick = useCallback(
+    (node: TwinGraphNode) => {
+      const state = traversalRef.current;
+      if (node.kind === "none") return;
+      if (node.kind === "more") {
+        const key = groupKeyFromSyntheticId(node.id);
+        if (key) fetchMembers(key);
+        return;
+      }
+      if (node.kind === "summary") {
+        const key = groupKeyFromSyntheticId(node.id);
+        const group = key ? state.groups.get(key) : undefined;
+        if (!key || !group) return;
+        if (group.expanded) {
+          setGroupExpanded(state, key, false);
+          bumpTraversal();
+        } else if ((state.members.get(key)?.length ?? 0) > 0) {
+          setGroupExpanded(state, key, true);
+          bumpTraversal();
+        } else {
+          fetchMembers(key);
+        }
+        return;
+      }
+      if (!node.isSystem) fetchSummary(node);
+    },
+    [bumpTraversal, fetchMembers, fetchSummary],
+  );
+
+  // Dbl-click opens the existing entity detail view (R8).
+  const handleEntityDoubleClick = useCallback(
+    (node: TwinGraphNode) => {
+      if (node.kind || !node.canonicalId || !node.typeLabel || node.isSystem) {
+        return;
+      }
+      void navigate({
+        to: "/settings/memory/explorer/$entityType/$canonicalId",
+        params: { entityType: node.typeLabel, canonicalId: node.canonicalId },
+      });
+    },
+    [navigate],
+  );
   const [cohort, setCohort] = useState<{
     key: string;
     fetching: boolean;
@@ -549,6 +963,27 @@ export function TwinExplorer({
       new Map(entityTypes.map((type) => [type.slug, type.name ?? type.slug])),
     [entityTypes],
   );
+  const relNameBySlug = useMemo(
+    () =>
+      new Map(
+        (ontologyData?.ontologyDefinitions?.relationshipTypes ?? []).map(
+          (rel) => [rel.slug, rel.name ?? rel.slug],
+        ),
+      ),
+    [ontologyData],
+  );
+
+  // Derived traversal canvas — rebuilt per rev bump; node/link object
+  // identity comes from the model's caches, so positions and camera hold.
+  const traversalData: TwinGraphData = useMemo(
+    () =>
+      buildTraversalGraphData(traversalRef.current, {
+        relationshipLabel: (slug) => relNameBySlug.get(slug) ?? slug,
+        typeLabel: (slug) => typeNameBySlug.get(slug) ?? slug,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [traversalRev, relNameBySlug, typeNameBySlug],
+  );
   const rows = useMemo(() => {
     if (!cohort.responses || cohort.key !== cohortKey) return null;
     const merged: Array<CohortRow & { entityTypeSlug: string }> = [];
@@ -588,6 +1023,39 @@ export function TwinExplorer({
 
   const columns: ColumnDef<CohortRow & { entityTypeSlug: string }>[] = useMemo(
     () => [
+      {
+        // Traversal roots (R9): checking rows accumulates roots on the
+        // graph canvas; unchecking prunes that root's subtree.
+        id: "select",
+        header: "",
+        cell: ({ row }) => {
+          const canonicalId = row.original.canonicalId;
+          if (!canonicalId) return null;
+          const nodeId = `t#${tenantId}#e#${canonicalId}`;
+          return (
+            <span
+              className="flex h-10 items-center px-2"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <Checkbox
+                aria-label={`Traverse from ${row.original.label}`}
+                checked={traversalRef.current.rootIds.includes(nodeId)}
+                onCheckedChange={() =>
+                  toggleTraversalRoot({
+                    id: nodeId,
+                    canonicalId,
+                    label: row.original.label,
+                    typeLabel: row.original.entityTypeSlug,
+                    isSystem: false,
+                    isCenter: true,
+                    properties: row.original.properties,
+                  })
+                }
+              />
+            </span>
+          );
+        },
+      },
       {
         id: "label",
         header: "Name",
@@ -645,7 +1113,17 @@ export function TwinExplorer({
         }),
       ),
     ],
-    [referenced, referencedFacets, effectiveEntityTypes, typeNameBySlug],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      referenced,
+      referencedFacets,
+      effectiveEntityTypes,
+      typeNameBySlug,
+      tenantId,
+      toggleTraversalRoot,
+      // Re-render checkbox states after every traversal mutation.
+      traversalRev,
+    ],
   );
 
   if (!tenantId) {
@@ -689,73 +1167,93 @@ export function TwinExplorer({
         }
       />
       <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {/* Collapsible search — the Memory tab's toolbar idiom. */}
-          {!(searchExpanded || nameQuery.length > 0) ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon-sm"
-              className="h-8 w-8 rounded-md"
-              aria-label="Search by name"
-              data-testid="explorer-search-toggle"
-              disabled={effectiveEntityTypes.length === 0}
-              onClick={() => setSearchExpanded(true)}
-            >
-              <Search className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          ) : (
-            <div className="relative flex h-8 w-[min(20rem,calc(100vw-2rem))] items-center">
-              <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                autoFocus
-                type="search"
-                className="h-8 rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                placeholder="Search by name..."
+        {/* R1: the search/filter toolbar hides while the console is open. */}
+        {!consoleOpen ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {/* Collapsible search — the Memory tab's toolbar idiom. In
+                graph view it is the server-backed entity picker (traversal
+                entry); in table view it filters the cohort. */}
+            {!(searchExpanded || nameQuery.length > 0) ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                className="h-8 w-8 rounded-md"
                 aria-label="Search by name"
-                data-testid="explorer-name-search"
-                value={nameQuery}
-                onBlur={() => {
-                  if (!nameQuery) setSearchExpanded(false);
+                data-testid="explorer-search-toggle"
+                disabled={effectiveEntityTypes.length === 0}
+                onClick={() => setSearchExpanded(true)}
+              >
+                <Search className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            ) : view === "graph" ? (
+              <TwinEntitySearchPicker
+                tenantId={tenantId}
+                typeSlugs={
+                  selectedTypeSlugs.length > 0
+                    ? effectiveEntityTypes
+                    : entityTypes.map((type) => type.slug)
+                }
+                typeNameBySlug={typeNameBySlug}
+                onPick={(node) => {
+                  setSearchExpanded(false);
+                  rootTraversal(node, { replace: true });
                 }}
-                onChange={(event) => setNameQuery(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter")
-                    setActiveNameQuery(nameQuery.trim());
-                  if (event.key === "Escape") {
-                    event.preventDefault();
+                onClose={() => setSearchExpanded(false)}
+              />
+            ) : (
+              <div className="relative flex h-8 w-[min(20rem,calc(100vw-2rem))] items-center">
+                <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  autoFocus
+                  type="search"
+                  className="h-8 rounded-md border-transparent bg-transparent pl-8 pr-8 text-sm shadow-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  placeholder="Search by name..."
+                  aria-label="Search by name"
+                  data-testid="explorer-name-search"
+                  value={nameQuery}
+                  onBlur={() => {
+                    if (!nameQuery) setSearchExpanded(false);
+                  }}
+                  onChange={(event) => setNameQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter")
+                      setActiveNameQuery(nameQuery.trim());
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setNameQuery("");
+                      setActiveNameQuery("");
+                      setSearchExpanded(false);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 text-muted-foreground hover:text-foreground"
+                  aria-label="Clear name search"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
                     setNameQuery("");
                     setActiveNameQuery("");
                     setSearchExpanded(false);
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="absolute right-2 text-muted-foreground hover:text-foreground"
-                aria-label="Clear name search"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  setNameQuery("");
-                  setActiveNameQuery("");
-                  setSearchExpanded(false);
-                }}
-              >
-                <X className="size-3.5" />
-              </button>
-            </div>
-          )}
-          <DataTableTokenFilter
-            table={filterTable}
-            columns={filterColumns}
-            addLabel="Filter"
-            showAddLabel={false}
-            clearLabel="Clear filters"
-            flattenToolbar
-            className="max-w-full [&_[data-token-filter-token]]:shrink-0"
-            popoverClassName="w-[min(18rem,calc(100vw-2rem))]"
-          />
-        </div>
+                  }}
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            )}
+            <DataTableTokenFilter
+              table={filterTable}
+              columns={filterColumns}
+              addLabel="Filter"
+              showAddLabel={false}
+              clearLabel="Clear filters"
+              flattenToolbar
+              className="max-w-full [&_[data-token-filter-token]]:shrink-0"
+              popoverClassName="w-[min(18rem,calc(100vw-2rem))]"
+            />
+          </div>
+        ) : null}
 
         {consoleOpen ? <CypherConsole /> : null}
 
@@ -799,25 +1297,69 @@ export function TwinExplorer({
           )
         ) : null}
 
+        {traversalError ? (
+          <p className="text-sm text-red-500" role="alert">
+            {traversalError}
+          </p>
+        ) : null}
+
         {view === "graph" && effectiveEntityTypes.length > 0 ? (
           <div className="relative min-h-[28rem] flex-1 overflow-hidden rounded-lg border border-border">
-            <TwinGraph
-              tenantId={tenantId}
-              loadingFallback={
-                <div className="flex h-full min-h-48 items-center justify-center">
-                  <LoadingShimmer />
-                </div>
-              }
-              subgraphEntityTypes={effectiveEntityTypes}
-              subgraphLimit={25}
-              depth={1}
-              onNodeClick={(node: TwinGraphNode) =>
-                setSheetSelection({ kind: "node", node })
-              }
-              onLinkClick={(link: TwinGraphLink) =>
-                setSheetSelection({ kind: "edge", link })
-              }
-            />
+            {traversalActive ? (
+              /* Traversal mode (R5–R11): single click traverses, dbl-click
+                 opens detail, edge clicks keep the property sheet. */
+              <TwinGraph
+                key={`traversal-${traversalEpoch}`}
+                tenantId={tenantId}
+                data={traversalData}
+                revision={traversalRev}
+                onNodeClick={handleTraversalNodeClick}
+                onNodeDoubleClick={handleEntityDoubleClick}
+                onLinkClick={(link: TwinGraphLink) => {
+                  // Synthetic summary/more edges carry no properties —
+                  // only real relationship edges open the sheet.
+                  if (!link.id.startsWith("link:")) {
+                    setSheetSelection({ kind: "edge", link });
+                  }
+                }}
+              />
+            ) : (
+              /* Overview (R10): matched-set behavior unchanged; a node
+                 click roots a traversal on that entity (KTD-7). */
+              <TwinGraph
+                tenantId={tenantId}
+                loadingFallback={
+                  <div className="flex h-full min-h-48 items-center justify-center">
+                    <LoadingShimmer />
+                  </div>
+                }
+                subgraphEntityTypes={effectiveEntityTypes}
+                subgraphLimit={25}
+                depth={1}
+                onNodeClick={(node: TwinGraphNode) => {
+                  if (!node.isSystem && node.canonicalId) {
+                    rootTraversal(node, { replace: true });
+                  }
+                }}
+                onNodeDoubleClick={handleEntityDoubleClick}
+                onLinkClick={(link: TwinGraphLink) =>
+                  setSheetSelection({ kind: "edge", link })
+                }
+              />
+            )}
+            {traversalActive ? (
+              <div className="pointer-events-none absolute inset-0 z-20">
+                <button
+                  type="button"
+                  className="pointer-events-auto absolute top-3 right-3 z-30 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
+                  data-testid="traversal-clear"
+                  onClick={clearTraversal}
+                >
+                  <X className="size-3.5" aria-hidden="true" />
+                  Back to overview
+                </button>
+              </div>
+            ) : null}
             <TwinNodeSheet
               selection={sheetSelection}
               onOpenChange={(open) => {
