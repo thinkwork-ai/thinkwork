@@ -55,6 +55,7 @@ import {
 } from "./TwinTraversal";
 import { useTenant } from "@/context/TenantContext";
 import { CypherConsole } from "./CypherConsole";
+import { TwinMindMap } from "./TwinMindMap";
 import {
   parseExplorerFacets,
   type ExplorerFacet,
@@ -514,7 +515,7 @@ export function TwinExplorer({
   const [activeNameQuery, setActiveNameQuery] = useState("");
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [view, setView] = useState<"graph" | "table">("graph");
+  const [view, setView] = useState<"graph" | "table" | "traversal">("graph");
   const [sheetSelection, setSheetSelection] =
     useState<TwinSheetSelection | null>(null);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -863,11 +864,31 @@ export function TwinExplorer({
     [bumpTraversal, rootTraversal],
   );
 
+  // Summary group toggle (R6): collapse if open; instant re-expand from
+  // cache; first expand fetches the first member batch. Shared by the
+  // force renderer (Graph view) and the mind map (Traversal view).
+  const toggleSummaryGroup = useCallback(
+    (key: string) => {
+      const state = traversalRef.current;
+      const group = state.groups.get(key);
+      if (!group) return;
+      if (group.expanded) {
+        setGroupExpanded(state, key, false);
+        bumpTraversal();
+      } else if ((state.members.get(key)?.length ?? 0) > 0) {
+        setGroupExpanded(state, key, true);
+        bumpTraversal();
+      } else {
+        fetchMembers(key);
+      }
+    },
+    [bumpTraversal, fetchMembers],
+  );
+
   // Click routing (R6/R7/R11): summary → expand/collapse; "+N more…" →
   // next batch; entity → attach its own ring.
   const handleTraversalNodeClick = useCallback(
     (node: TwinGraphNode) => {
-      const state = traversalRef.current;
       if (node.kind === "none") return;
       if (node.kind === "more") {
         const key = groupKeyFromSyntheticId(node.id);
@@ -876,22 +897,12 @@ export function TwinExplorer({
       }
       if (node.kind === "summary") {
         const key = groupKeyFromSyntheticId(node.id);
-        const group = key ? state.groups.get(key) : undefined;
-        if (!key || !group) return;
-        if (group.expanded) {
-          setGroupExpanded(state, key, false);
-          bumpTraversal();
-        } else if ((state.members.get(key)?.length ?? 0) > 0) {
-          setGroupExpanded(state, key, true);
-          bumpTraversal();
-        } else {
-          fetchMembers(key);
-        }
+        if (key) toggleSummaryGroup(key);
         return;
       }
       if (!node.isSystem) fetchSummary(node);
     },
-    [bumpTraversal, fetchMembers, fetchSummary],
+    [toggleSummaryGroup, fetchMembers, fetchSummary],
   );
 
   // Dbl-click opens the existing entity detail view (R8).
@@ -979,16 +990,21 @@ export function TwinExplorer({
     [ontologyData],
   );
 
+  // Shared display-name accessors for both traversal renderers.
+  const traversalLabels = useMemo(
+    () => ({
+      relationshipLabel: (slug: string) => relNameBySlug.get(slug) ?? slug,
+      typeLabel: (slug: string) => typeNameBySlug.get(slug) ?? slug,
+    }),
+    [relNameBySlug, typeNameBySlug],
+  );
+
   // Derived traversal canvas — rebuilt per rev bump; node/link object
   // identity comes from the model's caches, so positions and camera hold.
   const traversalData: TwinGraphData = useMemo(
-    () =>
-      buildTraversalGraphData(traversalRef.current, {
-        relationshipLabel: (slug) => relNameBySlug.get(slug) ?? slug,
-        typeLabel: (slug) => typeNameBySlug.get(slug) ?? slug,
-      }),
+    () => buildTraversalGraphData(traversalRef.current, traversalLabels),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [traversalRev, relNameBySlug, typeNameBySlug],
+    [traversalRev, traversalLabels],
   );
   const rows = useMemo(() => {
     if (!cohort.responses || cohort.key !== cohortKey) return null;
@@ -1150,7 +1166,8 @@ export function TwinExplorer({
             type="single"
             value={view}
             onValueChange={(next) => {
-              if (next === "graph" || next === "table") setView(next);
+              if (next === "graph" || next === "table" || next === "traversal")
+                setView(next);
             }}
             variant="outline"
             className="ml-4 h-8 overflow-hidden rounded-full border bg-background shadow-sm"
@@ -1168,6 +1185,13 @@ export function TwinExplorer({
               aria-label="Table view"
             >
               Table
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="traversal"
+              className="h-full rounded-none border-0 border-l border-border px-3 text-sm font-medium"
+              aria-label="Traversal view"
+            >
+              Traversal
             </ToggleGroupItem>
           </ToggleGroup>
         }
@@ -1192,7 +1216,7 @@ export function TwinExplorer({
               >
                 <Search className="h-4 w-4" aria-hidden="true" />
               </Button>
-            ) : view === "graph" ? (
+            ) : view !== "table" ? (
               <TwinEntitySearchPicker
                 tenantId={tenantId}
                 typeSlugs={
@@ -1366,6 +1390,63 @@ export function TwinExplorer({
                 </button>
               </div>
             ) : null}
+            <TwinNodeSheet
+              selection={sheetSelection}
+              onOpenChange={(open) => {
+                if (!open) setSheetSelection(null);
+              }}
+              onOpenEntity={(target) => {
+                setSheetSelection(null);
+                void navigate({
+                  to: "/settings/memory/explorer/$entityType/$canonicalId",
+                  params: target,
+                });
+              }}
+            />
+          </div>
+        ) : null}
+
+        {view === "traversal" && effectiveEntityTypes.length > 0 ? (
+          <div className="relative min-h-[28rem] flex-1 overflow-hidden rounded-lg border border-border">
+            {traversalActive ? (
+              <>
+                <TwinMindMap
+                  key={`mindmap-${traversalEpoch}`}
+                  state={traversalRef.current}
+                  revision={traversalRev}
+                  labels={traversalLabels}
+                  onEntityClick={(entity) => {
+                    if (!entity.isSystem) fetchSummary(entity);
+                  }}
+                  onEntityDoubleClick={handleEntityDoubleClick}
+                  onSummaryClick={toggleSummaryGroup}
+                  onMoreClick={fetchMembers}
+                  onEdgeClick={(link) =>
+                    setSheetSelection({ kind: "edge", link })
+                  }
+                />
+                <button
+                  type="button"
+                  className="absolute top-3 left-3 z-30 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
+                  data-testid="mindmap-clear"
+                  onClick={clearTraversal}
+                >
+                  <X className="size-3.5" aria-hidden="true" />
+                  Clear
+                </button>
+              </>
+            ) : (
+              <div
+                className="flex h-full min-h-48 flex-col items-center justify-center gap-2 py-16 text-center"
+                data-testid="mindmap-empty"
+              >
+                <p className="text-sm font-medium">Pick a starting entity.</p>
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  Use the search above, click a node in the Graph view, or check
+                  rows in the Table view — then traverse its relationships here.
+                </p>
+              </div>
+            )}
             <TwinNodeSheet
               selection={sheetSelection}
               onOpenChange={(open) => {
