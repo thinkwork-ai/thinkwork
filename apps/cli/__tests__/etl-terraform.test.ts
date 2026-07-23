@@ -87,6 +87,8 @@ describe("argument construction (KTD-2)", () => {
       "landing",
       "query-router",
       "dagster",
+      "observability",
+      "trigger-dispatcher",
       "neptune",
     ]);
   });
@@ -253,6 +255,8 @@ describe("runEtlTwinStacks", () => {
       "found",
       "found",
       "found",
+      "found",
+      "found",
     ]);
     expect(result.neptuneOutputs).toEqual({
       neptuneEndpoint: "ep:8182",
@@ -300,7 +304,13 @@ describe("runEtlTwinStacks", () => {
       "landing",
     ]);
     expect(result.entries.at(-1)!.state).toBe("failed");
-    expect(result.notAttempted).toEqual(["query-router", "dagster", "neptune"]);
+    expect(result.notAttempted).toEqual([
+      "query-router",
+      "dagster",
+      "observability",
+      "trigger-dispatcher",
+      "neptune",
+    ]);
   });
 
   it("missing account files fail before any terraform call", () => {

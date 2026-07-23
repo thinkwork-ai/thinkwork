@@ -84,6 +84,33 @@ failure and re-run; the command resumes by re-detection, not checkpoints.
   files (and apply the etl repo's `bootstrap/` for the state bucket, plus
   the VPC/Aurora/dagster-db-secret prerequisites its README documents)
   first.
+
+## Fresh-account bring-up (proven at TEI, 2026-07-23)
+
+A first install on an empty account hits two remote-state circularities the
+command cannot resolve alone; break them white-glove, then re-run the
+install to converge:
+
+1. Run the install once — aurora/data-lake/landing/query-router apply; the
+   dagster plan fails on missing `observability`/`neptune` state.
+2. Seed an empty `observability` state object (`terraform state push` of an
+   empty state) so dagster's `defaults` can apply, then apply **dagster**
+   with `-var neptune_stack_enabled=false`, then **observability**, then
+   **neptune**, then **trigger-dispatcher** — all via the etl repo's
+   `accounts/<slug>` files.
+3. Re-run the install with `--allow-changes`: dagster pass 2 (twin env/IAM,
+   new ECS task-definition revisions — point the services at the new
+   revision with `aws ecs update-service --task-definition <family>`), then
+   the product wiring and MCP registration proceed.
+4. First-boot code pushes ride the etl repo's CI: run the `dagster-image`
+   and `trigger-dispatcher` workflows (workflow_dispatch) once the ECR repo
+   and Lambda exist — Terraform ships placeholder images/zips by design.
+5. Database prep: apply the etl repo migrations to the customer Aurora
+   (001–011; `platform.*` twin/mirror ledgers must ALSO be applied inside
+   the `thinkwork_warehouse` database), and compile the tenant's twin
+   mapping export (`regenerateTwinMappingExport`) — without it the twin
+   projection no-ops every batch.
+
 - Seed data. The ontology change set, identity bootstrap, and projector
   drain/deposit sequence remain the engineer-run recipe (commissioning
   gate is a named follow-up).
