@@ -4563,6 +4563,24 @@ def write_runner_files(payload, runner_secrets):
         "deployment_terraform_module_source": terraform_module_source,
         "deployment_terraform_module_version": terraform_module_version,
         "agentcore_pi_source_image_uri": resolve_agentcore_pi_source_image_uri(payload),
+        # Digital Twin Neptune wiring (THINK-334): values come from the
+        # etl-platform neptune stack outputs, written into the runner-secrets
+        # document by `thinkwork twin install`. Empty = twin disabled.
+        "neptune_endpoint": safe_get(
+            runner_secrets,
+            "neptuneEndpoint",
+            default=safe_get(reviewed_payload, "neptuneEndpoint", default=""),
+        ),
+        "neptune_cluster_resource_id": safe_get(
+            runner_secrets,
+            "neptuneClusterResourceId",
+            default=safe_get(reviewed_payload, "neptuneClusterResourceId", default=""),
+        ),
+        "neptune_client_security_group_id": safe_get(
+            runner_secrets,
+            "neptuneClientSecurityGroupId",
+            default=safe_get(reviewed_payload, "neptuneClientSecurityGroupId", default=""),
+        ),
     }
     enforce_customer_domain_preservation(
         current_outputs,
@@ -4694,6 +4712,21 @@ variable "analyst_lambda_vpc_egress" {{
 }}
 
 variable "hindsight_database_name" {{
+  type    = string
+  default = ""
+}}
+
+variable "neptune_endpoint" {{
+  type    = string
+  default = ""
+}}
+
+variable "neptune_cluster_resource_id" {{
+  type    = string
+  default = ""
+}}
+
+variable "neptune_client_security_group_id" {{
   type    = string
   default = ""
 }}
@@ -5138,6 +5171,9 @@ module "thinkwork" {{
   enable_hindsight               = var.enable_hindsight
   analyst_lambda_vpc_egress      = var.analyst_lambda_vpc_egress
   hindsight_database_name        = var.hindsight_database_name
+  neptune_endpoint                 = var.neptune_endpoint
+  neptune_cluster_resource_id      = var.neptune_cluster_resource_id
+  neptune_client_security_group_id = var.neptune_client_security_group_id
   enable_workspace_orchestration = true
   enable_agentcore_multiplayer_proof          = var.enable_agentcore_multiplayer_proof
   agentcore_multiplayer_proof_tenant_slug     = var.agentcore_multiplayer_proof_tenant_slug
