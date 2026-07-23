@@ -61,8 +61,10 @@ export const TRAVERSAL_BATCH_SIZE = 20;
 
 const SUMMARY_COLOR = "#475569";
 const MORE_COLOR = "#334155";
-const SUMMARY_RADIUS = 14;
-const MORE_RADIUS = 10;
+// Uniform with entity discs (TWIN_NODE_RADIUS) — all nodes render the
+// same size (Eric 2026-07-23).
+const SUMMARY_RADIUS = 12;
+const MORE_RADIUS = 12;
 
 export function groupKey(
   focalId: string,
@@ -196,6 +198,28 @@ function synthLink(
   return created;
 }
 
+function endpointOf(endpoint: string | { id: string }): string {
+  return typeof endpoint === "object" ? endpoint.id : endpoint;
+}
+
+/**
+ * Seed a node's initial simulation position next to its origin node
+ * (golden-angle fan, deterministic) so an expansion blooms out of the
+ * node the user clicked instead of flying in from the canvas origin.
+ * No-op once the simulation owns the node or the origin is unplaced.
+ */
+function seedAt(
+  node: TwinGraphNode,
+  origin: TwinGraphNode | undefined,
+  index: number,
+): void {
+  if (node.x !== undefined || origin?.x === undefined || origin.y === undefined)
+    return;
+  const angle = index * 2.399963;
+  node.x = origin.x + Math.cos(angle) * 18;
+  node.y = origin.y + Math.sin(angle) * 18;
+}
+
 export interface BuildOptions {
   /** Slug → display name for relationship edge labels. */
   relationshipLabel?: (slug: string) => string;
@@ -206,10 +230,10 @@ export interface BuildOptions {
 /**
  * Derive the rendered graph by walking from the roots (R5–R11):
  * per visible entity with a fetched ring, one summary node per group
- * ("Customers (20)"), expanded groups additionally render their loaded
- * members attached to the focal plus a "+N more…" node while members
- * remain; members recurse. Node/link objects come from the state caches so
- * identity — and camera — is stable.
+ * ("Customers (20)"), expanded groups render their loaded members spoked
+ * off the summary hub (hub-and-spoke, Eric 2026-07-23) plus a "+N more…"
+ * node while members remain; members recurse. Node/link objects come from
+ * the state caches so identity — and camera — is stable.
  */
 export function buildTraversalGraphData(
   state: TraversalState,
@@ -247,21 +271,21 @@ export function buildTraversalGraphData(
     if (rows.length === 0) {
       // "(no relations)" affordance — the focal renders alone, no crash.
       const noneId = `none:${focalId}`;
-      pushNode(
-        synthNode(state, noneId, () => ({
-          id: noneId,
-          canonicalId: null,
-          label: "(no relations)",
-          typeLabel: null,
-          isSystem: false,
-          isCenter: false,
-          properties: {},
-          kind: "none",
-          color: MORE_COLOR,
-          radius: MORE_RADIUS,
-          labelAlways: true,
-        })),
-      );
+      const noneNode = synthNode(state, noneId, () => ({
+        id: noneId,
+        canonicalId: null,
+        label: "(no relations)",
+        typeLabel: null,
+        isSystem: false,
+        isCenter: false,
+        properties: {},
+        kind: "none",
+        color: MORE_COLOR,
+        radius: MORE_RADIUS,
+        labelAlways: true,
+      }));
+      seedAt(noneNode, focal, 0);
+      pushNode(noneNode);
       pushLink(
         synthLink(state, `link:${noneId}`, () => ({
           id: `link:${noneId}`,
@@ -278,6 +302,39 @@ export function buildTraversalGraphData(
       const key = groupKey(focalId, row);
       const group = state.groups.get(key);
       if (!group) continue;
+
+      // Singleton groups (count 1) skip the hub entirely: once the lone
+      // member is fetched (the explorer auto-fetches it after the summary
+      // lands), it renders directly off the focal with the real
+      // relationship edge. Until then the hub below stands in, dimmed.
+      const singletonIds = state.members.get(key) ?? [];
+      if (group.count === 1 && singletonIds.length === 1) {
+        const memberId = singletonIds[0]!;
+        const member = state.nodesById.get(memberId);
+        if (member) seedAt(member, focal, nodes.length);
+        const raw = (state.memberLinks.get(key) ?? [])[0];
+        const singleId = `single:${key}`;
+        pushLink(
+          synthLink(state, singleId, () => ({
+            id: singleId,
+            source: raw
+              ? endpointOf(raw.source)
+              : row.direction === "in"
+                ? memberId
+                : focalId,
+            target: raw
+              ? endpointOf(raw.target)
+              : row.direction === "in"
+                ? focalId
+                : memberId,
+            label: relLabel(row.relationship),
+            properties: raw?.properties ?? {},
+          })),
+        );
+        visit(memberId);
+        continue;
+      }
+
       const summaryId = `sum:${key}`;
       const summaryNode = synthNode(state, summaryId, () => ({
         id: summaryId,
@@ -292,12 +349,13 @@ export function buildTraversalGraphData(
         radius: SUMMARY_RADIUS,
         labelAlways: true,
       }));
-      // Label reflects live expand state: collapsed shows the count,
-      // expanded becomes the collapse handle.
+      // The count stays visible in both states; the chevron marks the
+      // node as the open group's collapse handle.
       summaryNode.label = group.expanded
-        ? `${typeName(row.targetType)} —`
+        ? `${typeName(row.targetType)} (${group.count}) ▾`
         : `${typeName(row.targetType)} (${group.count})`;
       summaryNode.pending = state.pending.has(key);
+      seedAt(summaryNode, focal, nodes.length);
       pushNode(summaryNode);
       const summaryLinkId = `link:${summaryId}`;
       const summaryLink = synthLink(state, summaryLinkId, () => ({
@@ -310,12 +368,32 @@ export function buildTraversalGraphData(
       pushLink(summaryLink);
 
       if (!group.expanded) continue;
+      // Hub-and-spoke: members hang off the summary node the user clicked
+      // (not the focal), and spawn AT the hub so the expansion visibly
+      // blooms out of it instead of flying in from elsewhere. The real
+      // focal↔member edge's label/properties ride on the spoke so the
+      // relationship side sheet stays truthful, but the label itself is
+      // suppressed — the focal→hub edge already names the relationship.
       const memberIds = state.members.get(key) ?? [];
-      for (const memberId of memberIds) {
+      memberIds.forEach((memberId, index) => {
+        const member = state.nodesById.get(memberId);
+        if (member) seedAt(member, summaryNode, index);
         visit(memberId);
-      }
+      });
       for (const link of state.memberLinks.get(key) ?? []) {
-        pushLink(link);
+        const spokeId = `spoke:${link.id}`;
+        const memberEnd =
+          endpointOf(link.source) === focalId ? link.target : link.source;
+        pushLink(
+          synthLink(state, spokeId, () => ({
+            id: spokeId,
+            source: summaryId,
+            target: endpointOf(memberEnd),
+            label: link.label,
+            hideLabel: true,
+            properties: link.properties,
+          })),
+        );
       }
       const remaining = group.count - memberIds.length;
       if (remaining > 0) {
@@ -335,6 +413,7 @@ export function buildTraversalGraphData(
         }));
         moreNode.label = `+${remaining} more…`;
         moreNode.pending = state.pending.has(key);
+        seedAt(moreNode, summaryNode, memberIds.length);
         pushNode(moreNode);
         pushLink(
           synthLink(state, `link:${moreId}`, () => ({

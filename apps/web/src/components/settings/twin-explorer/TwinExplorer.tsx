@@ -45,6 +45,7 @@ import {
   addRoot,
   buildTraversalGraphData,
   createTraversal,
+  groupKey,
   groupKeyFromSyntheticId,
   removeRoot,
   setGroupExpanded,
@@ -736,48 +737,6 @@ export function TwinExplorer({
   const bumpTraversal = useCallback(() => setTraversalRev((r) => r + 1), []);
   const traversalActive = traversalRef.current.rootIds.length > 0;
 
-  // Fetch an entity's summary ring (R5/R7). Pending guard blocks
-  // double-fires; a query error surfaces as a toast-style alert and
-  // leaves traversal state unchanged.
-  const fetchSummary = useCallback(
-    (node: TwinGraphNode) => {
-      const state = traversalRef.current;
-      if (
-        !tenantId ||
-        !node.canonicalId ||
-        state.summaries.has(node.id) ||
-        state.pending.has(node.id)
-      ) {
-        return;
-      }
-      state.pending.add(node.id);
-      bumpTraversal();
-      void client
-        .query(TwinNeighborSummaryQuery, {
-          tenantId,
-          canonicalId: node.canonicalId,
-        })
-        .toPromise()
-        .then((result) => {
-          state.pending.delete(node.id);
-          const rows = parseTwinSummaryRows(
-            (result.data as { twinNeighborSummary?: unknown } | undefined)
-              ?.twinNeighborSummary,
-          );
-          if (rows) {
-            setSummary(state, node.id, rows);
-            setTraversalError(null);
-          } else {
-            setTraversalError(
-              result.error?.message ?? "Could not load relations.",
-            );
-          }
-          bumpTraversal();
-        });
-    },
-    [client, tenantId, bumpTraversal],
-  );
-
   // Fetch the next member batch for a summary group (R6/R11).
   const fetchMembers = useCallback(
     (key: string) => {
@@ -818,6 +777,53 @@ export function TwinExplorer({
         });
     },
     [client, tenantId, bumpTraversal],
+  );
+
+  // Fetch an entity's summary ring (R5/R7). Pending guard blocks
+  // double-fires; a query error surfaces as a toast-style alert and
+  // leaves traversal state unchanged. Singleton rows (count 1) render the
+  // actual member instead of a "(1)" hub, so their lone member is fetched
+  // eagerly here.
+  const fetchSummary = useCallback(
+    (node: TwinGraphNode) => {
+      const state = traversalRef.current;
+      if (
+        !tenantId ||
+        !node.canonicalId ||
+        state.summaries.has(node.id) ||
+        state.pending.has(node.id)
+      ) {
+        return;
+      }
+      state.pending.add(node.id);
+      bumpTraversal();
+      void client
+        .query(TwinNeighborSummaryQuery, {
+          tenantId,
+          canonicalId: node.canonicalId,
+        })
+        .toPromise()
+        .then((result) => {
+          state.pending.delete(node.id);
+          const rows = parseTwinSummaryRows(
+            (result.data as { twinNeighborSummary?: unknown } | undefined)
+              ?.twinNeighborSummary,
+          );
+          if (rows) {
+            setSummary(state, node.id, rows);
+            setTraversalError(null);
+            for (const row of rows) {
+              if (row.count === 1) fetchMembers(groupKey(node.id, row));
+            }
+          } else {
+            setTraversalError(
+              result.error?.message ?? "Could not load relations.",
+            );
+          }
+          bumpTraversal();
+        });
+    },
+    [client, tenantId, bumpTraversal, fetchMembers],
   );
 
   /**
@@ -1351,7 +1357,7 @@ export function TwinExplorer({
               <div className="pointer-events-none absolute inset-0 z-20">
                 <button
                   type="button"
-                  className="pointer-events-auto absolute top-3 right-3 z-30 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
+                  className="pointer-events-auto absolute top-3 left-3 z-30 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
                   data-testid="traversal-clear"
                   onClick={clearTraversal}
                 >

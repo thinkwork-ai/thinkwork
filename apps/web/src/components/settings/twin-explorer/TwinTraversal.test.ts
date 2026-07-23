@@ -173,6 +173,91 @@ describe("expansion batches (AE2, R11)", () => {
     expect(data.nodes.find((n) => n.kind === "more")).toBeUndefined();
   });
 
+  it("expanded hub keeps its count with a collapse chevron and members spoke off it", () => {
+    const { state, key } = bigGroupState(3);
+    const members = [entity("a"), entity("b"), entity("c")];
+    addMembers(
+      state,
+      key,
+      members,
+      members.map((m) => link("serves", PAUL.id, m.id)),
+    );
+    setGroupExpanded(state, key, true);
+    const data = buildTraversalGraphData(state);
+
+    const hub = data.nodes.find((n) => n.kind === "summary");
+    expect(hub?.label).toBe("customer (3) ▾");
+
+    const spokes = data.links.filter((l) => l.id.startsWith("spoke:"));
+    expect(spokes).toHaveLength(3);
+    for (const spoke of spokes) {
+      expect(spoke.source).toBe(`sum:${key}`);
+      expect(spoke.hideLabel).toBe(true);
+      expect(spoke.label).toBe("serves");
+    }
+    expect(spokes.map((l) => l.target).sort()).toEqual(
+      members.map((m) => m.id).sort(),
+    );
+    // The raw focal↔member edges are not rendered — the hub carries them.
+    expect(data.links.some((l) => l.id.startsWith("serves:"))).toBe(false);
+  });
+
+  it("members and the more-node spawn at the hub's position (bloom, not fly-in)", () => {
+    const { state, key } = bigGroupState(25);
+    const members = Array.from({ length: 20 }, (_, i) => entity(`m${i}`));
+    addMembers(
+      state,
+      key,
+      members,
+      members.map((m) => link("serves", PAUL.id, m.id)),
+    );
+    setGroupExpanded(state, key, true);
+
+    // Simulate the engine having placed the hub.
+    let data = buildTraversalGraphData(state);
+    const hub = data.nodes.find((n) => n.kind === "summary")!;
+    hub.x = 100;
+    hub.y = 50;
+
+    data = buildTraversalGraphData(state);
+    for (const node of data.nodes) {
+      if (node.kind === "summary" || node.id === PAUL.id) continue;
+      expect(node.x).toBeGreaterThan(100 - 20);
+      expect(node.x).toBeLessThan(100 + 20);
+      expect(node.y).toBeGreaterThan(50 - 20);
+      expect(node.y).toBeLessThan(50 + 20);
+    }
+    // Seeding never overwrites a position the simulation already owns.
+    const first = data.nodes.find((n) => n.id === members[0]!.id)!;
+    const placed = { x: first.x, y: first.y };
+    first.x = -400;
+    first.y = -400;
+    data = buildTraversalGraphData(state);
+    expect(first.x).toBe(-400);
+    expect(placed.x).not.toBe(-400);
+  });
+
+  it("a singleton group renders its member directly — no hub (count 1)", () => {
+    const { state, key } = bigGroupState(1);
+    // Before the member arrives, the hub stands in.
+    let data = buildTraversalGraphData(state);
+    expect(data.nodes.find((n) => n.kind === "summary")?.label).toBe(
+      "customer (1)",
+    );
+
+    const solo = entity("solo", "Solo Corp");
+    addMembers(state, key, [solo], [link("serves", PAUL.id, solo.id)]);
+    data = buildTraversalGraphData(state, {
+      relationshipLabel: () => "Serves",
+    });
+    expect(data.nodes.find((n) => n.kind === "summary")).toBeUndefined();
+    expect(data.nodes.map((n) => n.id)).toContain(solo.id);
+    const single = data.links.find((l) => l.id === `single:${key}`);
+    expect(single?.source).toBe(PAUL.id);
+    expect(single?.target).toBe(solo.id);
+    expect(single?.label).toBe("Serves");
+  });
+
   it("synthetic node identity is stable across rebuilds (camera discipline)", () => {
     const { state } = bigGroupState(5);
     const first = buildTraversalGraphData(state);
@@ -191,12 +276,18 @@ describe("collapse and multi-root semantics (R6, R9, AE3)", () => {
       relationship: "serves",
       direction: "out" as const,
       targetType: "customer",
-      count: 1,
+      count: 2,
     };
     setSummary(state, PAUL.id, [row]);
     const key = groupKey(PAUL.id, row);
     const acme = entity("acme", "ACME");
-    addMembers(state, key, [acme], [link("serves", PAUL.id, acme.id)]);
+    const beta = entity("beta", "Beta LLC");
+    addMembers(
+      state,
+      key,
+      [acme, beta],
+      [link("serves", PAUL.id, acme.id), link("serves", PAUL.id, beta.id)],
+    );
     setGroupExpanded(state, key, true);
     // ACME's own traversed ring.
     const orderRow = {
@@ -254,12 +345,16 @@ describe("collapse and multi-root semantics (R6, R9, AE3)", () => {
       [shared],
       [link("serves", jane.id, shared.id)],
     );
-    setGroupExpanded(state, groupKey(PAUL.id, row), true);
-    setGroupExpanded(state, groupKey(jane.id, row), true);
 
+    // Singleton groups: both roots link the shared member directly.
     const data = buildTraversalGraphData(state);
     expect(data.nodes.filter((n) => n.id === shared.id)).toHaveLength(1);
-    expect(data.nodes.filter((n) => n.kind === "summary")).toHaveLength(2);
+    expect(data.nodes.filter((n) => n.kind === "summary")).toHaveLength(0);
+    const singles = data.links.filter((l) => l.id.startsWith("single:"));
+    expect(singles).toHaveLength(2);
+    expect(singles.map((l) => l.source).sort()).toEqual(
+      [PAUL.id, jane.id].sort(),
+    );
   });
 
   it("removing a root prunes its subtree but keeps nodes another root holds", () => {
