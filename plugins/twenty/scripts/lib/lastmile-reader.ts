@@ -203,8 +203,15 @@ export interface LastmileReader {
   readReps(): Promise<LastmileRep[]>;
   readAccounts(): Promise<LastmileAccount[]>;
   /** Dispatch customers with an order in the last `days` days (the ThinkWork
-   * twin's seed cohort rule) — the "real customers" band for the CRM. */
-  readOrderCohortCustomers(days: number): Promise<LastmileDispatchCustomer[]>;
+   * twin's seed cohort rule) — the "real customers" band for the CRM. With
+   * `includeOpenInvoices`, customers holding an open invoice (nonzero
+   * amount_remaining, any age) join the cohort regardless of order recency —
+   * the twin carries ALL open invoices, so their customers must exist in the
+   * CRM too. */
+  readOrderCohortCustomers(
+    days: number,
+    includeOpenInvoices?: boolean,
+  ): Promise<LastmileDispatchCustomer[]>;
   readContacts(): Promise<LastmileContact[]>;
   readLeads(): Promise<LastmileLead[]>;
   readOpportunities(): Promise<LastmileOpportunity[]>;
@@ -268,10 +275,20 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
         where id in (select account_id from opportunity_accounts)
         order by id
       `),
-    readOrderCohortCustomers: (days: number) => {
+    readOrderCohortCustomers: (days: number, includeOpenInvoices?: boolean) => {
       if (!Number.isInteger(days) || days < 1 || days > 365) {
         throw new Error(`cohort days must be an integer 1..365, got ${days}`);
       }
+      const openInvoiceUnion = includeOpenInvoices
+        ? `
+          union
+          select distinct i.customer_id as id
+          from invoice i
+          where i.company_id = '${TEI_DISPATCH_COMPANY_ID}'
+            and i.amount_remaining is not null
+            and i.amount_remaining <> 0
+            and i.customer_id is not null`
+        : "";
       return rows<LastmileDispatchCustomer>(`
         with cohort as (
           select distinct o.customer_id as id
@@ -279,7 +296,7 @@ export function createLastmileReader(databaseUrl: string): LastmileReader {
           where o.company_id = '${TEI_DISPATCH_COMPANY_ID}'
             and o.archived is not true
             and o.order_date > now() - interval '${days} days'
-            and o.customer_id is not null
+            and o.customer_id is not null${openInvoiceUnion}
         )
         select c.id,
                nullif(trim(c.name), '') as "name",
