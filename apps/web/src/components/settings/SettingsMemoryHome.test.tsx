@@ -27,7 +27,7 @@ describe("SettingsMemoryHome", () => {
     expect(source).toContain("tabs: [");
     expect(source).toContain('{ to: MEMORY, label: "Memory" }');
     // THINK-327 U8: Explorer replaced the wiki "Pages" tab in its slot.
-    expect(source).toContain('{ to: EXPLORER, label: "Explorer" }');
+    expect(source).toContain('{ to: EXPLORER, label: "Digital Twin" }');
     expect(source).not.toContain('label: "Pages"');
     expect(source).toContain('{ to: KNOWLEDGE_BASES, label: "KBs" }');
     expect(source).toContain('{ to: ONTOLOGY, label: "Ontology" }');

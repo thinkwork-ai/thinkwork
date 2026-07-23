@@ -4206,7 +4206,10 @@ function ShimmerText({ text }: { text: string }) {
       {text.split("").map((char, index) => (
         <span
           className="tw-shimmer-char"
-          key={`${char}-${index}`}
+          // Index-only key: when a live suffix ticks (e.g. "7s" -> "8s") the
+          // span updates in place instead of remounting, so the running
+          // shimmer animation doesn't restart on changed characters.
+          key={index}
           style={{ animationDelay: `${index * SHIMMER_CHAR_DURATION_MS}ms` }}
         >
           {char}
@@ -4265,7 +4268,10 @@ function ThinkingRow({
           >
             {running ? (
               <>
-                <ShimmerText text={title} />
+                {/* One string so the shimmer flows through the live timer. */}
+                <ShimmerText
+                  text={elapsedLabel ? `${title} ${elapsedLabel}` : title}
+                />
                 <span className="sr-only">{title}</span>
               </>
             ) : (
@@ -4285,14 +4291,6 @@ function ThinkingRow({
                     <span>{costLabel}</span>
                   </>
                 ) : null}
-              </span>
-            ) : null}
-            {running && elapsedLabel ? (
-              <span
-                aria-hidden="true"
-                className="font-mono text-sm text-muted-foreground/60"
-              >
-                {elapsedLabel}
               </span>
             ) : null}
           </span>

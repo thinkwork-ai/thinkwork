@@ -55,10 +55,10 @@ export const deleteThread = async (
         .where(eq(messageArtifacts.thread_id, args.id));
     }
 
-    await tx
-      .update(artifacts)
-      .set({ thread_id: null })
-      .where(eq(artifacts.thread_id, args.id));
+    // Cascade-delete the thread's artifacts (versions/shares/bindings hang
+    // off artifacts with ON DELETE CASCADE). Detaching used to orphan them
+    // into the artifacts list with no thread context.
+    await tx.delete(artifacts).where(eq(artifacts.thread_id, args.id));
     await tx
       .update(documents)
       .set({ thread_id: null })
