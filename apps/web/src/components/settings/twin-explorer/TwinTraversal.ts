@@ -57,7 +57,10 @@ export interface TraversalState {
   synthLinks: Map<string, TwinGraphLink>;
 }
 
-export const TRAVERSAL_BATCH_SIZE = 20;
+// Small first page + a "More" node that loads the next page (Eric
+// 2026-07-23): a large group shows 5 members and a "+N more…" affordance
+// rather than dumping everything at once.
+export const TRAVERSAL_BATCH_SIZE = 5;
 
 const SUMMARY_COLOR = "#475569";
 const MORE_COLOR = "#334155";

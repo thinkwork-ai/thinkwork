@@ -729,7 +729,7 @@ describe("TwinExplorer traversal (twin-traversal plan U4/U5)", () => {
       targetType: "tank",
       direction: "out",
       offset: 0,
-      limit: 20,
+      limit: 5,
     });
     const nodes = lastGraphProps().data.nodes as Array<any>;
     expect(nodes.map((node) => node.id)).toContain("t#tenant-1#e#tank-1");
