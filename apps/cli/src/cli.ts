@@ -53,6 +53,7 @@ import { registerCapabilitiesCommand } from "./commands/capabilities.js";
 import { registerDashboardCommand } from "./commands/dashboard.js";
 import { registerEvalCommand } from "./commands/eval.js";
 import { registerWikiCommand } from "./commands/wiki.js";
+import { registerTwinCommand } from "./commands/twin.js";
 import { registerEnterpriseCommand } from "./commands/enterprise.js";
 import { registerMigrateFolderCanonCommand } from "./commands/migrate-folder-canon.js";
 import { registerMigrateAgentFoldersCommand } from "./commands/migrate-agent-folders.js";
@@ -165,6 +166,9 @@ registerCleanupSpaceHindsightBanksCommand(program);
 
 // Wiki (Compounding Memory) pipeline controls — admin-only.
 registerWikiCommand(program);
+
+// Digital Twin white-glove installation (THINK-334) — engineer-run.
+registerTwinCommand(program);
 
 // Accept `--json` after any subcommand too (not just right after `thinkwork`).
 // Keeps individual registerXxxCommand functions free of plumbing. Walk only
