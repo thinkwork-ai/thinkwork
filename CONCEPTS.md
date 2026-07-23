@@ -267,6 +267,10 @@ The ontology's schema-level declaration of which attached source systems hold wh
 
 Answering a cross-system question by federation instead of replication: the agent resolves an entity through the Type-Level Map (which system holds the facet) and the Canonical Identity crosswalk (that system's natural key), then fetches fresh detail live through the registered connector's query path and stitches the answer with per-source provenance. On a crosswalk miss the agent presents candidate matches in-turn; a user confirmation writes a durable, audited mapping. The intelligence layer keeps a skeleton; detail stays in the source systems until asked for (THINK-321).
 
+### Context Tree
+
+The bounded "related parties" view of a single Digital Twin node, computed from relationship-type cardinality rather than hop depth: edges that are to-one from the current node's perspective expand transitively (an Order reaches its Customer, and the Customer's Sales Rep), while to-many edges expand only from the focal node itself (the Order shows its Order Items, but the Customer's other thousand orders never appear). Null cardinality is treated as to-many; a per-type `expand_through` override lets a to-many edge expand below the root. Edge direction stays purely semantic — one canonical stored direction per relationship type, with `inverse_name` carrying the reverse-direction display label. Replaces the depth-selector neighborhood view in the Twin Explorer (2026-07-22 brainstorm).
+
 ### External-Memory Rollout Gates
 
 The independent enablement ladder for external memory, verified per tenant by `packages/api/scripts/external-memory-readiness.ts` (JSON + table): source ledger shadow mode → personal manual → personal schedule → one Space workflow → tenant workflow → canonical graph/wiki writes. Kill switches: per-source `enabled`, per-tenant `tenants.wiki_compile_enabled`, stage-global `WIKI_SOURCE`. Rollback disables new writes but preserves ledgers for diagnosis and retraction; recovery is forward-only (pause, inspect, correct, replay, recompile).
