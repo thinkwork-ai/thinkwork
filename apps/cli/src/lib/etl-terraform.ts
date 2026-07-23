@@ -36,6 +36,8 @@ export const TWIN_STACK_ORDER = [
   "landing",
   "query-router",
   "dagster",
+  "observability",
+  "trigger-dispatcher",
   "neptune",
 ] as const;
 

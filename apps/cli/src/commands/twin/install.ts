@@ -378,26 +378,41 @@ function buildWiringDeps(stage: string): WiringDeps {
     readChannel: async () => readRunnerSecretChannel(readSecret()),
     writeChannel: async (desired) => {
       const merged = mergeRunnerSecrets(readSecret(), desired);
-      const res = spawnSync(
-        "aws",
-        [
-          "secretsmanager",
-          "put-secret-value",
-          "--cli-input-json",
-          "file:///dev/stdin",
-        ],
-        {
-          encoding: "utf8",
-          timeout: 60_000,
-          input: JSON.stringify({ SecretId: secretId, SecretString: merged }),
-          stdio: ["pipe", "pipe", "pipe"],
-        },
-      );
-      if (res.status !== 0) {
-        // Never echo stderr — diagnostics may include the secret document.
-        throw new Error(
-          `secretsmanager put-secret-value exited with ${res.status ?? "unknown"}.`,
+      // aws CLI v2 does not reliably parse --cli-input-json from /dev/stdin;
+      // stage the document in a 0600 temp file and delete it immediately.
+      const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+      const { tmpdir } = await import("node:os");
+      const { join } = await import("node:path");
+      const dir = mkdtempSync(join(tmpdir(), "twin-rs-"));
+      const path = join(dir, "put.json");
+      try {
+        writeFileSync(
+          path,
+          JSON.stringify({ SecretId: secretId, SecretString: merged }),
+          { mode: 0o600 },
         );
+        const res = spawnSync(
+          "aws",
+          [
+            "secretsmanager",
+            "put-secret-value",
+            "--cli-input-json",
+            `file://${path}`,
+          ],
+          {
+            encoding: "utf8",
+            timeout: 60_000,
+            stdio: ["ignore", "pipe", "pipe"],
+          },
+        );
+        if (res.status !== 0) {
+          // Never echo stderr — diagnostics may include the secret document.
+          throw new Error(
+            `secretsmanager put-secret-value exited with ${res.status ?? "unknown"}.`,
+          );
+        }
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
       }
     },
     runDeploy: () => runCustomerControllerDeploy(stage),
