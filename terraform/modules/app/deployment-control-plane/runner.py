@@ -4581,6 +4581,16 @@ def write_runner_files(payload, runner_secrets):
             "neptuneClientSecurityGroupId",
             default=safe_get(reviewed_payload, "neptuneClientSecurityGroupId", default=""),
         ),
+        "neptune_load_bucket": safe_get(
+            runner_secrets,
+            "neptuneLoadBucket",
+            default=safe_get(reviewed_payload, "neptuneLoadBucket", default=""),
+        ),
+        "neptune_loader_role_arn": safe_get(
+            runner_secrets,
+            "neptuneLoaderRoleArn",
+            default=safe_get(reviewed_payload, "neptuneLoaderRoleArn", default=""),
+        ),
     }
     enforce_customer_domain_preservation(
         current_outputs,
@@ -4727,6 +4737,16 @@ variable "neptune_cluster_resource_id" {{
 }}
 
 variable "neptune_client_security_group_id" {{
+  type    = string
+  default = ""
+}}
+
+variable "neptune_load_bucket" {{
+  type    = string
+  default = ""
+}}
+
+variable "neptune_loader_role_arn" {{
   type    = string
   default = ""
 }}
@@ -5174,6 +5194,8 @@ module "thinkwork" {{
   neptune_endpoint                 = var.neptune_endpoint
   neptune_cluster_resource_id      = var.neptune_cluster_resource_id
   neptune_client_security_group_id = var.neptune_client_security_group_id
+  neptune_load_bucket              = var.neptune_load_bucket
+  neptune_loader_role_arn          = var.neptune_loader_role_arn
   enable_workspace_orchestration = true
   enable_agentcore_multiplayer_proof          = var.enable_agentcore_multiplayer_proof
   agentcore_multiplayer_proof_tenant_slug     = var.agentcore_multiplayer_proof_tenant_slug

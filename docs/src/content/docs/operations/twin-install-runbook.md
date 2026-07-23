@@ -42,13 +42,13 @@ neptune`) using its `accounts/<slug>.{backend.hcl,tfvars}` machinery.
 
 - **dev** — `deploy.yml` reads the three Neptune values from GitHub repo
   variables (`NEPTUNE_ENDPOINT`, `NEPTUNE_CLUSTER_RESOURCE_ID`,
-  `NEPTUNE_CLIENT_SG_ID`). The command sets them with `gh variable set`
+  `NEPTUNE_CLIENT_SG_ID`, `NEPTUNE_LOAD_BUCKET`, `NEPTUNE_LOADER_ROLE_ARN`). The command sets them with `gh variable set`
   **before** dispatching the workflow (GitHub Actions variables snapshot
   at trigger) and watches the run.
 - **customer stages** — the values live in the
   `/thinkwork/<stage>/deployment/runner-secrets` document as
   `neptuneEndpoint` / `neptuneClusterResourceId` /
-  `neptuneClientSecurityGroupId`; the control-plane runner's `vars_json`
+  `neptuneClientSecurityGroupId` / `neptuneLoadBucket` / `neptuneLoaderRoleArn`; the control-plane runner's `vars_json`
   allowlist forwards them into Terraform. The command merges the keys
   into the document (touching nothing else) and starts a deployment
   controller `update` run, waiting for the result. The runner allowlist
