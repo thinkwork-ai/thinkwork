@@ -27,6 +27,8 @@ export const DEV_GH_VARIABLE_KEYS = {
   neptuneEndpoint: "NEPTUNE_ENDPOINT",
   clusterResourceId: "NEPTUNE_CLUSTER_RESOURCE_ID",
   clientSgId: "NEPTUNE_CLIENT_SG_ID",
+  loadBucket: "NEPTUNE_LOAD_BUCKET",
+  loaderRoleArn: "NEPTUNE_LOADER_ROLE_ARN",
 } as const;
 
 /** camelCase keys inside the customer runner-secrets document. */
@@ -34,6 +36,8 @@ export const RUNNER_SECRET_KEYS = {
   neptuneEndpoint: "neptuneEndpoint",
   clusterResourceId: "neptuneClusterResourceId",
   clientSgId: "neptuneClientSecurityGroupId",
+  loadBucket: "neptuneLoadBucket",
+  loaderRoleArn: "neptuneLoaderRoleArn",
 } as const;
 
 export type NeptuneField = keyof typeof DEV_GH_VARIABLE_KEYS;
@@ -42,6 +46,8 @@ export const NEPTUNE_FIELDS: NeptuneField[] = [
   "neptuneEndpoint",
   "clusterResourceId",
   "clientSgId",
+  "loadBucket",
+  "loaderRoleArn",
 ];
 
 // ── Deployment model ─────────────────────────────────────────────────────────
@@ -95,6 +101,8 @@ export function mergeRunnerSecrets(
   doc[RUNNER_SECRET_KEYS.neptuneEndpoint] = desired.neptuneEndpoint;
   doc[RUNNER_SECRET_KEYS.clusterResourceId] = desired.clusterResourceId;
   doc[RUNNER_SECRET_KEYS.clientSgId] = desired.clientSgId;
+  doc[RUNNER_SECRET_KEYS.loadBucket] = desired.loadBucket;
+  doc[RUNNER_SECRET_KEYS.loaderRoleArn] = desired.loaderRoleArn;
   return JSON.stringify(doc);
 }
 
@@ -110,6 +118,8 @@ export function readRunnerSecretChannel(
     neptuneEndpoint: read(RUNNER_SECRET_KEYS.neptuneEndpoint),
     clusterResourceId: read(RUNNER_SECRET_KEYS.clusterResourceId),
     clientSgId: read(RUNNER_SECRET_KEYS.clientSgId),
+    loadBucket: read(RUNNER_SECRET_KEYS.loadBucket),
+    loaderRoleArn: read(RUNNER_SECRET_KEYS.loaderRoleArn),
   };
 }
 

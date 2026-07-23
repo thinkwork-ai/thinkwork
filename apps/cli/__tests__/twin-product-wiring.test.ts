@@ -15,6 +15,8 @@ const DESIRED = {
   neptuneEndpoint: "twin.cluster-x.us-east-1.neptune.amazonaws.com",
   clusterResourceId: "cluster-ABC123",
   clientSgId: "sg-0abc",
+  loadBucket: "etl-platform-neptune-load-1",
+  loaderRoleArn: "arn:aws:iam::1:role/etl-platform-neptune-loader",
 };
 
 function deps(overrides: Partial<WiringDeps> = {}): WiringDeps & {
@@ -28,6 +30,8 @@ function deps(overrides: Partial<WiringDeps> = {}): WiringDeps & {
       neptuneEndpoint: DESIRED.neptuneEndpoint,
       clusterResourceId: DESIRED.clusterResourceId,
       clientSgId: DESIRED.clientSgId,
+      loadBucket: DESIRED.loadBucket,
+      loaderRoleArn: DESIRED.loaderRoleArn,
     }),
     writeChannel: async () => {
       d.writes++;
@@ -120,7 +124,7 @@ describe("channel diff", () => {
 });
 
 describe("mergeRunnerSecrets", () => {
-  it("never writes keys other than the three Neptune keys", () => {
+  it("never writes keys other than the Neptune keys", () => {
     const before = {
       dbPassword: "s3cret",
       googleOauthClientId: "g-id",
@@ -134,6 +138,8 @@ describe("mergeRunnerSecrets", () => {
     expect(after.neptuneEndpoint).toBe(DESIRED.neptuneEndpoint);
     expect(after.neptuneClusterResourceId).toBe(DESIRED.clusterResourceId);
     expect(after.neptuneClientSecurityGroupId).toBe(DESIRED.clientSgId);
+    expect(after.neptuneLoadBucket).toBe(DESIRED.loadBucket);
+    expect(after.neptuneLoaderRoleArn).toBe(DESIRED.loaderRoleArn);
     expect(Object.keys(after).sort()).toEqual(
       [
         "dbPassword",
@@ -141,6 +147,8 @@ describe("mergeRunnerSecrets", () => {
         "neptuneEndpoint",
         "neptuneClusterResourceId",
         "neptuneClientSecurityGroupId",
+        "neptuneLoadBucket",
+        "neptuneLoaderRoleArn",
       ].sort(),
     );
   });

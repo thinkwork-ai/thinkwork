@@ -277,6 +277,10 @@ export interface NeptuneOutputs {
   neptuneEndpoint: string;
   clusterResourceId: string;
   clientSgId: string;
+  /** Bulk-loader staging bucket (THINK-331 bulk-rebuild lane). */
+  loadBucket: string;
+  /** Neptune loader IAM role (THINK-331 bulk-rebuild lane). */
+  loaderRoleArn: string;
 }
 
 /** Output names as declared by the etl repo's neptune stack. */
@@ -284,6 +288,8 @@ const NEPTUNE_OUTPUT_KEYS = {
   neptuneEndpoint: "cluster_endpoint",
   clusterResourceId: "cluster_resource_id",
   clientSgId: "client_sg_id",
+  loadBucket: "bulk_load_bucket_name",
+  loaderRoleArn: "loader_role_arn",
 } as const;
 
 export function parseNeptuneOutputs(outputJson: string): {
@@ -304,6 +310,8 @@ export function parseNeptuneOutputs(outputJson: string): {
     neptuneEndpoint: read(NEPTUNE_OUTPUT_KEYS.neptuneEndpoint),
     clusterResourceId: read(NEPTUNE_OUTPUT_KEYS.clusterResourceId),
     clientSgId: read(NEPTUNE_OUTPUT_KEYS.clientSgId),
+    loadBucket: read(NEPTUNE_OUTPUT_KEYS.loadBucket),
+    loaderRoleArn: read(NEPTUNE_OUTPUT_KEYS.loaderRoleArn),
   };
   if (missing.length > 0) return { outputs: null, missing };
   return { outputs, missing: [] };

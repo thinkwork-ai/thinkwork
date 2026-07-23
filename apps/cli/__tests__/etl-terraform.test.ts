@@ -168,6 +168,8 @@ describe("parseNeptuneOutputs", () => {
       cluster_endpoint: { value: "neptune.example:8182" },
       cluster_resource_id: { value: "cluster-ABC" },
       client_sg_id: { value: "sg-123" },
+      bulk_load_bucket_name: { value: "load-bkt" },
+      loader_role_arn: { value: "arn:aws:iam::1:role/loader" },
       reader_endpoint: { value: "r.example" },
     });
     const { outputs, missing } = parseNeptuneOutputs(json);
@@ -176,6 +178,8 @@ describe("parseNeptuneOutputs", () => {
       neptuneEndpoint: "neptune.example:8182",
       clusterResourceId: "cluster-ABC",
       clientSgId: "sg-123",
+      loadBucket: "load-bkt",
+      loaderRoleArn: "arn:aws:iam::1:role/loader",
     });
   });
 
@@ -194,6 +198,8 @@ describe("runEtlTwinStacks", () => {
     cluster_endpoint: { value: "ep:8182" },
     cluster_resource_id: { value: "rid" },
     client_sg_id: { value: "sg-1" },
+    bulk_load_bucket_name: { value: "load-bkt" },
+    loader_role_arn: { value: "arn:role" },
   });
 
   function scriptedExec(script: {
@@ -252,6 +258,8 @@ describe("runEtlTwinStacks", () => {
       neptuneEndpoint: "ep:8182",
       clusterResourceId: "rid",
       clientSgId: "sg-1",
+      loadBucket: "load-bkt",
+      loaderRoleArn: "arn:role",
     });
   });
 
