@@ -127,7 +127,7 @@ beforeEach(() => {
   store = createInMemoryPluginEngineStore();
   const install = store.seedInstall({
     tenant_id: TENANT,
-    plugin_key: "lastmile",
+    plugin_key: "acme",
     pinned_version: "0.1.0",
     pinned_payload_sha256: "sha-0.1.0",
     state: "installed",
@@ -155,7 +155,7 @@ beforeEach(() => {
     store,
     secrets: createInMemoryPluginSecrets(),
     resolveVersion: async () => ({
-      plugin: { pluginKey: "lastmile" },
+      plugin: { pluginKey: "acme" },
       versionEntry: {
         version: "0.1.0",
         payloadSha256: "sha-0.1.0",
@@ -301,22 +301,22 @@ describe("GET /api/skills/plugin-oauth/callback", () => {
   it("completion redirect targets /settings/plugins/{pluginKey}?pluginOAuth=...", () => {
     const success = pluginOAuthCompletionRedirect({
       ok: true,
-      pluginKey: "lastmile",
+      pluginKey: "acme",
       returnTo: null,
     });
     const successUrl = new URL(success);
-    expect(successUrl.pathname).toBe("/settings/plugins/lastmile");
+    expect(successUrl.pathname).toBe("/settings/plugins/acme");
     expect(successUrl.searchParams.get("pluginOAuth")).toBe("success");
     expect(successUrl.searchParams.get("reason")).toBeNull();
 
     const denied = pluginOAuthCompletionRedirect({
       ok: false,
       reason: "denied",
-      pluginKey: "lastmile",
+      pluginKey: "acme",
       returnTo: null,
     });
     const deniedUrl = new URL(denied);
-    expect(deniedUrl.pathname).toBe("/settings/plugins/lastmile");
+    expect(deniedUrl.pathname).toBe("/settings/plugins/acme");
     expect(deniedUrl.searchParams.get("pluginOAuth")).toBe("error");
     expect(deniedUrl.searchParams.get("reason")).toBe("denied");
   });
@@ -324,8 +324,8 @@ describe("GET /api/skills/plugin-oauth/callback", () => {
   it("an explicit returnTo from the signed state wins over the default landing", () => {
     const redirect = pluginOAuthCompletionRedirect({
       ok: true,
-      pluginKey: "lastmile",
-      returnTo: "https://app.thinkwork.ai/settings/plugins/lastmile?tab=conn",
+      pluginKey: "acme",
+      returnTo: "https://app.thinkwork.ai/settings/plugins/acme?tab=conn",
     });
     const url = new URL(redirect);
     expect(url.searchParams.get("tab")).toBe("conn");

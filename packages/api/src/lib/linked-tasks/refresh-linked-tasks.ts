@@ -5,7 +5,7 @@ import { linkedTasks } from "@thinkwork/database-pg/schema";
 import type {
   LastMileAdapterResult,
   LastMileTaskSnapshot,
-} from "@thinkwork/plugin-lastmile/tasks-adapter";
+} from "./lastmile-tasks-adapter.js";
 import type { CoordinatorAgentService } from "../spaces/coordinator-agent.js";
 import {
   markLinkedTaskSyncFailure,

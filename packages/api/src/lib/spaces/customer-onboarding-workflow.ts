@@ -20,7 +20,7 @@ import {
   type LastMileAdapterResult,
   type LastMileTaskSnapshot,
   type LastMileProviderError,
-} from "@thinkwork/plugin-lastmile/tasks-adapter";
+} from "../linked-tasks/lastmile-tasks-adapter.js";
 import type {
   LinkedTaskStatus,
   LinkedTaskSyncStatus,
@@ -292,8 +292,7 @@ export interface CreateCustomerOnboardingLinkedTaskInput {
   metadata: Record<string, unknown>;
 }
 
-export interface CreateCustomerOnboardingWorkItemInput
-  extends CreateCustomerOnboardingLinkedTaskInput {
+export interface CreateCustomerOnboardingWorkItemInput extends CreateCustomerOnboardingLinkedTaskInput {
   linkedTaskId?: string | null;
 }
 
@@ -1136,9 +1135,7 @@ function createUnavailableLastMileTaskAdapter(): LastMileTasksWorkflowAdapter {
   };
 }
 
-class DrizzleCustomerOnboardingRepository
-  implements CustomerOnboardingWorkflowRepository
-{
+class DrizzleCustomerOnboardingRepository implements CustomerOnboardingWorkflowRepository {
   private readonly db = getDb();
 
   async findSpace(input: {

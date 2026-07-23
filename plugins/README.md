@@ -152,8 +152,8 @@ When a plugin version bump should become visible without a full app deploy:
 6. Install or upgrade through ThinkWork. Do not substitute a direct Terraform
    apply, vendor cloud login, local Docker Compose run, or manual catalog edit.
 7. Run the package-owned smoke for the plugin after install/upgrade. For
-   LastMile, that means proving `lastmile--crm`, `lastmile--tasks`, and
-   `lastmile--routing` through ThinkWork's MCP proxy.
+   Twenty, that means proving the `twenty--crm` MCP server through
+   ThinkWork's MCP proxy.
 
 Before closing a migration slice, run the source-boundary check:
 

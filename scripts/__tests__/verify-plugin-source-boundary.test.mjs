@@ -21,8 +21,6 @@ describe("verify-plugin-source-boundary", () => {
 
   it("accepts plugin-specific source inside the owning plugin package", async () => {
     await withFixture(async (dir) => {
-      await writeFixtureFile(dir, "plugins/company-data/src/manifest.ts");
-      await writeFixtureFile(dir, "plugins/company-etl/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/email-channel/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/n8n/src/manifest.ts");
       await writeFixtureFile(dir, "plugins/twenty/src/manifest.ts");
@@ -36,43 +34,28 @@ describe("verify-plugin-source-boundary", () => {
 
   it("blocks another plugin's source inside the wrong plugin package", async () => {
     await withFixture(async (dir) => {
-      await writeFixtureFile(dir, "plugins/lastmile/src/company-data-notes.md");
-      await writeFixtureFile(dir, "plugins/lastmile/src/company-etl-notes.md");
-      await writeFixtureFile(
-        dir,
-        "plugins/lastmile/src/email-channel-notes.md",
-      );
-      await writeFixtureFile(dir, "plugins/lastmile/src/n8n-notes.md");
-      await writeFixtureFile(dir, "plugins/lastmile/src/twenty-notes.md");
+      await writeFixtureFile(dir, "plugins/twenty/src/email-channel-notes.md");
+      await writeFixtureFile(dir, "plugins/twenty/src/n8n-notes.md");
+      await writeFixtureFile(dir, "plugins/n8n/src/twenty-notes.md");
 
       const result = await scanFixture(dir);
 
-      assert.equal(result.violations.length, 5);
+      assert.equal(result.violations.length, 3);
       assert.equal(
         result.violations[0].path,
-        "plugins/lastmile/src/company-data-notes.md",
+        "plugins/n8n/src/twenty-notes.md",
       );
-      assert.deepEqual(result.violations[0].pluginKeys, ["company-data"]);
+      assert.deepEqual(result.violations[0].pluginKeys, ["twenty"]);
       assert.equal(
         result.violations[1].path,
-        "plugins/lastmile/src/company-etl-notes.md",
+        "plugins/twenty/src/email-channel-notes.md",
       );
-      assert.deepEqual(result.violations[1].pluginKeys, ["company-etl"]);
+      assert.deepEqual(result.violations[1].pluginKeys, ["email-channel"]);
       assert.equal(
         result.violations[2].path,
-        "plugins/lastmile/src/email-channel-notes.md",
+        "plugins/twenty/src/n8n-notes.md",
       );
-      assert.deepEqual(result.violations[2].pluginKeys, ["email-channel"]);
-      assert.equal(
-        result.violations[3].path,
-        "plugins/lastmile/src/n8n-notes.md",
-      );
-      assert.deepEqual(result.violations[3].pluginKeys, ["n8n"]);
-      assert.equal(
-        result.violations[4].path,
-        "plugins/lastmile/src/twenty-notes.md",
-      );
-      assert.deepEqual(result.violations[4].pluginKeys, ["twenty"]);
+      assert.deepEqual(result.violations[2].pluginKeys, ["n8n"]);
     });
   });
 
@@ -80,11 +63,7 @@ describe("verify-plugin-source-boundary", () => {
     await withFixture(async (dir) => {
       await writeFixtureFile(
         dir,
-        "packages/api/src/lib/plugins/company-data-extra.ts",
-      );
-      await writeFixtureFile(
-        dir,
-        "packages/api/src/lib/plugins/company-etl-extra.ts",
+        "packages/api/src/lib/plugins/email-channel-extra.ts",
       );
       await writeFixtureFile(dir, "packages/api/src/lib/plugins/n8n-extra.ts");
       await writeFixtureFile(
@@ -94,27 +73,22 @@ describe("verify-plugin-source-boundary", () => {
 
       const result = await scanFixture(dir);
 
-      assert.equal(result.violations.length, 4);
+      assert.equal(result.violations.length, 3);
       assert.equal(
         result.violations[0].path,
-        "packages/api/src/lib/plugins/company-data-extra.ts",
+        "packages/api/src/lib/plugins/email-channel-extra.ts",
       );
-      assert.deepEqual(result.violations[0].pluginKeys, ["company-data"]);
+      assert.deepEqual(result.violations[0].pluginKeys, ["email-channel"]);
       assert.equal(
         result.violations[1].path,
-        "packages/api/src/lib/plugins/company-etl-extra.ts",
-      );
-      assert.deepEqual(result.violations[1].pluginKeys, ["company-etl"]);
-      assert.equal(
-        result.violations[2].path,
         "packages/api/src/lib/plugins/n8n-extra.ts",
       );
-      assert.deepEqual(result.violations[2].pluginKeys, ["n8n"]);
+      assert.deepEqual(result.violations[1].pluginKeys, ["n8n"]);
       assert.equal(
-        result.violations[3].path,
+        result.violations[2].path,
         "packages/api/src/lib/plugins/twenty-extra.ts",
       );
-      assert.deepEqual(result.violations[3].pluginKeys, ["twenty"]);
+      assert.deepEqual(result.violations[2].pluginKeys, ["twenty"]);
     });
   });
 

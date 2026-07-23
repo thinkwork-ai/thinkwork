@@ -45,10 +45,8 @@ describe("MCP OAuth client helpers", () => {
 
   it("allows stage-scoped desktop app-route return URLs", () => {
     expect(
-      normalizeMcpOAuthReturnTo(
-        "thinkwork-canary://app/settings/plugins/lastmile",
-      ),
-    ).toBe("thinkwork-canary://app/settings/plugins/lastmile");
+      normalizeMcpOAuthReturnTo("thinkwork-canary://app/settings/plugins/acme"),
+    ).toBe("thinkwork-canary://app/settings/plugins/acme");
   });
 
   it("blocks arbitrary web return origins", () => {

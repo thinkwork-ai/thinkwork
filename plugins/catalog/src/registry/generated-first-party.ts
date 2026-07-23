@@ -3,25 +3,13 @@
 //   pnpm --filter @thinkwork/plugin-catalog generate:plugins
 
 import { defineFirstPartyPluginPackage } from "../plugin-package";
-import { companyDataPluginPackage as rawCompanyDataPluginPackage } from "@thinkwork/plugin-company-data";
-import { companyEtlPluginPackage as rawCompanyEtlPluginPackage } from "@thinkwork/plugin-company-etl";
 import { emailChannelPluginPackage as rawEmailChannelPluginPackage } from "@thinkwork/plugin-email-channel";
-import { lastmilePluginPackage as rawLastmilePluginPackage } from "@thinkwork/plugin-lastmile";
 import { n8nPluginPackage as rawN8nPluginPackage } from "@thinkwork/plugin-n8n";
 import { sendgridPluginPackage as rawSendgridPluginPackage } from "@thinkwork/plugin-sendgrid";
 import { twentyPluginPackage as rawTwentyPluginPackage } from "@thinkwork/plugin-twenty";
 
-export const companyDataPluginPackage = defineFirstPartyPluginPackage(
-  rawCompanyDataPluginPackage,
-);
-export const companyEtlPluginPackage = defineFirstPartyPluginPackage(
-  rawCompanyEtlPluginPackage,
-);
 export const emailChannelPluginPackage = defineFirstPartyPluginPackage(
   rawEmailChannelPluginPackage,
-);
-export const lastmilePluginPackage = defineFirstPartyPluginPackage(
-  rawLastmilePluginPackage,
 );
 export const n8nPluginPackage = defineFirstPartyPluginPackage(
   rawN8nPluginPackage,
@@ -33,19 +21,13 @@ export const twentyPluginPackage = defineFirstPartyPluginPackage(
   rawTwentyPluginPackage,
 );
 
-export const companyDataManifest = companyDataPluginPackage.manifest;
-export const companyEtlManifest = companyEtlPluginPackage.manifest;
 export const emailChannelManifest = emailChannelPluginPackage.manifest;
-export const lastmileManifest = lastmilePluginPackage.manifest;
 export const n8nManifest = n8nPluginPackage.manifest;
 export const sendgridManifest = sendgridPluginPackage.manifest;
 export const twentyManifest = twentyPluginPackage.manifest;
 
 export const firstPartyPluginPackages = [
-  companyDataPluginPackage,
-  companyEtlPluginPackage,
   emailChannelPluginPackage,
-  lastmilePluginPackage,
   n8nPluginPackage,
   sendgridPluginPackage,
   twentyPluginPackage,

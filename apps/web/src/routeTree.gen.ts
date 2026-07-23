@@ -68,7 +68,6 @@ import { Route as AuthedSettingsSkillsDraftsRouteImport } from "./routes/_authed
 import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_authed/settings.skills.$skillSlug";
 import { Route as AuthedSettingsRoutinesRoutineIdRouteImport } from "./routes/_authed/settings.routines.$routineId";
 import { Route as AuthedSettingsPluginsN8nRouteImport } from "./routes/_authed/settings.plugins.n8n";
-import { Route as AuthedSettingsPluginsDataIntegrationsRouteImport } from "./routes/_authed/settings.plugins.data-integrations";
 import { Route as AuthedSettingsPluginsPluginKeyRouteImport } from "./routes/_authed/settings.plugins.$pluginKey";
 import { Route as AuthedSettingsMemoryOntologyRouteImport } from "./routes/_authed/settings.memory.ontology";
 import { Route as AuthedSettingsMemoryKnowledgeGraphRouteImport } from "./routes/_authed/settings.memory.knowledge-graph";
@@ -445,12 +444,6 @@ const AuthedSettingsPluginsN8nRoute =
     path: "/plugins/n8n",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
-const AuthedSettingsPluginsDataIntegrationsRoute =
-  AuthedSettingsPluginsDataIntegrationsRouteImport.update({
-    id: "/plugins/data-integrations",
-    path: "/plugins/data-integrations",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
 const AuthedSettingsPluginsPluginKeyRoute =
   AuthedSettingsPluginsPluginKeyRouteImport.update({
     id: "/plugins/$pluginKey",
@@ -809,7 +802,6 @@ export interface FileRoutesByFullPath {
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
   "/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
-  "/settings/plugins/data-integrations": typeof AuthedSettingsPluginsDataIntegrationsRoute;
   "/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
@@ -915,7 +907,6 @@ export interface FileRoutesByTo {
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
   "/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
-  "/settings/plugins/data-integrations": typeof AuthedSettingsPluginsDataIntegrationsRoute;
   "/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
@@ -1028,7 +1019,6 @@ export interface FileRoutesById {
   "/_authed/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/_authed/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
   "/_authed/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
-  "/_authed/settings/plugins/data-integrations": typeof AuthedSettingsPluginsDataIntegrationsRoute;
   "/_authed/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/_authed/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
@@ -1140,7 +1130,6 @@ export interface FileRouteTypes {
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/ontology"
     | "/settings/plugins/$pluginKey"
-    | "/settings/plugins/data-integrations"
     | "/settings/plugins/n8n"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
@@ -1246,7 +1235,6 @@ export interface FileRouteTypes {
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/ontology"
     | "/settings/plugins/$pluginKey"
-    | "/settings/plugins/data-integrations"
     | "/settings/plugins/n8n"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
@@ -1358,7 +1346,6 @@ export interface FileRouteTypes {
     | "/_authed/settings/memory/knowledge-graph"
     | "/_authed/settings/memory/ontology"
     | "/_authed/settings/plugins/$pluginKey"
-    | "/_authed/settings/plugins/data-integrations"
     | "/_authed/settings/plugins/n8n"
     | "/_authed/settings/routines/$routineId"
     | "/_authed/settings/skills/$skillSlug"
@@ -1835,13 +1822,6 @@ declare module "@tanstack/react-router" {
       path: "/plugins/n8n";
       fullPath: "/settings/plugins/n8n";
       preLoaderRoute: typeof AuthedSettingsPluginsN8nRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
-    "/_authed/settings/plugins/data-integrations": {
-      id: "/_authed/settings/plugins/data-integrations";
-      path: "/plugins/data-integrations";
-      fullPath: "/settings/plugins/data-integrations";
-      preLoaderRoute: typeof AuthedSettingsPluginsDataIntegrationsRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/plugins/$pluginKey": {
@@ -2420,7 +2400,6 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsMcpServersSelfAcquiredRoute: typeof AuthedSettingsMcpServersSelfAcquiredRoute;
   AuthedSettingsMcpServersServersRoute: typeof AuthedSettingsMcpServersServersRoute;
   AuthedSettingsPluginsPluginKeyRoute: typeof AuthedSettingsPluginsPluginKeyRoute;
-  AuthedSettingsPluginsDataIntegrationsRoute: typeof AuthedSettingsPluginsDataIntegrationsRoute;
   AuthedSettingsPluginsN8nRoute: typeof AuthedSettingsPluginsN8nRouteWithChildren;
   AuthedSettingsRoutinesRoutineIdRoute: typeof AuthedSettingsRoutinesRoutineIdRoute;
   AuthedSettingsSkillsSkillSlugRoute: typeof AuthedSettingsSkillsSkillSlugRoute;
@@ -2491,8 +2470,6 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
     AuthedSettingsMcpServersSelfAcquiredRoute,
   AuthedSettingsMcpServersServersRoute: AuthedSettingsMcpServersServersRoute,
   AuthedSettingsPluginsPluginKeyRoute: AuthedSettingsPluginsPluginKeyRoute,
-  AuthedSettingsPluginsDataIntegrationsRoute:
-    AuthedSettingsPluginsDataIntegrationsRoute,
   AuthedSettingsPluginsN8nRoute: AuthedSettingsPluginsN8nRouteWithChildren,
   AuthedSettingsRoutinesRoutineIdRoute: AuthedSettingsRoutinesRoutineIdRoute,
   AuthedSettingsSkillsSkillSlugRoute: AuthedSettingsSkillsSkillSlugRoute,

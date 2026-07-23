@@ -13,10 +13,7 @@ import {
 describe("first-party plugin packages", () => {
   it("registers n8n from its root plugin package boundary", () => {
     expect(firstPartyPluginPackages.map((entry) => entry.packageKey)).toEqual([
-      "company-data",
-      "company-etl",
       "email-channel",
-      "lastmile",
       "n8n",
       "sendgrid",
       "twenty",
@@ -45,14 +42,18 @@ describe("first-party plugin packages", () => {
 
   it("publishes every first-party plugin manifest through the catalog aggregate", () => {
     expect(allPluginManifests.map((manifest) => manifest.pluginKey)).toEqual([
-      "lastmile",
       "n8n",
       "email-channel",
       "sendgrid",
-      "company-data",
-      "company-etl",
       "twenty",
     ]);
+  });
+
+  it("no longer publishes the superseded data plugins (THINK-334 U6)", () => {
+    const keys = allPluginManifests.map((manifest) => manifest.pluginKey);
+    expect(keys).not.toContain("lastmile");
+    expect(keys).not.toContain("company-data");
+    expect(keys).not.toContain("company-etl");
   });
 
   it("rejects package descriptors whose source root does not match the key", () => {
