@@ -455,6 +455,24 @@ export const identityGraphProjectionCursors = identity.table(
     last_event_id: uuid("last_event_id"),
     /** Snapshot cursor string published with the identity-mapping snapshot. */
     last_snapshot_cursor: text("last_snapshot_cursor"),
+    /**
+     * Bulk-rebuild lane (THINK-331): per-tenant CAS fence + extract-time
+     * watermark. `bulk_load_started_at` non-null = a bulk-rebuild holds the
+     * fence (refreshed as a heartbeat on every resume/poll); `bulk_load_id`
+     * is the Neptune loader job id, null until the loader starts. The
+     * watermark pair is captured SQL-side BEFORE the Postgres extract so the
+     * success tail fast-forwards the cursor only past events the extract
+     * reflected — events committed during the load window replay through the
+     * nudge lane. All four are null when no bulk-rebuild is in flight.
+     */
+    bulk_load_id: text("bulk_load_id"),
+    bulk_load_started_at: timestamp("bulk_load_started_at", {
+      withTimezone: true,
+    }),
+    bulk_watermark_created_at: timestamp("bulk_watermark_created_at", {
+      withTimezone: true,
+    }),
+    bulk_watermark_event_id: uuid("bulk_watermark_event_id"),
     updated_at: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),

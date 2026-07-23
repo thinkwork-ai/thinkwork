@@ -1518,3 +1518,15 @@ variable "neptune_client_security_group_id" {
   description = "neptune-client SG id (etl-platform neptune stack output) attached to the identity-graph-projector"
 }
 
+variable "neptune_load_bucket" {
+  type        = string
+  default     = ""
+  description = "Neptune bulk-load staging bucket name (etl-platform neptune stack; empty = bulk-rebuild disabled)"
+}
+
+variable "neptune_loader_role_arn" {
+  type        = string
+  default     = ""
+  description = "IAM role ARN the Neptune cluster assumes to read the load bucket (etl-platform neptune stack; empty = bulk-rebuild disabled)"
+}
+

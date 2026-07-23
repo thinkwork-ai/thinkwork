@@ -159,6 +159,18 @@ variable "neptune_client_security_group_id" {
   description = "Company Brain twin: neptune-client SG id for the identity-graph-projector"
 }
 
+variable "neptune_load_bucket" {
+  type        = string
+  default     = ""
+  description = "Company Brain twin: Neptune bulk-load staging bucket (empty = bulk-rebuild disabled)"
+}
+
+variable "neptune_loader_role_arn" {
+  type        = string
+  default     = ""
+  description = "Company Brain twin: IAM role the Neptune cluster assumes to read the load bucket"
+}
+
 variable "analyst_lambda_vpc_egress" {
   description = "VPC-attach the analyst data-path Lambdas so their egress rides the NAT gateway's stable EIP — required when an external analyst data source sits behind an IP allowlist. See the thinkwork module's analyst_egress_ip output for the IP to allowlist."
   type        = bool
@@ -891,6 +903,8 @@ module "thinkwork" {
   neptune_endpoint                            = var.neptune_endpoint
   neptune_cluster_resource_id                 = var.neptune_cluster_resource_id
   neptune_client_security_group_id            = var.neptune_client_security_group_id
+  neptune_load_bucket                         = var.neptune_load_bucket
+  neptune_loader_role_arn                     = var.neptune_loader_role_arn
   hindsight_database_name                     = var.hindsight_database_name
   memory_engine                               = var.memory_engine
   twenty_provisioned                          = var.twenty_provisioned

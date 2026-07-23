@@ -17,10 +17,10 @@ import { createFakeIdentityDb } from "./fake-db.test-helper.js";
 import {
   buildCanonicalResyncOps,
   buildIdentitySnapshot,
+  clearTenantSubgraph,
   entityNodeId,
   projectPendingIdentityEvents,
   readSingleCount,
-  rebuildTenantGraph,
   systemEdgeId,
   systemNodeId,
   type GraphOp,
@@ -375,24 +375,16 @@ describe("buildIdentitySnapshot", () => {
   });
 });
 
-describe("rebuildTenantGraph", () => {
-  it("clearFirst drops the tenant subgraph in batches before resyncing", async () => {
-    const fake = createFakeIdentityDb();
+describe("clearTenantSubgraph", () => {
+  it("drops the tenant subgraph in batches, fenced by the ~id prefix", async () => {
     const neptune = new FakeNeptune();
-    const s3Send = vi.fn().mockResolvedValue({});
-    // allCanonicals empty -> no resync; latest event empty; snapshot selects.
-    fake.selectQueue.push([], [], [], []);
 
-    const result = await rebuildTenantGraph({
+    const result = await clearTenantSubgraph({
       tenantId: "tenant-1",
-      clearFirst: true,
-      db: fake.db as never,
       neptune,
-      s3: { send: s3Send } as never,
-      now: new Date("2026-07-22T04:00:00Z"),
     });
 
-    expect(result).toEqual({ tenantId: "tenant-1", resyncedCanonicals: 0 });
+    expect(result).toEqual({ cleared: true });
     // First op deletes a bounded batch, fenced by the tenant ~id PREFIX so
     // property-less ghost nodes (pre-label-fix survivors) are swept too.
     expect(neptune.ops[0].query).toContain("DETACH DELETE n");
@@ -402,19 +394,15 @@ describe("rebuildTenantGraph", () => {
     expect(neptune.ops[1].query).toContain("RETURN count(n)");
   });
 
-  it("default rebuild does NOT clear (facet properties survive)", async () => {
-    const fake = createFakeIdentityDb();
+  it("stops before the next batch when shouldStop trips (deadline guard)", async () => {
     const neptune = new FakeNeptune();
-    fake.selectQueue.push([], [], [], []);
-    await rebuildTenantGraph({
+    const result = await clearTenantSubgraph({
       tenantId: "tenant-1",
-      db: fake.db as never,
       neptune,
-      s3: { send: vi.fn().mockResolvedValue({}) } as never,
+      shouldStop: () => true,
     });
-    expect(neptune.ops.some((op) => op.query.includes("DETACH DELETE"))).toBe(
-      false,
-    );
+    expect(result).toEqual({ cleared: false });
+    expect(neptune.ops).toEqual([]);
   });
 });
 
