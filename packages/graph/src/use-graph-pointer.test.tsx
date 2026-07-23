@@ -32,11 +32,13 @@ function Harness({
   nodes,
   onNodeClick,
   onBackgroundClick,
+  onNodeDoubleClick,
 }: {
   fg: any;
   nodes: any[];
   onNodeClick: (node: any) => void;
   onBackgroundClick: () => void;
+  onNodeDoubleClick?: (node: any) => void;
 }) {
   const [containerEl, setContainerEl] = React.useState<HTMLDivElement | null>(
     null,
@@ -51,6 +53,7 @@ function Harness({
     tooltipText: (node: any) => String(node.id),
     onNodeClick,
     onBackgroundClick,
+    onNodeDoubleClick,
   });
   return (
     <div ref={setContainerEl} data-testid="container">
@@ -74,7 +77,10 @@ function firePointer(target: EventTarget, type: string, x: number, y: number) {
   target.dispatchEvent(new MouseEvent(type, pointerOpts(x, y)));
 }
 
-function setup(nodes: any[] = [{ id: "type:person", x: 50, y: 50 }]) {
+function setup(
+  nodes: any[] = [{ id: "type:person", x: 50, y: 50 }],
+  onNodeDoubleClick?: (node: any) => void,
+) {
   const fg = makeFg();
   const onNodeClick = vi.fn();
   const onBackgroundClick = vi.fn();
@@ -84,6 +90,7 @@ function setup(nodes: any[] = [{ id: "type:person", x: 50, y: 50 }]) {
       nodes={nodes}
       onNodeClick={onNodeClick}
       onBackgroundClick={onBackgroundClick}
+      onNodeDoubleClick={onNodeDoubleClick}
     />,
   );
   const canvas = view.getByTestId("canvas");
@@ -169,5 +176,98 @@ describe("useGraphPointer clicks", () => {
 
     expect(onNodeClick).toHaveBeenCalledTimes(1);
     expect(onNodeClick.mock.calls[0]![0].id).toBe("candidate:item-1");
+  });
+});
+
+describe("useGraphPointer double-click primitive", () => {
+  const clickAt = (canvas: EventTarget, x: number, y: number) => {
+    firePointer(canvas, "pointerdown", x, y);
+    firePointer(window, "pointerup", x, y);
+    firePointer(canvas, "click", x, y);
+  };
+
+  it("two clicks on the same node within the window fire one dbl-click and two singles", () => {
+    const onNodeDoubleClick = vi.fn();
+    const { canvas, onNodeClick } = setup(
+      [{ id: "type:person", x: 50, y: 50 }],
+      onNodeDoubleClick,
+    );
+
+    clickAt(canvas, 50, 50);
+    clickAt(canvas, 51, 50);
+
+    expect(onNodeClick).toHaveBeenCalledTimes(2);
+    expect(onNodeDoubleClick).toHaveBeenCalledTimes(1);
+    expect(onNodeDoubleClick.mock.calls[0]![0].id).toBe("type:person");
+  });
+
+  it("a third click does not fire a second dbl-click", () => {
+    const onNodeDoubleClick = vi.fn();
+    const { canvas } = setup(
+      [{ id: "type:person", x: 50, y: 50 }],
+      onNodeDoubleClick,
+    );
+
+    clickAt(canvas, 50, 50);
+    clickAt(canvas, 50, 50);
+    clickAt(canvas, 50, 50);
+
+    expect(onNodeDoubleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("clicks on different nodes fire singles only", () => {
+    const onNodeDoubleClick = vi.fn();
+    const { canvas, onNodeClick } = setup(
+      [
+        { id: "a", x: 50, y: 50 },
+        { id: "b", x: 120, y: 50 },
+      ],
+      onNodeDoubleClick,
+    );
+
+    clickAt(canvas, 50, 50);
+    clickAt(canvas, 120, 50);
+
+    expect(onNodeClick).toHaveBeenCalledTimes(2);
+    expect(onNodeDoubleClick).not.toHaveBeenCalled();
+  });
+
+  it("clicks outside the time window fire singles only", () => {
+    const onNodeDoubleClick = vi.fn();
+    const { canvas } = setup(
+      [{ id: "type:person", x: 50, y: 50 }],
+      onNodeDoubleClick,
+    );
+
+    const nowSpy = vi.spyOn(Date, "now");
+    nowSpy.mockReturnValue(1_000);
+    clickAt(canvas, 50, 50);
+    nowSpy.mockReturnValue(1_000 + 301);
+    clickAt(canvas, 50, 50);
+    nowSpy.mockRestore();
+
+    expect(onNodeDoubleClick).not.toHaveBeenCalled();
+  });
+
+  it("drift beyond the threshold between the clicks cancels the dbl-click", () => {
+    const onNodeDoubleClick = vi.fn();
+    const { canvas } = setup(
+      [{ id: "type:person", x: 50, y: 50 }],
+      onNodeDoubleClick,
+    );
+
+    clickAt(canvas, 50, 50);
+    clickAt(canvas, 57, 50);
+
+    expect(onNodeDoubleClick).not.toHaveBeenCalled();
+  });
+
+  it("unwired onNodeDoubleClick leaves single-click behavior identical", () => {
+    const { canvas, onNodeClick } = setup();
+
+    clickAt(canvas, 50, 50);
+    clickAt(canvas, 50, 50);
+
+    expect(onNodeClick).toHaveBeenCalledTimes(2);
   });
 });

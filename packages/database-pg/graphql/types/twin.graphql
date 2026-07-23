@@ -15,6 +15,28 @@ extend type Query {
   twinEntity(tenantId: ID, canonicalId: ID!): AWSJSON!
   twinNeighbors(tenantId: ID, canonicalId: ID!, depth: Int = 1): AWSJSON!
   twinSystemEdges(tenantId: ID, canonicalId: ID!): AWSJSON!
+  """
+  Traversal ring aggregation (traversal explorer): one row per
+  (relationship, direction, targetType) among the entity's 1-hop neighbors
+  with a distinct-neighbor count. external_identity fenced out.
+  Result: { ok, results: [{ relationship, direction, targetType, count }] }.
+  """
+  twinNeighborSummary(tenantId: ID, canonicalId: ID!): AWSJSON!
+  """
+  One ordered batch of a summary group's members plus connecting edge
+  triples (traversal explorer). Ordered by display name; offset pages
+  "+N more…" bursts; limit clamped server-side (<=25, default 20).
+  Result: { ok, results: [{ members, edges }] }.
+  """
+  twinNeighborMembers(
+    tenantId: ID
+    canonicalId: ID!
+    relationship: String!
+    targetType: String!
+    direction: String
+    offset: Int = 0
+    limit: Int = 20
+  ): AWSJSON!
   twinCohort(
     tenantId: ID
     entityType: String!

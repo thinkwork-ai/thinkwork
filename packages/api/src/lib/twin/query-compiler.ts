@@ -28,6 +28,13 @@ const MAX_COHORT_LIMIT = 100;
 // tank → monitor; customer → order → item → product) while the collect
 // caps keep the response bounded regardless of fan-out.
 export const MAX_NEIGHBOR_DEPTH = 3;
+// Traversal-explorer paging (KTD-6): one "+N more…" batch per click,
+// deterministic display-name order. SKIP/LIMIT are validated integer
+// literals like every other bound in this file — Neptune's parameterized
+// SKIP support is unverified, and literals sidestep it entirely.
+export const NEIGHBOR_MEMBERS_DEFAULT_LIMIT = 20;
+export const NEIGHBOR_MEMBERS_MAX_LIMIT = 25;
+export const NEIGHBOR_MEMBERS_MAX_OFFSET = 100_000;
 
 export type TwinPredicateOp =
   | "eq"
@@ -55,6 +62,16 @@ export interface TwinPath {
 export type TwinRequest =
   | { kind: "entity_get"; canonicalId: string }
   | { kind: "neighbors"; canonicalId: string; depth?: number }
+  | { kind: "neighbor_summary"; canonicalId: string }
+  | {
+      kind: "neighbor_members";
+      canonicalId: string;
+      relationship: string;
+      targetType: string;
+      direction?: "in" | "out";
+      offset?: number;
+      limit?: number;
+    }
   | {
       kind: "cohort";
       entityType: string;
@@ -256,6 +273,75 @@ export function compileTwinQuery(
           "RETURN n AS node, collect(DISTINCT m)[0..50] AS neighbors, " +
           "collect(DISTINCT {rel: type(rel), sourceId: id(startNode(rel)), " +
           "targetId: id(endNode(rel)), props: properties(rel)})[0..200] AS edges",
+        parameters,
+      };
+    }
+    case "neighbor_summary": {
+      // Traversal ring aggregation (traversal-explorer KTD-5): one row per
+      // (relationship, direction, targetType) among the entity's 1-hop
+      // neighbors, with a distinct-neighbor count. external_identity is
+      // fenced out like `neighbors` — system hubs never enter traversal.
+      parameters.nodeId = `t#${tenantId}#e#${request.canonicalId}`;
+      return {
+        query:
+          "MATCH (n {`~id`: $nodeId}) WHERE n.tenantId = $tenantId " +
+          "MATCH (n)-[r]-(m) WHERE m.tenantId = $tenantId " +
+          "AND type(r) <> 'external_identity' " +
+          "RETURN type(r) AS relationship, " +
+          "CASE WHEN id(startNode(r)) = id(n) THEN 'out' ELSE 'in' END AS direction, " +
+          "labels(m)[0] AS targetType, count(DISTINCT m) AS count",
+        parameters,
+      };
+    }
+    case "neighbor_members": {
+      // One ordered batch of a summary group's members plus the connecting
+      // edge triples (traversal-explorer KTD-6). Relationship/target are
+      // validated slugs from the summary the client just fetched; offset
+      // and limit are validated integer literals.
+      const rel = slug(request.relationship, "relationship slug");
+      if (rel === "external_identity") {
+        throw new TwinCompileError(
+          "external_identity is fenced out of traversal",
+        );
+      }
+      const target = slug(request.targetType, "target type slug");
+      const offset = Math.trunc(request.offset ?? 0);
+      if (
+        !Number.isInteger(request.offset ?? 0) ||
+        offset < 0 ||
+        offset > NEIGHBOR_MEMBERS_MAX_OFFSET
+      ) {
+        throw new TwinCompileError(
+          `offset must be an integer 0..${NEIGHBOR_MEMBERS_MAX_OFFSET}`,
+        );
+      }
+      const limit = Math.min(
+        Math.max(
+          1,
+          Math.trunc(request.limit ?? NEIGHBOR_MEMBERS_DEFAULT_LIMIT),
+        ),
+        NEIGHBOR_MEMBERS_MAX_LIMIT,
+      );
+      if (
+        request.direction !== undefined &&
+        request.direction !== "in" &&
+        request.direction !== "out"
+      ) {
+        throw new TwinCompileError('direction must be "in" or "out"');
+      }
+      const left = request.direction === "in" ? "<-" : "-";
+      const right = request.direction === "out" ? "->" : "-";
+      parameters.nodeId = `t#${tenantId}#e#${request.canonicalId}`;
+      return {
+        query:
+          "MATCH (n {`~id`: $nodeId}) WHERE n.tenantId = $tenantId " +
+          `MATCH (n)${left}[:${rel}]${right}(m:${target}) WHERE m.tenantId = $tenantId ` +
+          "WITH DISTINCT n, m ORDER BY toLower(m.displayName) " +
+          `SKIP ${offset} LIMIT ${limit} ` +
+          `MATCH (n)${left}[r:${rel}]${right}(m) ` +
+          "RETURN collect(DISTINCT m) AS members, " +
+          "collect(DISTINCT {rel: type(r), sourceId: id(startNode(r)), " +
+          "targetId: id(endNode(r)), props: properties(r)})[0..200] AS edges",
         parameters,
       };
     }

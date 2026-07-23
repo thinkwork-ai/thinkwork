@@ -12,15 +12,39 @@ export type GraphPointerTooltip = { x: number; y: number; text: string };
  */
 export const DRAG_START_THRESHOLD_PX = 4;
 
+/**
+ * Double-click detection (twin traversal KTD-3): two clicks on the SAME
+ * node within this window and drift fire `onNodeDoubleClick` once. The
+ * first click still fires `onNodeClick` — traversal expansion is cheap and
+ * idempotent, so the pair reads as "expand, then open detail".
+ */
+export const DOUBLE_CLICK_WINDOW_MS = 300;
+export const DOUBLE_CLICK_DRIFT_PX = 4;
+
+/**
+ * Screen-space tolerance for edge (link) hit-testing — a click within this
+ * many px of a link's segment counts, checked only after every node disc
+ * misses (nodes always win).
+ */
+export const LINK_HIT_TOLERANCE_PX = 5;
+
 interface UseGraphPointerArgs {
   /** The graph container element (same element the size observer uses). */
   containerEl: HTMLElement | null;
   fgRef: React.MutableRefObject<any>;
-  graphDataRef: React.MutableRefObject<{ nodes: any[] }>;
+  graphDataRef: React.MutableRefObject<{ nodes: any[]; links?: any[] }>;
   nodeRadius: (node: any) => number;
   tooltipText: (node: any) => string;
   onNodeClick: (node: any) => void;
   onBackgroundClick: () => void;
+  /** Optional dbl-click primitive — unwired, behavior is identical to before. */
+  onNodeDoubleClick?: (node: any) => void;
+  /**
+   * Optional geometric link clicks (segment distance hit-test) — the 2D
+   * library's own link picking is part of the canvas color-picking this
+   * hook replaces, so hosts that need edge clicks wire them here.
+   */
+  onLinkClick?: (link: any) => void;
 }
 
 /**
@@ -47,6 +71,8 @@ export function useGraphPointer({
   tooltipText,
   onNodeClick,
   onBackgroundClick,
+  onNodeDoubleClick,
+  onLinkClick,
 }: UseGraphPointerArgs): { tooltip: GraphPointerTooltip | null } {
   const [tooltip, setTooltip] = useState<GraphPointerTooltip | null>(null);
 
@@ -56,12 +82,16 @@ export function useGraphPointer({
     tooltipText,
     onNodeClick,
     onBackgroundClick,
+    onNodeDoubleClick,
+    onLinkClick,
   });
   callbacksRef.current = {
     nodeRadius,
     tooltipText,
     onNodeClick,
     onBackgroundClick,
+    onNodeDoubleClick,
+    onLinkClick,
   };
 
   useEffect(() => {
@@ -200,16 +230,100 @@ export function useGraphPointer({
       if (!dragRef.current) updateHover(null);
     };
 
+    // Nearest link whose segment passes within the screen-space tolerance
+    // of the pointer. Endpoints must be sim-hydrated objects.
+    const hitLink = (px: number, py: number): any | null => {
+      const fg = fgRef.current;
+      const links = graphDataRef.current.links;
+      if (!fg?.screen2GraphCoords || !links?.length) return null;
+      const point = fg.screen2GraphCoords(px, py);
+      if (!point) return null;
+      const k = typeof fg.zoom === "function" ? (fg.zoom() ?? 1) : 1;
+      const tolerance = LINK_HIT_TOLERANCE_PX / (k || 1);
+      let best: any = null;
+      let bestDist = Infinity;
+      for (const link of links as any[]) {
+        const s = link.source;
+        const t = link.target;
+        if (
+          typeof s !== "object" ||
+          typeof t !== "object" ||
+          typeof s?.x !== "number" ||
+          typeof t?.x !== "number"
+        ) {
+          continue;
+        }
+        const dx = t.x - s.x;
+        const dy = t.y - s.y;
+        const lenSq = dx * dx + dy * dy;
+        const u = lenSq
+          ? Math.max(
+              0,
+              Math.min(
+                1,
+                ((point.x - s.x) * dx + (point.y - s.y) * dy) / lenSq,
+              ),
+            )
+          : 0;
+        const cx = s.x + u * dx;
+        const cy = s.y + u * dy;
+        const dist = Math.hypot(point.x - cx, point.y - cy);
+        if (dist <= tolerance && dist < bestDist) {
+          best = link;
+          bestDist = dist;
+        }
+      }
+      return best;
+    };
+
+    const lastClickRef = {
+      current: null as {
+        nodeId: string;
+        time: number;
+        x: number;
+        y: number;
+      } | null,
+    };
+
     const onClick = (event: MouseEvent) => {
       if (suppressClickRef.current) {
         suppressClickRef.current = false;
+        lastClickRef.current = null;
         return;
       }
       if (!isCanvasEvent(event)) return;
       const { x, y } = localPoint(event);
       const node = hitNode(x, y);
-      if (node) callbacksRef.current.onNodeClick(node);
-      else callbacksRef.current.onBackgroundClick();
+      if (!node) {
+        lastClickRef.current = null;
+        const link = callbacksRef.current.onLinkClick ? hitLink(x, y) : null;
+        if (link) callbacksRef.current.onLinkClick?.(link);
+        else callbacksRef.current.onBackgroundClick();
+        return;
+      }
+      // The single click ALWAYS fires (expansion is idempotent); a paired
+      // second click within the window/drift additionally fires the
+      // dbl-click and resets, so a triple click can't fire it twice.
+      callbacksRef.current.onNodeClick(node);
+      const previous = lastClickRef.current;
+      const now = Date.now();
+      if (
+        previous &&
+        previous.nodeId === node.id &&
+        now - previous.time <= DOUBLE_CLICK_WINDOW_MS &&
+        Math.hypot(event.clientX - previous.x, event.clientY - previous.y) <=
+          DOUBLE_CLICK_DRIFT_PX
+      ) {
+        lastClickRef.current = null;
+        callbacksRef.current.onNodeDoubleClick?.(node);
+      } else {
+        lastClickRef.current = {
+          nodeId: node.id,
+          time: now,
+          x: event.clientX,
+          y: event.clientY,
+        };
+      }
     };
 
     containerEl.addEventListener("pointerdown", onPointerDown, true);

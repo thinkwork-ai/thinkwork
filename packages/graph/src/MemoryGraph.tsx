@@ -28,13 +28,11 @@ import {
   composeGraphClassification,
   communityColor,
   computeCommunityLayout,
-  darkenColor,
   degreeRadius,
   isDarkMode,
   endpointId,
   expandNeighborhood,
   labelsVisibleAtScale,
-  wrapLabelLines,
   DEFAULT_FOCUS_CAP,
   DEFAULT_FOCUS_DEGREE,
   type GraphClassification,
@@ -43,6 +41,11 @@ import {
 } from "./graph-utils.js";
 import { GraphLabelToggles } from "./GraphLabelToggles.js";
 import { useGraphPointer } from "./use-graph-pointer.js";
+import {
+  applySettleFit,
+  paintLinkLine,
+  paintNodeDisc,
+} from "./renderer-core.js";
 
 export interface MemoryGraphNode {
   id: string;
@@ -667,46 +670,21 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
     const nodeCanvasObject = useCallback(
       (node: any, ctx: CanvasRenderingContext2D) => {
         const state = classifyNode(node.id, classificationRef.current);
-        const alpha = state === "matched" ? 1 : 0.15;
         const isMemory = node.nodeType === "memory";
-        const entityType = node.entityType as string | null;
-        // Color by detected community so cluster membership reads at a
-        // glance — entity-type colors were near-uniform in practice.
-        const color = communityColor(
-          communityLayoutRef.current.communityByNode.get(node.id),
-        );
-        const r = nodeRadius(node);
-
-        ctx.globalAlpha = alpha;
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-        ctx.fillStyle = color;
-        ctx.fill();
-        ctx.lineWidth = Math.max(0.75, r * 0.05);
-        ctx.strokeStyle = darkenColor(color);
-        ctx.stroke();
-
-        if (nodeLabelVisible(node.id)) {
-          const rawLabel = isMemory ? "Memory" : (node.label ?? "");
-          // Wrapped white text that stays inside the disc (neo4j style).
-          const fontSize = Math.max(3.5, r * 0.32);
-          ctx.font = `600 ${fontSize}px sans-serif`;
-          const lines = wrapLabelLines(
-            (s) => ctx.measureText?.(s)?.width ?? s.length * fontSize * 0.6,
-            rawLabel,
-            r * 1.7,
-            3,
-          );
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillStyle = "#ffffff";
-          const lineHeight = fontSize * 1.15;
-          const y0 = node.y - ((lines.length - 1) / 2) * lineHeight;
-          lines.forEach((line, index) => {
-            ctx.fillText(line, node.x, y0 + index * lineHeight);
-          });
-        }
-        ctx.globalAlpha = 1;
+        paintNodeDisc(node, ctx, {
+          radius: nodeRadius(node),
+          // Color by detected community so cluster membership reads at a
+          // glance — entity-type colors were near-uniform in practice.
+          color: communityColor(
+            communityLayoutRef.current.communityByNode.get(node.id),
+          ),
+          alpha: state === "matched" ? 1 : 0.15,
+          label: nodeLabelVisible(node.id)
+            ? isMemory
+              ? "Memory"
+              : (node.label ?? "")
+            : null,
+        });
       },
       [nodeLabelVisible, nodeRadius],
     );
@@ -725,104 +703,25 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         const start = link.source;
         const end = link.target;
         if (typeof start !== "object" || typeof end !== "object") return;
-        const dx = end.x - start.x;
-        const dy = end.y - start.y;
-        const dist = Math.hypot(dx, dy);
-        if (!dist) return;
-        const ux = dx / dist;
-        const uy = dy / dist;
-        const sourceTrim = nodeRadius(start) + 1.5;
-        const targetTrim = nodeRadius(end) + 1.5;
-        if (dist <= sourceTrim + targetTrim) return;
-        const sx = start.x + ux * sourceTrim;
-        const sy = start.y + uy * sourceTrim;
-        const tx = end.x - ux * targetTrim;
-        const ty = end.y - uy * targetTrim;
-        const lineLen = dist - sourceTrim - targetTrim;
 
         // Mute the connecting lines only while FILTERING (search / facet) —
         // NOT when a node is merely selected/focused. Focus keeps the normal
         // bright/dim treatment so the selected neighborhood stays legible.
         const filtering = !!matchedIdsRef.current;
         const bright = isLinkBright(link);
-        const color = filtering
-          ? bright
-            ? "rgba(148,163,184,0.3)"
-            : "rgba(148,163,184,0.05)"
-          : bright
-            ? "rgba(148,163,184,0.9)"
-            : "rgba(148,163,184,0.15)";
-        ctx.strokeStyle = color;
-        ctx.fillStyle = color;
-        // Constant 1px screen width regardless of zoom.
-        ctx.lineWidth = 1 / globalScale;
-
-        let labeled = false;
-        if (linkLabelVisible(link)) {
-          const label = link.label || "mentions";
-          const fontSize = 10 / globalScale;
-          ctx.font = `${fontSize}px sans-serif`;
-          const textWidth =
-            ctx.measureText?.(label)?.width ?? label.length * fontSize * 0.6;
-          const gap = textWidth + 10 / globalScale;
-          // Only inline the label when the line has room for it, and only
-          // when the midpoint is anywhere near the viewport (cheap cull so
-          // 10k offscreen labels don't cost a frame).
-          const mx = (sx + tx) / 2;
-          const my = (sy + ty) / 2;
-          let onScreen = true;
-          const t = (ctx as any).getTransform?.();
-          const viewport = dimsRef.current;
-          if (t && viewport) {
-            const px = t.a * mx + t.c * my + t.e;
-            const py = t.b * mx + t.d * my + t.f;
-            const bound = Math.max(viewport.w, viewport.h) * 2.5;
-            onScreen = px > -bound && px < bound && py > -bound && py < bound;
-          }
-          if (onScreen && lineLen > gap + 14 / globalScale) {
-            const half = gap / 2;
-            ctx.beginPath();
-            ctx.moveTo(sx, sy);
-            ctx.lineTo(mx - ux * half, my - uy * half);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(mx + ux * half, my + uy * half);
-            ctx.lineTo(tx, ty);
-            ctx.stroke();
-            let angle = Math.atan2(dy, dx);
-            if (angle > Math.PI / 2) angle -= Math.PI;
-            else if (angle < -Math.PI / 2) angle += Math.PI;
-            ctx.save();
-            ctx.translate(mx, my);
-            ctx.rotate(angle);
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(label, 0, 0);
-            ctx.restore();
-            labeled = true;
-          }
-        }
-        if (!labeled) {
-          ctx.beginPath();
-          ctx.moveTo(sx, sy);
-          ctx.lineTo(tx, ty);
-          ctx.stroke();
-        }
-
-        // Arrowhead sitting exactly on the target disc's rim.
-        const ah = 4;
-        ctx.beginPath();
-        ctx.moveTo(tx, ty);
-        ctx.lineTo(
-          tx - ux * ah - uy * (ah * 0.5),
-          ty - uy * ah + ux * (ah * 0.5),
-        );
-        ctx.lineTo(
-          tx - ux * ah + uy * (ah * 0.5),
-          ty - uy * ah - ux * (ah * 0.5),
-        );
-        ctx.closePath();
-        ctx.fill();
+        paintLinkLine(link, ctx, globalScale, {
+          sourceRadius: nodeRadius(start),
+          targetRadius: nodeRadius(end),
+          color: filtering
+            ? bright
+              ? "rgba(148,163,184,0.3)"
+              : "rgba(148,163,184,0.05)"
+            : bright
+              ? "rgba(148,163,184,0.9)"
+              : "rgba(148,163,184,0.15)",
+          label: linkLabelVisible(link) ? link.label || "mentions" : null,
+          viewport: dimsRef.current,
+        });
       },
       [linkLabelVisible, isLinkBright],
     );
@@ -980,11 +879,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
             // Frame the graph, but never fit-to-tiny: sparse layouts
             // (many small components) would otherwise open unreadably
             // zoomed out.
-            fgRef.current?.zoomToFit?.(0, 40);
-            const k = fgRef.current?.zoom?.();
-            if (typeof k === "number" && k < 0.55) {
-              fgRef.current?.zoom?.(0.55, 0);
-            }
+            applySettleFit(fgRef.current, { padding: 40, minZoom: 0.55 });
             setFramed(true);
           }}
         />

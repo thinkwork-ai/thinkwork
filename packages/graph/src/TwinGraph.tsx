@@ -1,18 +1,23 @@
 /**
- * TwinGraph — 2D force-graph of one twin entity's neighborhood
- * (THINK-327 U3).
+ * TwinGraph — 2D force-graph of the digital twin (THINK-327 U3, rebuilt on
+ * the shared renderer core for the traversal explorer).
  *
- * Self-fetching sibling of KnowledgeGraph/MemoryGraph/WikiGraph/
- * OntologyGraph per the settled convention (Living Map KTD-1): new surface,
- * new sibling — never a modification of an existing component's fetch seam
- * or sim/camera behavior. Fetches `twinNeighbors` (AWSJSON envelope
- * `{ ok, results: [{ node, neighbors, edges }] }`), maps Neptune openCypher
- * nodes onto the settled node shape (label = displayName, type badge from
- * `~labels`), and labels edges by relationship type.
+ * Rendering and interaction come from `renderer-core` + `useGraphPointer`
+ * — the SAME paint geometry and geometric hit-testing the Memory tab uses
+ * (in-disc wrapped labels, inline rotated edge labels, degree-scaled
+ * discs, no canvas color-picking, so clicks work under Brave/Firefox
+ * fingerprint farbling). Every node class reports clicks — there is no
+ * canonicalId guard; hosts decide what a click means.
  *
- * Camera invariants (sibling parity): one-shot zoomToFit after the first
- * settle; depth-change refetches merge nodes IN PLACE by id so surviving
- * nodes keep their positions and the camera never re-frames.
+ * Data modes:
+ *  - neighbors (canonicalId) / type-overview (subgraphEntityTypes): the
+ *    original self-fetching seams, unchanged.
+ *  - controlled (`data` + `revision`): the traversal explorer supplies
+ *    merged graph data and owns all click routing; no fetching happens.
+ *
+ * Camera: frame ONCE, early in the settle (~tick 15) and never again — no
+ * end-of-settle zoom snap (Eric, 2026-07-22). Data merges keep node object
+ * identity (`mergeTwinGraphData`) so the camera never re-frames.
  */
 import {
   forwardRef,
@@ -31,8 +36,13 @@ import {
   degreeRadius,
   endpointId,
   labelsVisibleAtScale,
-  wrapLabelLines,
 } from "./graph-utils.js";
+import {
+  makeEarlyTickFramer,
+  paintLinkLine,
+  paintNodeDisc,
+} from "./renderer-core.js";
+import { useGraphPointer } from "./use-graph-pointer.js";
 
 export interface TwinGraphNode {
   /** The Neptune `~id` (`t#<tenant>#e#<canonicalId>`). */
@@ -48,6 +58,18 @@ export interface TwinGraphNode {
   /** The node's flat property map (facet stamps included) — the host's
    *  property side sheet renders these. */
   properties: Record<string, unknown>;
+  /**
+   * Synthetic traversal nodes (summary / "+N more…" / "(no relations)")
+   * set a kind; real twin entities leave it undefined.
+   */
+  kind?: "summary" | "more" | "none";
+  /** Explicit paint overrides for synthetic nodes. */
+  color?: string;
+  radius?: number;
+  /** Bypass the zoom label gate — summary counts must always read. */
+  labelAlways?: boolean;
+  /** In-flight fetch affordance: painted dimmed. */
+  pending?: boolean;
 }
 
 export interface TwinGraphLink {
@@ -126,7 +148,12 @@ function parseAwsJson(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" ? (value as Record<string, unknown>) : null;
 }
 
-function mapNeptuneNode(raw: unknown, isCenter: boolean): TwinGraphNode | null {
+/** Map one Neptune openCypher node payload onto the settled node shape
+ * (exported for the traversal explorer's member-batch parsing). */
+export function mapNeptuneNode(
+  raw: unknown,
+  isCenter: boolean,
+): TwinGraphNode | null {
   if (!raw || typeof raw !== "object") return null;
   const node = raw as Record<string, unknown>;
   const id = node["~id"];
@@ -321,13 +348,23 @@ export interface TwinGraphProps {
   /** Neighborhood depth (compiler-bounded 1..2). Default 1. */
   depth?: number;
   /**
-   * Node click, with the canonical id parsed from the `~id` — the host
-   * decides navigation (component stays router-agnostic). Not fired for
-   * nodes whose id doesn't parse.
+   * Controlled traversal mode: the host supplies merged graph data
+   * (mutated in place, `mergeTwinGraphData` discipline) and bumps
+   * `revision` after each merge. No fetching happens in this mode; the
+   * host owns click routing and emptiness.
+   */
+  data?: TwinGraphData;
+  revision?: number;
+  /**
+   * Node click — fires for EVERY node class (entity, system, synthetic);
+   * the host decides what a click means. Component stays router-agnostic.
    */
   onNodeClick?: (node: TwinGraphNode) => void;
+  /** Double-click (useGraphPointer primitive) — entity detail, typically. */
+  onNodeDoubleClick?: (node: TwinGraphNode) => void;
   /** Edge click — the host renders the relationship's property sheet. */
   onLinkClick?: (link: TwinGraphLink) => void;
+  onBackgroundClick?: () => void;
   loadingFallback?: React.ReactNode;
   emptyFallback?: React.ReactNode;
   errorFallback?: (message: string, retry: () => void) => React.ReactNode;
@@ -341,8 +378,12 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
       subgraphEntityTypes,
       subgraphLimit,
       depth = 1,
+      data: controlledData,
+      revision = 0,
       onNodeClick,
+      onNodeDoubleClick,
       onLinkClick,
+      onBackgroundClick,
       loadingFallback,
       emptyFallback,
       errorFallback,
@@ -353,19 +394,24 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     const fgRef = useRef<any>(null);
     const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
 
+    const controlled = controlledData !== undefined;
     const overviewTypes = useMemo(
-      () => (canonicalId ? [] : (subgraphEntityTypes ?? []).filter(Boolean)),
-      [canonicalId, subgraphEntityTypes],
+      () =>
+        controlled || canonicalId
+          ? []
+          : (subgraphEntityTypes ?? []).filter(Boolean),
+      [controlled, canonicalId, subgraphEntityTypes],
     );
-    const overviewMode = !canonicalId && overviewTypes.length > 0;
+    const overviewMode = overviewTypes.length > 0;
     const client = useClient();
 
     // Neighbors mode keeps the plain useQuery; overview fans one subgraph
-    // query out per selected type and unions the payloads.
+    // query out per selected type and unions the payloads. Controlled mode
+    // never fetches.
     const [neighborsResult, reexecute] = useQuery({
       query: TwinNeighborsQuery,
       variables: { tenantId, canonicalId, depth },
-      pause: !tenantId || !canonicalId,
+      pause: controlled || !tenantId || !canonicalId,
     });
     const [overview, setOverview] = useState<{
       key: string;
@@ -426,55 +472,94 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     // wrapper per merge so it re-ingests without a layout restart.
     const graphDataRef = useRef<TwinGraphData>({ nodes: [], links: [] });
     const lastKeyRef = useRef<string | null>(null);
-    const zoomInitRef = useRef(false);
-    const tickCountRef = useRef(0);
 
     // The query identity (mode + types + entity): when it changes, the old
     // dataset is WRONG, not stale-but-refreshing — drop it immediately so
     // the loading state shows instead of the previous type's nodes, and
-    // re-frame the camera for the next dataset.
-    const identityKey = overviewMode
-      ? overviewKey
-      : JSON.stringify([tenantId, canonicalId]);
-    const identityRef = useRef(identityKey);
+    // re-frame the camera for the next dataset. Applies to the self-fetch
+    // modes only — in controlled mode the HOST owns replacement (remount
+    // via key to re-frame).
+    const identityKey = controlled
+      ? "controlled"
+      : overviewMode
+        ? overviewKey
+        : JSON.stringify([tenantId, canonicalId]);
+    const framerRef = useRef<(() => void) | null>(null);
+    const identityRef = useRef<string | null>(null);
     if (identityRef.current !== identityKey) {
       identityRef.current = identityKey;
       graphDataRef.current.nodes.length = 0;
       graphDataRef.current.links.length = 0;
       lastKeyRef.current = null;
-      zoomInitRef.current = false;
-      tickCountRef.current = 0;
+      // Fresh dataset → fresh one-shot early-tick framing (never re-frames
+      // on merges within the same identity).
+      framerRef.current = makeEarlyTickFramer(fgRef);
     }
 
-    const payload = overviewMode
-      ? overview.key === overviewKey
-        ? overview.payloads
-        : null
-      : (neighborsResult.data?.twinNeighbors ?? null);
-    const graphKey =
-      payload === null
-        ? null
-        : typeof payload === "string"
-          ? payload
-          : JSON.stringify(payload);
-    if (graphKey !== null && graphKey !== lastKeyRef.current) {
-      lastKeyRef.current = graphKey;
-      mergeTwinGraphData(graphDataRef.current, payload);
+    let graphKey: string | null;
+    if (controlled) {
+      graphKey = `controlled:${revision}`;
+    } else {
+      const payload = overviewMode
+        ? overview.key === overviewKey
+          ? overview.payloads
+          : null
+        : (neighborsResult.data?.twinNeighbors ?? null);
+      graphKey =
+        payload === null
+          ? null
+          : typeof payload === "string"
+            ? payload
+            : JSON.stringify(payload);
+      if (graphKey !== null && graphKey !== lastKeyRef.current) {
+        lastKeyRef.current = graphKey;
+        mergeTwinGraphData(graphDataRef.current, payload);
+      }
     }
     const engineData = useMemo(
-      () => ({
-        nodes: graphDataRef.current.nodes,
-        links: graphDataRef.current.links,
-      }),
+      () =>
+        controlled
+          ? { nodes: controlledData!.nodes, links: controlledData!.links }
+          : {
+              nodes: graphDataRef.current.nodes,
+              links: graphDataRef.current.links,
+            },
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [graphKey],
+      [graphKey, controlled, controlledData],
     );
-    const graphData = graphDataRef.current;
+    const graphData = controlled ? controlledData! : graphDataRef.current;
+    const engineDataRef = useRef(engineData);
+    engineDataRef.current = engineData;
+
+    // Degree-scaled discs (renderer-core parity with the Memory tab):
+    // normalize against this dataset's max degree; synthetic nodes may
+    // carry an explicit radius.
+    const degreeById = useMemo(() => {
+      const degrees = new Map<string, number>();
+      for (const link of engineData.links) {
+        const s = endpointId(link.source as never);
+        const t = endpointId(link.target as never);
+        degrees.set(s, (degrees.get(s) ?? 0) + 1);
+        degrees.set(t, (degrees.get(t) ?? 0) + 1);
+      }
+      return degrees;
+    }, [engineData]);
+    const maxDegree = useMemo(
+      () => Math.max(1, ...degreeById.values()),
+      [degreeById],
+    );
+    const degreeRef = useRef({ degreeById, maxDegree });
+    degreeRef.current = { degreeById, maxDegree };
+    const nodeRadius = useCallback((node: any) => {
+      if (typeof node.radius === "number") return node.radius;
+      const { degreeById: degrees, maxDegree: max } = degreeRef.current;
+      return degreeRadius(degrees.get(node.id) ?? 1, max);
+    }, []);
 
     // Dense neighborhoods (invoices/items fanning out of one customer)
     // otherwise stack into a single blob. Firm collision + wider link
-    // distance + stronger charge keep uniform nodes separated, and every
-    // data merge reheats the simulation so the layout actually updates.
+    // distance keeps nodes separated, and every data merge reheats the
+    // simulation so the layout actually updates.
     useEffect(() => {
       const fg = fgRef.current;
       if (!fg || typeof fg.d3Force !== "function") return;
@@ -482,7 +567,7 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
         "collide",
         d3
           .forceCollide()
-          .radius(TWIN_NODE_RADIUS + 3)
+          .radius((node: any) => nodeRadius(node) + 6)
           .strength(1)
           .iterations(2),
       );
@@ -491,8 +576,8 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
       // starfield at the canvas corners.
       fg.d3Force("x", d3.forceX(0).strength(0.1));
       fg.d3Force("y", d3.forceY(0).strength(0.1));
-      fg.d3Force("charge")?.strength?.(-25);
-      fg.d3Force("link")?.distance?.(28);
+      fg.d3Force("charge")?.strength?.(-40);
+      fg.d3Force("link")?.distance?.(40);
       fg.d3ReheatSimulation?.();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [graphKey, dims]);
@@ -513,49 +598,84 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     const zoomKRef = useRef(1);
     const nodeCountRef = useRef(0);
     nodeCountRef.current = graphData.nodes.length;
+    const dimsRef = useRef(dims);
+    dimsRef.current = dims;
 
+    // Renderer-core painting — identical geometry to the Memory tab:
+    // in-disc wrapped labels, rim, zoom-gated visibility.
     const nodeCanvasObject = useCallback(
       (node: any, ctx: CanvasRenderingContext2D) => {
-        const r = TWIN_NODE_RADIUS;
-        const color = node.isCenter
-          ? CENTER_COLOR
-          : node.isSystem
-            ? SYSTEM_COLOR
-            : twinTypeColor(node.typeLabel);
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-        ctx.fillStyle = color;
-        ctx.fill();
-        if (labelsVisibleAtScale(zoomKRef.current, nodeCountRef.current)) {
-          const fontSize = Math.max(3.5, r * 0.4);
-          ctx.font = `600 ${fontSize}px sans-serif`;
-          const lines = wrapLabelLines(
-            (s) => ctx.measureText?.(s)?.width ?? s.length * fontSize * 0.6,
-            node.label ?? "",
-            r * 3,
-            2,
-          );
-          ctx.textAlign = "center";
-          ctx.textBaseline = "top";
-          ctx.fillStyle = "#94a3b8";
-          lines.forEach((line, index) => {
-            ctx.fillText(
-              line,
-              node.x,
-              node.y + r + 2 + index * fontSize * 1.15,
-            );
-          });
-        }
+        const color =
+          node.color ??
+          (node.isCenter
+            ? CENTER_COLOR
+            : node.isSystem
+              ? SYSTEM_COLOR
+              : twinTypeColor(node.typeLabel));
+        paintNodeDisc(node, ctx, {
+          radius: nodeRadius(node),
+          color,
+          alpha: node.pending ? 0.5 : 1,
+          label:
+            node.labelAlways ||
+            labelsVisibleAtScale(zoomKRef.current, nodeCountRef.current)
+              ? (node.label ?? "")
+              : null,
+        });
       },
-      [],
+      [nodeRadius],
     );
 
-    const fetching = overviewMode
-      ? overview.fetching || overview.key !== overviewKey
-      : neighborsResult.fetching;
-    const errorMessage = overviewMode
-      ? overview.error
-      : (neighborsResult.error?.message ?? null);
+    const linkCanvasObject = useCallback(
+      (link: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
+        const start = link.source;
+        const end = link.target;
+        if (typeof start !== "object" || typeof end !== "object") return;
+        paintLinkLine(link, ctx, globalScale, {
+          sourceRadius: nodeRadius(start),
+          targetRadius: nodeRadius(end),
+          color: "rgba(148,163,184,0.9)",
+          label:
+            (link as { labelAlways?: boolean }).labelAlways ||
+            labelsVisibleAtScale(zoomKRef.current, nodeCountRef.current)
+              ? link.label || "related to"
+              : null,
+          viewport: dimsRef.current,
+        });
+      },
+      [nodeRadius],
+    );
+
+    // Geometric pointer handling — replaces the library's canvas-picking
+    // (broken under Brave/Firefox fingerprinting protection) AND removes
+    // the old canonicalId click guard: every node class reports clicks.
+    const { tooltip } = useGraphPointer({
+      containerEl,
+      fgRef,
+      graphDataRef: engineDataRef,
+      nodeRadius,
+      tooltipText: (node: any) =>
+        `${node.label}${node.typeLabel ? ` — ${node.typeLabel}` : ""}`,
+      onNodeClick: (node: any) => onNodeClick?.(node as TwinGraphNode),
+      onNodeDoubleClick: onNodeDoubleClick
+        ? (node: any) => onNodeDoubleClick(node as TwinGraphNode)
+        : undefined,
+      onLinkClick: onLinkClick
+        ? (link: any) => onLinkClick(link as TwinGraphLink)
+        : undefined,
+      onBackgroundClick: () => onBackgroundClick?.(),
+    });
+
+    const fetching = controlled
+      ? false
+      : overviewMode
+        ? overview.fetching || overview.key !== overviewKey
+        : neighborsResult.fetching;
+    const errorMessage = controlled
+      ? null
+      : overviewMode
+        ? overview.error
+        : (neighborsResult.error?.message ?? null);
 
     if (fetching && graphData.nodes.length === 0) {
       return (
@@ -602,7 +722,9 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
       return <div ref={setContainerEl} className="absolute inset-0" />;
     }
 
-    if (graphData.nodes.length <= 1) {
+    // The self-fetch modes' emptiness; a controlled host owns emptiness
+    // (a lone traversal root must render, not blank the canvas).
+    if (!controlled && graphData.nodes.length <= 1) {
       return (
         emptyFallback ?? (
           <div
@@ -630,37 +752,26 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
           height={dims.h}
           backgroundColor="rgba(0,0,0,0)"
           nodeCanvasObject={nodeCanvasObject}
-          nodeLabel={(node: any) =>
-            `${node.label}${node.typeLabel ? ` — ${node.typeLabel}` : ""}`
-          }
-          linkLabel={(link: any) => link.label || "related to"}
-          linkColor={() => "rgba(148,163,184,0.4)"}
-          linkDirectionalArrowLength={3}
-          linkDirectionalArrowRelPos={1}
+          // Continuous repaint so ref-driven zoom/label changes show
+          // without rebuilding graphData (Memory-tab discipline).
+          autoPauseRedraw={false}
+          enablePointerInteraction={false}
+          linkCanvasObjectMode={() => "replace" as const}
+          linkCanvasObject={linkCanvasObject}
           cooldownTicks={120}
-          onNodeClick={(node: any) => {
-            if (node?.canonicalId) onNodeClick?.(node as TwinGraphNode);
-          }}
-          onLinkClick={(link: any) => onLinkClick?.(link as TwinGraphLink)}
           onZoom={({ k }: { k: number }) => {
             zoomKRef.current = k;
           }}
-          onEngineTick={() => {
-            // Frame ONCE, early in the settle (tick ~15, when the layout
-            // has rough shape) — after that the camera is never touched
-            // again: no end-of-settle zoom snap (Eric, 2026-07-22). Clamp
-            // keeps tiny neighborhoods from absurd zoom levels.
-            tickCountRef.current += 1;
-            if (zoomInitRef.current || tickCountRef.current < 15) return;
-            zoomInitRef.current = true;
-            fgRef.current?.zoomToFit?.(0, 20);
-            const k = fgRef.current?.zoom?.();
-            if (typeof k === "number") {
-              if (k > 2.5) fgRef.current?.zoom?.(2.5, 0);
-              else if (k < 0.7) fgRef.current?.zoom?.(0.7, 0);
-            }
-          }}
+          onEngineTick={() => framerRef.current?.()}
         />
+        {tooltip && (
+          <div
+            className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-full rounded-md border border-border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md whitespace-nowrap backdrop-blur-sm"
+            style={{ left: tooltip.x, top: tooltip.y }}
+          >
+            {tooltip.text}
+          </div>
+        )}
       </div>
     );
   },

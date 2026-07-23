@@ -71,7 +71,9 @@ describe("guardTwinCypher — happy path fencing", () => {
   });
 
   it("bounded variable-length paths pass and fence their endpoint patterns", () => {
-    const r = ok(guard("MATCH (c:customer)-[:owns*1..3]->(t:tank) RETURN c, t"));
+    const r = ok(
+      guard("MATCH (c:customer)-[:owns*1..3]->(t:tank) RETURN c, t"),
+    );
     expect(r.query).toContain("*1..3");
     expect(fenceCount(r.query)).toBe(2);
   });
@@ -115,26 +117,34 @@ describe("guardTwinCypher — fence positions beyond MATCH (KTD-2)", () => {
 
   it("node patterns inside COUNT subqueries are fenced", () => {
     const r = ok(
-      guard("MATCH (c:customer) WHERE COUNT { (c)-[:has_invoice]->(:invoice) } > 3 RETURN c"),
+      guard(
+        "MATCH (c:customer) WHERE COUNT { (c)-[:has_invoice]->(:invoice) } > 3 RETURN c",
+      ),
     );
     expect(fenceCount(r.query)).toBe(3);
   });
 
   it("node patterns in pattern comprehensions are fenced", () => {
     const r = ok(
-      guard("MATCH (c:customer) RETURN size([(c)-[:owns]->(t:tank) | t]) AS tanks"),
+      guard(
+        "MATCH (c:customer) RETURN size([(c)-[:owns]->(t:tank) | t]) AS tanks",
+      ),
     );
     expect(fenceCount(r.query)).toBe(3);
   });
 
   it("node patterns in WHERE pattern predicates are fenced", () => {
-    const r = ok(guard("MATCH (c:customer) WHERE (c)-[:owns]->(:tank) RETURN c"));
+    const r = ok(
+      guard("MATCH (c:customer) WHERE (c)-[:owns]->(:tank) RETURN c"),
+    );
     expect(fenceCount(r.query)).toBe(3);
   });
 
   it("every UNION arm is fenced and clamped independently", () => {
     const r = ok(
-      guard("MATCH (a:customer) RETURN a.name AS n UNION MATCH (b:site) RETURN b.name AS n"),
+      guard(
+        "MATCH (a:customer) RETURN a.name AS n UNION MATCH (b:site) RETURN b.name AS n",
+      ),
     );
     expect(fenceCount(r.query)).toBe(2);
     expect(r.query.match(/LIMIT 100/g)?.length).toBe(2);
@@ -150,24 +160,34 @@ describe("guardTwinCypher — property-map merging", () => {
   });
 
   it("a caller-supplied tenantId property key is overridden with the server value", () => {
-    const r = ok(guard("MATCH (c:customer {tenantId: 'other-tenant'}) RETURN c"));
+    const r = ok(
+      guard("MATCH (c:customer {tenantId: 'other-tenant'}) RETURN c"),
+    );
     expect(fenceCount(r.query)).toBe(1);
     expect(r.query).not.toContain("'other-tenant'");
   });
 
   it("a backtick-escaped tenantId key cannot smuggle a foreign value", () => {
-    const r = ok(guard("MATCH (c:customer {`tenantId`: 'other-tenant'}) RETURN c"));
+    const r = ok(
+      guard("MATCH (c:customer {`tenantId`: 'other-tenant'}) RETURN c"),
+    );
     expect(r.query).not.toContain("'other-tenant'");
     expect(r.query).toContain("$tenantId");
   });
 
   it("a node pattern with an inner WHERE still gets the fence", () => {
-    const r = ok(guard("MATCH (c:customer WHERE c.f_profile__active) RETURN c"));
+    const r = ok(
+      guard("MATCH (c:customer WHERE c.f_profile__active) RETURN c"),
+    );
     expect(fenceCount(r.query)).toBe(1);
   });
 
   it("parameter property maps are rejected — they cannot be fenced statically", () => {
-    const r = rejected(guard("MATCH (c:customer $props) RETURN c", { parameters: { props: {} } }));
+    const r = rejected(
+      guard("MATCH (c:customer $props) RETURN c", {
+        parameters: { props: {} },
+      }),
+    );
     expect(r.rule).toBe("unsupported_construct");
   });
 });
@@ -198,7 +218,9 @@ describe("guardTwinCypher — mutation and procedure rejection (AE3)", () => {
 
   it("rejects CALL {} subqueries with procedure_call", () => {
     const r = rejected(
-      guard("MATCH (c:customer) CALL { WITH c MATCH (c)-[:owns]->(t) RETURN t } RETURN t"),
+      guard(
+        "MATCH (c:customer) CALL { WITH c MATCH (c)-[:owns]->(t) RETURN t } RETURN t",
+      ),
     );
     expect(r.rule).toBe("procedure_call");
   });
@@ -208,14 +230,26 @@ describe("guardTwinCypher — mutation and procedure rejection (AE3)", () => {
       rejected(guard("LOAD CSV FROM 'file:///x.csv' AS row RETURN row")).rule,
     ).toBe("unsupported_construct");
     expect(
-      rejected(guard("MATCH (n:customer) USING INDEX n:customer(name) WHERE n.name = 'x' RETURN n")).rule,
+      rejected(
+        guard(
+          "MATCH (n:customer) USING INDEX n:customer(name) WHERE n.name = 'x' RETURN n",
+        ),
+      ).rule,
     ).toBe("unsupported_construct");
   });
 
   it("rejects admin/schema commands as unsupported constructs", () => {
-    for (const q of ["SHOW DATABASES", "CREATE INDEX FOR (n:x) ON (n.y)", "USE other MATCH (n) RETURN n"]) {
+    for (const q of [
+      "SHOW DATABASES",
+      "CREATE INDEX FOR (n:x) ON (n.y)",
+      "USE other MATCH (n) RETURN n",
+    ]) {
       const r = rejected(guard(q));
-      expect(["unsupported_construct", "mutation_clause", "parse_error"]).toContain(r.rule);
+      expect([
+        "unsupported_construct",
+        "mutation_clause",
+        "parse_error",
+      ]).toContain(r.rule);
     }
   });
 });
@@ -223,13 +257,19 @@ describe("guardTwinCypher — mutation and procedure rejection (AE3)", () => {
 describe("guardTwinCypher — adversarial shapes", () => {
   it("write keywords inside string literals are NOT rejected (AST guard, not a blocklist)", () => {
     const r = ok(
-      guard("MATCH (n:customer) WHERE n.memo = 'please DELETE me and MERGE later' RETURN n"),
+      guard(
+        "MATCH (n:customer) WHERE n.memo = 'please DELETE me and MERGE later' RETURN n",
+      ),
     );
     expect(r.query).toContain("'please DELETE me and MERGE later'");
   });
 
   it("write keywords inside comments do not poison an otherwise-clean query", () => {
-    const r = ok(guard("MATCH (n:customer) /* CREATE SET DELETE */ RETURN n // DETACH DELETE"));
+    const r = ok(
+      guard(
+        "MATCH (n:customer) /* CREATE SET DELETE */ RETURN n // DETACH DELETE",
+      ),
+    );
     expect(fenceCount(r.query)).toBe(1);
   });
 
@@ -252,9 +292,18 @@ describe("guardTwinCypher — adversarial shapes", () => {
   });
 
   it("unicode/exotic obfuscation fails closed", () => {
-    for (const q of ["MATCH (n) RЕTURN n", "MATCH (n)  DELETE n", " MATCH (n) RETURN n"]) {
+    for (const q of [
+      "MATCH (n) RЕTURN n",
+      "MATCH (n)  DELETE n",
+      " MATCH (n) RETURN n",
+    ]) {
       const r = guard(q);
-      if (!r.ok) expect(["parse_error", "mutation_clause", "unsupported_construct"]).toContain(r.rule);
+      if (!r.ok)
+        expect([
+          "parse_error",
+          "mutation_clause",
+          "unsupported_construct",
+        ]).toContain(r.rule);
       else expect(fenceCount(r.query)).toBeGreaterThan(0);
     }
   });
@@ -262,13 +311,17 @@ describe("guardTwinCypher — adversarial shapes", () => {
 
 describe("guardTwinCypher — reserved parameters", () => {
   it("a query referencing $tenantId is rejected", () => {
-    const r = rejected(guard("MATCH (n:customer) WHERE n.x = $tenantId RETURN n"));
+    const r = rejected(
+      guard("MATCH (n:customer) WHERE n.x = $tenantId RETURN n"),
+    );
     expect(r.rule).toBe("reserved_parameter");
   });
 
   it("a caller parameter map containing tenantId is rejected", () => {
     const r = rejected(
-      guard("MATCH (n:customer) RETURN n", { parameters: { tenantId: "other" } }),
+      guard("MATCH (n:customer) RETURN n", {
+        parameters: { tenantId: "other" },
+      }),
     );
     expect(r.rule).toBe("reserved_parameter");
   });
@@ -289,13 +342,17 @@ describe("guardTwinCypher — clamps (AE4)", () => {
   });
 
   it("a non-literal LIMIT expression is rejected with limit_exceeded", () => {
-    const r = rejected(guard("MATCH (n:customer) RETURN n LIMIT $n", { parameters: { n: 5 } }));
+    const r = rejected(
+      guard("MATCH (n:customer) RETURN n LIMIT $n", { parameters: { n: 5 } }),
+    );
     expect(r.rule).toBe("limit_exceeded");
   });
 
   it("an intermediate WITH ... LIMIT is left alone; the final RETURN is still clamped", () => {
     const r = ok(
-      guard("MATCH (n:customer) WITH n LIMIT 50 MATCH (n)-[:owns]->(t) RETURN t"),
+      guard(
+        "MATCH (n:customer) WITH n LIMIT 50 MATCH (n)-[:owns]->(t) RETURN t",
+      ),
     );
     expect(r.query).toContain("WITH n LIMIT 50");
     expect(r.query).toMatch(/RETURN t LIMIT 100\s*$/);
@@ -328,7 +385,13 @@ describe("guardTwinCypher — variable-length bounds (KTD-6)", () => {
 });
 
 describe("guardTwinCypher — parse failures fail closed", () => {
-  for (const q of ["", "   ", "MATCH (n RETURN n", "complete garbage ~~ ???", "RETURN"]) {
+  for (const q of [
+    "",
+    "   ",
+    "MATCH (n RETURN n",
+    "complete garbage ~~ ???",
+    "RETURN",
+  ]) {
     it(`rejects ${JSON.stringify(q.slice(0, 20))} with parse_error`, () => {
       expect(rejected(guard(q)).rule).toBe("parse_error");
     });
@@ -345,7 +408,9 @@ describe("guardTwinCypher — aclPredicates seam (R10)", () => {
   it("acl predicates are applied to every node pattern alongside the tenant fence", () => {
     const r = ok(
       guard("MATCH (c:customer)-[:owns]->(t:tank) RETURN c, t", {
-        aclPredicates: [{ property: "aclGroup", parameter: "aclGroup", value: "field-ops" }],
+        aclPredicates: [
+          { property: "aclGroup", parameter: "aclGroup", value: "field-ops" },
+        ],
       }),
     );
     expect((r.query.match(/aclGroup: \$aclGroup/g) ?? []).length).toBe(2);
@@ -355,7 +420,9 @@ describe("guardTwinCypher — aclPredicates seam (R10)", () => {
   it("acl parameter names are reserved too", () => {
     const r = rejected(
       guard("MATCH (n) WHERE n.x = $aclGroup RETURN n", {
-        aclPredicates: [{ property: "aclGroup", parameter: "aclGroup", value: "x" }],
+        aclPredicates: [
+          { property: "aclGroup", parameter: "aclGroup", value: "x" },
+        ],
       }),
     );
     expect(r.rule).toBe("reserved_parameter");
