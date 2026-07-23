@@ -32,11 +32,7 @@ import ForceGraph2D from "react-force-graph-2d";
 import * as d3 from "d3-force";
 import { useClient, useQuery } from "urql";
 import { TwinNeighborsQuery, TwinSubgraphQuery } from "./queries.js";
-import {
-  degreeRadius,
-  endpointId,
-  labelsVisibleAtScale,
-} from "./graph-utils.js";
+import { endpointId, labelsVisibleAtScale } from "./graph-utils.js";
 import {
   makeEarlyTickFramer,
   paintLinkLine,
@@ -70,6 +66,10 @@ export interface TwinGraphNode {
   labelAlways?: boolean;
   /** In-flight fetch affordance: painted dimmed. */
   pending?: boolean;
+  /** Simulation position — the engine owns these; hosts may pre-seed them
+   *  so new nodes spawn next to the node that revealed them. */
+  x?: number;
+  y?: number;
 }
 
 export interface TwinGraphLink {
@@ -79,6 +79,9 @@ export interface TwinGraphLink {
   label: string;
   /** Relationship properties for the side sheet (may be empty). */
   properties: Record<string, unknown>;
+  /** Keep the label for the side sheet but never paint it (hub spokes —
+   *  the focal→hub edge already names the relationship). */
+  hideLabel?: boolean;
 }
 
 export interface TwinGraphData {
@@ -109,8 +112,8 @@ const TYPE_PALETTE = [
   "#f87171", // red
 ];
 /** Every node renders the same size — density reads through color and
- * position, not radius. */
-export const TWIN_NODE_RADIUS = 6;
+ * position, not radius (Eric 2026-07-23: no degree scaling). */
+export const TWIN_NODE_RADIUS = 12;
 
 export function twinTypeColor(typeLabel: string | null): string {
   if (!typeLabel) return NEIGHBOR_COLOR;
@@ -531,30 +534,14 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
     const engineDataRef = useRef(engineData);
     engineDataRef.current = engineData;
 
-    // Degree-scaled discs (renderer-core parity with the Memory tab):
-    // normalize against this dataset's max degree; synthetic nodes may
-    // carry an explicit radius.
-    const degreeById = useMemo(() => {
-      const degrees = new Map<string, number>();
-      for (const link of engineData.links) {
-        const s = endpointId(link.source as never);
-        const t = endpointId(link.target as never);
-        degrees.set(s, (degrees.get(s) ?? 0) + 1);
-        degrees.set(t, (degrees.get(t) ?? 0) + 1);
-      }
-      return degrees;
-    }, [engineData]);
-    const maxDegree = useMemo(
-      () => Math.max(1, ...degreeById.values()),
-      [degreeById],
+    // Uniform discs (Eric 2026-07-23): degree scaling made hubs balloon
+    // and read as importance; density reads through color and position
+    // instead. Synthetic nodes may still carry an explicit radius.
+    const nodeRadius = useCallback(
+      (node: any) =>
+        typeof node.radius === "number" ? node.radius : TWIN_NODE_RADIUS,
+      [],
     );
-    const degreeRef = useRef({ degreeById, maxDegree });
-    degreeRef.current = { degreeById, maxDegree };
-    const nodeRadius = useCallback((node: any) => {
-      if (typeof node.radius === "number") return node.radius;
-      const { degreeById: degrees, maxDegree: max } = degreeRef.current;
-      return degreeRadius(degrees.get(node.id) ?? 1, max);
-    }, []);
 
     // Dense neighborhoods (invoices/items fanning out of one customer)
     // otherwise stack into a single blob. Firm collision + wider link
@@ -636,9 +623,11 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
           targetRadius: nodeRadius(end),
           color: "rgba(148,163,184,0.9)",
           label:
-            (link as { labelAlways?: boolean }).labelAlways ||
-            labelsVisibleAtScale(zoomKRef.current, nodeCountRef.current)
-              ? link.label || "related to"
+            !link.hideLabel &&
+            link.label &&
+            ((link as { labelAlways?: boolean }).labelAlways ||
+              labelsVisibleAtScale(zoomKRef.current, nodeCountRef.current))
+              ? link.label
               : null,
           viewport: dimsRef.current,
         });
@@ -759,6 +748,12 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
           linkCanvasObjectMode={() => "replace" as const}
           linkCanvasObject={linkCanvasObject}
           cooldownTicks={120}
+          // Muted, viscous motion (Eric feedback 2026-07-23): heavier
+          // friction + faster energy decay so expansions drift into place
+          // instead of slingshotting, especially on the reheat every data
+          // merge triggers.
+          d3VelocityDecay={0.65}
+          d3AlphaDecay={0.05}
           onZoom={({ k }: { k: number }) => {
             zoomKRef.current = k;
           }}
