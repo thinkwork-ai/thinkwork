@@ -50,6 +50,19 @@ export const TWIN_CONNECTOR_SLUG = "digital-twin";
 export const TWIN_CONNECTOR_NAME = "Digital Twin";
 export const TWIN_KEY_NAME = "default";
 
+/**
+ * The grant's operations list IS the runtime tool whitelist: folder
+ * dispatch maps `permissions.operations` -> `toolAllowlist` ->
+ * mcp-connect's listTools filter. Name the server's actual tools here or
+ * they are silently filtered after connect (the server shows "loaded"
+ * with zero tools — burned on dev, 2026-07-22).
+ */
+export const TWIN_CONNECTOR_OPERATIONS = [
+  "twin_describe_ontology",
+  "twin_cypher",
+  "twin_entity",
+] as const;
+
 /** `tkt_` distinguishes twin keys from admin-ops' `tkm_` at a glance. */
 export function generateTwinKey(): { raw: string; hash: string } {
   const raw = `tkt_${randomBytes(32).toString("base64url")}`;
@@ -341,7 +354,7 @@ export async function materializeTwinConnectorFolder(
       definition,
       sidecar: {
         enabled: true,
-        permissions: { operations: ["query"] },
+        permissions: { operations: [...TWIN_CONNECTOR_OPERATIONS] },
         config: { registryServerId: row.id },
       },
       signedBy,

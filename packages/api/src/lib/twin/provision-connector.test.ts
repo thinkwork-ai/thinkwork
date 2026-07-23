@@ -90,6 +90,7 @@ vi.mock("../mcp/assignment-state.js", () => ({
 
 import {
   generateTwinKey,
+  TWIN_CONNECTOR_OPERATIONS,
   hashTwinKey,
   provisionTwinConnector,
   twinConnectorAuthConfig,
@@ -203,6 +204,14 @@ describe("provisionTwinConnector", () => {
     // Both agents materialized + dual-write once for the batch.
     expect(result.workspaces.agents).toBe(2);
     expect(folderCalls.length).toBe(2);
+    // The operations list must name the server's REAL tools — it becomes
+    // the runtime toolWhitelist; a wrong list silently drops every tool.
+    const sidecar = folderCalls[0]!.sidecar as {
+      permissions: { operations: string[] };
+    };
+    expect(sidecar.permissions.operations).toEqual([
+      ...TWIN_CONNECTOR_OPERATIONS,
+    ]);
     expect(dualWriteCalls).toEqual([
       {
         agentIds: ["agent-1", "agent-2"],
