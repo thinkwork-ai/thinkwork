@@ -154,7 +154,7 @@ export function TwinNodeSheet({
   );
 }
 
-function PropertyGroups({
+export function PropertyGroups({
   groups,
 }: {
   groups: Array<[string | null, PropertyRow[]]>;

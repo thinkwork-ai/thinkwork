@@ -69,6 +69,7 @@ import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_aut
 import { Route as AuthedSettingsRoutinesRoutineIdRouteImport } from "./routes/_authed/settings.routines.$routineId";
 import { Route as AuthedSettingsPluginsN8nRouteImport } from "./routes/_authed/settings.plugins.n8n";
 import { Route as AuthedSettingsPluginsPluginKeyRouteImport } from "./routes/_authed/settings.plugins.$pluginKey";
+import { Route as AuthedSettingsMemoryRecordsRouteImport } from "./routes/_authed/settings.memory.records";
 import { Route as AuthedSettingsMemoryOntologyRouteImport } from "./routes/_authed/settings.memory.ontology";
 import { Route as AuthedSettingsMemoryKnowledgeGraphRouteImport } from "./routes/_authed/settings.memory.knowledge-graph";
 import { Route as AuthedSettingsMemoryKnowledgeBasesRouteImport } from "./routes/_authed/settings.memory.knowledge-bases";
@@ -450,6 +451,12 @@ const AuthedSettingsPluginsPluginKeyRoute =
     path: "/plugins/$pluginKey",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsMemoryRecordsRoute =
+  AuthedSettingsMemoryRecordsRouteImport.update({
+    id: "/records",
+    path: "/records",
+    getParentRoute: () => AuthedSettingsMemoryRoute,
+  } as any);
 const AuthedSettingsMemoryOntologyRoute =
   AuthedSettingsMemoryOntologyRouteImport.update({
     id: "/ontology",
@@ -801,6 +808,7 @@ export interface FileRoutesByFullPath {
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
+  "/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
   "/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
   "/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
@@ -906,6 +914,7 @@ export interface FileRoutesByTo {
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
+  "/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
   "/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
   "/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
@@ -1018,6 +1027,7 @@ export interface FileRoutesById {
   "/_authed/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/_authed/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/_authed/settings/memory/ontology": typeof AuthedSettingsMemoryOntologyRoute;
+  "/_authed/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
   "/_authed/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
   "/_authed/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
@@ -1129,6 +1139,7 @@ export interface FileRouteTypes {
     | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/ontology"
+    | "/settings/memory/records"
     | "/settings/plugins/$pluginKey"
     | "/settings/plugins/n8n"
     | "/settings/routines/$routineId"
@@ -1234,6 +1245,7 @@ export interface FileRouteTypes {
     | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/ontology"
+    | "/settings/memory/records"
     | "/settings/plugins/$pluginKey"
     | "/settings/plugins/n8n"
     | "/settings/routines/$routineId"
@@ -1345,6 +1357,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/memory/knowledge-bases"
     | "/_authed/settings/memory/knowledge-graph"
     | "/_authed/settings/memory/ontology"
+    | "/_authed/settings/memory/records"
     | "/_authed/settings/plugins/$pluginKey"
     | "/_authed/settings/plugins/n8n"
     | "/_authed/settings/routines/$routineId"
@@ -1830,6 +1843,13 @@ declare module "@tanstack/react-router" {
       fullPath: "/settings/plugins/$pluginKey";
       preLoaderRoute: typeof AuthedSettingsPluginsPluginKeyRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/settings/memory/records": {
+      id: "/_authed/settings/memory/records";
+      path: "/records";
+      fullPath: "/settings/memory/records";
+      preLoaderRoute: typeof AuthedSettingsMemoryRecordsRouteImport;
+      parentRoute: typeof AuthedSettingsMemoryRoute;
     };
     "/_authed/settings/memory/ontology": {
       id: "/_authed/settings/memory/ontology";
@@ -2324,6 +2344,7 @@ interface AuthedSettingsMemoryRouteChildren {
   AuthedSettingsMemoryKnowledgeBasesRoute: typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   AuthedSettingsMemoryKnowledgeGraphRoute: typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   AuthedSettingsMemoryOntologyRoute: typeof AuthedSettingsMemoryOntologyRoute;
+  AuthedSettingsMemoryRecordsRoute: typeof AuthedSettingsMemoryRecordsRoute;
 }
 
 const AuthedSettingsMemoryRouteChildren: AuthedSettingsMemoryRouteChildren = {
@@ -2333,6 +2354,7 @@ const AuthedSettingsMemoryRouteChildren: AuthedSettingsMemoryRouteChildren = {
   AuthedSettingsMemoryKnowledgeGraphRoute:
     AuthedSettingsMemoryKnowledgeGraphRoute,
   AuthedSettingsMemoryOntologyRoute: AuthedSettingsMemoryOntologyRoute,
+  AuthedSettingsMemoryRecordsRoute: AuthedSettingsMemoryRecordsRoute,
 };
 
 const AuthedSettingsMemoryRouteWithChildren =

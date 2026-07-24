@@ -34,7 +34,8 @@ import {
   type TwinGraphLink,
   type TwinGraphNode,
 } from "@thinkwork/graph";
-import { TwinNodeSheet, type TwinSheetSelection } from "./TwinNodeSheet";
+import { type TwinSheetSelection } from "./TwinNodeSheet";
+import { TwinDetailPanel, TwinStatsPanel } from "./TwinDetailPanel";
 import {
   TwinCohortQuery,
   TwinExplorerOntologyQuery,
@@ -515,8 +516,12 @@ export function TwinExplorer({
   const [activeNameQuery, setActiveNameQuery] = useState("");
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [view, setView] = useState<"graph" | "table" | "traversal">("graph");
-  const [sheetSelection, setSheetSelection] =
+  // Mind Map is the customer-facing default view (customer feedback
+  // 2026-07-23); the internal value keeps its historical "traversal" name.
+  const [view, setView] = useState<"graph" | "table" | "traversal">(
+    "traversal",
+  );
+  const [panelSelection, setPanelSelection] =
     useState<TwinSheetSelection | null>(null);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 
@@ -847,6 +852,7 @@ export function TwinExplorer({
   const clearTraversal = useCallback(() => {
     traversalRef.current = createTraversal();
     setTraversalError(null);
+    setPanelSelection(null);
     setTraversalEpoch((epoch) => epoch + 1);
     bumpTraversal();
   }, [bumpTraversal]);
@@ -885,8 +891,9 @@ export function TwinExplorer({
     [bumpTraversal, fetchMembers],
   );
 
-  // Click routing (R6/R7/R11): summary → expand/collapse; "+N more…" →
-  // next batch; entity → attach its own ring.
+  // Click routing (customer feedback 2026-07-23): a single click on an
+  // entity opens the docked detail panel; summary hubs and "+N more…"
+  // keep their single-click expand since they carry no properties.
   const handleTraversalNodeClick = useCallback(
     (node: TwinGraphNode) => {
       if (node.kind === "none") return;
@@ -900,23 +907,18 @@ export function TwinExplorer({
         if (key) toggleSummaryGroup(key);
         return;
       }
-      if (!node.isSystem) fetchSummary(node);
+      if (!node.isSystem) setPanelSelection({ kind: "node", node });
     },
-    [toggleSummaryGroup, fetchMembers, fetchSummary],
+    [toggleSummaryGroup, fetchMembers],
   );
 
-  // Dbl-click opens the existing entity detail view (R8).
+  // Dbl-click EXPANDS the entity — attaches its relationship ring.
   const handleEntityDoubleClick = useCallback(
     (node: TwinGraphNode) => {
-      if (node.kind || !node.canonicalId || !node.typeLabel || node.isSystem) {
-        return;
-      }
-      void navigate({
-        to: "/settings/memory/explorer/$entityType/$canonicalId",
-        params: { entityType: node.typeLabel, canonicalId: node.canonicalId },
-      });
+      if (node.kind || node.isSystem) return;
+      fetchSummary(node);
     },
-    [navigate],
+    [fetchSummary],
   );
   const [cohort, setCohort] = useState<{
     key: string;
@@ -1159,8 +1161,8 @@ export function TwinExplorer({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto p-6">
       <SettingsPageTitle
-        title="Digital Twin"
-        description="Browse the digital twin — live entities projected from your source systems."
+        title="Company Brain"
+        description="Browse the company brain — live entities projected from your source systems."
         badge={
           <ToggleGroup
             type="single"
@@ -1173,8 +1175,15 @@ export function TwinExplorer({
             className="ml-4 h-8 overflow-hidden rounded-full border bg-background shadow-sm"
           >
             <ToggleGroupItem
-              value="graph"
+              value="traversal"
               className="h-full rounded-none border-0 px-3 text-sm font-medium"
+              aria-label="Mind map view"
+            >
+              Mind Map
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="graph"
+              className="h-full rounded-none border-0 border-l border-border px-3 text-sm font-medium"
               aria-label="Graph view"
             >
               Graph
@@ -1185,13 +1194,6 @@ export function TwinExplorer({
               aria-label="Table view"
             >
               Table
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="traversal"
-              className="h-full rounded-none border-0 border-l border-border px-3 text-sm font-medium"
-              aria-label="Traversal view"
-            >
-              Traversal
             </ToggleGroupItem>
           </ToggleGroup>
         }
@@ -1334,132 +1336,142 @@ export function TwinExplorer({
         ) : null}
 
         {view === "graph" && effectiveEntityTypes.length > 0 ? (
-          <div className="relative min-h-[28rem] flex-1 overflow-hidden rounded-lg border border-border">
-            {traversalActive ? (
-              /* Traversal mode (R5–R11): single click traverses, dbl-click
-                 opens detail, edge clicks keep the property sheet. */
-              <TwinGraph
-                key={`traversal-${traversalEpoch}`}
-                tenantId={tenantId}
-                data={traversalData}
-                revision={traversalRev}
-                onNodeClick={handleTraversalNodeClick}
-                onNodeDoubleClick={handleEntityDoubleClick}
-                onLinkClick={(link: TwinGraphLink) => {
-                  // Synthetic summary/more edges carry no properties —
-                  // only real relationship edges open the sheet.
-                  if (!link.id.startsWith("link:")) {
-                    setSheetSelection({ kind: "edge", link });
+          <div className="flex min-h-[28rem] flex-1 gap-3">
+            <div className="relative min-w-0 flex-1 overflow-hidden rounded-lg border border-border">
+              {traversalActive ? (
+                /* Traversal mode: single click opens the detail panel,
+                   dbl-click expands the entity's relationship ring. */
+                <TwinGraph
+                  key={`traversal-${traversalEpoch}`}
+                  tenantId={tenantId}
+                  data={traversalData}
+                  revision={traversalRev}
+                  onNodeClick={handleTraversalNodeClick}
+                  onNodeDoubleClick={handleEntityDoubleClick}
+                  onLinkClick={(link: TwinGraphLink) => {
+                    // Synthetic summary/more edges carry no properties —
+                    // only real relationship edges open the panel.
+                    if (!link.id.startsWith("link:")) {
+                      setPanelSelection({ kind: "edge", link });
+                    }
+                  }}
+                />
+              ) : (
+                /* Overview (R10): single click opens the detail panel;
+                   dbl-click roots a traversal on that entity (KTD-7). */
+                <TwinGraph
+                  tenantId={tenantId}
+                  loadingFallback={
+                    <div className="flex h-full min-h-48 items-center justify-center">
+                      <LoadingShimmer />
+                    </div>
                   }
-                }}
+                  subgraphEntityTypes={effectiveEntityTypes}
+                  subgraphLimit={25}
+                  depth={1}
+                  onNodeClick={(node: TwinGraphNode) => {
+                    if (!node.isSystem) {
+                      setPanelSelection({ kind: "node", node });
+                    }
+                  }}
+                  onNodeDoubleClick={(node: TwinGraphNode) => {
+                    if (!node.isSystem && node.canonicalId) {
+                      rootTraversal(node, { replace: true });
+                    }
+                  }}
+                  onLinkClick={(link: TwinGraphLink) =>
+                    setPanelSelection({ kind: "edge", link })
+                  }
+                />
+              )}
+              {traversalActive ? (
+                <div className="pointer-events-none absolute inset-0 z-20">
+                  <button
+                    type="button"
+                    className="pointer-events-auto absolute top-3 left-3 z-30 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
+                    data-testid="traversal-clear"
+                    onClick={clearTraversal}
+                  >
+                    <X className="size-3.5" aria-hidden="true" />
+                    Back to overview
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            {panelSelection ? (
+              <TwinDetailPanel
+                selection={panelSelection}
+                labels={traversalLabels}
+                onClose={() => setPanelSelection(null)}
               />
             ) : (
-              /* Overview (R10): matched-set behavior unchanged; a node
-                 click roots a traversal on that entity (KTD-7). */
-              <TwinGraph
-                tenantId={tenantId}
-                loadingFallback={
-                  <div className="flex h-full min-h-48 items-center justify-center">
-                    <LoadingShimmer />
-                  </div>
-                }
-                subgraphEntityTypes={effectiveEntityTypes}
-                subgraphLimit={25}
-                depth={1}
-                onNodeClick={(node: TwinGraphNode) => {
-                  if (!node.isSystem && node.canonicalId) {
-                    rootTraversal(node, { replace: true });
-                  }
-                }}
-                onNodeDoubleClick={handleEntityDoubleClick}
-                onLinkClick={(link: TwinGraphLink) =>
-                  setSheetSelection({ kind: "edge", link })
-                }
+              <TwinStatsPanel
+                data={traversalData}
+                typeLabel={traversalLabels.typeLabel}
               />
             )}
-            {traversalActive ? (
-              <div className="pointer-events-none absolute inset-0 z-20">
-                <button
-                  type="button"
-                  className="pointer-events-auto absolute top-3 left-3 z-30 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
-                  data-testid="traversal-clear"
-                  onClick={clearTraversal}
-                >
-                  <X className="size-3.5" aria-hidden="true" />
-                  Back to overview
-                </button>
-              </div>
-            ) : null}
-            <TwinNodeSheet
-              selection={sheetSelection}
-              onOpenChange={(open) => {
-                if (!open) setSheetSelection(null);
-              }}
-              onOpenEntity={(target) => {
-                setSheetSelection(null);
-                void navigate({
-                  to: "/settings/memory/explorer/$entityType/$canonicalId",
-                  params: target,
-                });
-              }}
-            />
           </div>
         ) : null}
 
         {view === "traversal" && effectiveEntityTypes.length > 0 ? (
-          <div className="relative min-h-[28rem] flex-1 overflow-hidden rounded-lg border border-border">
-            {traversalActive ? (
-              <>
-                <TwinMindMap
-                  key={`mindmap-${traversalEpoch}`}
-                  state={traversalRef.current}
-                  revision={traversalRev}
-                  labels={traversalLabels}
-                  onEntityClick={(entity) => {
-                    if (!entity.isSystem) fetchSummary(entity);
-                  }}
-                  onEntityDoubleClick={handleEntityDoubleClick}
-                  onSummaryClick={toggleSummaryGroup}
-                  onMoreClick={fetchMembers}
-                  onEdgeClick={(link) =>
-                    setSheetSelection({ kind: "edge", link })
-                  }
-                />
-                <button
-                  type="button"
-                  className="absolute top-3 left-3 z-30 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
-                  data-testid="mindmap-clear"
-                  onClick={clearTraversal}
+          <div className="flex min-h-[28rem] flex-1 gap-3">
+            <div className="relative min-w-0 flex-1 overflow-hidden rounded-lg border border-border">
+              {traversalActive ? (
+                <>
+                  <TwinMindMap
+                    key={`mindmap-${traversalEpoch}`}
+                    state={traversalRef.current}
+                    revision={traversalRev}
+                    labels={traversalLabels}
+                    onEntityClick={(entity) => {
+                      // Single click → docked detail panel; dbl-click
+                      // expands (customer feedback 2026-07-23).
+                      if (!entity.isSystem) {
+                        setPanelSelection({ kind: "node", node: entity });
+                      }
+                    }}
+                    onEntityDoubleClick={handleEntityDoubleClick}
+                    onSummaryClick={toggleSummaryGroup}
+                    onMoreClick={fetchMembers}
+                    onEdgeClick={(link) =>
+                      setPanelSelection({ kind: "edge", link })
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="absolute top-3 left-3 z-30 flex items-center gap-2 rounded-full border border-border bg-background/90 px-3 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground"
+                    data-testid="mindmap-clear"
+                    onClick={clearTraversal}
+                  >
+                    <X className="size-3.5" aria-hidden="true" />
+                    Clear
+                  </button>
+                </>
+              ) : (
+                <div
+                  className="flex h-full min-h-48 items-center justify-center py-16"
+                  data-testid="mindmap-empty"
                 >
-                  <X className="size-3.5" aria-hidden="true" />
-                  Clear
-                </button>
-              </>
+                  {/* Ghost root pill — the guidance lives in the side
+                      panel (Eric 2026-07-23). */}
+                  <div className="rounded-full border border-dashed border-muted-foreground/40 px-6 py-2.5 text-sm text-muted-foreground/60 select-none">
+                    Pick a starting entity
+                  </div>
+                </div>
+              )}
+            </div>
+            {panelSelection ? (
+              <TwinDetailPanel
+                selection={panelSelection}
+                labels={traversalLabels}
+                onClose={() => setPanelSelection(null)}
+              />
             ) : (
-              <div
-                className="flex h-full min-h-48 flex-col items-center justify-center gap-2 py-16 text-center"
-                data-testid="mindmap-empty"
-              >
-                <p className="text-sm font-medium">Pick a starting entity.</p>
-                <p className="max-w-sm text-sm text-muted-foreground">
-                  Use the search above, click a node in the Graph view, or check
-                  rows in the Table view — then traverse its relationships here.
-                </p>
-              </div>
+              <TwinStatsPanel
+                data={traversalData}
+                typeLabel={traversalLabels.typeLabel}
+              />
             )}
-            <TwinNodeSheet
-              selection={sheetSelection}
-              onOpenChange={(open) => {
-                if (!open) setSheetSelection(null);
-              }}
-              onOpenEntity={(target) => {
-                setSheetSelection(null);
-                void navigate({
-                  to: "/settings/memory/explorer/$entityType/$canonicalId",
-                  params: target,
-                });
-              }}
-            />
           </div>
         ) : null}
 

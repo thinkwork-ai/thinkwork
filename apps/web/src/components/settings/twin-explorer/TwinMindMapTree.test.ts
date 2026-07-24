@@ -98,19 +98,19 @@ describe("buildMindMap", () => {
     );
     setGroupExpanded(state, key, true);
 
-    const summary = buildMindMap(state).roots[0]!.right[0]!;
-    expect(summary.expanded).toBe(true);
-    expect(summary.children.map((n) => n.kind)).toEqual([
-      "entity",
-      "entity",
-      "more",
-    ]);
-    expect(summary.children[2]!.label).toBe("+18 more…");
-    // Member entities carry the real edge for the sheet.
-    expect(summary.children[0]!.edge?.label).toBe("serves");
+    // Loaded members REPLACE the hub: they attach directly to the focal
+    // (customer feedback 2026-07-23 — no collapse for now).
+    const right = buildMindMap(state).roots[0]!.right;
+    expect(right.map((n) => n.kind)).toEqual(["entity", "entity", "more"]);
+    expect(right[2]!.label).toBe("+18 more…");
+    // Member entities carry the real edge for the sheet; only the first
+    // branch of the group carries the relationship label.
+    expect(right[0]!.edge?.label).toBe("serves");
+    expect(right[0]!.relationship).toBe("serves");
+    expect(right[1]!.relationship).toBeUndefined();
   });
 
-  it("collapse hides the subtree; cached members return on re-expand", () => {
+  it("members stay attached directly to the focal regardless of the expanded flag", () => {
     const state = ringState();
     const row = {
       relationship: "serves",
@@ -126,11 +126,16 @@ describe("buildMindMap", () => {
       [link("serves", PAUL.id, entity("a").id)],
     );
     setGroupExpanded(state, key, true);
-    expect(buildMindMap(state).roots[0]!.right[0]!.children.length).toBe(2);
+    expect(buildMindMap(state).roots[0]!.right.map((n) => n.kind)).toEqual([
+      "entity",
+      "more",
+    ]);
+    // The hub never comes back once members are loaded — no collapse.
     setGroupExpanded(state, key, false);
-    expect(buildMindMap(state).roots[0]!.right[0]!.children.length).toBe(0);
-    setGroupExpanded(state, key, true);
-    expect(buildMindMap(state).roots[0]!.right[0]!.children.length).toBe(2);
+    expect(buildMindMap(state).roots[0]!.right.map((n) => n.kind)).toEqual([
+      "entity",
+      "more",
+    ]);
   });
 
   it("a singleton group inlines its member with the relationship on the branch", () => {
@@ -255,12 +260,16 @@ describe("layoutMindMap", () => {
 
   it("parents are vertically centered on their children's span", () => {
     const layout = layoutMindMap(buildMindMap(expandedState(5)));
-    const hub = layout.nodes.find((n) => n.node?.kind === "summary")!;
-    const children = layout.nodes.filter((n) => n.parentId === hub.id);
+    // Loaded members attach directly to the focal root (hub replaced).
+    const root = layout.nodes.find((n) => n.parentId === null)!;
+    const children = layout.nodes.filter(
+      (n) => n.parentId === root.id && n.side === "right",
+    );
+    expect(children.length).toBeGreaterThanOrEqual(5);
     const minY = Math.min(...children.map((n) => n.y));
     const maxY = Math.max(...children.map((n) => n.y + n.height));
     const mid = (minY + maxY) / 2;
-    expect(Math.abs(hub.y + hub.height / 2 - mid)).toBeLessThan(1);
+    expect(Math.abs(root.y + root.height / 2 - mid)).toBeLessThan(1);
   });
 
   it("every edge references placed nodes and layout box covers them", () => {

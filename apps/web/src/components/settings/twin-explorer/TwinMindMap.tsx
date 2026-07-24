@@ -154,8 +154,11 @@ export function TwinMindMap({
     const node = placedNode.node;
     const isRoot = node === null;
     const entity = isRoot ? placedNode.root! : node.entity;
+    // Every entity pill — root included — is colored by its entity type
+    // so the canvas matches the panel's type legend (Eric 2026-07-23);
+    // the root stays distinct via its heavier border + bold label.
     const accent = isRoot
-      ? "#0ea5e9"
+      ? twinTypeColor(placedNode.root!.typeLabel)
       : node.kind === "entity"
         ? nodeAccent(node)
         : "#64748b";
@@ -242,7 +245,7 @@ export function TwinMindMap({
     <div
       ref={containerRef}
       data-testid="twin-mindmap"
-      className="absolute inset-0 cursor-grab overflow-hidden active:cursor-grabbing"
+      className="absolute inset-0 cursor-grab select-none overflow-hidden active:cursor-grabbing"
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         // Only pan when the press starts on empty canvas — capturing the
@@ -251,6 +254,10 @@ export function TwinMindMap({
         const target = event.target as HTMLElement;
         if (target.closest("[data-node-id],[data-testid='mindmap-edge-hit']"))
           return;
+        // Suppress native text selection from the drag — without this the
+        // browser can highlight page text while panning (customer feedback
+        // 2026-07-23).
+        event.preventDefault();
         dragRef.current = { px: event.clientX, py: event.clientY };
         (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
       }}
