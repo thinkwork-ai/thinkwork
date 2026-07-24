@@ -113,8 +113,8 @@ export function buildMindMap(
           ? "left"
           : "right"
         : side;
-      const child = buildRowNode(focal, row, childSide);
-      if (child) (childSide === "left" ? left : right).push(child);
+      const children = buildRowNodes(focal, row, childSide);
+      (childSide === "left" ? left : right).push(...children);
     }
     return { left, right };
   };
@@ -142,14 +142,14 @@ export function buildMindMap(
     };
   };
 
-  const buildRowNode = (
+  const buildRowNodes = (
     focal: TwinGraphNode,
     row: TraversalSummaryRow,
     side: "left" | "right",
-  ): MindMapNode | null => {
+  ): MindMapNode[] => {
     const key = groupKey(focal.id, row);
     const group = state.groups.get(key);
-    if (!group) return null;
+    if (!group) return [];
     const memberIds = state.members.get(key) ?? [];
     const links = state.memberLinks.get(key) ?? [];
     const edgeForMember = (memberId: string) =>
@@ -159,60 +159,43 @@ export function buildMindMap(
           endpointOf(link.target) === memberId,
       );
 
-    // Singleton: inline the lone member, no hub.
-    if (group.count === 1 && memberIds.length === 1) {
-      const memberId = memberIds[0]!;
-      const member = state.nodesById.get(memberId);
-      if (!member) return null;
+    // Loaded members REPLACE the summary hub (customer feedback
+    // 2026-07-23): they attach directly to the focal entity, so there is
+    // no collapse — the hub pill only exists until its first expansion.
+    // (The singleton inline is now just the one-member case of this.)
+    if (memberIds.length > 0) {
+      const nodes: MindMapNode[] = [];
       const relationship = relLabel(row.relationship);
-      if (placed.has(memberId)) {
-        crossLinks.push({
-          fromId: focal.id,
-          toId: memberId,
-          relationship,
-          edge: edgeForMember(memberId),
-        });
-        return null;
-      }
-      placed.add(memberId);
-      return buildEntityNode(
-        member,
-        side,
-        relationship,
-        edgeForMember(memberId),
-        row.direction,
-      );
-    }
-
-    const summaryId = `sum:${key}`;
-    const children: MindMapNode[] = [];
-    if (group.expanded) {
+      let labelNext = true;
       for (const memberId of memberIds) {
         const member = state.nodesById.get(memberId);
         if (!member) continue;
         if (placed.has(memberId)) {
           crossLinks.push({
-            fromId: summaryId,
+            fromId: focal.id,
             toId: memberId,
-            relationship: relLabel(row.relationship),
+            relationship,
             edge: edgeForMember(memberId),
           });
           continue;
         }
         placed.add(memberId);
-        children.push(
+        nodes.push(
           buildEntityNode(
             member,
             side,
-            undefined,
+            // Label the first branch of the group only — repeating
+            // "Delivered To" down five stacked branches is noise.
+            labelNext ? relationship : undefined,
             edgeForMember(memberId),
             row.direction,
           ),
         );
+        labelNext = false;
       }
       const remaining = group.count - memberIds.length;
       if (remaining > 0) {
-        children.push({
+        nodes.push({
           id: `more:${key}`,
           kind: "more",
           label: `+${remaining} more…`,
@@ -223,21 +206,26 @@ export function buildMindMap(
           children: [],
         });
       }
+      return nodes;
     }
-    return {
-      id: summaryId,
-      kind: "summary",
-      label: typeName(row.targetType),
-      typeLabel: row.targetType,
-      groupKey: key,
-      relationship: relLabel(row.relationship),
-      direction: row.direction,
-      side,
-      pending: state.pending.has(key),
-      expanded: group.expanded,
-      count: group.count,
-      children,
-    };
+
+    // Nothing loaded yet: the "Type (N)" hub is the expand affordance.
+    return [
+      {
+        id: `sum:${key}`,
+        kind: "summary",
+        label: typeName(row.targetType),
+        typeLabel: row.targetType,
+        groupKey: key,
+        relationship: relLabel(row.relationship),
+        direction: row.direction,
+        side,
+        pending: state.pending.has(key),
+        expanded: false,
+        count: group.count,
+        children: [],
+      },
+    ];
   };
 
   const roots: MindMapRootTree[] = [];

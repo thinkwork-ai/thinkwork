@@ -25,15 +25,28 @@ describe("SettingsMemoryHome", () => {
 
   it("publishes the Knowledge tabs into the page header", () => {
     expect(source).toContain("tabs: [");
-    expect(source).toContain('{ to: MEMORY, label: "Memory" }');
-    // THINK-327 U8: Explorer replaced the wiki "Pages" tab in its slot.
-    expect(source).toContain('{ to: EXPLORER, label: "Digital Twin" }');
+    // Customer feedback 2026-07-23: Company Brain leads the strip and is
+    // the default tab; memory records moved to /settings/memory/records.
+    expect(source).toContain('label: "Company Brain"');
+    expect(source).not.toContain('label: "Digital Twin"');
+    expect(source).toContain('to: RECORDS, label: "Memory"');
     expect(source).not.toContain('label: "Pages"');
-    expect(source).toContain('{ to: KNOWLEDGE_BASES, label: "KBs" }');
-    expect(source).toContain('{ to: ONTOLOGY, label: "Ontology" }');
-    expect(source).not.toContain('{ to: ONTOLOGY, label: "Model" }');
+    expect(source).toContain('label: "KBs"');
+    expect(source).toContain('label: "Ontology"');
     expect(source).not.toContain('label: "Knowledge Model"');
     expect(source).not.toContain('label: "Graph"');
+    // Company Brain first, then Ontology, Memory, KBs.
+    expect(source.indexOf('label: "Company Brain"')).toBeLessThan(
+      source.indexOf('label: "Ontology"'),
+    );
+    expect(source.indexOf('label: "Ontology"')).toBeLessThan(
+      source.indexOf('to: RECORDS, label: "Memory"'),
+    );
+    expect(source.indexOf('to: RECORDS, label: "Memory"')).toBeLessThan(
+      source.indexOf('label: "KBs"'),
+    );
+    // The bare /settings/memory path lands on Company Brain.
+    expect(source).toContain('return "explorer";');
   });
 
   it("keeps the Memory refresh control visually interactive", () => {
@@ -86,7 +99,7 @@ describe("SettingsMemoryHome", () => {
   });
 
   it("keeps the Ontology tab on the ontology route", () => {
-    expect(source).toContain('{ to: ONTOLOGY, label: "Ontology" }');
+    expect(source).toContain('to: ONTOLOGY, label: "Ontology"');
     expect(source).toContain('activeTab === "ontology"');
     expect(source).not.toContain("ontologyEnabled");
     expect(source).not.toContain("SettingsPluginCatalogQuery");

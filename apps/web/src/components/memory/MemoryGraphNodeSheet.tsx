@@ -126,14 +126,7 @@ export function MemoryGraphNodeSheet({
           </Link>
         )}
 
-        {!isMemory && (
-          <RelatedMemories
-            tenantId={tenantId}
-            userId={userId}
-            query={node.label}
-          />
-        )}
-
+        {/* Relationships lead, memories follow (Eric 2026-07-23). */}
         {edges.length > 0 && (
           <div>
             <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
@@ -187,6 +180,14 @@ export function MemoryGraphNodeSheet({
           <p className="text-sm text-muted-foreground">
             No connections found for this node.
           </p>
+        )}
+
+        {!isMemory && (
+          <RelatedMemories
+            tenantId={tenantId}
+            userId={userId}
+            query={node.label}
+          />
         )}
       </div>
     </SheetContent>

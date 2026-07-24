@@ -115,8 +115,26 @@ const TYPE_PALETTE = [
  * position, not radius (Eric 2026-07-23: no degree scaling). */
 export const TWIN_NODE_RADIUS = 12;
 
+/** Fixed hues for the core operational types (Eric 2026-07-23: customer
+ * reads sky blue; the hash landed person and opportunity on near-identical
+ * hues). Unknown types still fall back to the hashed palette. */
+const TYPE_COLORS: Record<string, string> = {
+  customer: "#0ea5e9", // sky blue
+  person: "#f472b6", // pink
+  opportunity: "#f59e0b", // amber
+  order: "#2dd4bf", // teal
+  order_item: "#a3e635", // lime
+  invoice: "#f87171", // red
+  product: "#818cf8", // indigo
+  ship_to: "#4ade80", // green
+  tank: "#fb923c", // orange
+  tank_monitor: "#e879f9", // fuchsia
+};
+
 export function twinTypeColor(typeLabel: string | null): string {
   if (!typeLabel) return NEIGHBOR_COLOR;
+  const fixed = TYPE_COLORS[typeLabel.toLowerCase()];
+  if (fixed) return fixed;
   let hash = 0;
   for (let i = 0; i < typeLabel.length; i += 1) {
     hash = (hash * 31 + typeLabel.charCodeAt(i)) | 0;
@@ -732,7 +750,7 @@ export const TwinGraph = forwardRef<TwinGraphHandle, TwinGraphProps>(
       <div
         ref={setContainerEl}
         data-testid="twin-graph-container"
-        className="absolute inset-0 overflow-hidden"
+        className="absolute inset-0 select-none overflow-hidden"
       >
         <ForceGraph2D
           ref={fgRef}

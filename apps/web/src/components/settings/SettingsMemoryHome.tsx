@@ -19,7 +19,7 @@ import {
   type TwinExplorerHeaderController,
 } from "@/components/settings/twin-explorer/TwinExplorer";
 
-const MEMORY = "/settings/memory";
+const RECORDS = "/settings/memory/records";
 const EXPLORER = "/settings/memory/explorer";
 const KNOWLEDGE_BASES = "/settings/memory/knowledge-bases";
 const ONTOLOGY = "/settings/memory/ontology";
@@ -30,7 +30,11 @@ function tabForPath(pathname: string): MemoryTab {
   if (pathname.startsWith(EXPLORER)) return "explorer";
   if (pathname.startsWith(KNOWLEDGE_BASES)) return "knowledge-bases";
   if (pathname.startsWith(ONTOLOGY)) return "ontology";
-  return "memory";
+  if (pathname.startsWith(RECORDS)) return "memory";
+  // Company Brain is the landing tab (customer feedback 2026-07-23) — the
+  // bare /settings/memory path renders the explorer; memory records moved
+  // to /settings/memory/records.
+  return "explorer";
 }
 
 /**
@@ -213,11 +217,21 @@ export function SettingsMemoryHome() {
     title: "Knowledge",
     breadcrumbs: [{ label: "Knowledge" }],
     tabs: [
-      { to: MEMORY, label: "Memory" },
-      // THINK-327 U8: Digital Twin holds the retired wiki "Pages" slot.
-      { to: EXPLORER, label: "Digital Twin" },
-      { to: ONTOLOGY, label: "Ontology" },
-      { to: KNOWLEDGE_BASES, label: "KBs" },
+      // Company Brain leads and is the default tab (customer feedback
+      // 2026-07-23); explicit `active` keeps it highlighted on the bare
+      // /settings/memory path.
+      {
+        to: EXPLORER,
+        label: "Company Brain",
+        active: activeTab === "explorer",
+      },
+      { to: ONTOLOGY, label: "Ontology", active: activeTab === "ontology" },
+      { to: RECORDS, label: "Memory", active: activeTab === "memory" },
+      {
+        to: KNOWLEDGE_BASES,
+        label: "KBs",
+        active: activeTab === "knowledge-bases",
+      },
     ],
     action:
       activeTab === "ontology"

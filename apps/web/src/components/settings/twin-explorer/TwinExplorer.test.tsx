@@ -265,6 +265,10 @@ function switchToTable() {
   fireEvent.click(screen.getByRole("radio", { name: "Table view" }));
 }
 
+function switchToGraph() {
+  fireEvent.click(screen.getByRole("radio", { name: "Graph view" }));
+}
+
 function lastCohortFilter(): Record<string, unknown> {
   return JSON.parse(cohortCalls.at(-1)!.filter as string);
 }
@@ -399,10 +403,13 @@ describe("TwinExplorer", () => {
   });
   afterEach(cleanup);
 
-  it("defaults to the graph view over the customer type without any filter", () => {
+  it("defaults to the mind map view; graph shows the customer overview", () => {
     render(<TwinExplorer />);
-    expect(screen.getByTestId("twin-overview-graph")).toBeTruthy();
+    // Customer feedback 2026-07-23: Mind Map is the landing view.
+    expect(screen.getByTestId("mindmap-empty")).toBeTruthy();
     expect(cohortCalls).toHaveLength(0);
+    switchToGraph();
+    expect(screen.getByTestId("twin-overview-graph")).toBeTruthy();
     switchToTable();
     expect(cohortCalls.at(-1)!.entityType).toBe("customer");
     expect(lastCohortFilter().predicates).toEqual([]);
@@ -649,6 +656,7 @@ describe("TwinExplorer traversal (twin-traversal plan U4/U5)", () => {
   it("search picker fetches results from the server and a pick roots traversal", async () => {
     vi.useFakeTimers();
     render(<TwinExplorer />);
+    switchToGraph();
     fireEvent.click(screen.getByTestId("explorer-search-toggle"));
     const input = screen.getByTestId("traversal-entity-search");
     fireEvent.change(input, { target: { value: "Customer" } });
@@ -681,11 +689,12 @@ describe("TwinExplorer traversal (twin-traversal plan U4/U5)", () => {
     });
   });
 
-  it("KTD-7: an overview node click roots traversal and fetches the ring", async () => {
+  it("KTD-7: an overview node dbl-click roots traversal and fetches the ring", async () => {
     render(<TwinExplorer />);
+    switchToGraph();
     const overview = lastGraphProps();
     await React.act(async () => {
-      overview.onNodeClick?.({
+      overview.onNodeDoubleClick?.({
         id: "t#tenant-1#e#cust-0",
         canonicalId: "cust-0",
         label: "Customer 0",
@@ -706,8 +715,9 @@ describe("TwinExplorer traversal (twin-traversal plan U4/U5)", () => {
 
   it("R6/R11: summary click fetches the first member batch; R10: clear returns to overview", async () => {
     render(<TwinExplorer />);
+    switchToGraph();
     await React.act(async () => {
-      lastGraphProps().onNodeClick?.({
+      lastGraphProps().onNodeDoubleClick?.({
         id: "t#tenant-1#e#cust-0",
         canonicalId: "cust-0",
         label: "Customer 0",
@@ -738,8 +748,33 @@ describe("TwinExplorer traversal (twin-traversal plan U4/U5)", () => {
     expect(screen.getByTestId("twin-overview-graph")).toBeTruthy();
   });
 
-  it("R8: double-clicking an entity navigates to the detail view", async () => {
+  it("single-clicking an entity opens the docked detail panel (no traversal root)", async () => {
     render(<TwinExplorer />);
+    switchToGraph();
+    // The panel rests as canvas statistics until something is selected.
+    expect(screen.getByTestId("twin-stats-panel")).toBeTruthy();
+    await React.act(async () => {
+      lastGraphProps().onNodeClick?.({
+        id: "t#tenant-1#e#cust-0",
+        canonicalId: "cust-0",
+        label: "Customer 0",
+        typeLabel: "customer",
+        isSystem: false,
+        isCenter: false,
+        properties: { displayName: "Customer 0" },
+      });
+    });
+    const panel = screen.getByTestId("twin-detail-panel");
+    expect(panel.textContent).toContain("Customer 0");
+    // No Open entity button any more (customer feedback 2026-07-23).
+    expect(screen.queryByTestId("twin-detail-open-entity")).toBeNull();
+    // The click did NOT root a traversal — that is the dbl-click gesture.
+    expect(summaryCalls).toHaveLength(0);
+  });
+
+  it("the panel close button returns it to the stats view", async () => {
+    render(<TwinExplorer />);
+    switchToGraph();
     await React.act(async () => {
       lastGraphProps().onNodeClick?.({
         id: "t#tenant-1#e#cust-0",
@@ -751,21 +786,9 @@ describe("TwinExplorer traversal (twin-traversal plan U4/U5)", () => {
         properties: {},
       });
     });
-    await React.act(async () => {
-      lastGraphProps().onNodeDoubleClick?.({
-        id: "t#tenant-1#e#cust-0",
-        canonicalId: "cust-0",
-        label: "Customer 0",
-        typeLabel: "customer",
-        isSystem: false,
-        isCenter: true,
-        properties: {},
-      });
-    });
-    expect(navigateMock).toHaveBeenCalledWith({
-      to: "/settings/memory/explorer/$entityType/$canonicalId",
-      params: { entityType: "customer", canonicalId: "cust-0" },
-    });
+    fireEvent.click(screen.getByTestId("twin-detail-panel-close"));
+    expect(screen.queryByTestId("twin-detail-panel")).toBeNull();
+    expect(screen.getByTestId("twin-stats-panel")).toBeTruthy();
   });
 
   it("R9: table checkboxes accumulate traversal roots", async () => {
@@ -845,7 +868,7 @@ describe("TwinExplorer traversal mind-map view", () => {
   });
 
   function switchToTraversal() {
-    fireEvent.click(screen.getByRole("radio", { name: "Traversal view" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Mind map view" }));
   }
 
   it("offers the third view and shows the empty prompt until a root exists", () => {
@@ -917,5 +940,45 @@ describe("TwinExplorer traversal mind-map view", () => {
 
     fireEvent.click(screen.getByTestId("mindmap-clear"));
     expect(screen.getByTestId("mindmap-empty")).toBeTruthy();
+  });
+
+  it("entity pill: single click opens the detail panel, dbl-click expands", async () => {
+    render(<TwinExplorer />);
+    switchToTraversal();
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByTestId("explorer-search-toggle"));
+    fireEvent.change(screen.getByTestId("traversal-entity-search"), {
+      target: { value: "Customer" },
+    });
+    await React.act(async () => {
+      await vi.advanceTimersByTimeAsync(350);
+    });
+    await React.act(async () => {
+      fireEvent.click(
+        screen.getByTestId("traversal-search-results").querySelector("button")!,
+      );
+    });
+    await React.act(async () => {
+      fireEvent.click(screen.getByTestId("mindmap-summary"));
+    });
+    const tank = screen
+      .getAllByTestId("mindmap-entity")
+      .find((el) => el.textContent?.includes("Tank 1"))!;
+
+    // Single click → docked panel, no summary fetch for the tank.
+    const summaryCallsBefore = summaryCalls.length;
+    await React.act(async () => {
+      fireEvent.click(tank);
+    });
+    expect(screen.getByTestId("twin-detail-panel").textContent).toContain(
+      "Tank 1",
+    );
+    expect(summaryCalls).toHaveLength(summaryCallsBefore);
+
+    // Dbl-click → expand: fetches the tank's own relationship ring.
+    await React.act(async () => {
+      fireEvent.dblClick(tank);
+    });
+    expect(summaryCalls.at(-1)).toMatchObject({ canonicalId: "tank-1" });
   });
 });
