@@ -13,6 +13,12 @@ import type { Check, CheckResult } from "./checks.js";
 import { checkAwsCli, checkAwsIdentity, checkTerraformCli } from "./checks.js";
 
 // ── etl-repo checkout ─────────────────────────────────────────────────────────
+//
+// The etl/platform repo is thinkwork-ai/company-brain (formerly
+// McPherson-Data/thinkwork). Identity is established by the marker layout
+// (etl-platform/ with terraform stacks), not the git remote, so checkouts of
+// either repo pass during the transition window (U8, KTD-10) — the
+// stacks/ + accounts/ layout contract is identical in both.
 
 export interface EtlCheckoutProbe {
   /** Resolved path the engineer pointed at (flag or THINKWORK_ETL_REPO). */
@@ -28,7 +34,8 @@ export function evaluateEtlCheckout(probe: EtlCheckoutProbe): CheckResult {
       pass: false,
       detail:
         "No etl repo checkout configured. Pass --etl-repo-dir <path> or set THINKWORK_ETL_REPO " +
-        "to a local checkout of McPherson-Data/thinkwork.",
+        "to a local checkout of thinkwork-ai/company-brain (a McPherson-Data/thinkwork " +
+        "checkout is also accepted during the transition).",
     };
   }
   if (!probe.dirExists) {
@@ -43,7 +50,7 @@ export function evaluateEtlCheckout(probe: EtlCheckoutProbe): CheckResult {
       detail:
         `${probe.path} does not look like the etl repo (expected an etl-platform/ ` +
         "directory with terraform stacks). Point --etl-repo-dir at a checkout of " +
-        "McPherson-Data/thinkwork.",
+        "thinkwork-ai/company-brain (or, during the transition, McPherson-Data/thinkwork).",
     };
   }
   return { pass: true, detail: `etl repo checkout at ${probe.path}` };

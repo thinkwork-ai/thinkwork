@@ -1,7 +1,8 @@
 /**
  * etl-repo Terraform orchestration for `thinkwork twin install` (THINK-334 U2).
  *
- * Drives the etl repo's (McPherson-Data/thinkwork) per-account stack machinery
+ * Drives the etl repo's (thinkwork-ai/company-brain, formerly
+ * McPherson-Data/thinkwork) per-account stack machinery
  * from a local checkout: `terraform -chdir=<stack>` with
  * `accounts/<slug>.backend.hcl` + `accounts/<slug>.tfvars`, honoring the
  * repo's `accounts/<slug>.skip-stacks` file, in twin dependency order.

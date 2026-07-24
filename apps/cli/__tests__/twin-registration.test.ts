@@ -28,4 +28,14 @@ describe("twin command registration", () => {
     expect(help).toMatch(/--allow-changes/);
     expect(help).toMatch(/--dry-run/);
   });
+
+  it("help names thinkwork-ai/company-brain as the etl repo (U8)", () => {
+    const program = new Command();
+    registerTwinCommand(program);
+    const install = program.commands
+      .find((c) => c.name() === "twin")!
+      .commands.find((c) => c.name() === "install")!;
+    const help = install.helpInformation();
+    expect(help).toMatch(/thinkwork-ai\/company-brain/);
+  });
 });

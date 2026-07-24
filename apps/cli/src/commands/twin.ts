@@ -3,7 +3,9 @@
  *
  * Engineer-run: installs or adopts the twin's full infrastructure footprint
  * for a stage — etl-repo stacks (Neptune, Dagster projection, landing
- * bucket) from a local checkout of McPherson-Data/thinkwork, product-side
+ * bucket) from a local checkout of thinkwork-ai/company-brain (a
+ * McPherson-Data/thinkwork checkout is also accepted during the
+ * transition), product-side
  * Neptune wiring via the standard deploy path, and the tenant's digital-twin
  * MCP registration via the THINK-333 provisioning route.
  *
@@ -34,7 +36,7 @@ export function registerTwinCommand(program: Command): void {
     )
     .option(
       "--etl-repo-dir <path>",
-      "Local checkout of the etl repo (McPherson-Data/thinkwork). Falls back to THINKWORK_ETL_REPO.",
+      "Local checkout of the etl repo (thinkwork-ai/company-brain; the former McPherson-Data/thinkwork checkout also works during the transition). Falls back to THINKWORK_ETL_REPO.",
     )
     .option(
       "--etl-account <slug>",
@@ -60,7 +62,7 @@ Examples:
   $ thinkwork twin install -s dev
 
   # Preview what a TEI install would do (no changes)
-  $ thinkwork twin install -s tei --tenant tei --etl-repo-dir ~/src/mcpherson-thinkwork --dry-run
+  $ thinkwork twin install -s tei --tenant tei --etl-repo-dir ~/src/company-brain --dry-run
 
   # Rotate the twin MCP key after an incident
   $ thinkwork twin install -s dev --rotate
