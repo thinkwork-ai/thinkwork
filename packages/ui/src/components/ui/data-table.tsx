@@ -96,6 +96,9 @@ interface DataTableProps<TData, TValue> {
   allowHorizontalScroll?: boolean;
   /** When true, table body scrolls within its container and pagination sticks to bottom. Parent must constrain height. */
   scrollable?: boolean;
+  /** Drop the table container's own border/rounding — for embedding inside an
+   * already-bordered card (e.g. a settings section) without a double frame. */
+  frameless?: boolean;
   /** Render empty state as a full table container instead of a table row. */
   emptyStatePlacement?: "row" | "container";
   /** Server-side pagination: total row count (enables manual pagination mode) */
@@ -127,6 +130,7 @@ export function DataTable<TData, TValue>({
   tableClassName,
   allowHorizontalScroll = true,
   scrollable = false,
+  frameless = false,
   emptyStatePlacement = "row",
   totalCount,
   pageIndex: controlledPageIndex,
@@ -339,10 +343,11 @@ export function DataTable<TData, TValue>({
       <div
         className={cn(
           scrollable
-            ? "flex-1 min-h-0 overflow-y-auto rounded-md border"
+            ? "flex-1 min-h-0 overflow-y-auto"
             : allowHorizontalScroll
-              ? "overflow-x-auto rounded-md border"
-              : "overflow-hidden rounded-md border",
+              ? "overflow-x-auto"
+              : "overflow-hidden",
+          !frameless && "rounded-md border",
           renderEmptyContainer && "flex items-center justify-center",
         )}
       >
