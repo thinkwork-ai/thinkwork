@@ -352,7 +352,7 @@ export interface AgentRuntimeConfig {
    * `search_knowledge` tool. Independent of the legacy
    * ENABLE_LEGACY_AGENT_KNOWLEDGE_BASES field above.
    */
-  boundKnowledgeBases: BoundKnowledgeBaseConfig[] | undefined;
+  boundKnowledgeBases?: BoundKnowledgeBaseConfig[] | undefined;
   mcpConfigs: McpConfig[];
   piExtensions: AgentRuntimePiExtension[];
   agentProfilesConfig: AgentProfileRuntimeConfig[];
