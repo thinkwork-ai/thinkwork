@@ -819,7 +819,17 @@ module "cognito" {
       "http://localhost:5180/auth/callback",
       "http://127.0.0.1:5180",
       "http://127.0.0.1:5180/auth/callback",
-    ]
+    ],
+    # Hosted Company Brain console origins (dev only): the console's CloudFront
+    # distribution and the future custom domain must be able to complete OAuth
+    # against the dev web-family clients. Dev-scoped so customer stacks don't
+    # carry dev console origins in their pools.
+    var.stage == "dev" ? [
+      "https://d3q9a98mhsakjf.cloudfront.net",
+      "https://d3q9a98mhsakjf.cloudfront.net/auth/callback",
+      "https://brain.thinkwork.ai",
+      "https://brain.thinkwork.ai/auth/callback",
+    ] : []
   ))
   admin_logout_urls = distinct(concat(
     var.admin_logout_urls,
@@ -827,7 +837,14 @@ module "cognito" {
     local.customer_domain_legacy_retired ? [] : (local.legacy_end_user_app_domain != "" ? ["https://${local.legacy_end_user_app_domain}"] : []),
     local.customer_domain_web_enabled ? ["https://${var.customer_domain}"] : [],
     local.customer_domain_legacy_retired ? [] : (var.computer_domain != "" ? ["https://${var.computer_domain}"] : []),
-    ["http://localhost:5180", "http://127.0.0.1:5180"]
+    ["http://localhost:5180", "http://127.0.0.1:5180"],
+    # Hosted Company Brain console origins (dev only) — see admin_callback_urls.
+    var.stage == "dev" ? [
+      "https://d3q9a98mhsakjf.cloudfront.net",
+      "https://d3q9a98mhsakjf.cloudfront.net/auth/callback",
+      "https://brain.thinkwork.ai",
+      "https://brain.thinkwork.ai/auth/callback",
+    ] : []
   ))
   desktop_callback_urls = var.desktop_callback_urls
   cli_callback_urls     = var.cli_callback_urls
