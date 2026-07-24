@@ -488,9 +488,11 @@ async function syncS3ConnectSource(
   const dataSourceId = source.aws_data_source_id!;
   const bucket = sourceBucket(source);
 
-  // 1. Live listing of the connected bucket/prefix.
-  const { S3Client, ListObjectsV2Command } = await import("@aws-sdk/client-s3");
-  const s3 = new S3Client({ region: AWS_REGION });
+  // 1. Live listing of the connected bucket/prefix — AS the KB service
+  // role: customer buckets are granted to it only, never to this Lambda's
+  // own role (live-E2E finding: the plain client 403s on ListBucket).
+  const { ListObjectsV2Command } = await import("@aws-sdk/client-s3");
+  const s3 = await assumeKbRoleS3Client();
   const liveObjects: LiveObject[] = [];
   let continuationToken: string | undefined;
   do {
@@ -762,6 +764,37 @@ async function handleSync(kbId: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
+ * S3 client running AS the KB service role. Customer buckets are granted to
+ * the KB role only (external_kb_source_arns) — the Lambda's own role never
+ * gets them — so every customer-bucket read (preflight probe AND s3-connect
+ * sync listing) must go through this client.
+ */
+async function assumeKbRoleS3Client() {
+  const { STSClient, AssumeRoleCommand } = await import("@aws-sdk/client-sts");
+  const sts = new STSClient({ region: AWS_REGION });
+  const assumed = await sts.send(
+    new AssumeRoleCommand({
+      RoleArn: kbServiceRoleArn(),
+      RoleSessionName: "kb-source-access",
+      DurationSeconds: 900,
+    }),
+  );
+  const credentials = assumed.Credentials;
+  if (!credentials?.AccessKeyId) {
+    throw new Error(`No credentials returned assuming ${kbServiceRoleArn()}`);
+  }
+  const { S3Client } = await import("@aws-sdk/client-s3");
+  return new S3Client({
+    region: AWS_REGION,
+    credentials: {
+      accessKeyId: credentials.AccessKeyId,
+      secretAccessKey: credentials.SecretAccessKey!,
+      sessionToken: credentials.SessionToken!,
+    },
+  });
+}
+
+/**
  * As-role access preflight (R8): assume the KB service role and probe
  * ListObjectsV2 + GetObject so we prove the identity Bedrock ingests with
  * can actually read the bucket — operator credentials passing is not
@@ -771,40 +804,19 @@ async function preflightAsKbRole(
   bucket: string,
   prefix: string,
 ): Promise<{ keys: string[] }> {
-  const { STSClient, AssumeRoleCommand } = await import("@aws-sdk/client-sts");
-  const sts = new STSClient({ region: AWS_REGION });
-  let credentials;
+  let s3;
   try {
-    const assumed = await sts.send(
-      new AssumeRoleCommand({
-        RoleArn: kbServiceRoleArn(),
-        RoleSessionName: "kb-connect-preflight",
-        DurationSeconds: 900,
-      }),
-    );
-    credentials = assumed.Credentials;
+    s3 = await assumeKbRoleS3Client();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(
       `Preflight failed: cannot assume KB service role ${kbServiceRoleArn()} (${message})`,
     );
   }
-  if (!credentials?.AccessKeyId) {
-    throw new Error(
-      `Preflight failed: no credentials returned assuming ${kbServiceRoleArn()}`,
-    );
-  }
 
-  const { S3Client, ListObjectsV2Command, GetObjectCommand } =
-    await import("@aws-sdk/client-s3");
-  const s3 = new S3Client({
-    region: AWS_REGION,
-    credentials: {
-      accessKeyId: credentials.AccessKeyId,
-      secretAccessKey: credentials.SecretAccessKey!,
-      sessionToken: credentials.SessionToken!,
-    },
-  });
+  const { ListObjectsV2Command, GetObjectCommand } = await import(
+    "@aws-sdk/client-s3"
+  );
 
   let keys: string[] = [];
   try {
