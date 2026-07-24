@@ -1530,6 +1530,12 @@ variable "neptune_endpoint" {
   description = "Neptune twin cluster writer endpoint (etl-platform neptune stack output; empty = twin disabled)"
 }
 
+variable "brain_mcp_url" {
+  type        = string
+  default     = ""
+  description = "Platform-served Brain MCP endpoint (consolidation U14). When set, twin-connector provisioning registers agents against it instead of the product /mcp/twin route. Empty = legacy product-served default."
+}
+
 variable "neptune_cluster_resource_id" {
   type        = string
   default     = ""

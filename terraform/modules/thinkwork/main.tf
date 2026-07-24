@@ -1203,6 +1203,7 @@ module "api" {
   # first dev rebuild invoke).
   lambda_max_memory_mb        = var.lambda_max_memory_mb
   neptune_endpoint            = var.neptune_endpoint
+  brain_mcp_url               = var.brain_mcp_url
   neptune_cluster_resource_id = var.neptune_cluster_resource_id
   neptune_subnet_ids          = var.neptune_client_security_group_id != "" ? module.vpc.private_subnet_ids : []
   neptune_security_group_ids  = var.neptune_client_security_group_id != "" ? [var.neptune_client_security_group_id, aws_security_group.twin_lambda_egress[0].id] : []
