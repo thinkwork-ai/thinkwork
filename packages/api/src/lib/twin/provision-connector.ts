@@ -16,6 +16,13 @@
  *   4. Materialize `connectors/digital-twin/` into every non-archived agent
  *      workspace (default-on, R13) + the legacy `mcp/<slug>/.assignment.json`
  *      dual-write for non-folder-dispatch agents.
+ *   5. Publish the hashed-key manifest to the brain-artifacts bucket
+ *      (twin-mcp-keys/<tenantId>/latest.json, U12 KTD amendment) — during
+ *      rotation the outgoing hash is published alongside the new one
+ *      (step 1b grace publish) before the active-only final publish, so
+ *      the platform verifier never sees zero valid keys mid-rotation.
+ *      Publish failure never blocks the ceremony; it surfaces in
+ *      `result.keyManifest`.
  *
  * Rotation IS a re-run: step 1 revokes the old key, steps 2-3 re-point the
  * secret + re-pin the hash in the same call, so agents never cross a
@@ -43,6 +50,11 @@ import {
 } from "../capabilities/registry-trust-flag.js";
 import { resolveAgentWorkspacePrefix } from "../skills/assignment-state.js";
 import { materializeMcpAssignmentFoldersForAgents } from "../mcp/assignment-state.js";
+import {
+  publishTwinKeyManifest,
+  type PublishTwinKeyManifestOptions,
+  type TwinKeyManifestEntry,
+} from "./key-manifest.js";
 
 type DbLike = typeof defaultDb;
 
@@ -139,6 +151,11 @@ export interface TwinProvisionResult {
     agents: number;
     skipped: Array<{ agentId: string; reason: string }>;
   };
+  /**
+   * Hashed-key manifest publish outcome (U12 KTD amendment). Publish
+   * failure never blocks provisioning — it surfaces here instead.
+   */
+  keyManifest: { published: boolean; errors: string[] };
 }
 
 export interface TwinProvisionDeps {
@@ -148,6 +165,9 @@ export interface TwinProvisionDeps {
   folderDeps?: CapabilityFolderWriteDeps;
   signedBy?: CapabilitySignedBy;
   now?: () => Date;
+  /** S3 seam for the key-manifest publisher (tests). */
+  manifestS3?: PublishTwinKeyManifestOptions["s3"];
+  manifestBucket?: string;
 }
 
 export async function provisionTwinConnector(
@@ -165,6 +185,25 @@ export async function provisionTwinConnector(
   const secretRef = twinSecretName(input.stage, input.tenantId);
 
   // 1. Rotate-safe key mint: revoke same-name active rows, insert fresh.
+  // Capture the outgoing active hashes FIRST — the U12 KTD amendment
+  // requires BOTH hashes live in the published manifest mid-rotation.
+  const outgoingRows = await db
+    .select({
+      key_hash: tenantMcpTwinKeys.key_hash,
+      created_at: tenantMcpTwinKeys.created_at,
+    })
+    .from(tenantMcpTwinKeys)
+    .where(
+      and(
+        eq(tenantMcpTwinKeys.tenant_id, input.tenantId),
+        isNull(tenantMcpTwinKeys.revoked_at),
+      ),
+    );
+  const outgoingKeys: TwinKeyManifestEntry[] = outgoingRows.map((row) => ({
+    keyHash: row.key_hash,
+    createdAt: row.created_at ? row.created_at.toISOString() : null,
+  }));
+
   const { raw, hash } = generateTwinKey();
   await db
     .update(tenantMcpTwinKeys)
@@ -186,6 +225,27 @@ export async function provisionTwinConnector(
     })
     .returning({ id: tenantMcpTwinKeys.id });
   if (!keyRow) throw new Error("twin provision: key insert returned no row");
+
+  // 1b. Rotation grace publish: manifest = new active key + the outgoing
+  // hashes carried as grace entries, so the platform (≤60s manifest cache)
+  // accepts both keys while the secret repoint propagates. Never blocks
+  // the ceremony — failures collect into result.keyManifest.
+  const manifestErrors: string[] = [];
+  const manifestOpts: PublishTwinKeyManifestOptions = {
+    db,
+    s3: deps.manifestS3,
+    bucket: deps.manifestBucket,
+    now,
+  };
+  if (outgoingKeys.length > 0) {
+    const grace = await publishTwinKeyManifest(input.tenantId, {
+      ...manifestOpts,
+      extraKeys: outgoingKeys,
+    });
+    if (!grace.published) {
+      manifestErrors.push(`grace publish failed: ${grace.reason}`);
+    }
+  }
 
   // 2. Raw key to Secrets Manager (value shape resolveServiceCredentialAuth
   // binds: {token, tenantId}).
@@ -233,6 +293,16 @@ export async function provisionTwinConnector(
     deps,
   );
 
+  // 5. Final manifest publish: ACTIVE keys only — drops the rotated-out
+  // hash; the platform's ≤60s cache is the revocation overlap window.
+  const finalPublish = await publishTwinKeyManifest(
+    input.tenantId,
+    manifestOpts,
+  );
+  if (!finalPublish.published) {
+    manifestErrors.push(`publish failed: ${finalPublish.reason}`);
+  }
+
   return {
     tenantMcpServerId,
     keyId: keyRow.id,
@@ -240,6 +310,10 @@ export async function provisionTwinConnector(
     url: input.twinMcpUrl,
     provisioned,
     workspaces,
+    keyManifest: {
+      published: finalPublish.published,
+      errors: manifestErrors,
+    },
   };
 }
 
