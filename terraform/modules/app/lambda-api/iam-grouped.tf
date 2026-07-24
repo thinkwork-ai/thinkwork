@@ -1035,6 +1035,13 @@ locals {
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.analyst_connection_reconciler_dlq[0].arn
       },
+      # External S3 KB source U6 — kb-source-reconciler async on_failure DLQ.
+      {
+        Sid      = "KbSourceReconcilerDlqSend"
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = aws_sqs_queue.kb_source_reconciler_dlq[0].arn
+      },
       # (was inline policy "compliance-exports-send")
       # graphql-http needs sqs:SendMessage on the exports queue to dispatch
       # jobIds from the createComplianceExport mutation. Attached to the
