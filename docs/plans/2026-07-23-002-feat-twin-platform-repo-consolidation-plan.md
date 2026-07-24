@@ -13,10 +13,10 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** Consolidate the Company Brain data platform into a dedicated private repo `thinkwork-ai/brain-platform` — extractor through Dagster/Iceberg to the Neptune-loaded graph, twin MCP server, and a fully standalone deployed Explorer/Ontology console — with an internal docs site whose centerpiece is the white-glove bespoke-customer onboarding playbook. Closes THINK-338.
+- **Objective:** Consolidate the Company Brain data platform into a dedicated private repo `thinkwork-ai/company-brain` — extractor through Dagster/Iceberg to the Neptune-loaded graph, twin MCP server, and a fully standalone deployed Explorer/Ontology console — with an internal docs site whose centerpiece is the white-glove bespoke-customer onboarding playbook. Closes THINK-338.
 - **Product authority:** the Product Contract below (confirmed with Eric 2026-07-23). One plan owns the whole consolidation program; Track B pipeline features (U2 `twin_derive`, U3 identity-sync in the etl repo) are a separate in-flight workstream this program must not block.
 - **Stop conditions:** surface as blocked instead of guessing if (a) a cutover plan shows non-whitelisted destructive diffs (KTD-3), (b) the twin-mapping export cannot be extended to satisfy the Phase D seam validation (KTD-7's fallback fails), or (c) the old repo's frozen state must be modified after archive.
-- **Execution profile:** phased A→D; Phases A–C are repo/infra/docs work proven by CI green and live cutover evidence; Phase D is product-code extraction proven by per-customer console verification before any removal ships. Path prefixes in this plan: `etl:` = McPherson-Data/thinkwork (becomes `brain-platform` after the move); `product:` = this repo.
+- **Execution profile:** phased A→D; Phases A–C are repo/infra/docs work proven by CI green and live cutover evidence; Phase D is product-code extraction proven by per-customer console verification before any removal ships. Path prefixes in this plan: `etl:` = McPherson-Data/thinkwork (becomes `company-brain` after the move); `product:` = this repo.
 - **Tail ownership:** the implementing sessions own CI green in the new repo, both account cutovers with E2E evidence, docs v1 live, and — in Phase D — console live at each customer before the Explorer-removal release ships.
 
 ---
@@ -25,7 +25,7 @@ execution: code
 
 ### Summary
 
-Create `thinkwork-ai/brain-platform`, a private repo that owns the Company Brain data plane end to end, moved with git history out of the McPherson customer repo and — in a late phase — extracted from the open-source product repo. It ships with per-account CI/CD cutover (McPherson first, then TEI), a productized customer-site extractor, an internal-engineer docs site with a thorough white-glove onboarding playbook branching by customer entry state, and a standalone deployed twin console that replaces the product app's Explorer/Ontology UI.
+Create `thinkwork-ai/company-brain`, a private repo that owns the Company Brain data plane end to end, moved with git history out of the McPherson customer repo and — in a late phase — extracted from the open-source product repo. It ships with per-account CI/CD cutover (McPherson first, then TEI), a productized customer-site extractor, an internal-engineer docs site with a thorough white-glove onboarding playbook branching by customer entry state, and a standalone deployed twin console that replaces the product app's Explorer/Ontology UI.
 
 ### Problem Frame
 
@@ -33,10 +33,10 @@ The Company Brain platform is becoming the real product, but it lives in the wro
 
 ### Key Decisions
 
-- **Dedicated private repo named `brain-platform`, under the `thinkwork-ai` org.** (session-settled: user-directed — originally created as `twin-platform`, chosen over `digital-twin` and `thinkwork-twin`; renamed `brain-platform` 2026-07-23 with the Company Brain naming pivot.)
+- **Dedicated private repo named `company-brain`, under the `thinkwork-ai` org.** (session-settled: user-directed — originally created as `twin-platform`, chosen over `digital-twin` and `thinkwork-twin`; renamed `company-brain` 2026-07-23 with the Company Brain naming pivot.)
 - **One plan for the whole consolidation program.** (session-settled: user-approved — chosen over planning the repo move or the docs site separately: the seam and contract decisions belong in one place; workstreams are phased, not split into separate plans.)
 - **Full UI extraction: MCP is the only runtime seam between product and twin.** (session-settled: user-directed — chosen over splitting the UI by audience or runtime-gating public UI code: plates and all product surfaces reach the twin only via MCP tools mentioned in instructions; there is no tight coupling between plates and the twin. Product code that touches the twin outside MCP moves to the platform repo or retires.)
-- **The Explorer/Ontology UI becomes a fully standalone console in `brain-platform`, deployed per customer.** (session-settled: user-directed — chosen over keeping conditional UI in the product app: the product app keeps at most a conditional link-out.)
+- **The Explorer/Ontology UI becomes a fully standalone console in `company-brain`, deployed per customer.** (session-settled: user-directed — chosen over keeping conditional UI in the product app: the product app keeps at most a conditional link-out.)
 - **Ontology store, change-set machinery, and the twin-mapping export stay product-side for now.** (session-settled: user-directed — chosen over migrating ontology into the platform repo: less migration risk now; the console authors ontology through the product API; moving ontology out is a named future revisit.)
 - **White-glove engineer-run installs remain the permanent install story.** (session-settled: user-directed — reaffirms the THINK-334 decision; no plugin shape, no self-serve. Each customer is bespoke and the documentation must carry that, not automation.)
 - **Docs audience is internal engineers only.** (session-settled: user-directed — chosen over customer-facing or self-serve docs: the playbook is what our engineers follow; hosting stays internal/private.)
@@ -57,7 +57,7 @@ flowchart TB
     REG[MCP registration for tenant]
     LINK[Conditional link-out to console]
   end
-  subgraph TP[brain-platform - private]
+  subgraph TP[company-brain - private]
     EXT[Extractor] --> DAG[Dagster / Iceberg / Athena]
     DAG --> PROJ[Projector]
     PROJ --> NEP[(Neptune)]
@@ -76,7 +76,7 @@ flowchart TB
 
 **Repo bootstrap and code move**
 
-- R1. `brain-platform` is a private repo under `thinkwork-ai` with branch protection mirroring the current ruleset (squash-merge, up-to-date branch required), no CLA bot, and CI covering pytest + ruff, terraform validate + checkov, and the Dagster image build.
+- R1. `company-brain` is a private repo under `thinkwork-ai` with branch protection mirroring the current ruleset (squash-merge, up-to-date branch required), no CLA bot, and CI covering pytest + ruff, terraform validate + checkov, and the Dagster image build.
 - R2. `etl-platform/` moves via history-preserving subtree extraction (`git filter-repo`), keeping blame across the 80+ merged PRs of institutional knowledge.
 - R3. The extractor branch lands as a first-class `extractor/` directory with its `extraction-definitions/` tree.
 - R4. After cutover, the old `etl-platform/` directory in the customer repo is archived with a pointer README, frozen to new merges by a CI guard, and every open PR has an explicit disposition (merged before freeze or re-targeted to the new repo).
@@ -100,8 +100,8 @@ flowchart TB
 
 **UI and seam extraction (late phase)**
 
-- R13. A standalone twin console (Explorer, Cypher console, predicate/traversal tooling, ontology views) lives in `brain-platform` and deploys per customer, authenticating against the customer's existing Cognito pool.
-- R14. `twin-query`, the projector, and the twin MCP server are owned and deployed by `brain-platform`; the product repo retains only the ontology store and change-set machinery, the two S3 exporters, and tenant MCP registration.
+- R13. A standalone twin console (Explorer, Cypher console, predicate/traversal tooling, ontology views) lives in `company-brain` and deploys per customer, authenticating against the customer's existing Cognito pool.
+- R14. `twin-query`, the projector, and the twin MCP server are owned and deployed by `company-brain`; the product repo retains only the ontology store and change-set machinery, the two S3 exporters, and tenant MCP registration.
 - R15. The product app's twin UI surfaces are removed; at most a conditional link to the console renders when the tenant has a twin MCP registration. After extraction, no product code reads the twin outside MCP. Removal ships only after the console is live and verified at every customer using the Explorer (KTD-7).
 - R16. The console performs ontology authoring by calling the product GraphQL API with the tenant's Cognito token.
 
@@ -109,23 +109,23 @@ flowchart TB
 
 - F1. Bespoke customer onboarding (white-glove)
   - **Trigger:** A new customer signs; an internal engineer opens the onboarding playbook.
-  - **Steps:** Assess entry state → if no AWS account, walk the customer through creating their own org/account (billing theirs) → obtain cross-account engineer access → bootstrap or adopt per-account infrastructure from `brain-platform` Terraform → install and configure the packaged extractor on the customer host → seed ontology → prove the E2E run → register the twin MCP server for the tenant → deploy the twin console.
+  - **Steps:** Assess entry state → if no AWS account, walk the customer through creating their own org/account (billing theirs) → obtain cross-account engineer access → bootstrap or adopt per-account infrastructure from `company-brain` Terraform → install and configure the packaged extractor on the customer host → seed ontology → prove the E2E run → register the twin MCP server for the tenant → deploy the twin console.
   - **Outcome:** Customer live on their own account; every step traceable to a playbook section.
 - F2. Account cutover (existing customers)
-  - **Trigger:** Engineer cuts an existing account (McPherson, then TEI) over to deploying from `brain-platform`.
+  - **Trigger:** Engineer cuts an existing account (McPherson, then TEI) over to deploying from `company-brain`.
   - **Steps:** Add new repo to the account's OIDC trust → pause old-repo applies for the account → verify plan from the new repo is no-op beyond whitelist → flip deploys → prove a full extractor-to-Neptune run from a new-repo-built image → remove old-repo trust. Customer extractor hosts are untouched throughout; the landing contract is the compatibility line.
-  - **Outcome:** Account deploys exclusively from `brain-platform`; no infrastructure churn; old repo remained the rollback path until proof passed.
+  - **Outcome:** Account deploys exclusively from `company-brain`; no infrastructure churn; old repo remained the rollback path until proof passed.
 
 ### Acceptance Examples
 
-- AE1. **Covers R5, R6.** Given McPherson's existing per-account state, when `terraform plan` runs from `brain-platform` before cutover, then it reports zero changes beyond the whitelisted diffs (the deadman `github_repo` retarget), and the deploy role accepts the new repo's OIDC identity.
+- AE1. **Covers R5, R6.** Given McPherson's existing per-account state, when `terraform plan` runs from `company-brain` before cutover, then it reports zero changes beyond the whitelisted diffs (the deadman `github_repo` retarget), and the deploy role accepts the new repo's OIDC identity.
 - AE2. **Covers R7.** After each account's cutover, a full extractor drop flows through Dagster and Iceberg into Neptune using an image built by the new repo's CI, and the graph answers a query over the new data.
 - AE3. **Covers R11.** An engineer who has not previously onboarded a customer follows the playbook for a hypothetical no-AWS-account customer and reaches a proven E2E install without steps that exist only in someone's head.
 - AE4. **Covers R14, R15.** After the late-phase extraction, the product repo contains no twin runtime code beyond the ontology machinery, the two exporters, and MCP registration, and agents (including plate-driven turns) still answer twin queries through the MCP server.
 
 ### Success Criteria
 
-- McPherson and TEI both deploy from `brain-platform` with a proven extractor→Neptune E2E each.
+- McPherson and TEI both deploy from `company-brain` with a proven extractor→Neptune E2E each.
 - `etl-platform/` in the customer repo is archived and frozen.
 - Docs v1 is live internally: architecture, contracts, and the bespoke-onboarding runbook (R12 set).
 - The standalone twin console is deployed at one or more customers.
@@ -151,7 +151,7 @@ flowchart TB
 This plan owns the whole consolidation program: repo bootstrap, code move, CI/CD/AWS cutover, extractor productization, docs site, and the late-phase UI/seam extraction. The surrounding work, as currently understood (not a committed roadmap):
 
 - Track B (U2 `twin_derive`, U3 identity-sync, per docs/plans/2026-07-23-001-feat-mcpherson-dagster-elt-neptune-plan.md) — proceeds independently in the current etl repo; this program sequences around it (KTD-1's snapshot-after-merge rule) and must not block it. Their landed code moves with the extraction.
-- THINK-334 white-glove install command (docs/plans/2026-07-22-003-feat-digital-twin-white-glove-install-plan.md, shipped) — `thinkwork twin install` orchestrates across both repos today; the playbook (R11) absorbs and supersedes its runbook role, and the command's etl-repo pointer retargets to `brain-platform` at cutover (KTD-10).
+- THINK-334 white-glove install command (docs/plans/2026-07-22-003-feat-digital-twin-white-glove-install-plan.md, shipped) — `thinkwork twin install` orchestrates across both repos today; the playbook (R11) absorbs and supersedes its runbook role, and the command's etl-repo pointer retargets to `company-brain` at cutover (KTD-10).
 - Ontology migration out of product Postgres — enabled by this program's extraction phase; still to decide whether it ever happens.
 - Linear process (issue home for platform work, ELT plan doc supersession) — still to decide; see Outstanding Questions.
 
@@ -181,13 +181,13 @@ This plan owns the whole consolidation program: repo bootstrap, code move, CI/CD
 - KTD-1. **Repeatable import, snapshot after the current PR set merges, freeze last.** The `git filter-repo` extraction is a scripted, re-runnable import (paths: `etl-platform/`, root `docs/`, root `.github/workflows/`, `extraction-definitions/` from the extractor branch). The old repo's open PRs (Track B #84/#85 with their ordering constraint, fixes #86/#87, UAT #70, extractor #26) get an explicit disposition — default merge-before-snapshot; #26 lands via U2 instead. Final re-run + `git diff` verification against old `main` happens immediately before the freeze guard lands, and freeze is the **last** step after the final account's cutover proof, not an early milestone. Customer-side contributors (scott1) get new-repo access before freeze. (session-settled: user-approved — chosen over snapshot-now-port-later: avoids double-landing Track B mid-flight.)
 - KTD-2. **Per-account cutover state machine.** Pause old-repo applies for the account (add the account's stacks to the old repo's `accounts/<name>.skip-stacks`, or pause merges) → plan from new repo, triaged against the whitelist → flip → E2E proof (AE2) → remove the old repo from the account's OIDC trust. The old repo remains fully deployable as the rollback path until proof passes; the two repos never both apply to one account's state. (session-settled: user-approved.)
 - KTD-3. **Drift triage with a whitelist, not a bare no-op bar.** Plan diffs classify as: whitelisted (the deadman `github_repo` retarget — etl: `infrastructure/stacks/deadman/main.tf:87`), code-behind (old repo merged something the snapshot missed — re-sync first), or hand-applied infra (codify into tfvars/modules, re-plan — TEI's hand-crafted history makes this likely there). Any delete/replace outside the whitelist stops the cutover. (session-settled: user-approved.)
-- KTD-4. **TEI enters the Terraform matrix plan-only until its cutover slot.** TEI (637423202447) is absent from the old repo's `terraform.yml` matrix; its `etl-platform-plan`/`etl-platform-deploy` roles must be bootstrapped (etl: `infrastructure/bootstrap/`) trusting `brain-platform`. Its first-ever CI-driven apply is the cutover itself — applies stay manual until then. (session-settled: user-approved.)
+- KTD-4. **TEI enters the Terraform matrix plan-only until its cutover slot.** TEI (637423202447) is absent from the old repo's `terraform.yml` matrix; its `etl-platform-plan`/`etl-platform-deploy` roles must be bootstrapped (etl: `infrastructure/bootstrap/`) trusting `company-brain`. Its first-ever CI-driven apply is the cutover itself — applies stay manual until then. (session-settled: user-approved.)
 - KTD-5. **dbt retires by porting the `jde_orders` lane.** The lane (etl: `dbt/models/staging/stg_jde/`, `dbt/models/marts/sales/order_history.sql`, consumed via `@dbt_assets` in `pipelines/sources/jde_orders/pipeline.py`, registered in `dagster/workspace.yaml`) ports to the Iceberg path; then dbt leaves `dagster/Dockerfile:13-34` (dbt-athena/dbt-duckdb install + `dbt parse`) and the `dbt/**` trigger in `dagster-image.yml`. Dockerfile/workflow edits land with the port so triggers never go dead. (session-settled: user-approved — inherits the brainstorm's dbt decision with the port refinement.)
 - KTD-6. **Customer extractor hosts are untouched by the repo cutover.** The landing contract (etl: `etl-platform/landing-contract/`) is the compatibility line; the branch-checkout extractor keeps depositing regardless of which repo builds the pipeline. The R9 packaged installer replaces the branch deployment as its own later rollout with its own runbook, independent of both the repo cutover and McPherson's future prod-extractor repoint.
 - KTD-7. **Existing-customer console ordering: link-out → console live → removal release.** The conditional link-out ships first (renders on MCP registration), the console is deployed and verified per customer, and only then does the Explorer-removal product release ship (canary-tag flow). The whole phase is gated on U12's validation that the twin-mapping export can feed ontology description and query compilation; if it cannot, the fallback is extending `twin-mapping/v1` (a format-version bump with the projection's fail-loud gate), never a cross-account DB seam. (session-settled: user-approved.)
 - KTD-8. **`graph-projection.ts` splits along the seam.** The Neptune-writing projector half (product: `packages/api/src/lib/entity-identity/graph-projection.ts` MERGE operations, plus `packages/api/src/handlers/identity-graph-projector.ts` and `bulk-rebuild.ts`) moves to the platform; the identity snapshot exporter (`uploadIdentitySnapshot`, currently invoked as a side effect of projection runs) stays product-side and gains its own invocation path so the export survives without the projector.
 - KTD-9. **Docs live in-repo as Starlight source; publishing is additive.** The floor is repo-browsable markdown with a locally buildable Starlight site (mirroring product: `docs/astro.config.mjs` conventions). Access-controlled GitHub Pages publishing is enabled if the org plan supports it — a deploy detail, never a gate on R11/R12 content.
-- KTD-10. **The etl repo's `stacks/` + `accounts/` layout stays stable through the move** so the product CLI's Terraform wrapper (product: `apps/cli/src/lib/etl-terraform.ts:94`) keeps working; the CLI retarget is naming only — help text and docs move from `McPherson-Data/thinkwork` to `brain-platform` (product: `apps/cli/src/commands/twin.ts:36-63`, `apps/cli/src/commands/twin/install.ts:73`).
+- KTD-10. **The etl repo's `stacks/` + `accounts/` layout stays stable through the move** so the product CLI's Terraform wrapper (product: `apps/cli/src/lib/etl-terraform.ts:94`) keeps working; the CLI retarget is naming only — help text and docs move from `McPherson-Data/thinkwork` to `company-brain` (product: `apps/cli/src/commands/twin.ts:36-63`, `apps/cli/src/commands/twin/install.ts:73`).
 - KTD-11. **Workflow port rewrites path prefixes and regularizes the stragglers.** All old-repo workflows filter on `etl-platform/**` paths; the new repo keeps the directory name so rewrites are mechanical (repo-name references, matrix account lists). The two known irregulars are fixed in the port: `dagster-mcp.yml` deploys mcpherson-only (thinkwork account is hand-deployed today — add it to the matrix), and `aws-oidc-smoke.yml` becomes the per-account OIDC verification template for cutover.
 
 ### High-Level Technical Design
@@ -196,10 +196,10 @@ Per-account cutover state machine (KTD-2/KTD-3):
 
 ```mermaid
 flowchart TB
-  A[Add brain-platform to account OIDC trust] --> B[Pause old-repo applies for this account]
-  B --> C[terraform plan from brain-platform, per stack]
+  A[Add company-brain to account OIDC trust] --> B[Pause old-repo applies for this account]
+  B --> C[terraform plan from company-brain, per stack]
   C --> D{Diffs?}
-  D -->|none| F[Flip: applies run from brain-platform]
+  D -->|none| F[Flip: applies run from company-brain]
   D -->|whitelisted only\ndeadman repo retarget| F
   D -->|code-behind| E1[Re-sync import from old main] --> C
   D -->|hand-applied infra| E2[Codify into tfvars/modules] --> C
@@ -238,13 +238,13 @@ Unit index:
 | U14  | Runtime move + projector split + link-out | new repo, `product: packages/api`                                     | U12, U13   |
 | U15  | Product-side Explorer removal release     | `product: apps/web`, `packages/api`                                   | U13, U14   |
 
-### U1. Bootstrap `brain-platform` and the scripted history-preserving import
+### U1. Bootstrap `company-brain` and the scripted history-preserving import
 
 - **Goal:** Private repo exists with branch protection, CI green on the imported tree, and a re-runnable import script so the snapshot can re-sync until freeze.
 - **Requirements:** R1, R2; KTD-1.
 - **Dependencies:** none.
 - **Files:** new repo — imported `etl-platform/` tree (kept under the same directory name per KTD-11), old-repo root `docs/` (solutions/plans/brainstorms trap ledgers), `tools/import-from-old-repo.sh`, `.github/` branch-protection config, `README.md`.
-- **Approach:** `git filter-repo` in a scripted, idempotent form: fresh clone of old repo → filter to the KTD-1 path set → fetch into `brain-platform` and fast-forward a re-sync branch. Branch protection mirrors the product repo ruleset (squash-merge, up-to-date required); no CLA bot; proprietary license. Record the PR disposition table (KTD-1) in the repo's first issue or `docs/plans/` entry; grant customer-side contributors access.
+- **Approach:** `git filter-repo` in a scripted, idempotent form: fresh clone of old repo → filter to the KTD-1 path set → fetch into `company-brain` and fast-forward a re-sync branch. Branch protection mirrors the product repo ruleset (squash-merge, up-to-date required); no CLA bot; proprietary license. Record the PR disposition table (KTD-1) in the repo's first issue or `docs/plans/` entry; grant customer-side contributors access.
 - **Execution note:** Verify the import with `git log --follow` on a deep file (e.g. the twin projection) proving blame survives, and a full-tree diff against old `main`.
 - **Test scenarios:** Test expectation: none — repo scaffolding; CI green on the imported suites (900+ existing tests) is the proof.
 - **Verification:** New repo CI (pytest/ruff/mypy, terraform validate/checkov, jsonschema config validation) green on the imported tree; re-running the import script after an old-repo merge produces a clean re-sync diff.
@@ -255,7 +255,7 @@ Unit index:
 - **Requirements:** R3; KTD-1 (PR #26 disposition = re-target here).
 - **Dependencies:** U1.
 - **Files:** new repo — `extraction-definitions/` (config.schema.json, `_executor_version`, per-dataset `config.yaml` + `extract.sql`), `etl-platform/extractor/executor.py` updates from the branch.
-- **Approach:** Import the branch's commits onto the new repo (cherry-pick or branch import via the U1 script), reconciling with whatever `main` moved under it. The `GITHUB_REPO` config in the executor env retargets to `brain-platform`. This is landing the code, not R9 productization — the installer/packaging is deferred to its own rollout (KTD-6).
+- **Approach:** Import the branch's commits onto the new repo (cherry-pick or branch import via the U1 script), reconciling with whatever `main` moved under it. The `GITHUB_REPO` config in the executor env retargets to `company-brain`. This is landing the code, not R9 productization — the installer/packaging is deferred to its own rollout (KTD-6).
 - **Test scenarios:**
   - Existing extractor tests pass in new-repo CI.
   - `extraction-definitions/*/config.yaml` passes the jsonschema CI validation.
@@ -275,18 +275,18 @@ Unit index:
 
 ### U4. OIDC trust updates and TEI role bootstrap
 
-- **Goal:** Every account's deploy roles trust `brain-platform`; TEI gains the roles it never had.
+- **Goal:** Every account's deploy roles trust `company-brain`; TEI gains the roles it never had.
 - **Requirements:** R5; KTD-2, KTD-4.
 - **Dependencies:** U3.
-- **Files:** new repo — `etl-platform/infrastructure/bootstrap/` applied per account (mcpherson 024350822488, thinkwork 487219502366, TEI 637423202447) with `github_repository = thinkwork-ai/brain-platform`.
+- **Files:** new repo — `etl-platform/infrastructure/bootstrap/` applied per account (mcpherson 024350822488, thinkwork 487219502366, TEI 637423202447) with `github_repository = thinkwork-ai/company-brain`.
 - **Approach:** Re-apply the bootstrap stack per account adding the new repo sub (dual-trust window is deliberate and bounded by KTD-2's per-account sequence). TEI: bootstrap `etl-platform-plan`/`etl-platform-deploy` from scratch; add TEI to the new repo's terraform matrix **plan-only** (KTD-4).
 - **Execution note:** Bootstrap is applied locally by convention (not via CI) — follow the old repo's `bootstrap/README.md` procedure.
 - **Test scenarios:** Test expectation: none — infra operation; `aws-oidc-smoke.yml` per account is the check.
-- **Verification:** Smoke workflow green from `brain-platform` against all three accounts; TEI plan job produces a plan (its diffs feed U6's triage).
+- **Verification:** Smoke workflow green from `company-brain` against all three accounts; TEI plan job produces a plan (its diffs feed U6's triage).
 
 ### U5. McPherson cutover
 
-- **Goal:** McPherson deploys exclusively from `brain-platform`, proven E2E.
+- **Goal:** McPherson deploys exclusively from `company-brain`, proven E2E.
 - **Requirements:** R6, R7, R8; KTD-2, KTD-3; AE1, AE2.
 - **Dependencies:** U3, U4.
 - **Files:** operational — old repo `accounts/mcpherson.skip-stacks` (pause lever), new repo matrix enable, cutover evidence recorded on THINK-338.
@@ -297,7 +297,7 @@ Unit index:
 
 ### U6. TEI cutover
 
-- **Goal:** TEI's first-ever CI-driven Terraform apply lands cleanly; TEI deploys exclusively from `brain-platform`.
+- **Goal:** TEI's first-ever CI-driven Terraform apply lands cleanly; TEI deploys exclusively from `company-brain`.
 - **Requirements:** R6, R7, R8; KTD-2, KTD-3, KTD-4; AE1-equivalent, AE2.
 - **Dependencies:** U4, U5.
 - **Files:** operational — new repo matrix apply-enable for tei; codified tfvars for any hand-applied drift.
@@ -320,15 +320,15 @@ Unit index:
 
 ### U8. Product CLI retarget
 
-- **Goal:** `thinkwork twin install` names and documents `brain-platform` as the etl repo.
+- **Goal:** `thinkwork twin install` names and documents `company-brain` as the etl repo.
 - **Requirements:** KTD-10.
 - **Dependencies:** U5 (retarget ships after the new repo is the real deploy source).
 - **Files:** product — `apps/cli/src/commands/twin.ts` (help text), `apps/cli/src/commands/twin/install.ts` (env fallback docs), `apps/cli/src/lib/twin-install-checks.ts` (expected-repo check if it asserts the remote), tests `apps/cli/__tests__/{twin-install-checks,twin-registration,etl-terraform}.test.ts`, the operator doc page for the command.
 - **Approach:** Naming-only per KTD-10 — the `stacks/`+`accounts/` layout contract is unchanged. If `evaluateEtlCheckout` validates the remote URL, accept both names during the transition window.
 - **Test scenarios:**
-  - Help text and error messages name `brain-platform`.
-  - `evaluateEtlCheckout` accepts a `brain-platform` checkout; rejects an unrelated repo.
-- **Verification:** `npx vitest run` green in `apps/cli`; `thinkwork twin install --dry-run` against dev succeeds with a `brain-platform` checkout.
+  - Help text and error messages name `company-brain`.
+  - `evaluateEtlCheckout` accepts a `company-brain` checkout; rejects an unrelated repo.
+- **Verification:** `npx vitest run` green in `apps/cli`; `thinkwork twin install --dry-run` against dev succeeds with a `company-brain` checkout.
 
 ### U9. Freeze and archive `etl-platform/` in the old repo
 
@@ -375,7 +375,7 @@ Unit index:
 
 ### U13. Standalone console + Cognito app client
 
-- **Goal:** The console (Explorer, Cypher console, predicate/traversal tooling, ontology views) builds and deploys from `brain-platform`, authenticating against the customer's Cognito pool.
+- **Goal:** The console (Explorer, Cypher console, predicate/traversal tooling, ontology views) builds and deploys from `company-brain`, authenticating against the customer's Cognito pool.
 - **Requirements:** R13, R16; KTD-7.
 - **Dependencies:** U12.
 - **Files:** new repo — `console/` app (port of product `apps/web/src/components/settings/twin-explorer/` components: TwinExplorer, CypherConsole, PredicateBuilder, TwinEntityDetail, TwinNodeSheet, TwinTraversal), per-account deploy stack; product — `terraform/modules/foundation/cognito/main.tf` new app-client block + callback vars (Terraform-only per the Cognito runbook), `terraform/examples/greenfield/main.tf` wiring.
@@ -388,7 +388,7 @@ Unit index:
 
 ### U14. Runtime move, projector split, and conditional link-out
 
-- **Goal:** twin-query, the Neptune projector, and the MCP server deploy from `brain-platform`; the identity snapshot exporter survives product-side; the product app links out conditionally.
+- **Goal:** twin-query, the Neptune projector, and the MCP server deploy from `company-brain`; the identity snapshot exporter survives product-side; the product app links out conditionally.
 - **Requirements:** R14; KTD-7, KTD-8.
 - **Dependencies:** U12 (and U13 for the link-out target).
 - **Files:** new repo — moved handlers/modules (twin-query, mcp-twin + provision-adapter per U12's key decision, projector + bulk-rebuild, `lib/twin/` compiler/guard/client modules) with their Terraform (VPC attach, read-only Neptune IAM mirroring product `terraform/modules/app/lambda-api/handlers.tf:1384-1444`); product — `graph-projection.ts` split (snapshot exporter stays with its own invocation on identity mutations, replacing the projector side-effect at `:538`), conditional link-out in the product nav (renders on active twin MCP registration).
@@ -419,7 +419,7 @@ Unit index:
 | ---------------- | ------------------------------------------------------------------------------------------------- | ------------------- |
 | New-repo CI      | pytest + ruff + mypy (uv), `terraform validate` + checkov, dagster image build, config jsonschema | U1–U3, U7, U13, U14 |
 | Import fidelity  | full-tree diff vs old `main` + `git log --follow` blame spot-check                                | U1, U9              |
-| OIDC smoke       | `aws-oidc-smoke.yml` green per account from `brain-platform`                                      | U4                  |
+| OIDC smoke       | `aws-oidc-smoke.yml` green per account from `company-brain`                                      | U4                  |
 | Cutover evidence | whitelist-clean plan output + AE2 E2E ledger/query proof, recorded on THINK-338                   | U5, U6              |
 | Product suites   | `pnpm -r --if-present typecheck && pnpm lint && npx vitest run` in touched packages               | U8, U13–U15         |
 | Docs build       | Starlight build green in new-repo CI                                                              | U10, U11            |
@@ -434,7 +434,7 @@ Live AE1/AE2 evidence is operator-recorded per account; it is the cutover accept
 ## Definition of Done
 
 - R1–R16 implemented across the phases; AE1/AE2 proven at McPherson and TEI; AE3 dry-run performed; AE4 proven after the removal release.
-- `brain-platform` CI green; both accounts deploy exclusively from it; old-repo trust removed; `etl-platform/` frozen with the CI guard and pointer (U9), all open-PR dispositions closed.
+- `company-brain` CI green; both accounts deploy exclusively from it; old-repo trust removed; `etl-platform/` frozen with the CI guard and pointer (U9), all open-PR dispositions closed.
 - dbt fully out of the new repo with the jde_orders lane ported and parity-checked (U7).
 - Docs v1 live: all six R12 sections populated, playbook AE3-tested, freshness mechanism (CI build + PR checkbox) in place.
 - Phase D: seam validation recorded with its key-auth KTD amendment; console live at dev + both customers; platform-served runtime stable for a week before the removal release; product repo passes the AE4 grep gate.
