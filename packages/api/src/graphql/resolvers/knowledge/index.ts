@@ -7,6 +7,7 @@ import { deleteKnowledgeBase } from "./deleteKnowledgeBase.mutation.js";
 import { syncKnowledgeBase } from "./syncKnowledgeBase.mutation.js";
 import { retryKnowledgeBase } from "./retryKnowledgeBase.mutation.js";
 import { setAgentKnowledgeBases } from "./setAgentKnowledgeBases.mutation.js";
+import { connectKnowledgeBaseSource } from "./connectKnowledgeBaseSource.mutation.js";
 
 export const knowledgeQueries = {
   knowledgeBases,
@@ -20,4 +21,5 @@ export const knowledgeMutations = {
   syncKnowledgeBase,
   retryKnowledgeBase,
   setAgentKnowledgeBases,
+  connectKnowledgeBaseSource,
 };

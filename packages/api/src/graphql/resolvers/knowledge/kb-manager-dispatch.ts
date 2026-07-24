@@ -32,3 +32,45 @@ export async function dispatchKbManager(
     }),
   );
 }
+
+/**
+ * RequestResponse variant for operator-initiated connect operations
+ * (external S3 KB source KTD7): connect failures are IAM/preflight failures,
+ * which fire-and-forget turns into a permanently stuck status. The manager's
+ * thrown error is decoded from the FunctionError payload and re-thrown so
+ * the resolver surfaces the real reason (missing grant, cross-account, …).
+ */
+export async function dispatchKbManagerSync<T>(
+  action: "connect_source",
+  knowledgeBaseId: string,
+  extra: Record<string, unknown>,
+): Promise<T> {
+  const arn = await getKbManagerFnArn();
+  if (!arn) {
+    throw new Error("Knowledge base manager function is not configured");
+  }
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
+  const lambda = new LambdaClient({});
+  const resp = await lambda.send(
+    new InvokeCommand({
+      FunctionName: arn,
+      InvocationType: "RequestResponse",
+      Payload: JSON.stringify({ action, knowledgeBaseId, ...extra }),
+    }),
+  );
+  const raw = resp.Payload
+    ? Buffer.from(resp.Payload).toString("utf-8")
+    : "null";
+  if (resp.FunctionError) {
+    let message = raw;
+    try {
+      const parsed = JSON.parse(raw);
+      message = parsed.errorMessage ?? raw;
+    } catch {
+      // keep raw
+    }
+    throw new Error(message);
+  }
+  return JSON.parse(raw) as T;
+}

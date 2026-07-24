@@ -61,6 +61,33 @@ const KnowledgeBaseDoc = graphql(`
       errorMessage
       createdAt
       updatedAt
+      sources {
+        id
+        kind
+        bucket
+        prefix
+        filterPatterns
+        accessStatus
+        lastSyncAt
+        lastSyncStatus
+        documentCount
+        errorMessage
+        sentinelDocumentKey
+      }
+    }
+  }
+`);
+
+const ConnectKBSourceDoc = graphql(`
+  mutation CliConnectKBSource($input: ConnectKnowledgeBaseSourceInput!) {
+    connectKnowledgeBaseSource(input: $input) {
+      id
+      kind
+      bucket
+      prefix
+      filterPatterns
+      accessStatus
+      sentinelDocumentKey
     }
   }
 `);
@@ -246,6 +273,34 @@ async function runKbGet(id: string, opts: KbCliOptions): Promise<void> {
     ["Created", fmtIso(kb.createdAt)],
     ["Updated", fmtIso(kb.updatedAt)],
   ]);
+  const sources = kb.sources ?? [];
+  if (sources.length > 0) {
+    logStderr("");
+    logStderr("Sources:");
+    printTable(
+      sources.map((source) => ({
+        id: source.id,
+        kind: source.kind,
+        location:
+          source.kind === "managed-upload"
+            ? (source.prefix ?? "—")
+            : `s3://${source.bucket}/${source.prefix ?? ""}`,
+        access: source.accessStatus,
+        docs: source.documentCount != null ? String(source.documentCount) : "—",
+        lastSync: fmtIso(source.lastSyncAt),
+        syncStatus: source.lastSyncStatus ?? "—",
+      })),
+      [
+        { key: "id", header: "ID" },
+        { key: "kind", header: "KIND" },
+        { key: "location", header: "LOCATION" },
+        { key: "access", header: "ACCESS" },
+        { key: "docs", header: "DOCS" },
+        { key: "lastSync", header: "LAST SYNC" },
+        { key: "syncStatus", header: "SYNC" },
+      ],
+    );
+  }
 }
 
 interface CreateOptions extends KbCliOptions {
@@ -354,12 +409,47 @@ async function runKbDelete(id: string, opts: DeleteOptions): Promise<void> {
 
 interface SyncOptions extends KbCliOptions {
   wait?: boolean;
+  timeout?: string;
+}
+
+/** Poll the KB until lastSyncStatus is terminal; render per-source rows. */
+async function waitForSync(
+  ctx: Awaited<ReturnType<typeof resolveKbContext>>,
+  id: string,
+  timeoutSec: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutSec * 1000;
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 10_000));
+    const data = await gqlQuery(ctx.client, KnowledgeBaseDoc, { id });
+    const kb = data.knowledgeBase;
+    if (!kb) return false;
+    const status = kb.lastSyncStatus ?? "IN_PROGRESS";
+    if (status === "COMPLETE" || status === "FAILED") {
+      for (const source of kb.sources ?? []) {
+        logStderr(
+          `  source ${source.id} [${source.kind}] access=${source.accessStatus} sync=${source.lastSyncStatus ?? "—"} docs=${source.documentCount ?? "—"}${source.errorMessage ? ` error=${source.errorMessage}` : ""}`,
+        );
+      }
+      if (status === "FAILED" && kb.errorMessage) {
+        printError(kb.errorMessage);
+      }
+      return status === "COMPLETE";
+    }
+    if (Date.now() > deadline) {
+      printWarning(
+        `Timed out after ${timeoutSec}s with sync still ${status}. Check later with \`thinkwork kb get ${id}\`.`,
+      );
+      return false;
+    }
+    logStderr(`  sync ${status}…`);
+  }
 }
 
 async function runKbSync(id: string, opts: SyncOptions): Promise<void> {
   const ctx = await resolveKbContext(opts);
   const data = await gqlMutate(ctx.client, SyncKBDoc, { id });
-  if (isJsonMode()) {
+  if (isJsonMode() && !opts.wait) {
     printJson(data.syncKnowledgeBase);
     return;
   }
@@ -367,10 +457,96 @@ async function runKbSync(id: string, opts: SyncOptions): Promise<void> {
     `Sync enqueued for ${id} — status: ${data.syncKnowledgeBase.status}, sync: ${data.syncKnowledgeBase.lastSyncStatus ?? "pending"}`,
   );
   if (opts.wait) {
-    printWarning(
-      "--wait is not yet implemented; check status with `thinkwork kb get` until lastSyncStatus is terminal.",
+    const ok = await waitForSync(
+      ctx,
+      id,
+      Number.parseInt(opts.timeout ?? "1800", 10) || 1800,
     );
+    process.exit(ok ? 0 : 2);
   }
+}
+
+interface ConnectOptions extends KbCliOptions {
+  bucket?: string;
+  prefix?: string;
+  include: string[];
+  exclude: string[];
+  bucketOwner?: string;
+  sync?: boolean;
+  timeout?: string;
+}
+
+/**
+ * `thinkwork kb connect` — map an existing customer-owned S3 bucket/prefix
+ * as an s3-connect source (external S3 KB source U5). Per-step report:
+ * validate → as-role preflight + source create (server-side, synchronous) →
+ * initial sync → per-source status. Exit non-zero on any failed step with
+ * the server's missing-grant message verbatim.
+ */
+async function runKbConnect(kbId: string, opts: ConnectOptions): Promise<void> {
+  const ctx = await resolveKbContext(opts);
+  if (!opts.bucket || !opts.prefix) {
+    printError("--bucket and --prefix are required.");
+    process.exit(1);
+  }
+
+  logStderr(`[1/3] Connecting s3://${opts.bucket}/${opts.prefix} …`);
+  if (opts.exclude.length > 0) {
+    logStderr(`      exclusions: ${opts.exclude.join(", ")}`);
+  }
+  let source;
+  try {
+    const data = await gqlMutate(ctx.client, ConnectKBSourceDoc, {
+      input: {
+        knowledgeBaseId: kbId,
+        bucket: opts.bucket,
+        prefix: opts.prefix,
+        include: opts.include,
+        exclude: opts.exclude,
+        bucketOwnerAccountId: opts.bucketOwner ?? null,
+      },
+    });
+    source = data.connectKnowledgeBaseSource;
+  } catch (err) {
+    printError(
+      `Connect failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  }
+  printSuccess(
+    `Source ${source.id} connected (access verified as the KB service role).`,
+  );
+  if (source.sentinelDocumentKey) {
+    logStderr(`      canary sentinel: ${source.sentinelDocumentKey}`);
+  }
+
+  if (opts.sync === false) {
+    logStderr(
+      `[2/3] Skipped initial sync (--no-sync). Run: thinkwork kb sync ${kbId} --wait`,
+    );
+    if (isJsonMode()) printJson({ source, synced: false });
+    process.exit(0);
+  }
+
+  logStderr(`[2/3] Starting initial sync …`);
+  try {
+    await gqlMutate(ctx.client, SyncKBDoc, { id: kbId });
+  } catch (err) {
+    printError(
+      `Sync dispatch failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  }
+
+  logStderr(`[3/3] Waiting for ingestion + canary retrieval …`);
+  const ok = await waitForSync(
+    ctx,
+    kbId,
+    Number.parseInt(opts.timeout ?? "1800", 10) || 1800,
+  );
+  if (isJsonMode()) printJson({ source, synced: ok });
+  if (ok) printSuccess("Connect complete — source synced and retrievable.");
+  process.exit(ok ? 0 : 2);
 }
 
 interface AttachOptions extends KbCliOptions {
@@ -522,8 +698,56 @@ Examples:
     .description("Re-embed from S3. Idempotent; safe to re-run.")
     .option("-s, --stage <name>", "Deployment stage")
     .option("-t, --tenant <slug>", "Tenant slug")
-    .option("--wait", "Block until the sync finishes (not yet implemented)")
+    .option(
+      "--wait",
+      "Block until the sync finishes; exit 2 on failure/timeout",
+    )
+    .option("--timeout <sec>", "Max seconds to wait with --wait", "1800")
     .action(runKbSync);
+
+  const collect = (value: string, prev: string[]) => [...prev, value];
+  kb.command("connect <kbId>")
+    .description(
+      "Connect an existing S3 bucket/prefix as a read-in-place source. Access is verified AS the KB service role before anything is created.",
+    )
+    .option("-s, --stage <name>", "Deployment stage")
+    .option("-t, --tenant <slug>", "Tenant slug")
+    .option("--bucket <name>", "S3 bucket name (customer-owned)")
+    .option("--prefix <path>", "Key prefix to read, e.g. cx/files/")
+    .option(
+      "--exclude <glob>",
+      "Exclusion glob (repeatable). Exclusions win over inclusions.",
+      collect,
+      [] as string[],
+    )
+    .option(
+      "--include <glob>",
+      "Inclusion glob (repeatable). Empty = include everything under the prefix.",
+      collect,
+      [] as string[],
+    )
+    .option(
+      "--bucket-owner <accountId>",
+      "Bucket owner AWS account ID (V1: must be the stack account)",
+    )
+    .option("--no-sync", "Connect only; skip the initial sync")
+    .option(
+      "--timeout <sec>",
+      "Max seconds to wait for the initial sync",
+      "1800",
+    )
+    .addHelpText(
+      "after",
+      `
+Examples:
+  $ thinkwork kb connect kb-cx --bucket cx-to-s3 --prefix cx/files/ \\
+      --exclude "*Retired Procedures/*"
+
+The bucket must first be granted to the KB service role via the stack's
+terraform variable external_kb_source_arns (deploy before connecting).
+`,
+    )
+    .action(runKbConnect);
 
   kb.command("attach <kbId>")
     .description("Attach a knowledge base to an agent.")

@@ -1481,6 +1481,20 @@ def safe_get_bool(runner_secrets, payload, name, default=False):
     return default
 
 
+def safe_get_list(runner_secrets, payload, name, default=None):
+    """List analogue of safe_get_bool's precedence. Generated-root
+    variables typed list(string) reject bare strings, so string values
+    (comma-separated, common in Secrets Manager JSON) are split here and
+    the wiring point always emits a real list of non-empty strings."""
+    for source in (runner_secrets, payload):
+        value = source.get(name)
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        if isinstance(value, str) and value.strip():
+            return [part.strip() for part in value.split(",") if part.strip()]
+    return list(default or [])
+
+
 def current_terraform_state(stage):
     bucket = os.environ.get("THINKWORK_TERRAFORM_STATE_BUCKET")
     if not bucket:
@@ -4410,6 +4424,17 @@ def write_runner_files(payload, runner_secrets):
             "hindsightDatabaseName",
             default="",
         ),
+        # External S3 KB source R20: customer-owned buckets granted to the
+        # KB service role for s3-connect sources. Per-environment infra
+        # posture — durable home is the runner-secrets document; a payload
+        # list can override per-deploy. Accepts a JSON list or a
+        # comma-separated string (Secrets Manager values often arrive as
+        # strings).
+        "external_kb_source_arns": safe_get_list(
+            runner_secrets,
+            reviewed_payload,
+            "externalKbSourceArns",
+        ),
         # AgentCore Harness is an environment-level deployment choice. The
         # controller carries these reviewed, non-secret values forward so a
         # release update cannot silently remove the managed runtime plane.
@@ -4733,6 +4758,11 @@ variable "analyst_lambda_vpc_egress" {{
 variable "hindsight_database_name" {{
   type    = string
   default = ""
+}}
+
+variable "external_kb_source_arns" {{
+  type    = list(string)
+  default = []
 }}
 
 variable "lambda_max_memory_mb" {{
@@ -5203,6 +5233,7 @@ module "thinkwork" {{
   agentcore_pi_source_image_uri = var.agentcore_pi_source_image_uri
 
   enable_hindsight               = var.enable_hindsight
+  external_kb_source_arns        = var.external_kb_source_arns
   analyst_lambda_vpc_egress      = var.analyst_lambda_vpc_egress
   hindsight_database_name        = var.hindsight_database_name
   lambda_max_memory_mb             = var.lambda_max_memory_mb

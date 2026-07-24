@@ -107,6 +107,9 @@ export async function reconcileKnowledgeBaseDocuments(
     tenantId: string;
     knowledgeBaseId: string;
     dataSourceId: string;
+    /** knowledge_base_sources row the documents belong to (external S3 KB
+     * source U2) — stamped on inserted manifest rows. */
+    sourceId?: string | null;
     s3Objects: ManifestS3Object[];
     /** Full S3 key → Bedrock document status (ListKnowledgeBaseDocuments). */
     bedrockStatusByKey: Map<string, string>;
@@ -142,6 +145,7 @@ export async function reconcileKnowledgeBaseDocuments(
         tenant_id: args.tenantId,
         knowledge_base_id: args.knowledgeBaseId,
         data_source_id: args.dataSourceId,
+        source_id: args.sourceId ?? null,
         document_key: object.key,
         etag,
         s3_version_id: object.versionId ?? null,

@@ -575,6 +575,11 @@ build_handler "skill-runs-reconciler" \
 build_handler "analyst-connection-reconciler" \
   "$REPO_ROOT/packages/api/src/handlers/analyst-connection-reconciler.ts"
 
+# External S3 KB source U6 — hourly as-role access probe + daily sync
+# dispatch for s3-connect sources (paired with its handlers.tf entry).
+build_handler "kb-source-reconciler" \
+  "$REPO_ROOT/packages/api/src/handlers/kb-source-reconciler.ts"
+
 # Unit 8 — composable-skills webhook ingress pattern. Each integration
 # has a thin handler under handlers/webhooks/; the shared helper
 # (_shared.ts) owns HMAC + bootstrap + dispatch.

@@ -53,6 +53,7 @@ import {
   users,
   agentKnowledgeBases,
   knowledgeBases,
+  spaceKnowledgeBases,
   guardrails,
   spaces,
   tenantMcpServers,
@@ -126,6 +127,13 @@ export interface KnowledgeBaseConfig {
   name: string | null;
   description: string | null;
   searchConfig: unknown;
+}
+
+/** One KB the Pi `search_knowledge` tool may Retrieve against (U7). */
+export interface BoundKnowledgeBaseConfig {
+  awsKbId: string;
+  name: string | null;
+  description: string | null;
 }
 
 export interface McpConfig {
@@ -336,6 +344,15 @@ export interface AgentRuntimeConfig {
   webExtractConfig?: WebExtractConfig;
   sendEmailConfig?: SendEmailConfig;
   knowledgeBasesConfig: KnowledgeBaseConfig[] | undefined;
+  /**
+   * External S3 KB source U7 — KBs bound to this agent OR its Space,
+   * resolved by the direct binding queries only (never the tenant-wide
+   * catalog fallback: an agent with no bindings gets NONE, preserving
+   * AE3 isolation). Non-empty ⇒ the Pi container assembles the
+   * `search_knowledge` tool. Independent of the legacy
+   * ENABLE_LEGACY_AGENT_KNOWLEDGE_BASES field above.
+   */
+  boundKnowledgeBases: BoundKnowledgeBaseConfig[] | undefined;
   mcpConfigs: McpConfig[];
   piExtensions: AgentRuntimePiExtension[];
   agentProfilesConfig: AgentProfileRuntimeConfig[];
@@ -815,6 +832,46 @@ export async function resolveAgentRuntimeConfig(
           searchConfig: kb.search_config,
         }))
       : undefined;
+  // External S3 KB source U7: agent ∪ Space bound KBs for the Pi
+  // `search_knowledge` tool. Direct binding queries ONLY — the tenant-wide
+  // catalog fallback in listKnowledgeBases would grant the tool to every
+  // agent and break AE3 isolation.
+  const spaceKbRows = opts.spaceId
+    ? await db
+        .select({
+          aws_kb_id: knowledgeBases.aws_kb_id,
+          name: knowledgeBases.name,
+          description: knowledgeBases.description,
+        })
+        .from(spaceKnowledgeBases)
+        .innerJoin(
+          knowledgeBases,
+          eq(spaceKnowledgeBases.knowledge_base_id, knowledgeBases.id),
+        )
+        .where(
+          and(
+            eq(spaceKnowledgeBases.space_id, opts.spaceId),
+            eq(spaceKnowledgeBases.tenant_id, opts.tenantId),
+            eq(spaceKnowledgeBases.enabled, true),
+          ),
+        )
+    : [];
+  const boundById = new Map<
+    string,
+    { awsKbId: string; name: string | null; description: string | null }
+  >();
+  for (const kb of [...kbRows, ...spaceKbRows]) {
+    if (kb.aws_kb_id) {
+      boundById.set(kb.aws_kb_id, {
+        awsKbId: kb.aws_kb_id,
+        name: kb.name,
+        description: kb.description,
+      });
+    }
+  }
+  const boundKnowledgeBases =
+    boundById.size > 0 ? [...boundById.values()] : undefined;
+
   const runtimeType = normalizeAgentRuntimeType(agent.runtime);
 
   // --- Per-agent Browser Automation override ------------------------------
@@ -951,6 +1008,7 @@ export async function resolveAgentRuntimeConfig(
       : undefined,
     sendEmailConfig,
     knowledgeBasesConfig,
+    boundKnowledgeBases,
     mcpConfigs,
     piExtensions: [],
     agentProfilesConfig: [],
