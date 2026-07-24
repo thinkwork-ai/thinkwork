@@ -105,6 +105,12 @@ variable "enable_hindsight" {
   default     = true
 }
 
+variable "external_kb_source_arns" {
+  description = "Bucket ARNs of customer-owned S3 buckets connected as external Knowledge Base sources (s3-connect). Empty by default — inert until a bucket is connected."
+  type        = list(string)
+  default     = []
+}
+
 variable "enable_capability_broker" {
   description = "THINK-280 governed capability runtime. When true, brings up the capability broker (PoP session table, private REST API, dedicated execute-api VPCE with private DNS off, no-NAT interpreter SG) and enables capability-private interpreter provisioning. Default false — currently flipped on only for the dev dogfood via deploy.yml."
   type        = bool
@@ -911,6 +917,7 @@ module "thinkwork" {
   db_password                                 = var.db_password
   database_engine                             = var.database_engine
   enable_hindsight                            = var.enable_hindsight
+  external_kb_source_arns                     = var.external_kb_source_arns
   enable_capability_broker                    = var.enable_capability_broker
   enable_agentcore_multiplayer_proof          = var.enable_agentcore_multiplayer_proof
   agentcore_multiplayer_proof_tenant_slug     = var.agentcore_multiplayer_proof_tenant_slug

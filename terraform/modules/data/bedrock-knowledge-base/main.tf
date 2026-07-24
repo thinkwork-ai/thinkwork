@@ -25,6 +25,12 @@ variable "bucket_name" {
   type        = string
 }
 
+variable "external_kb_source_arns" {
+  description = "Bucket ARNs of customer-owned S3 buckets connected as external KB sources (s3-connect). Read-only grants are added for each ARN and its objects. Empty by default — inert until a bucket is connected."
+  type        = list(string)
+  default     = []
+}
+
 data "aws_iam_policy_document" "kb_assume" {
   statement {
     effect  = "Allow"
@@ -37,6 +43,26 @@ data "aws_iam_policy_document" "kb_assume" {
       test     = "StringEquals"
       variable = "aws:SourceAccount"
       values   = [var.account_id]
+    }
+  }
+
+  # The knowledge-base-manager Lambda assumes this role to run connect-time
+  # access preflights AS the role Bedrock will crawl with (external S3 KB
+  # source R8): a probe under operator/Lambda credentials would prove the
+  # wrong identity has access. Principal is the account root with a
+  # PrincipalArn condition (not a role-ARN principal) so this policy doesn't
+  # depend on the app-tier role existing first.
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${var.account_id}:root"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:PrincipalArn"
+      values   = ["arn:aws:iam::${var.account_id}:role/thinkwork-${var.stage}-api-lambda-role"]
     }
   }
 }
@@ -60,10 +86,15 @@ resource "aws_iam_role_policy" "kb_permissions" {
           "s3:GetObject",
           "s3:ListBucket",
         ]
-        Resource = [
-          "arn:aws:s3:::${var.bucket_name}",
-          "arn:aws:s3:::${var.bucket_name}/*",
-        ]
+        Resource = concat(
+          [
+            "arn:aws:s3:::${var.bucket_name}",
+            "arn:aws:s3:::${var.bucket_name}/*",
+          ],
+          # External s3-connect source buckets (read in place, never written).
+          var.external_kb_source_arns,
+          [for arn in var.external_kb_source_arns : "${arn}/*"],
+        )
       },
       {
         Sid    = "BedrockEmbedding"

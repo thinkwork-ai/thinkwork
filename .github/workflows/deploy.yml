@@ -1582,6 +1582,15 @@ jobs:
               -target=module.thinkwork.module.workflow_interpreter_stepfunctions.aws_iam_role_policy.execution_lambda_invoke
               -target=module.thinkwork.module.workflow_interpreter_stepfunctions.aws_iam_role_policy.execution_states
             )
+            # External S3 KB sources (R20): the KB service role's trust policy
+            # and S3 grants change when external_kb_source_arns changes or the
+            # STS-preflight trust statement lands. Without these targets a
+            # merged bucket grant can sit unapplied on no-tf deploys (same
+            # failure class as the grouped API IAM policies above).
+            TF_TARGET_ARGS+=(
+              -target=module.thinkwork.module.bedrock_kb.aws_iam_role.kb_service
+              -target=module.thinkwork.module.bedrock_kb.aws_iam_role_policy.kb_permissions
+            )
             # THINK-280: the capability-broker + agentcore-admin Lambdas live in
             # their OWN app modules, NOT the api `handler` for_each above — so a
             # code-only change to either (no terraform edited) was never applied

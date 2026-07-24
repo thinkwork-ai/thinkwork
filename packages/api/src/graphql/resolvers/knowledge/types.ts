@@ -8,7 +8,10 @@
  */
 
 import { asc, eq } from "drizzle-orm";
-import { knowledgeBaseDocuments } from "@thinkwork/database-pg/schema";
+import {
+  knowledgeBaseDocuments,
+  knowledgeBaseSources,
+} from "@thinkwork/database-pg/schema";
 import { db, snakeToCamel } from "../../utils.js";
 
 export const knowledgeBaseTypeResolvers = {
@@ -19,5 +22,20 @@ export const knowledgeBaseTypeResolvers = {
       .where(eq(knowledgeBaseDocuments.knowledge_base_id, parent.id))
       .orderBy(asc(knowledgeBaseDocuments.document_key));
     return rows.map(snakeToCamel);
+  },
+  sources: async (parent: { id: string }) => {
+    const rows = await db
+      .select()
+      .from(knowledgeBaseSources)
+      .where(eq(knowledgeBaseSources.knowledge_base_id, parent.id))
+      .orderBy(asc(knowledgeBaseSources.created_at));
+    return rows.map((row) => {
+      const camel = snakeToCamel(row) as Record<string, unknown>;
+      // AWSJSON fields must be JSON-encoded strings on the wire.
+      if (camel.filterPatterns != null) {
+        camel.filterPatterns = JSON.stringify(camel.filterPatterns);
+      }
+      return camel;
+    });
   },
 };

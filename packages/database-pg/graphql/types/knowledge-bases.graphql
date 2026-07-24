@@ -20,6 +20,35 @@ type KnowledgeBase {
   updatedAt: AWSDateTime!
   # THINK-193 U7: per-document edition manifest for operator visibility.
   documents: [KnowledgeBaseDocument!]!
+  # External S3 KB source U1: the KB's data sources (source #0 is the
+  # migrated managed-upload prefix).
+  sources: [KnowledgeBaseSource!]!
+}
+
+# One Bedrock data source of a KB. kind: managed-upload | s3-connect |
+# snapshot (reserved). accessStatus: pending | healthy | degraded |
+# access_revoked | failed. For s3-connect, bucket/prefix point at the
+# customer-owned location read in place; filterPatterns is
+# {include: [...], exclude: [...]} with Bedrock exclusion-wins semantics.
+type KnowledgeBaseSource {
+  id: ID!
+  tenantId: ID!
+  knowledgeBaseId: ID!
+  kind: String!
+  bucket: String
+  prefix: String
+  filterPatterns: AWSJSON
+  bucketOwnerAccountId: String
+  parsingStrategy: String!
+  awsDataSourceId: String
+  accessStatus: String!
+  lastSyncAt: AWSDateTime
+  lastSyncStatus: String
+  documentCount: Int
+  errorMessage: String
+  sentinelDocumentKey: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
 }
 
 # One row per (data source, document key): the document's stable manifest

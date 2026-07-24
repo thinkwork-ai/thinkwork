@@ -85,6 +85,7 @@ Conventions:
 - [inbox_item_links](#inbox-item-links)
 - [inbox_items](#inbox-items)
 - [knowledge_base_documents](#knowledge-base-documents)
+- [knowledge_base_sources](#knowledge-base-sources)
 - [knowledge_bases](#knowledge-bases)
 - [linked_task_events](#linked-task-events)
 - [linked_tasks](#linked-tasks)
@@ -1906,6 +1907,7 @@ Join hints:
 | tenant_id | uuid | not null |
 | knowledge_base_id | uuid | not null |
 | data_source_id | text | not null |
+| source_id | uuid |  |
 | document_key | text | not null |
 | s3_version_id | text |  |
 | etag | text |  |
@@ -1927,7 +1929,42 @@ Enum values:
 Join hints:
 
 - `knowledge_base_documents.knowledge_base_id` → `knowledge_bases.id`
+- `knowledge_base_documents.source_id` → `knowledge_base_sources.id`
 - `knowledge_base_documents.tenant_id` → `tenants.id`
+
+## knowledge_base_sources
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| knowledge_base_id | uuid | not null |
+| kind | text | not null |
+| bucket | text |  |
+| prefix | text |  |
+| filter_patterns | jsonb |  |
+| bucket_owner_account_id | text |  |
+| parsing_strategy | text | not null |
+| aws_data_source_id | text |  |
+| access_status | text | not null |
+| last_sync_at | timestamp with time zone |  |
+| last_sync_status | text |  |
+| document_count | integer |  |
+| error_message | text |  |
+| sentinel_document_key | text |  |
+| sentinel_phrase | text |  |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+
+Enum values:
+
+- `kind`: `managed-upload`, `s3-connect`, `snapshot`
+- `access_status`: `pending`, `healthy`, `degraded`, `access_revoked`, `failed`
+
+Join hints:
+
+- `knowledge_base_sources.knowledge_base_id` → `knowledge_bases.id`
+- `knowledge_base_sources.tenant_id` → `tenants.id`
 
 ## knowledge_bases
 

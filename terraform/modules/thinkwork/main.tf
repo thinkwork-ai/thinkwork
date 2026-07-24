@@ -963,10 +963,11 @@ module "database" {
 module "bedrock_kb" {
   source = "../data/bedrock-knowledge-base"
 
-  stage       = var.stage
-  account_id  = var.account_id
-  region      = var.region
-  bucket_name = module.s3.bucket_name
+  stage                   = var.stage
+  account_id              = var.account_id
+  region                  = var.region
+  bucket_name             = module.s3.bucket_name
+  external_kb_source_arns = var.external_kb_source_arns
 }
 
 ################################################################################

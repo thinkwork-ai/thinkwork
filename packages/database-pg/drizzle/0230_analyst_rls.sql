@@ -704,6 +704,15 @@ BEGIN
   ELSE
     missing := missing || 'knowledge_base_documents'::text;
   END IF;
+  IF to_regclass('public.knowledge_base_sources') IS NOT NULL THEN
+    ALTER TABLE public.knowledge_base_sources ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.knowledge_base_sources;
+    CREATE POLICY analyst_tenant_isolation ON public.knowledge_base_sources
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'knowledge_base_sources'::text;
+  END IF;
   IF to_regclass('public.knowledge_bases') IS NOT NULL THEN
     ALTER TABLE public.knowledge_bases ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS analyst_tenant_isolation ON public.knowledge_bases;
