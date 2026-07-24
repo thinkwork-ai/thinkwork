@@ -1,5 +1,5 @@
 /**
- * `thinkwork twin ...` — white-glove Digital Twin installation (THINK-334).
+ * `thinkwork twin ...` — white-glove Company Brain installation (THINK-334).
  *
  * Engineer-run: installs or adopts the twin's full infrastructure footprint
  * for a stage — etl-repo stacks (Neptune, Dagster projection, landing
@@ -19,13 +19,13 @@ export function registerTwinCommand(program: Command): void {
   const twin = program
     .command("twin")
     .description(
-      "Digital Twin white-glove installation (engineer-run). Idempotent.",
+      "Company Brain white-glove installation (engineer-run). Idempotent.",
     );
 
   twin
     .command("install")
     .description(
-      "Install or adopt the Digital Twin for a stage: etl-repo stacks, product Neptune wiring, MCP registration.",
+      "Install or adopt the Company Brain for a stage: etl-repo stacks, product Neptune wiring, MCP registration.",
     )
     .option("-s, --stage <name>", "Deployment stage")
     .option(

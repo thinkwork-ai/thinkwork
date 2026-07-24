@@ -1,5 +1,5 @@
 /**
- * Digital Twin MCP server (THINK-333 U3) — the single tool surface for
+ * Company Brain MCP server (THINK-333 U3) — the single tool surface for
  * cross-system twin queries, mounted by ThinkWork agents (connector grant)
  * and external MCP clients (Claude Desktop etc.) over streamable HTTP at
  * `/mcp/twin`.
@@ -47,7 +47,7 @@ const TOOLS = [
   {
     name: "twin_cypher",
     description:
-      "Run a read-only openCypher query against the company digital twin " +
+      "Run a read-only openCypher query against the company brain " +
       "(cross-system entity graph). The server scopes every query to your " +
       "tenant and clamps rows (default LIMIT 100, max 500). Rejected " +
       "queries return the rule that fired so you can revise. Use " +
@@ -231,9 +231,8 @@ async function resolveTenantFromClaims(
   if (claimedTenantId) return claimedTenantId;
   const sub = stringClaim(claims.sub);
   if (!sub) return null;
-  const { resolveCallerFromAuth } = await import(
-    "../graphql/resolvers/core/resolve-auth-user.js"
-  );
+  const { resolveCallerFromAuth } =
+    await import("../graphql/resolvers/core/resolve-auth-user.js");
   const resolved = await resolveCallerFromAuth({
     authType: "cognito",
     principalId: sub,
@@ -275,10 +274,16 @@ async function handleToolCall(
     case "twin_cypher": {
       const query = stringArg(args.query);
       if (!query) return jsonRpcError(request.id, -32602, "query is required");
-      const parameters = isRecord(args.parameters) ? args.parameters : undefined;
+      const parameters = isRecord(args.parameters)
+        ? args.parameters
+        : undefined;
       const result = await executeTwinQuery({
         tenantId: auth.tenantId,
-        request: { kind: "cypher", query, ...(parameters ? { parameters } : {}) },
+        request: {
+          kind: "cypher",
+          query,
+          ...(parameters ? { parameters } : {}),
+        },
       });
       if (!result.ok) {
         if (result.reason === "rejected") {
@@ -381,7 +386,7 @@ async function handleToolCall(
 }
 
 const TWIN_UNAVAILABLE_TEXT =
-  "The digital twin is currently unavailable. Try again later.";
+  "The company brain is currently unavailable. Try again later.";
 
 // ── JSON-RPC / HTTP helpers (mirrors mcp-user-memory.ts) ────────────────
 

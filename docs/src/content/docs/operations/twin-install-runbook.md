@@ -1,9 +1,9 @@
 ---
-title: Digital Twin install runbook
-description: "How an engineer installs or adopts the Digital Twin for a stage with `thinkwork twin install`: prereqs, flags, per-model deploy channels, and the report contract."
+title: Company Brain install runbook
+description: "How an engineer installs or adopts the Company Brain for a stage with `thinkwork twin install`: prereqs, flags, per-model deploy channels, and the report contract."
 ---
 
-The Digital Twin is installed white-glove: an engineer runs one idempotent
+The Company Brain (formerly Digital Twin) is installed white-glove: an engineer runs one idempotent
 command against a target stage. There is no plugin catalog entry, install
 button, or operator self-serve path — MCP registration is the only
 enablement switch.

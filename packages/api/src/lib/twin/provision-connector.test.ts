@@ -1,5 +1,5 @@
 /**
- * Digital Twin connector provisioning tests (THINK-333 U4).
+ * Company Brain connector provisioning tests (THINK-333 U4).
  * Chain-mock Drizzle db — same approach as analyst provision-connector.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -65,7 +65,7 @@ vi.mock("../../graphql/utils.js", () => ({ db: mockDb }));
 vi.mock("../capabilities/folder-write.js", () => ({
   connectionDefinitionFromRegistryRow: (row: { slug: string | null }) => ({
     slug: row.slug ?? "digital-twin",
-    definition: "# Digital Twin connector\n",
+    definition: "# Company Brain connector\n",
   }),
   putCapabilityFolder: vi.fn(async (input: Record<string, unknown>) => {
     folderCalls.push(input);
@@ -176,7 +176,7 @@ describe("provisionTwinConnector", () => {
       {
         id: "server-1",
         slug: "digital-twin",
-        name: "Digital Twin",
+        name: "Company Brain",
         url: INPUT.twinMcpUrl,
         transport: "streamable-http",
         tools: null,
@@ -231,7 +231,7 @@ describe("provisionTwinConnector", () => {
       {
         id: "server-1",
         slug: "digital-twin",
-        name: "Digital Twin",
+        name: "Company Brain",
         url: INPUT.twinMcpUrl,
         transport: "streamable-http",
         tools: null,

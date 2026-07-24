@@ -1,5 +1,5 @@
 /**
- * Traversal state model for the Digital Twin explorer (twin-traversal
+ * Traversal state model for the Company Brain explorer (twin-traversal
  * plan U4, KTD-4).
  *
  * Pure data + functions — no React, no fetching. The explorer owns one

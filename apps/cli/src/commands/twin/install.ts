@@ -220,7 +220,7 @@ export async function runTwinInstall(opts: TwinInstallOptions): Promise<void> {
   record(report, "MCP registration", mcp.state, mcp.detail);
 
   if (reportExitCode(report) === 0) {
-    printSuccess(`Digital Twin install complete for ${stage}/${tenantSlug}.`);
+    printSuccess(`Company Brain install complete for ${stage}/${tenantSlug}.`);
   }
   finish();
 }
