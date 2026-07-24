@@ -530,6 +530,11 @@ BEGIN
   ELSE
     missing := missing || 'knowledge_base_documents'::text;
   END IF;
+  IF to_regclass('public.knowledge_base_sources') IS NOT NULL THEN
+    GRANT SELECT ON public.knowledge_base_sources TO analyst_reader;
+  ELSE
+    missing := missing || 'knowledge_base_sources'::text;
+  END IF;
   IF to_regclass('public.knowledge_bases') IS NOT NULL THEN
     GRANT SELECT ON public.knowledge_bases TO analyst_reader;
   ELSE
