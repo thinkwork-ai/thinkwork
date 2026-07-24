@@ -542,10 +542,71 @@ async function syncS3ConnectSource(
     ListKnowledgeBaseDocumentsCommand,
   } = await import("@aws-sdk/client-bedrock-agent");
 
+  // The account allows at most 10 concurrent in-flight
+  // Ingest/DeleteKnowledgeBaseDocuments document operations. Drain each
+  // batch (wait for its keys to leave the in-flight states) before
+  // submitting the next, and retry throttle rejections with backoff —
+  // back-to-back submissions on a 200+ doc corpus otherwise fail with
+  // "sum of concurrent … requests can't exceed (10)" (live McPherson
+  // finding).
+  const IN_FLIGHT_STATUSES = new Set([
+    "STARTING",
+    "PENDING",
+    "IN_PROGRESS",
+    "DELETING",
+    "DELETE_IN_PROGRESS",
+  ]);
+  const listStatuses = async (): Promise<Map<string, string>> => {
+    const statuses = new Map<string, string>();
+    let token: string | undefined;
+    do {
+      const page = await client.send(
+        new ListKnowledgeBaseDocumentsCommand({
+          knowledgeBaseId: awsKbId,
+          dataSourceId,
+          nextToken: token,
+        }),
+      );
+      for (const detail of page.documentDetails ?? []) {
+        const key = detail.identifier?.custom?.id;
+        if (key && detail.status) statuses.set(key, detail.status);
+      }
+      token = page.nextToken;
+    } while (token);
+    return statuses;
+  };
+  const drainInFlight = async (keys: string[]): Promise<void> => {
+    const deadline = Date.now() + 5 * 60_000;
+    for (;;) {
+      const statuses = await listStatuses();
+      const inFlight = keys.filter((key) =>
+        IN_FLIGHT_STATUSES.has(statuses.get(key) ?? ""),
+      );
+      if (inFlight.length === 0 || Date.now() > deadline) return;
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+    }
+  };
+  const sendWithThrottleRetry = async (command: any): Promise<void> => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await client.send(command);
+        return;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const throttled =
+          message.includes("can’t exceed") ||
+          message.includes("can't exceed") ||
+          (err as { name?: string })?.name === "ThrottlingException";
+        if (!throttled || attempt >= 6) throw err;
+        await new Promise((resolve) => setTimeout(resolve, 15_000));
+      }
+    }
+  };
+
   // 3. Ingest new/changed documents in batches (content stays in the
   // customer bucket — S3_LOCATION source).
   for (const group of batch(plan.toIngest)) {
-    await client.send(
+    await sendWithThrottleRetry(
       new IngestKnowledgeBaseDocumentsCommand({
         knowledgeBaseId: awsKbId,
         dataSourceId,
@@ -566,12 +627,13 @@ async function syncS3ConnectSource(
         })),
       }),
     );
+    await drainInFlight(group.map((object) => object.key));
   }
 
   // 4. Delete removed/now-excluded documents from the index (R12/AE1 —
   // exclusion takes effect on the sync after the move, no crawler involved).
   for (const group of batch(plan.toDelete)) {
-    await client.send(
+    await sendWithThrottleRetry(
       new DeleteKnowledgeBaseDocumentsCommand({
         knowledgeBaseId: awsKbId,
         dataSourceId,
@@ -581,6 +643,7 @@ async function syncS3ConnectSource(
         })),
       }),
     );
+    await drainInFlight(group);
   }
 
   // 5. Wait for terminal per-document statuses (bounded ~5 minutes).
@@ -814,9 +877,8 @@ async function preflightAsKbRole(
     );
   }
 
-  const { ListObjectsV2Command, GetObjectCommand } = await import(
-    "@aws-sdk/client-s3"
-  );
+  const { ListObjectsV2Command, GetObjectCommand } =
+    await import("@aws-sdk/client-s3");
 
   let keys: string[] = [];
   try {
