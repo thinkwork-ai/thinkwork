@@ -1081,6 +1081,24 @@ variable "cli_logout_urls" {
   ]
 }
 
+variable "console_client_enabled" {
+  description = "Create the optional Company Brain console Cognito app client (U13). Default false = ship-inert; nothing is created and console_client_id is null."
+  type        = bool
+  default     = false
+}
+
+variable "console_callback_urls" {
+  description = "OAuth callback URLs for the console client — must include the console hosting URL BEFORE first login (redirect_mismatch otherwise). Required non-empty when console_client_enabled."
+  type        = list(string)
+  default     = []
+}
+
+variable "console_logout_urls" {
+  description = "OAuth logout URLs for the console client"
+  type        = list(string)
+  default     = []
+}
+
 variable "mobile_callback_urls" {
   type    = list(string)
   default = ["exp://localhost:8081", "thinkwork://", "thinkwork://auth/callback"]

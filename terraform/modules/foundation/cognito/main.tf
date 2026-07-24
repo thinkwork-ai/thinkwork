@@ -696,6 +696,76 @@ resource "aws_cognito_user_pool_client" "mobile" {
 }
 
 ################################################################################
+# App Client — Company Brain console (U13, optional; ship-inert default off)
+#
+# Same OAuth flows/scopes/providers as the web client family. Gated on
+# console_client_enabled so merging this creates nothing; enablement requires
+# the console's callback URLs to be registered here FIRST (redirect_mismatch
+# otherwise).
+################################################################################
+
+resource "aws_cognito_user_pool_client" "console" {
+  count        = local.create && var.console_client_enabled ? 1 : 0
+  name         = "ThinkworkConsole"
+  user_pool_id = aws_cognito_user_pool.main[0].id
+
+  generate_secret                      = false
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_scopes                 = ["openid", "email", "profile"]
+
+  explicit_auth_flows = [
+    "ALLOW_USER_PASSWORD_AUTH",
+    "ALLOW_USER_SRP_AUTH",
+    "ALLOW_REFRESH_TOKEN_AUTH",
+  ]
+
+  supported_identity_providers = local.identity_providers
+
+  callback_urls = distinct(var.console_callback_urls)
+  logout_urls   = distinct(var.console_logout_urls)
+
+  enable_token_revocation       = true
+  prevent_user_existence_errors = "ENABLED"
+  access_token_validity         = 1
+  id_token_validity             = 1
+  refresh_token_validity        = 30
+
+  token_validity_units {
+    access_token  = "hours"
+    id_token      = "hours"
+    refresh_token = "days"
+  }
+
+  read_attributes = [
+    "email",
+    "email_verified",
+    "name",
+    "custom:tenant_id",
+  ]
+
+  write_attributes = [
+    "email",
+    "name",
+    "custom:tenant_id",
+  ]
+
+  lifecycle {
+    precondition {
+      condition     = length(var.console_callback_urls) > 0
+      error_message = "console_callback_urls must be non-empty when console_client_enabled — register the console URL before first login or Cognito fails with redirect_mismatch."
+    }
+  }
+
+  depends_on = [
+    aws_cognito_identity_provider.google,
+    aws_cognito_identity_provider.microsoft_organizations,
+    aws_cognito_identity_provider.oidc,
+    aws_cognito_identity_provider.saml,
+  ]
+}
+
+################################################################################
 # Identity Pool
 ################################################################################
 
@@ -718,6 +788,15 @@ resource "aws_cognito_identity_pool" "main" {
 
   dynamic "cognito_identity_providers" {
     for_each = aws_cognito_user_pool_client.auth_route
+    content {
+      client_id               = cognito_identity_providers.value.id
+      provider_name           = "cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main[0].id}"
+      server_side_token_check = true
+    }
+  }
+
+  dynamic "cognito_identity_providers" {
+    for_each = aws_cognito_user_pool_client.console
     content {
       client_id               = cognito_identity_providers.value.id
       provider_name           = "cognito-idp.${var.region}.amazonaws.com/${aws_cognito_user_pool.main[0].id}"

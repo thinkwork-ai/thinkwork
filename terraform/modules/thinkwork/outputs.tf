@@ -19,6 +19,10 @@ output "mobile_client_id" {
   value = module.cognito.mobile_client_id
 }
 
+output "console_client_id" {
+  value = module.cognito.console_client_id
+}
+
 output "identity_pool_id" {
   value = module.cognito.identity_pool_id
 }
