@@ -384,6 +384,12 @@ variable "database_engine" {
   default     = "aurora-serverless"
 }
 
+variable "external_kb_source_arns" {
+  description = "Bucket ARNs of customer-owned S3 buckets connected as external Knowledge Base sources (s3-connect). Grants the KB service role read on each ARN and its objects. Empty by default — inert until a bucket is connected (external S3 KB source R20)."
+  type        = list(string)
+  default     = []
+}
+
 variable "enable_hindsight" {
   description = "Enable Hindsight long-term memory. Full ThinkWork installs default this on because Hindsight is the canonical user and Space memory provider; set false only for explicit low-cost/development AgentCore-only deployments."
   type        = bool

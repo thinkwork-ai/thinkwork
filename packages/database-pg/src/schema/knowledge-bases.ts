@@ -134,6 +134,105 @@ export const spaceKnowledgeBases = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// knowledge_base_sources — N data sources per KB (external-s3-kb-source U1)
+// ---------------------------------------------------------------------------
+
+/**
+ * 'managed-upload' is the platform-managed upload prefix (the pre-sources
+ * implied data source, backfilled as source #0); 's3-connect' points Bedrock
+ * at an existing customer-owned bucket/prefix read in place; 'snapshot' is a
+ * reserved enum value only — no import path exists.
+ */
+export const KB_SOURCE_KINDS = [
+  "managed-upload",
+  "s3-connect",
+  "snapshot",
+] as const;
+
+export type KbSourceKind = (typeof KB_SOURCE_KINDS)[number];
+
+/**
+ * Access/sync lifecycle: 'pending' until preflight + initial sync + canary
+ * pass, 'degraded' when ingestion succeeded but the canary retrieval missed,
+ * 'access_revoked' when the reconciler's as-role probe fails (fail closed —
+ * scheduled syncs skip the source until access is restored).
+ */
+export const KB_SOURCE_ACCESS_STATUSES = [
+  "pending",
+  "healthy",
+  "degraded",
+  "access_revoked",
+  "failed",
+] as const;
+
+export type KbSourceAccessStatus = (typeof KB_SOURCE_ACCESS_STATUSES)[number];
+
+/**
+ * One row per Bedrock data source of a KB. `bucket` is NULL for
+ * 'managed-upload' (resolved to the platform workspace bucket at runtime);
+ * 's3-connect' rows carry the external bucket name. `filter_patterns` holds
+ * `{include: string[], exclude: string[]}` glob arrays (Bedrock
+ * PatternObjectFilter semantics — exclusion wins). The sentinel columns back
+ * the canary retrieval: a distinctive phrase sampled from one document at
+ * connect time; post-sync health requires retrieving it.
+ */
+export const knowledgeBaseSources = pgTable(
+  "knowledge_base_sources",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tenant_id: uuid("tenant_id")
+      .references(() => tenants.id)
+      .notNull(),
+    knowledge_base_id: uuid("knowledge_base_id")
+      .references(() => knowledgeBases.id, { onDelete: "cascade" })
+      .notNull(),
+    kind: text("kind").notNull(),
+    bucket: text("bucket"),
+    prefix: text("prefix"),
+    filter_patterns: jsonb("filter_patterns"),
+    bucket_owner_account_id: text("bucket_owner_account_id"),
+    parsing_strategy: text("parsing_strategy").notNull().default("DEFAULT"),
+    aws_data_source_id: text("aws_data_source_id"),
+    access_status: text("access_status").notNull().default("pending"),
+    last_sync_at: timestamp("last_sync_at", { withTimezone: true }),
+    last_sync_status: text("last_sync_status"),
+    document_count: integer("document_count").default(0),
+    error_message: text("error_message"),
+    sentinel_document_key: text("sentinel_document_key"),
+    sentinel_phrase: text("sentinel_phrase"),
+    created_at: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updated_at: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (table) => [
+    index("idx_kb_sources_kb").on(table.knowledge_base_id),
+    index("idx_kb_sources_tenant").on(table.tenant_id),
+    // One managed-upload source per KB (the migrated source #0).
+    uniqueIndex("uq_kb_sources_managed_upload")
+      .on(table.knowledge_base_id)
+      .where(sql`${table.kind} = 'managed-upload'`),
+    check(
+      "knowledge_base_sources_kind_check",
+      sql`${table.kind} IN ('managed-upload', 's3-connect', 'snapshot')`,
+    ),
+    check(
+      "knowledge_base_sources_access_status_check",
+      sql`${table.access_status} IN ('pending', 'healthy', 'degraded', 'access_revoked', 'failed')`,
+    ),
+    // s3-connect rows must know where they point.
+    check(
+      "knowledge_base_sources_s3_connect_location_check",
+      sql`${table.kind} <> 's3-connect' OR (${table.bucket} IS NOT NULL AND ${table.prefix} IS NOT NULL)`,
+    ),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // knowledge_base_documents — per-document edition manifest (THINK-193 U7)
 // ---------------------------------------------------------------------------
 
@@ -198,6 +297,11 @@ export const knowledgeBaseDocuments = pgTable(
     /** Bedrock data source id the document was ingested through. A rechunk
      * recreates the data source, so rows are partitioned by it. */
     data_source_id: text("data_source_id").notNull(),
+    /** Source row the document belongs to (external-s3-kb-source U1). The
+     * text column above is the AWS identity; this is the row reference. */
+    source_id: uuid("source_id").references(() => knowledgeBaseSources.id, {
+      onDelete: "set null",
+    }),
     /** Full S3 object key (tenants/<slug>/knowledge-bases/<kb>/documents/…). */
     document_key: text("document_key").notNull(),
     s3_version_id: text("s3_version_id"),
@@ -263,6 +367,22 @@ export const knowledgeBasesRelations = relations(
     agentKnowledgeBases: many(agentKnowledgeBases),
     spaceKnowledgeBases: many(spaceKnowledgeBases),
     documents: many(knowledgeBaseDocuments),
+    sources: many(knowledgeBaseSources),
+  }),
+);
+
+export const knowledgeBaseSourcesRelations = relations(
+  knowledgeBaseSources,
+  ({ one, many }) => ({
+    tenant: one(tenants, {
+      fields: [knowledgeBaseSources.tenant_id],
+      references: [tenants.id],
+    }),
+    knowledgeBase: one(knowledgeBases, {
+      fields: [knowledgeBaseSources.knowledge_base_id],
+      references: [knowledgeBases.id],
+    }),
+    documents: many(knowledgeBaseDocuments),
   }),
 );
 
@@ -276,6 +396,10 @@ export const knowledgeBaseDocumentsRelations = relations(
     knowledgeBase: one(knowledgeBases, {
       fields: [knowledgeBaseDocuments.knowledge_base_id],
       references: [knowledgeBases.id],
+    }),
+    source: one(knowledgeBaseSources, {
+      fields: [knowledgeBaseDocuments.source_id],
+      references: [knowledgeBaseSources.id],
     }),
   }),
 );

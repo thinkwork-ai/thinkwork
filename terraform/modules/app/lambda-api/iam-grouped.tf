@@ -886,6 +886,15 @@ locals {
       Action   = ["iam:PassRole"]
       Resource = var.kb_service_role_arn != "" ? var.kb_service_role_arn : "*"
     },
+    # External S3 KB source R8: connect-time access preflight runs AS the KB
+    # service role (STS assume, then ListBucket/GetObject) so the probe
+    # proves the identity Bedrock will actually crawl with. The KB role's
+    # trust policy names this Lambda role via aws:PrincipalArn.
+    {
+      Effect   = "Allow"
+      Action   = ["sts:AssumeRole"]
+      Resource = var.kb_service_role_arn != "" ? var.kb_service_role_arn : "*"
+    },
     # (was inline policy "agentcore-memory-rw")
     # AgentCore Memory read access for the GraphQL memory resolvers.
     # memoryRecords / memorySearch call ListMemoryRecordsCommand to fetch

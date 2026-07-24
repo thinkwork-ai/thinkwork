@@ -3433,6 +3433,7 @@ export type KnowledgeBase = {
   lastSyncStatus?: Maybe<Scalars["String"]["output"]>;
   name: Scalars["String"]["output"];
   slug: Scalars["String"]["output"];
+  sources: Array<KnowledgeBaseSource>;
   status: Scalars["String"]["output"];
   tenantId: Scalars["ID"]["output"];
   updatedAt: Scalars["AWSDateTime"]["output"];
@@ -3468,6 +3469,28 @@ export type KnowledgeBaseRetrievalResult = {
   __typename?: "KnowledgeBaseRetrievalResult";
   hits: Array<KnowledgeBaseRetrievalHit>;
   status: Scalars["String"]["output"];
+};
+
+export type KnowledgeBaseSource = {
+  __typename?: "KnowledgeBaseSource";
+  accessStatus: Scalars["String"]["output"];
+  awsDataSourceId?: Maybe<Scalars["String"]["output"]>;
+  bucket?: Maybe<Scalars["String"]["output"]>;
+  bucketOwnerAccountId?: Maybe<Scalars["String"]["output"]>;
+  createdAt: Scalars["AWSDateTime"]["output"];
+  documentCount?: Maybe<Scalars["Int"]["output"]>;
+  errorMessage?: Maybe<Scalars["String"]["output"]>;
+  filterPatterns?: Maybe<Scalars["AWSJSON"]["output"]>;
+  id: Scalars["ID"]["output"];
+  kind: Scalars["String"]["output"];
+  knowledgeBaseId: Scalars["ID"]["output"];
+  lastSyncAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
+  lastSyncStatus?: Maybe<Scalars["String"]["output"]>;
+  parsingStrategy: Scalars["String"]["output"];
+  prefix?: Maybe<Scalars["String"]["output"]>;
+  sentinelDocumentKey?: Maybe<Scalars["String"]["output"]>;
+  tenantId: Scalars["ID"]["output"];
+  updatedAt: Scalars["AWSDateTime"]["output"];
 };
 
 export enum KnowledgeGraphArtifactManifestKind {
