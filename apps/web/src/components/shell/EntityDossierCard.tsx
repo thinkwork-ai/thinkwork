@@ -1,5 +1,5 @@
 import { CommandGroup, CommandItem, CommandShortcut } from "@thinkwork/ui";
-import { BookOpen, Brain, FileText, MessageSquare } from "lucide-react";
+import { Brain, FileText, MessageSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { EntityDossierResult, SearchEntityHit } from "@/gql/graphql";
 import type { PaletteThreadTarget } from "./SearchPalette";
@@ -18,15 +18,12 @@ const SECTION_LIMIT = 4;
 export function EntityDossierCard({
   result,
   fetching,
-  onOpenEntity,
   onOpenThread,
   onOpenArtifact,
   onSelectEntity,
 }: {
   result: EntityDossierResult | null;
   fetching: boolean;
-  /** Opens the Twin Explorer entity detail (THINK-327 U7). */
-  onOpenEntity: (target: { entityType: string; canonicalId: string }) => void;
   onOpenThread: (target: PaletteThreadTarget) => void;
   onOpenArtifact: (artifactId: string) => void;
   onSelectEntity: (entityId: string) => void;
@@ -43,12 +40,8 @@ export function EntityDossierCard({
     const memories = match.memories.slice(0, SECTION_LIMIT);
     const threads = match.threads.slice(0, SECTION_LIMIT);
     const artifacts = match.artifacts.slice(0, SECTION_LIMIT);
-    const canOpenEntity = Boolean(match.canonicalEntityId && match.entityType);
     const hasDetails =
-      canOpenEntity ||
-      memories.length > 0 ||
-      threads.length > 0 ||
-      artifacts.length > 0;
+      memories.length > 0 || threads.length > 0 || artifacts.length > 0;
 
     return (
       <CommandGroup
@@ -63,31 +56,6 @@ export function EntityDossierCard({
           </span>
         }
       >
-        {canOpenEntity ? (
-          <CommandItem
-            value={`dossier-entity ${match.entityId} ${match.canonicalEntityId}`}
-            className="h-10"
-            onSelect={() =>
-              onOpenEntity({
-                entityType: match.entityType!,
-                canonicalId: match.canonicalEntityId!,
-              })
-            }
-          >
-            <BookOpen className="size-4 shrink-0 text-primary" />
-            <span className="min-w-0 flex-1 truncate font-medium">
-              Open {match.label}
-            </span>
-            {/* Dual-read gate verdict: the Explorer detail serves the
-                living projected sections for this entity (THINK-327 U7). */}
-            {match.twinProjected ? (
-              <span className="shrink-0 rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-600 dark:text-emerald-400">
-                Live
-              </span>
-            ) : null}
-          </CommandItem>
-        ) : null}
-
         {memories.map((memory) => {
           const threadId = memory.threadId;
           return (

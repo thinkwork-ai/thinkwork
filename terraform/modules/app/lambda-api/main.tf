@@ -26,10 +26,6 @@ locals {
   # allowlist can admit — a non-VPC Lambda egresses from the shared AWS pool
   # and can never satisfy such an allowlist.
   analyst_vpc_enabled = length(var.analyst_egress_subnet_ids) > 0 && length(var.analyst_egress_security_group_ids) > 0
-  # Company Brain U5: the identity-graph-projector attaches to the VPC only
-  # when both Neptune network inputs are present (disjoint from the two
-  # blocks above — a function takes at most one vpc_config).
-  neptune_vpc_enabled = length(var.neptune_subnet_ids) > 0 && length(var.neptune_security_group_ids) > 0
   analyst_vpc_handlers = toset([
     "graphql-http",
     "analyst-query-broker",

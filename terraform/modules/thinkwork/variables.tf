@@ -1519,9 +1519,11 @@ variable "compliance_anchor_retention_days" {
 }
 
 # ---------------------------------------------------------------------------
-# Company Brain twin (plan 2026-07-21-001): Neptune wiring for the
-# identity-graph-projector. Values come from the etl-platform neptune stack's
-# outputs; all default-empty so stages without the twin deploy unchanged.
+# Company Brain Neptune wiring. THINK-339 U15: the twin Lambdas retired to
+# the platform service — the product keeps neptune_endpoint (wiki-compile
+# soft-layer writer) and neptune_cluster_resource_id (shared-role grant).
+# The remaining neptune_* variables stay DECLARED for deploy.yml/tfvars
+# compatibility but feed nothing.
 # ---------------------------------------------------------------------------
 
 variable "neptune_endpoint" {
@@ -1545,19 +1547,19 @@ variable "neptune_cluster_resource_id" {
 variable "neptune_client_security_group_id" {
   type        = string
   default     = ""
-  description = "neptune-client SG id (etl-platform neptune stack output) attached to the identity-graph-projector"
+  description = "DEPRECATED (THINK-339 U15): unused — the twin Lambdas retired to the platform service"
 }
 
 variable "neptune_load_bucket" {
   type        = string
   default     = ""
-  description = "Neptune bulk-load staging bucket name (etl-platform neptune stack; empty = bulk-rebuild disabled)"
+  description = "DEPRECATED (THINK-339 U15): unused — the bulk-rebuild lane retired to the platform service"
 }
 
 variable "neptune_loader_role_arn" {
   type        = string
   default     = ""
-  description = "IAM role ARN the Neptune cluster assumes to read the load bucket (etl-platform neptune stack; empty = bulk-rebuild disabled)"
+  description = "DEPRECATED (THINK-339 U15): unused — the bulk-rebuild lane retired to the platform service"
 }
 
 

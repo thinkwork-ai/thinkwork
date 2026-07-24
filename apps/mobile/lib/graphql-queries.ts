@@ -1845,19 +1845,3 @@ export const CreateRecipeMutation = gql`
     }
   }
 `;
-
-/**
- * Projected twin page (Company Brain U9 / KTD-8). AWSJSON payload:
- * `{ projected: true, sections: [...] }` with per-section
- * OK/STALE/TIMEOUT/ERROR states, or `{ projected: false, reason }` — the
- * reader then keeps the compiled render (AE8).
- */
-export const TwinEntityPageQuery = graphql(`
-  query TwinEntityPage($tenantId: ID, $entityType: String!, $canonicalId: ID!) {
-    twinEntityPage(
-      tenantId: $tenantId
-      entityType: $entityType
-      canonicalId: $canonicalId
-    )
-  }
-`);

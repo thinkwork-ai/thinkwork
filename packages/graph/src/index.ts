@@ -31,38 +31,6 @@ export type {
 } from "./KnowledgeGraph.js";
 
 export {
-  OntologyGraph,
-  buildOntologyGraphData,
-  mergeOntologyGraphData,
-  matchesOntologySearch,
-  ontologyNodeMatchesFilters,
-  ONTOLOGY_GHOST_CANDIDATE_CAP,
-} from "./OntologyGraph.js";
-export type {
-  OntologyGraphData,
-  OntologyGraphFilters,
-  OntologyGraphHandle,
-  OntologyGraphLink,
-  OntologyGraphNode,
-  OntologyGraphNodeKind,
-} from "./OntologyGraph.js";
-
-export {
-  TwinGraph,
-  buildTwinGraphData,
-  mergeTwinGraphData,
-  mapNeptuneNode,
-  twinCanonicalIdFromNodeId,
-  twinTypeColor,
-} from "./TwinGraph.js";
-export type {
-  TwinGraphData,
-  TwinGraphHandle,
-  TwinGraphLink,
-  TwinGraphNode,
-} from "./TwinGraph.js";
-
-export {
   classifyNode,
   communityColor,
   connectedGraphEdges,
@@ -84,15 +52,7 @@ export {
   MEMORY_TYPE_COLORS,
 } from "./palettes/memory-palette.js";
 
-export {
-  KnowledgeGraphQuery,
-  MemoryGraphQuery,
-  OntologyGraphQuery,
-  TwinNeighborsQuery,
-  TwinNeighborSummaryQuery,
-  TwinNeighborMembersQuery,
-  TwinSubgraphQuery,
-} from "./queries.js";
+export { KnowledgeGraphQuery, MemoryGraphQuery } from "./queries.js";
 
 export {
   paintNodeDisc,

@@ -1011,9 +1011,9 @@ variable "capability_broker_vpce_dns" {
 }
 
 # ---------------------------------------------------------------------------
-# Company Brain twin (plan 2026-07-21-001 U5): Neptune wiring for the
-# identity-graph-projector. All default-empty — the projector deploys inert
-# (no VPC, no endpoint) until the stage's neptune outputs are supplied.
+# Company Brain Neptune wiring (THINK-339 U15: the twin Lambdas retired to
+# the platform service; the product keeps the endpoint for the wiki-compile
+# soft-layer writer and the cluster resource id for its shared-role grant).
 # ---------------------------------------------------------------------------
 
 variable "neptune_endpoint" {
@@ -1032,35 +1032,6 @@ variable "neptune_cluster_resource_id" {
   type        = string
   default     = ""
   description = "Neptune cluster resource id for neptune-db IAM ARNs (empty = no data-access grant)"
-}
-
-variable "neptune_subnet_ids" {
-  type        = list(string)
-  default     = []
-  description = "Private subnets for the identity-graph-projector's vpc_config (Neptune is VPC-only)"
-}
-
-variable "neptune_security_group_ids" {
-  type        = list(string)
-  default     = []
-  description = "SGs for the projector (the etl neptune stack's neptune-client SG)"
-}
-
-# Bulk-rebuild lane (THINK-331 U4): Neptune bulk-loader staging. Both
-# default-empty — bulk-rebuild returns a structured "not configured" error
-# until the etl-platform neptune stack's load bucket + loader role are
-# supplied.
-
-variable "neptune_load_bucket" {
-  type        = string
-  default     = ""
-  description = "Neptune bulk-load staging bucket name (etl-platform neptune stack; empty = bulk-rebuild disabled)"
-}
-
-variable "neptune_loader_role_arn" {
-  type        = string
-  default     = ""
-  description = "IAM role ARN the Neptune cluster assumes to read the load bucket (etl-platform neptune stack; empty = bulk-rebuild disabled)"
 }
 
 variable "lambda_max_memory_mb" {

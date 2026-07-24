@@ -8,7 +8,6 @@ import { and, eq } from "drizzle-orm";
 import { entityResolutionCases as casesTable } from "@thinkwork/database-pg/schema";
 import type { GraphQLContext } from "../../context.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
-import { nudgeIdentityGraphProjector } from "../../../lib/entity-identity/graph-projection.js";
 import {
   applyResolutionDecision,
   type ResolutionDecisionInput,
@@ -62,10 +61,6 @@ export async function resolveEntityResolutionCase(
     actorUserId,
     input,
   });
-
-  // Company Brain U5 (KTD-4): decision committed — nudge the twin graph
-  // projector (fire-and-forget; cursor makes missed nudges harmless).
-  await nudgeIdentityGraphProjector(tenantId);
 
   const [row] = await ctx.db
     .select()

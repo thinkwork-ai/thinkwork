@@ -490,25 +490,6 @@ resource "terraform_data" "n8n_runtime_state_guardrails" {
 # Egress-only SG for the VPC-attached analyst data-path Lambdas
 # (analyst_lambda_vpc_egress). Their whole point is a stable NAT egress IP for
 # external database allowlists; they accept no inbound traffic.
-# Company Brain U5/U6: general egress for the VPC-attached twin Lambdas
-# (identity-graph-projector, twin-query). Pairs with the etl neptune stack's
-# client SG (8182-only) — this one covers Aurora (5432), Secrets/S3/Lambda
-# APIs (443) through the NAT-routed private subnets.
-resource "aws_security_group" "twin_lambda_egress" {
-  #checkov:skip=CKV2_AWS_5: attached to the twin Lambdas via lambda-api's neptune vpc_config
-  count       = var.neptune_client_security_group_id != "" ? 1 : 0
-  name        = "thinkwork-${var.stage}-twin-lambda-egress"
-  description = "Twin Lambdas - general egress (Aurora, AWS APIs)"
-  vpc_id      = module.vpc.vpc_id
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
 resource "aws_security_group" "analyst_egress_lambda" {
   count = var.analyst_lambda_vpc_egress ? 1 : 0
 
@@ -1195,23 +1176,14 @@ module "api" {
   okf_efs_security_group_ids            = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
   analyst_egress_subnet_ids             = var.analyst_lambda_vpc_egress ? module.vpc.private_subnet_ids : []
   analyst_egress_security_group_ids     = var.analyst_lambda_vpc_egress ? [aws_security_group.analyst_egress_lambda[0].id] : []
-  # Company Brain U5: projector VPC attach only when the neptune-client SG
-  # is configured (the twin's Neptune cluster lives in this same VPC). The
-  # client SG only opens 8182→Neptune, so twin Lambdas ALSO attach the
-  # egress SG below — without it a VPC-attached Lambda cannot reach
-  # Aurora/Secrets/S3 and every DB connection times out (seen live on the
-  # first dev rebuild invoke).
-  lambda_max_memory_mb        = var.lambda_max_memory_mb
-  neptune_endpoint            = var.neptune_endpoint
-  brain_mcp_url               = var.brain_mcp_url
-  neptune_cluster_resource_id = var.neptune_cluster_resource_id
-  neptune_subnet_ids          = var.neptune_client_security_group_id != "" ? module.vpc.private_subnet_ids : []
-  neptune_security_group_ids  = var.neptune_client_security_group_id != "" ? [var.neptune_client_security_group_id, aws_security_group.twin_lambda_egress[0].id] : []
-  # Bulk-rebuild lane (THINK-331): loader staging bucket + cluster loader
-  # role, both default-empty (ship inert, KTD-9).
-  neptune_load_bucket     = var.neptune_load_bucket
-  neptune_loader_role_arn = var.neptune_loader_role_arn
-  # Company Brain U7: twin tool seam flag (KTD-5 rollout posture).
+  # THINK-339 U15: the twin Lambdas (identity-graph-projector, twin-query,
+  # mcp-twin) retired to the platform Company Brain service. The product
+  # keeps only the Neptune endpoint (wiki-compile soft-layer writer) and
+  # cluster resource id (shared-role openCypher grant).
+  lambda_max_memory_mb             = var.lambda_max_memory_mb
+  neptune_endpoint                 = var.neptune_endpoint
+  brain_mcp_url                    = var.brain_mcp_url
+  neptune_cluster_resource_id      = var.neptune_cluster_resource_id
   okf_efs_mount_target_ids         = var.okf_wiki_efs_enabled ? aws_efs_mount_target.okf_wiki[*].id : []
   okf_efs_file_system_arn          = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
   okf_efs_refresh_access_point_arn = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_refresh[0].arn : ""
