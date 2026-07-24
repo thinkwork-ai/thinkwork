@@ -116,6 +116,20 @@ input UpdateKnowledgeBaseInput {
   chunkOverlapPercent: Int
 }
 
+# Connect an existing customer-owned S3 bucket/prefix as an s3-connect
+# source (external S3 KB source U4). Exclusion patterns win over inclusion.
+# The platform verifies access AS the KB service role before anything is
+# created; failures surface synchronously with the missing grant named.
+input ConnectKnowledgeBaseSourceInput {
+  knowledgeBaseId: ID!
+  bucket: String!
+  prefix: String!
+  include: [String!]
+  exclude: [String!]
+  # V1 is same-account only; a foreign account ID is rejected.
+  bucketOwnerAccountId: String
+}
+
 input AgentKnowledgeBaseInput {
   knowledgeBaseId: ID!
   enabled: Boolean
@@ -162,6 +176,9 @@ extend type Mutation {
     agentId: ID!
     knowledgeBases: [AgentKnowledgeBaseInput!]!
   ): [AgentKnowledgeBase!]!
+  connectKnowledgeBaseSource(
+    input: ConnectKnowledgeBaseSourceInput!
+  ): KnowledgeBaseSource!
 }
 
 extend type Agent {

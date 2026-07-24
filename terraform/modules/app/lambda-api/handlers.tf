@@ -515,6 +515,12 @@ locals {
       KB_SERVICE_ROLE_ARN  = var.kb_service_role_arn
       DATABASE_CLUSTER_ARN = var.db_cluster_arn
     }
+    # External S3 KB source U6 — scheduled access probes run AS the KB
+    # service role (STS assume), and sync mode resolves the kb-manager fn
+    # ARN from SSM.
+    "kb-source-reconciler" = {
+      KB_SERVICE_ROLE_ARN = var.kb_service_role_arn
+    }
     # Observations → Knowledge Graph worker. Extraction is now a Bedrock
     # structured-output call inside this Lambda. KG_EXTRACTION_MODEL_ID pins
     # the gpt-oss extraction model (Bedrock IAM via the shared lambda_bedrock
@@ -821,6 +827,9 @@ resource "aws_lambda_function" "handler" {
     # fetch tool authorizes here, then downloads the returned S3 keys itself.
     "workspace-fetch-source",
     "knowledge-base-manager",
+    # External S3 KB source U6 — hourly access probe (fail closed to
+    # access_revoked) + daily sync dispatch for s3-connect sources.
+    "kb-source-reconciler",
     "knowledge-base-files",
     "email-send",
     "email-inbound",
@@ -1120,7 +1129,7 @@ resource "aws_lambda_function" "handler" {
   # analyst-connection-reconciler is capped at 1: the probe holds one
   # analyst_reader connection and overlapping probes are pointless (the
   # cluster-global reader has one grant surface / one live schema).
-  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : each.key == "analyst-query-broker" ? 4 : each.key == "analyst-connection-reconciler" ? 1 : -1
+  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : each.key == "analyst-query-broker" ? 4 : each.key == "analyst-connection-reconciler" ? 1 : each.key == "kb-source-reconciler" ? 1 : -1
 
   environment {
     variables = merge(
@@ -2435,6 +2444,83 @@ resource "aws_scheduler_schedule" "analyst_connection_reconciler" {
   target {
     arn      = aws_lambda_function.handler["analyst-connection-reconciler"].arn
     role_arn = aws_iam_role.scheduler.arn
+
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# kb_source_reconciler — external S3 KB source U6. Two schedules over one
+# handler: an hourly as-role access probe for every s3-connect source (fail
+# closed to access_revoked; restores healthy when access returns — R10/AE7)
+# and a daily sync dispatch to the kb-manager for KBs with connected
+# sources (R13). retry-0 + DLQ: the next tick IS the retry.
+# ---------------------------------------------------------------------------
+
+resource "aws_sqs_queue" "kb_source_reconciler_dlq" {
+  count                     = local.deploy_lambda_handlers ? 1 : 0
+  name                      = "thinkwork-${var.stage}-kb-source-reconciler-dlq"
+  message_retention_seconds = 1209600 # 14 days
+
+  tags = {
+    Name = "thinkwork-${var.stage}-kb-source-reconciler-dlq"
+  }
+}
+
+resource "aws_lambda_function_event_invoke_config" "kb_source_reconciler" {
+  count                        = local.deploy_lambda_handlers ? 1 : 0
+  function_name                = aws_lambda_function.handler["kb-source-reconciler"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+
+  destination_config {
+    on_failure {
+      destination = aws_sqs_queue.kb_source_reconciler_dlq[0].arn
+    }
+  }
+}
+
+resource "aws_scheduler_schedule" "kb_source_access_probe" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-kb-source-access-probe"
+  group_name          = "default"
+  schedule_expression = "rate(1 hour)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["kb-source-reconciler"].arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ mode = "probe" })
+
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+}
+
+resource "aws_scheduler_schedule" "kb_source_daily_sync" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-kb-source-daily-sync"
+  group_name          = "default"
+  schedule_expression = "rate(1 day)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["kb-source-reconciler"].arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ mode = "sync" })
 
     retry_policy {
       maximum_retry_attempts = 0

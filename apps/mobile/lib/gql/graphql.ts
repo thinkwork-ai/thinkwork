@@ -1782,6 +1782,15 @@ export type ConfirmEntityMappingResult = {
   status: Scalars["String"]["output"];
 };
 
+export type ConnectKnowledgeBaseSourceInput = {
+  bucket: Scalars["String"]["input"];
+  bucketOwnerAccountId?: InputMaybe<Scalars["String"]["input"]>;
+  exclude?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  include?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  knowledgeBaseId: Scalars["ID"]["input"];
+  prefix: Scalars["String"]["input"];
+};
+
 export type ConnectionResearchPayload = {
   __typename?: "ConnectionResearchPayload";
   definitions: Array<CapabilityDefinition>;
@@ -4668,6 +4677,7 @@ export type Mutation = {
    * arguments.
    */
   confirmEntityMapping: ConfirmEntityMappingResult;
+  connectKnowledgeBaseSource: KnowledgeBaseSource;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
   createCanvasRefreshSchedule: CanvasRefreshSchedule;
@@ -5439,6 +5449,10 @@ export type MutationConfirmEntityMappingArgs = {
   candidateSetId: Scalars["ID"]["input"];
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   threadRef?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type MutationConnectKnowledgeBaseSourceArgs = {
+  input: ConnectKnowledgeBaseSourceInput;
 };
 
 export type MutationCreateAgentProfileArgs = {

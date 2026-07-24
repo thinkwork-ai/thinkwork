@@ -150,6 +150,12 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     knowledge_base_id: "agentKnowledgeBases.knowledge_base_id",
   },
   knowledgeBases: { id: "knowledgeBases.id" },
+  spaceKnowledgeBases: {
+    space_id: "spaceKnowledgeBases.space_id",
+    tenant_id: "spaceKnowledgeBases.tenant_id",
+    enabled: "spaceKnowledgeBases.enabled",
+    knowledge_base_id: "spaceKnowledgeBases.knowledge_base_id",
+  },
   guardrails: {
     id: "guardrails.id",
     tenant_id: "guardrails.tenant_id",
@@ -709,6 +715,7 @@ describe("resolveAgentRuntimeConfig", () => {
     rowsQueue.push([]); // agent_skills metadata overlay
     stageTrustedRuntimeSkillRows("ratio-review");
     rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // space-bound kbs (U7)
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1598,6 +1605,7 @@ describe("resolveAgentRuntimeConfig", () => {
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
     rowsQueue.push([]); // kbs
+    rowsQueue.push([]); // space-bound kbs (U7)
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push([
       {

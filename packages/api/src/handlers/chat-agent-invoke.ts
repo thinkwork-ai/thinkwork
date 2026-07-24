@@ -1788,6 +1788,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       pinned_skills:
         pinnedSkillsConfig.length > 0 ? pinnedSkillsConfig : undefined,
       knowledge_bases: knowledgeBasesConfig,
+      // External S3 KB source U7 — parity with wakeup-processor's payload
+      // builder (documented two-builder trap).
+      bound_knowledge_bases: runtimeConfig.boundKnowledgeBases,
       trigger_channel: "chat",
       guardrail_config: guardrailPayload || undefined,
       mcp_configs:

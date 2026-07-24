@@ -32,6 +32,7 @@ import {
   agentTemplates,
   agentKnowledgeBases,
   knowledgeBases,
+  spaceKnowledgeBases,
   guardrails,
   messages,
   spaces,
@@ -1889,6 +1890,55 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       );
     }
   }
+  // External S3 KB source U7: agent ∪ Space bound KBs for Pi's
+  // search_knowledge tool. Direct binding queries only — no tenant-wide
+  // fallback (AE3). Parity trap: chat-agent-invoke builds the same field.
+  let boundKnowledgeBasesPayload:
+    | { awsKbId: string; name: string | null; description: string | null }[]
+    | undefined;
+  try {
+    const spaceKbRows = runSpaceId
+      ? await db
+          .select({
+            aws_kb_id: knowledgeBases.aws_kb_id,
+            name: knowledgeBases.name,
+            description: knowledgeBases.description,
+          })
+          .from(spaceKnowledgeBases)
+          .innerJoin(
+            knowledgeBases,
+            eq(spaceKnowledgeBases.knowledge_base_id, knowledgeBases.id),
+          )
+          .where(
+            and(
+              eq(spaceKnowledgeBases.space_id, runSpaceId),
+              eq(spaceKnowledgeBases.tenant_id, wakeup.tenant_id),
+              eq(spaceKnowledgeBases.enabled, true),
+            ),
+          )
+      : [];
+    const boundById = new Map<
+      string,
+      { awsKbId: string; name: string | null; description: string | null }
+    >();
+    for (const kb of [...kbRows, ...spaceKbRows]) {
+      if (kb.aws_kb_id) {
+        boundById.set(kb.aws_kb_id, {
+          awsKbId: kb.aws_kb_id,
+          name: kb.name,
+          description: kb.description,
+        });
+      }
+    }
+    boundKnowledgeBasesPayload =
+      boundById.size > 0 ? [...boundById.values()] : undefined;
+  } catch (err) {
+    console.warn(
+      `[wakeup-processor] Failed to resolve bound knowledge bases:`,
+      err,
+    );
+  }
+
   if (runSpaceId && !runSpaceSlug) {
     try {
       const [spaceRow] = await db
@@ -2433,6 +2483,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         effectiveSkillsConfig.length > 0 ? effectiveSkillsConfig : undefined,
       trusted_skill_ids: effectiveSkillsConfig.map((skill) => skill.skillId),
       knowledge_bases: knowledgeBasesConfig,
+      bound_knowledge_bases: boundKnowledgeBasesPayload,
       guardrail_config: guardrailPayload || undefined,
       mcp_servers: mcpServers,
       mcp_base_url: MCP_BASE_URL || undefined,
@@ -3207,7 +3258,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             context_engine_config: effectiveContextEngineConfig,
             knowledge_graph_enabled:
               effectiveKnowledgeGraphEnabled || undefined,
-                  identity_resolution_enabled:
+            identity_resolution_enabled:
               effectiveIdentityResolutionEnabled || undefined,
             runtime_type: runtimeType,
             invocation_source: wakeup.source,
@@ -3217,6 +3268,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                 ? effectiveSkillsConfig
                 : undefined,
             knowledge_bases: knowledgeBasesConfig,
+            bound_knowledge_bases: boundKnowledgeBasesPayload,
             guardrail_config: guardrailPayload || undefined,
             mcp_servers: mcpServers,
             mcp_base_url: MCP_BASE_URL || undefined,

@@ -68,9 +68,8 @@ describe("updateKnowledgeBase re-chunk dispatch (U8)", () => {
   it("dispatches rechunk when a chunking field changes", async () => {
     selectQueue.push([existing]);
     updateQueue.push([{ id: "kb-1", chunk_size_tokens: 500 }]);
-    const { updateKnowledgeBase } = await import(
-      "./updateKnowledgeBase.mutation.js"
-    );
+    const { updateKnowledgeBase } =
+      await import("./updateKnowledgeBase.mutation.js");
     await updateKnowledgeBase(
       null,
       { id: "kb-1", input: { chunkSizeTokens: 500 } },
@@ -82,9 +81,8 @@ describe("updateKnowledgeBase re-chunk dispatch (U8)", () => {
   it("does not dispatch for a name-only edit", async () => {
     selectQueue.push([existing]);
     updateQueue.push([{ id: "kb-1", name: "Renamed" }]);
-    const { updateKnowledgeBase } = await import(
-      "./updateKnowledgeBase.mutation.js"
-    );
+    const { updateKnowledgeBase } =
+      await import("./updateKnowledgeBase.mutation.js");
     await updateKnowledgeBase(
       null,
       { id: "kb-1", input: { name: "Renamed" } },
@@ -96,9 +94,8 @@ describe("updateKnowledgeBase re-chunk dispatch (U8)", () => {
   it("does not dispatch when chunking is set to its current value", async () => {
     selectQueue.push([existing]);
     updateQueue.push([{ id: "kb-1" }]);
-    const { updateKnowledgeBase } = await import(
-      "./updateKnowledgeBase.mutation.js"
-    );
+    const { updateKnowledgeBase } =
+      await import("./updateKnowledgeBase.mutation.js");
     await updateKnowledgeBase(
       null,
       { id: "kb-1", input: { chunkSizeTokens: 300, chunkOverlapPercent: 20 } },

@@ -1782,6 +1782,15 @@ export type ConfirmEntityMappingResult = {
   status: Scalars["String"]["output"];
 };
 
+export type ConnectKnowledgeBaseSourceInput = {
+  bucket: Scalars["String"]["input"];
+  bucketOwnerAccountId?: InputMaybe<Scalars["String"]["input"]>;
+  exclude?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  include?: InputMaybe<Array<Scalars["String"]["input"]>>;
+  knowledgeBaseId: Scalars["ID"]["input"];
+  prefix: Scalars["String"]["input"];
+};
+
 export type ConnectionResearchPayload = {
   __typename?: "ConnectionResearchPayload";
   definitions: Array<CapabilityDefinition>;
@@ -4668,6 +4677,7 @@ export type Mutation = {
    * arguments.
    */
   confirmEntityMapping: ConfirmEntityMappingResult;
+  connectKnowledgeBaseSource: KnowledgeBaseSource;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
   createCanvasRefreshSchedule: CanvasRefreshSchedule;
@@ -5439,6 +5449,10 @@ export type MutationConfirmEntityMappingArgs = {
   candidateSetId: Scalars["ID"]["input"];
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
   threadRef?: InputMaybe<Scalars["ID"]["input"]>;
+};
+
+export type MutationConnectKnowledgeBaseSourceArgs = {
+  input: ConnectKnowledgeBaseSourceInput;
 };
 
 export type MutationCreateAgentProfileArgs = {
@@ -14319,7 +14333,39 @@ export type CliKnowledgeBaseQuery = {
     errorMessage?: string | null;
     createdAt: any;
     updatedAt: any;
+    sources: Array<{
+      __typename?: "KnowledgeBaseSource";
+      id: string;
+      kind: string;
+      bucket?: string | null;
+      prefix?: string | null;
+      filterPatterns?: any | null;
+      accessStatus: string;
+      lastSyncAt?: any | null;
+      lastSyncStatus?: string | null;
+      documentCount?: number | null;
+      errorMessage?: string | null;
+      sentinelDocumentKey?: string | null;
+    }>;
   } | null;
+};
+
+export type CliConnectKbSourceMutationVariables = Exact<{
+  input: ConnectKnowledgeBaseSourceInput;
+}>;
+
+export type CliConnectKbSourceMutation = {
+  __typename?: "Mutation";
+  connectKnowledgeBaseSource: {
+    __typename?: "KnowledgeBaseSource";
+    id: string;
+    kind: string;
+    bucket?: string | null;
+    prefix?: string | null;
+    filterPatterns?: any | null;
+    accessStatus: string;
+    sentinelDocumentKey?: string | null;
+  };
 };
 
 export type CliCreateKbMutationVariables = Exact<{
@@ -19159,6 +19205,53 @@ export const CliKnowledgeBaseDocument = {
                 },
                 { kind: "Field", name: { kind: "Name", value: "createdAt" } },
                 { kind: "Field", name: { kind: "Name", value: "updatedAt" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "sources" },
+                  selectionSet: {
+                    kind: "SelectionSet",
+                    selections: [
+                      { kind: "Field", name: { kind: "Name", value: "id" } },
+                      { kind: "Field", name: { kind: "Name", value: "kind" } },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "bucket" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "prefix" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "filterPatterns" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "accessStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lastSyncAt" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "lastSyncStatus" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "documentCount" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "errorMessage" },
+                      },
+                      {
+                        kind: "Field",
+                        name: { kind: "Name", value: "sentinelDocumentKey" },
+                      },
+                    ],
+                  },
+                },
               ],
             },
           },
@@ -19169,6 +19262,75 @@ export const CliKnowledgeBaseDocument = {
 } as unknown as DocumentNode<
   CliKnowledgeBaseQuery,
   CliKnowledgeBaseQueryVariables
+>;
+export const CliConnectKbSourceDocument = {
+  kind: "Document",
+  definitions: [
+    {
+      kind: "OperationDefinition",
+      operation: "mutation",
+      name: { kind: "Name", value: "CliConnectKBSource" },
+      variableDefinitions: [
+        {
+          kind: "VariableDefinition",
+          variable: {
+            kind: "Variable",
+            name: { kind: "Name", value: "input" },
+          },
+          type: {
+            kind: "NonNullType",
+            type: {
+              kind: "NamedType",
+              name: { kind: "Name", value: "ConnectKnowledgeBaseSourceInput" },
+            },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: "SelectionSet",
+        selections: [
+          {
+            kind: "Field",
+            name: { kind: "Name", value: "connectKnowledgeBaseSource" },
+            arguments: [
+              {
+                kind: "Argument",
+                name: { kind: "Name", value: "input" },
+                value: {
+                  kind: "Variable",
+                  name: { kind: "Name", value: "input" },
+                },
+              },
+            ],
+            selectionSet: {
+              kind: "SelectionSet",
+              selections: [
+                { kind: "Field", name: { kind: "Name", value: "id" } },
+                { kind: "Field", name: { kind: "Name", value: "kind" } },
+                { kind: "Field", name: { kind: "Name", value: "bucket" } },
+                { kind: "Field", name: { kind: "Name", value: "prefix" } },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "filterPatterns" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "accessStatus" },
+                },
+                {
+                  kind: "Field",
+                  name: { kind: "Name", value: "sentinelDocumentKey" },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<
+  CliConnectKbSourceMutation,
+  CliConnectKbSourceMutationVariables
 >;
 export const CliCreateKbDocument = {
   kind: "Document",
