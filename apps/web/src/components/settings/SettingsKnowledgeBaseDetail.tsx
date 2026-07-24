@@ -5,6 +5,7 @@ import { Loader2, Pencil } from "lucide-react";
 import {
   Badge,
   Button,
+  DataTable,
   Input,
   Label,
   Select,
@@ -32,11 +33,13 @@ import {
   TestKnowledgeBaseRetrievalQuery,
   UpdateKnowledgeBaseMutation,
 } from "@/lib/kb-queries";
+import type { ColumnDef } from "@tanstack/react-table";
 import {
   deleteDocument,
-  listDocuments,
+  getDocumentViewUrl,
+  listManifestDocuments,
   uploadDocument,
-  type KbDocument,
+  type KbManifestDocument,
 } from "@/lib/kb-files-api";
 
 const ACCEPTED_FILE_TYPES = ".txt,.md,.html,.doc,.docx,.csv,.xls,.xlsx,.pdf";
@@ -49,13 +52,6 @@ function statusVariant(
   if (status === "active") return "secondary";
   if (status === "failed") return "destructive";
   return "outline";
-}
-
-function formatBytes(bytes: number): string {
-  if (!bytes) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), 3);
-  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
 export function SettingsKnowledgeBaseDetail() {
@@ -276,16 +272,25 @@ export function SettingsKnowledgeBaseDetail() {
   );
 }
 
+function docStatusVariant(
+  status: string,
+): "secondary" | "destructive" | "outline" {
+  if (status === "indexed") return "secondary";
+  if (status === "failed") return "destructive";
+  return "outline";
+}
+
 function DocumentsSection({ kbId }: { kbId: string }) {
-  const [docs, setDocs] = useState<KbDocument[] | null>(null);
+  const [docs, setDocs] = useState<KbManifestDocument[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [opening, setOpening] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
     setError(null);
-    listDocuments(kbId)
-      .then(setDocs)
+    listManifestDocuments(kbId, 1000, 0)
+      .then(({ documents }) => setDocs(documents))
       .catch((e) =>
         setError(e instanceof Error ? e.message : "Failed to load"),
       );
@@ -316,16 +321,99 @@ function DocumentsSection({ kbId }: { kbId: string }) {
   );
 
   const remove = useCallback(
-    async (filename: string) => {
+    async (doc: KbManifestDocument) => {
       setError(null);
       try {
-        await deleteDocument(kbId, filename);
-        setDocs((prev) => prev?.filter((d) => d.name !== filename) ?? prev);
+        await deleteDocument(kbId, doc.name);
+        setDocs((prev) => prev?.filter((d) => d.id !== doc.id) ?? prev);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Delete failed");
       }
     },
     [kbId],
+  );
+
+  const openDocument = useCallback(
+    async (doc: KbManifestDocument) => {
+      setError(null);
+      setOpening(doc.id);
+      // Open the tab synchronously (popup blockers kill window.open calls
+      // that happen after an await) and point it at the presigned URL once
+      // it resolves.
+      const tab = window.open("about:blank", "_blank");
+      try {
+        const url = await getDocumentViewUrl(kbId, doc.id);
+        if (tab) {
+          tab.location.href = url;
+        } else {
+          window.location.href = url;
+        }
+      } catch (e) {
+        tab?.close();
+        setError(e instanceof Error ? e.message : "Failed to open document");
+      } finally {
+        setOpening(null);
+      }
+    },
+    [kbId],
+  );
+
+  const columns = useMemo<ColumnDef<KbManifestDocument>[]>(
+    () => [
+      {
+        accessorKey: "name",
+        header: "Name",
+        cell: ({ row }) => (
+          <span
+            className="block truncate text-sm text-foreground"
+            title={row.original.documentKey}
+          >
+            {opening === row.original.id ? (
+              <Loader2 className="mr-1.5 inline h-3.5 w-3.5 animate-spin" />
+            ) : null}
+            {row.original.name}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "sourceKind",
+        header: "Source",
+        cell: ({ row }) => (
+          <span className="text-xs text-muted-foreground">
+            {row.original.sourceKind === "s3-connect"
+              ? "Connected bucket"
+              : "Upload"}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }) => (
+          <Badge variant={docStatusVariant(row.original.status)}>
+            {row.original.status}
+          </Badge>
+        ),
+      },
+      {
+        id: "actions",
+        header: "",
+        cell: ({ row }) =>
+          row.original.sourceKind === "managed-upload" ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                void remove(row.original);
+              }}
+            >
+              Remove
+            </Button>
+          ) : null,
+      },
+    ],
+    [opening, remove],
   );
 
   return (
@@ -361,31 +449,24 @@ function DocumentsSection({ kbId }: { kbId: string }) {
         <div className="px-4 py-3 text-sm text-muted-foreground">Loading…</div>
       ) : docs.length === 0 ? (
         <div className="px-4 py-3 text-sm text-muted-foreground">
-          No documents yet. Upload files, then sync to index them.
+          No documents yet. Upload files or connect a bucket, then sync to index
+          them.
         </div>
       ) : (
-        <div className="divide-y divide-border">
-          {docs.map((doc) => (
-            <div
-              key={doc.name}
-              className="flex items-center justify-between gap-3 px-4 py-3"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm text-foreground">{doc.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {formatBytes(doc.size)}
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => remove(doc.name)}
-              >
-                Remove
-              </Button>
+        <DataTable
+          columns={columns}
+          data={docs}
+          pageSize={10}
+          scrollable
+          allowHorizontalScroll={false}
+          tableClassName="table-fixed"
+          onRowClick={(doc) => void openDocument(doc)}
+          emptyState={
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              No documents yet.
             </div>
-          ))}
-        </div>
+          }
+        />
       )}
     </SettingsSection>
   );
