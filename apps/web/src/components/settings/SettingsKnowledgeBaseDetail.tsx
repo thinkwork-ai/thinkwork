@@ -363,6 +363,9 @@ function DocumentsSection({ kbId }: { kbId: string }) {
       {
         accessorKey: "name",
         header: "Name",
+        // No explicit size: with table-fixed + sized siblings, Name takes all
+        // remaining width; max-w-0 lets the truncate actually clip.
+        meta: { cellClassName: "max-w-0" },
         cell: ({ row }) => (
           <span
             className="block truncate text-sm text-foreground"
@@ -378,6 +381,9 @@ function DocumentsSection({ kbId }: { kbId: string }) {
       {
         accessorKey: "sourceKind",
         header: "Source",
+        // NOTE: 150 is TanStack's default and the colgroup ignores it as
+        // "not explicit" — keep this any value other than 150.
+        size: 140,
         cell: ({ row }) => (
           <span className="text-xs text-muted-foreground">
             {row.original.sourceKind === "s3-connect"
@@ -389,6 +395,7 @@ function DocumentsSection({ kbId }: { kbId: string }) {
       {
         accessorKey: "status",
         header: "Status",
+        size: 110,
         cell: ({ row }) => (
           <Badge variant={docStatusVariant(row.original.status)}>
             {row.original.status}
@@ -398,6 +405,7 @@ function DocumentsSection({ kbId }: { kbId: string }) {
       {
         id: "actions",
         header: "",
+        size: 90,
         cell: ({ row }) =>
           row.original.sourceKind === "managed-upload" ? (
             <Button
@@ -459,6 +467,7 @@ function DocumentsSection({ kbId }: { kbId: string }) {
           pageSize={10}
           scrollable
           allowHorizontalScroll={false}
+          frameless
           tableClassName="table-fixed"
           onRowClick={(doc) => void openDocument(doc)}
           emptyState={
