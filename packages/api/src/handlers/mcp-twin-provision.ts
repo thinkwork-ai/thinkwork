@@ -9,11 +9,16 @@
  *
  * Routes:
  *   POST /api/tenants/:tenantId/mcp-twin-provision
- *     body: { url?: string }
+ *     body: { url?: string, action?: "republish-keys" }
  *       url — override the MCP endpoint. Defaults to the stage API
  *             Gateway URL + /mcp/twin.
+ *       action "republish-keys" — idempotent backfill: publish the
+ *             hashed-key manifest (twin-mcp-keys/<tenantId>/latest.json)
+ *             from the CURRENT active keys WITHOUT rotating anything.
+ *             For tenants whose keys predate the U12 manifest seam.
  *     → 201 { tenantMcpServerId, keyId, secretRef, url, provisioned,
- *             workspaces }
+ *             workspaces, keyManifest }
+ *     → 200 { tenantId, keyManifest } for action=republish-keys
  *     → 409 twin_not_deployed when the stage has no NEPTUNE_ENDPOINT.
  *
  * Auth (requireTenantMembership): Cognito owner/admin of the tenant, or
@@ -26,6 +31,7 @@ import type {
 } from "aws-lambda";
 import { error, json, notFound } from "../lib/response.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
+import { publishTwinKeyManifest } from "../lib/twin/key-manifest.js";
 import { provisionTwinConnector } from "../lib/twin/provision-connector.js";
 
 const STAGE = process.env.STAGE || "dev";
@@ -63,6 +69,24 @@ export async function handler(
   const verdict = await requireTenantMembership(event, match[1]!);
   if (!verdict.ok) return error(verdict.reason, verdict.status);
 
+  let parsedBody: { url?: string; action?: string };
+  try {
+    parsedBody = JSON.parse(event.body || "{}");
+  } catch {
+    return error("Invalid JSON body", 400);
+  }
+
+  // Backfill path (U12 manifest seam): republish the hashed-key manifest
+  // from current active keys without touching keys/secret/registry. Needs
+  // no Neptune — the manifest is an S3-only artifact.
+  if (parsedBody.action === "republish-keys") {
+    const keyManifest = await publishTwinKeyManifest(verdict.tenantId);
+    return json({ tenantId: verdict.tenantId, keyManifest }, 200);
+  }
+  if (parsedBody.action !== undefined) {
+    return error(`Unknown action: ${parsedBody.action}`, 400);
+  }
+
   // The twin must be deployed on this stage — provisioning a connector
   // whose every tool degrades to "unavailable" helps nobody.
   let neptuneConfigured = false;
@@ -75,13 +99,7 @@ export async function handler(
     return error("twin_not_deployed: stage has no NEPTUNE_ENDPOINT", 409);
   }
 
-  let body: { url?: string };
-  try {
-    body = JSON.parse(event.body || "{}");
-  } catch {
-    return error("Invalid JSON body", 400);
-  }
-  const url = (body.url?.trim() || defaultTwinMcpUrl()).trim();
+  const url = (parsedBody.url?.trim() || defaultTwinMcpUrl()).trim();
   if (!/^https:\/\//i.test(url)) {
     return error("url must be an https URL", 400);
   }

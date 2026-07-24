@@ -169,6 +169,7 @@ describe("twin connector row values", () => {
 
 describe("provisionTwinConnector", () => {
   function queueFreshTenant(agents: Array<{ id: string }>) {
+    selectQueue.push([]); // no outgoing active keys (manifest grace scan)
     returningQueue.push([{ id: "key-1" }]); // key insert
     selectQueue.push([]); // no existing server row
     returningQueue.push([{ id: "server-1" }]); // server insert
@@ -225,6 +226,7 @@ describe("provisionTwinConnector", () => {
   });
 
   it("re-run rotates: existing server row updated in place (same id), old key revoked first", async () => {
+    selectQueue.push([]); // outgoing active keys (manifest grace scan)
     returningQueue.push([{ id: "key-2" }]);
     selectQueue.push([{ id: "server-1" }]); // existing server
     selectQueue.push([
@@ -254,5 +256,158 @@ describe("provisionTwinConnector", () => {
     expect(result.workspaces.skipped).toEqual([
       { agentId: "agent-no-workspace", reason: "no_workspace_prefix" },
     ]);
+  });
+});
+
+describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", () => {
+  const BUCKET = "thinkwork-test-brain-artifacts";
+  interface CapturedPut {
+    Bucket?: string;
+    Key?: string;
+    Body?: string;
+    ContentType?: string;
+  }
+  const puts: CapturedPut[] = [];
+  const manifestS3 = {
+    send: async (command: unknown) => {
+      puts.push((command as { input: CapturedPut }).input);
+      return {};
+    },
+  };
+  const manifestHashes = (index: number): string[] =>
+    (
+      JSON.parse(puts[index]!.Body!) as {
+        keys: Array<{ keyHash: string }>;
+      }
+    ).keys.map((k) => k.keyHash);
+
+  beforeEach(() => {
+    puts.length = 0;
+  });
+
+  it("fresh mint publishes the active-only manifest once, after the key row exists", async () => {
+    selectQueue.push([]); // no outgoing keys → no grace publish
+    returningQueue.push([{ id: "key-1" }]);
+    selectQueue.push([]); // no existing server
+    returningQueue.push([{ id: "server-1" }]);
+    selectQueue.push([
+      {
+        id: "server-1",
+        slug: "digital-twin",
+        name: "Company Brain",
+        url: INPUT.twinMcpUrl,
+        transport: "streamable-http",
+        tools: null,
+        status: "approved",
+      },
+    ]);
+    selectQueue.push([]); // no agents
+    selectQueue.push([
+      { key_hash: "new-hash", created_at: new Date("2026-07-24T00:00:00Z") },
+    ]); // final publish active scan
+
+    const result = await provisionTwinConnector(INPUT, {
+      sm,
+      manifestS3,
+      manifestBucket: BUCKET,
+    });
+    expect(result.keyManifest).toEqual({ published: true, errors: [] });
+    expect(puts.length).toBe(1);
+    expect(puts[0]!.Bucket).toBe(BUCKET);
+    expect(puts[0]!.Key).toBe(`twin-mcp-keys/${INPUT.tenantId}/latest.json`);
+    expect(puts[0]!.ContentType).toBe("application/json");
+    expect(manifestHashes(0)).toEqual(["new-hash"]);
+  });
+
+  it("rotation keeps BOTH hashes live: grace publish carries old+new, final publish is active-only", async () => {
+    const oldCreated = new Date("2026-01-01T00:00:00Z");
+    selectQueue.push([{ key_hash: "old-hash", created_at: oldCreated }]); // outgoing scan
+    returningQueue.push([{ id: "key-2" }]);
+    selectQueue.push([
+      { key_hash: "new-hash", created_at: new Date("2026-07-24T00:00:00Z") },
+    ]); // grace publish active scan (old row already revoked)
+    selectQueue.push([{ id: "server-1" }]); // existing server
+    selectQueue.push([
+      {
+        id: "server-1",
+        slug: "digital-twin",
+        name: "Company Brain",
+        url: INPUT.twinMcpUrl,
+        transport: "streamable-http",
+        tools: null,
+        status: "approved",
+      },
+    ]);
+    selectQueue.push([]); // no agents
+    selectQueue.push([
+      { key_hash: "new-hash", created_at: new Date("2026-07-24T00:00:00Z") },
+    ]); // final publish active scan
+
+    const result = await provisionTwinConnector(INPUT, {
+      sm,
+      manifestS3,
+      manifestBucket: BUCKET,
+    });
+    expect(result.provisioned).toBe("rotated");
+    expect(result.keyManifest).toEqual({ published: true, errors: [] });
+    expect(puts.length).toBe(2);
+    // Grace publish (before the secret repoint completes): both hashes.
+    expect(manifestHashes(0).sort()).toEqual(["new-hash", "old-hash"]);
+    const graceOld = (
+      JSON.parse(puts[0]!.Body!) as {
+        keys: Array<{ keyHash: string; createdAt: string | null }>;
+      }
+    ).keys.find((k) => k.keyHash === "old-hash");
+    expect(graceOld!.createdAt).toBe(oldCreated.toISOString());
+    // Final publish: the rotated-out hash is gone.
+    expect(manifestHashes(1)).toEqual(["new-hash"]);
+  });
+
+  it("manifest publish failure never fails the provisioning mutation — it surfaces in keyManifest", async () => {
+    const errorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      selectQueue.push([{ key_hash: "old-hash", created_at: null }]); // outgoing
+      returningQueue.push([{ id: "key-2" }]);
+      selectQueue.push([{ key_hash: "new-hash", created_at: null }]); // grace scan
+      selectQueue.push([{ id: "server-1" }]);
+      selectQueue.push([
+        {
+          id: "server-1",
+          slug: "digital-twin",
+          name: "Company Brain",
+          url: INPUT.twinMcpUrl,
+          transport: "streamable-http",
+          tools: null,
+          status: "approved",
+        },
+      ]);
+      selectQueue.push([]); // no agents
+      selectQueue.push([{ key_hash: "new-hash", created_at: null }]); // final scan
+
+      const result = await provisionTwinConnector(INPUT, {
+        sm,
+        manifestS3: {
+          send: async () => {
+            throw new Error("s3 exploded");
+          },
+        },
+        manifestBucket: BUCKET,
+      });
+      // The ceremony still completed end-to-end.
+      expect(result.provisioned).toBe("rotated");
+      expect(result.keyId).toBe("key-2");
+      expect(smSends.length).toBe(1); // secret still written
+      // ...and the failure is loud in the response metadata.
+      expect(result.keyManifest.published).toBe(false);
+      expect(result.keyManifest.errors).toEqual([
+        "grace publish failed: s3 exploded",
+        "publish failed: s3 exploded",
+      ]);
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
