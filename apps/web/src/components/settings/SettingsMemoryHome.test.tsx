@@ -13,9 +13,6 @@ const memoryKbRoute = read(
 const memoryKgRoute = read(
   "src/routes/_authed/settings.memory.knowledge-graph.tsx",
 );
-const memoryOntologyRoute = read(
-  "src/routes/_authed/settings.memory.ontology.tsx",
-);
 
 describe("SettingsMemoryHome", () => {
   it("owns a single stable Knowledge breadcrumb (U9 umbrella naming)", () => {
@@ -25,29 +22,28 @@ describe("SettingsMemoryHome", () => {
 
   it("publishes the Knowledge tabs into the page header", () => {
     expect(source).toContain("tabs: [");
-    // Customer feedback 2026-07-23: Company Brain leads the strip and is
-    // the default tab; memory records moved to /settings/memory/records.
-    expect(source).toContain('label: "Company Brain"');
-    // Split literal so repo-wide greps for the retired product noun stay clean.
-    expect(source).not.toContain('label: "Digital' + ' Twin"');
+    // THINK-339 U15: the Company Brain and Ontology tabs moved to the
+    // standalone console — Memory leads and is the default tab.
+    expect(source).not.toContain('label: "Company Brain"');
+    expect(source).not.toContain('label: "Ontology"');
     expect(source).toContain('to: RECORDS, label: "Memory"');
-    expect(source).not.toContain('label: "Pages"');
     expect(source).toContain('label: "KBs"');
-    expect(source).toContain('label: "Ontology"');
-    expect(source).not.toContain('label: "Knowledge Model"');
-    expect(source).not.toContain('label: "Graph"');
-    // Company Brain first, then Ontology, Memory, KBs.
-    expect(source.indexOf('label: "Company Brain"')).toBeLessThan(
-      source.indexOf('label: "Ontology"'),
-    );
-    expect(source.indexOf('label: "Ontology"')).toBeLessThan(
-      source.indexOf('to: RECORDS, label: "Memory"'),
-    );
     expect(source.indexOf('to: RECORDS, label: "Memory"')).toBeLessThan(
       source.indexOf('label: "KBs"'),
     );
-    // The bare /settings/memory path lands on Company Brain.
-    expect(source).toContain('return "explorer";');
+    // The bare /settings/memory path lands on Memory records.
+    expect(source).toContain('return "memory";');
+  });
+
+  it("links out to the standalone Company Brain console when registered", () => {
+    // THINK-339 U15: the link-out card renders only when the tenant has an
+    // active Brain MCP registration (the `digital-twin` connector row).
+    expect(source).toContain("https://brain.thinkwork.ai");
+    expect(source).toContain('"digital-twin"');
+    expect(source).toContain("listMcpServers");
+    expect(source).toContain(
+      "brainConsoleAvailable ? <BrainConsoleCard /> : null",
+    );
   });
 
   it("keeps the Memory refresh control visually interactive", () => {
@@ -57,29 +53,9 @@ describe("SettingsMemoryHome", () => {
     expect(source).toContain("setRefreshPending(true)");
   });
 
-  it("hosts the Living Map actions in the page header on the Ontology tab", () => {
-    // Icon-only ghost buttons with hover tooltips — the Agents page header
-    // TooltipIconButton pattern — driven by the controller the map
-    // publishes (SettingsMemory refresh-controller pattern).
-    expect(source).toContain("OntologyMapHeaderController");
-    expect(source).toContain("onMapHeaderControllerChange");
-    expect(source).toContain('label="Add triple"');
-    expect(source).toContain('label="Review queue"');
-    expect(source).toContain("ontologyMapController.openAddTriple()");
-    expect(source).toContain("ontologyMapController.openQueue()");
-    expect(source).toMatch(/activeTab === "ontology" && ontologyMapController/);
-    // The queue icon keeps its pending-count badge and accessible name.
-    expect(source).toContain("ontologyMapController.pendingCount > 0");
-    expect(source).toContain(
-      "`Review queue (${ontologyMapController.pendingCount} pending)`",
-    );
-    // Icon-only: no labeled pill buttons in the header actions.
-    expect(source).not.toContain(">Add triple</Button>");
-  });
-
   it("hosts the KBs new-source action in the page header on the KBs tab", () => {
     // Plus TooltipIconButton with a hover tooltip, driven by the controller
-    // the KBs tab publishes — the Ontology header-action pattern.
+    // the KBs tab publishes.
     expect(source).toContain("KnowledgeBasesHeaderController");
     expect(source).toContain("onHeaderControllerChange={updateKbController}");
     expect(source).toContain('label="New source"');
@@ -93,35 +69,28 @@ describe("SettingsMemoryHome", () => {
     expect(source).toContain("tabForPath");
     expect(source).toMatch(/<SettingsMemory\s+[\s\S]*?\bembedded\b/);
     expect(source).toMatch(/<SettingsKnowledgeBases\s+[\s\S]*?\bembedded\b/);
-    expect(source).toContain("<KnowledgeModelTab");
-    expect(source).toContain("<TwinExplorer");
+    // The twin explorer and ontology tabs are gone (THINK-339 U15).
+    expect(source).not.toContain("KnowledgeModelTab");
+    expect(source).not.toContain("TwinExplorer");
     // No in-body tab strip — the tabs live in the header now.
     expect(source).not.toContain("TabsList");
-  });
-
-  it("keeps the Ontology tab on the ontology route", () => {
-    expect(source).toContain('to: ONTOLOGY, label: "Ontology"');
-    expect(source).toContain('activeTab === "ontology"');
-    expect(source).not.toContain("ontologyEnabled");
-    expect(source).not.toContain("SettingsPluginCatalogQuery");
-    expect(source).not.toContain("SettingsDeploymentStatusQuery");
   });
 
   it("mounts the combined page across the Memory sub-routes", () => {
     expect(memoryRoute).toContain("SettingsMemoryHome");
     expect(memoryKbRoute).toContain("SettingsMemoryHome");
-    expect(memoryOntologyRoute).toContain("SettingsMemoryHome");
-    expect(memoryKgRoute).toContain(
-      'redirect({ to: "/settings/memory/ontology", replace: true })',
-    );
   });
 
   it("redirects retired memory routes into the matching tab", () => {
     expect(kbRoute).toContain(
       'redirect({ to: "/settings/memory/knowledge-bases" })',
     );
+    // The retired knowledge-graph/ontology URLs land on Memory records.
     expect(kgRoute).toContain(
-      'redirect({ to: "/settings/memory/ontology", replace: true })',
+      'redirect({ to: "/settings/memory/records", replace: true })',
+    );
+    expect(memoryKgRoute).toContain(
+      'redirect({ to: "/settings/memory/records", replace: true })',
     );
   });
 });

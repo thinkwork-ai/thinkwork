@@ -1084,22 +1084,6 @@ export function ChatSidebar() {
     [activateThread, defaultSpaceIds, navigate],
   );
 
-  // A dossier open action routes to the Twin Explorer entity detail
-  // (THINK-327 U7) — the living projected page, no wiki dependency.
-  const openSearchEntityDetail = useCallback(
-    (target: { entityType: string; canonicalId: string }) => {
-      setSearchOpen(false);
-      void navigate({
-        to: "/settings/memory/explorer/$entityType/$canonicalId",
-        params: {
-          entityType: target.entityType,
-          canonicalId: target.canonicalId,
-        },
-      });
-    },
-    [navigate],
-  );
-
   // An artifact result opens the artifact's canvas/reader (THINK-263 U5).
   const openSearchArtifact = useCallback(
     (id: string) => {
@@ -1452,7 +1436,6 @@ export function ChatSidebar() {
           <EntityDossierCard
             result={dossierData?.entityDossier ?? null}
             fetching={dossierFetching}
-            onOpenEntity={openSearchEntityDetail}
             onOpenThread={openSearchThread}
             onOpenArtifact={openSearchArtifact}
             onSelectEntity={selectDossierEntity}

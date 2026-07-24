@@ -91,11 +91,6 @@ export const sharedPluginTermAllowlist = [
       "shared platform GraphQL read API coverage for the n8n plugin app; native app runtime and manifest source remain package-owned under plugins/n8n.",
   },
   {
-    path: "packages/api/src/lib/twin/twenty-live-fetch.ts",
-    reason:
-      "platform twin live-fetch adapter (Company Brain U8): resolves a live-routed page section through the Twenty plugin's context/auth seam; the live-fetch registry seam is platform-owned like the memory-source adapters, while plugin runtime and manifest source remain under plugins/twenty.",
-  },
-  {
     path: "packages/api/src/lib/memory-sources/adapters/twenty.ts",
     reason:
       "platform memory-source adapter (THINK-193): normalizes Twenty CRM records into the source-agnostic evidence/dossier contract consumed by the memory-stage worker; the adapter seam is platform-owned like the other source families, while plugin runtime and manifest source remain under plugins/twenty.",

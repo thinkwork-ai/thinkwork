@@ -71,12 +71,12 @@ locals {
     # signed sidecar block authoritative (budgets/policyClaims flow). Flip
     # ONLY after clean shadow parity on live traffic.
     ANALYST_POLICY_SOURCE = var.analyst_policy_source
-    # Company Brain U9 follow-up: the twin "deployed?" signal must reach
-    # graphql-http too — projectEntityPage's internal twin-query invoke
-    # gated on this and read only the per-handler env, so every projected
-    # page rendered facet sections as pending (dev AE2, 2026-07-22).
+    # Neptune endpoint for the wiki-compile soft-layer writer and the
+    # identity-graph-projector's nudge gate (THINK-339 U15: the twin READ
+    # Lambdas retired to the platform service; the write/projection lane
+    # stays product-side — the platform identity_sync pipeline invokes it).
     # Document, not env: graphql-http's env sits near the 4KB ceiling.
-    # Readers use getConfig; env still wins on the VPC twin handlers.
+    # Readers use getConfig; env still wins on the VPC projector.
     NEPTUNE_ENDPOINT = var.neptune_endpoint
     # Consolidation U14: platform-served Brain MCP endpoint. When set,
     # mcp-twin-provision registers the twin connector against it instead
@@ -546,11 +546,6 @@ locals {
       NEPTUNE_LOAD_BUCKET     = var.neptune_load_bucket
       NEPTUNE_LOADER_ROLE_ARN = var.neptune_loader_role_arn
     }
-    # Company Brain U6: reader coordinates for the twin graph-query Lambda.
-    "twin-query" = {
-      NEPTUNE_ENDPOINT = var.neptune_endpoint
-      NEPTUNE_PORT     = "8182"
-    }
     "knowledge-graph-observations-ingest" = {
       BRAIN_ARTIFACTS_BUCKET          = aws_s3_bucket.brain_artifacts.bucket
       OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
@@ -806,8 +801,8 @@ resource "aws_lambda_function" "handler" {
     "mcp-open-engine",
     # THINK-280 U8: scoped external capability search MCP facade.
     "mcp-capability-search",
-    # THINK-333: Digital Twin MCP server at /mcp/twin.
-    "mcp-twin",
+    # THINK-333 / consolidation U14: provisions the tenant Brain MCP
+    # connector against the platform endpoint (BRAIN_MCP_URL).
     "mcp-twin-provision",
     "activity",
     "routines",
@@ -881,10 +876,6 @@ resource "aws_lambda_function" "handler" {
     # RequestResponse for the rebuild command. The per-tenant cursor row is
     # the source of truth — missed nudges are harmless.
     "identity-graph-projector",
-    # Company Brain U6 (KTD-6): the ONLY read path to Neptune — VPC-attached,
-    # typed-request-only (compilation inside the boundary). Invoked
-    # RequestResponse by graphql-http's twin queries.
-    "twin-query",
     "wiki-lint",
     "wiki-export",
     "okf-materialize",
@@ -1079,12 +1070,7 @@ resource "aws_lambda_function" "handler" {
   # so its destructive evidence-snapshot S3 capability (version enumeration +
   # bulk version deletion) never leaks into the 90+ handlers on the shared
   # role. Everything else keeps the shared role.
-  # THINK-327 U5: twin-query runs under a DEDICATED READ-ONLY role. The
-  # shared role carries neptune-db Write/Delete for the identity-graph-
-  # projector; the raw operator console executes through twin-query, so its
-  # role holds ReadDataViaQuery ONLY — the structural backstop behind the
-  # handler's write-clause denylist.
-  role    = each.key == "memory-retraction-drainer" ? aws_iam_role.memory_retraction_drainer.arn : each.key == "twin-query" ? aws_iam_role.twin_query.arn : aws_iam_role.lambda.arn
+  role    = each.key == "memory-retraction-drainer" ? aws_iam_role.memory_retraction_drainer.arn : aws_iam_role.lambda.arn
   handler = "index.handler"
   runtime = local.runtime
   # Parameters and Secrets extension: container-local cache for the SSM
@@ -1113,7 +1099,7 @@ resource "aws_lambda_function" "handler" {
   # headroom for transient slowness.
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "knowledge-base-manager" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "twin-query" ? 60 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "knowledge-base-manager" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(4096, var.lambda_max_memory_mb) : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
@@ -1174,7 +1160,7 @@ resource "aws_lambda_function" "handler" {
   # Company Brain U5: the identity-graph-projector reaches Neptune inside
   # the VPC (neptune-client SG). Disjoint from the two blocks above.
   dynamic "vpc_config" {
-    for_each = contains(["identity-graph-projector", "twin-query"], each.key) && local.neptune_vpc_enabled ? [1] : []
+    for_each = each.key == "identity-graph-projector" && local.neptune_vpc_enabled ? [1] : []
 
     content {
       subnet_ids         = var.neptune_subnet_ids
@@ -1401,78 +1387,6 @@ resource "aws_lambda_function_event_invoke_config" "memory_retain" {
 # drainer actually uses: logs (managed basic policy), Secrets Manager +
 # SSM runtime-config reads, and conditional KMS for the encrypted bucket.
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# THINK-327 U5: dedicated read-only IAM role for twin-query.
-#
-# The raw operator console (twinRawQuery) executes caller-supplied openCypher
-# through this Lambda. The comment-stripped write-clause denylist is UX, not
-# the fence — the fence is IAM: this role grants neptune-db:ReadDataViaQuery
-# ONLY, so a write that slips any text-level guard still fails at Neptune.
-# The shared api role keeps Write/Delete for the identity-graph-projector;
-# twin-query (typed reads included) never needed them. Otherwise the role
-# carries exactly what the handler uses: logs, VPC ENIs (Neptune is
-# VPC-only), and SSM/Secrets runtime-config reads.
-# ---------------------------------------------------------------------------
-
-resource "aws_iam_role" "twin_query" {
-  name = "thinkwork-${var.stage}-api-twin-query-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "lambda.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "twin_query_basic" {
-  role       = aws_iam_role.twin_query.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "aws_iam_role_policy_attachment" "twin_query_vpc_access" {
-  role       = aws_iam_role.twin_query.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
-
-resource "aws_iam_role_policy" "twin_query" {
-  name = "twin-query-read-only"
-  role = aws_iam_role.twin_query.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = concat(
-      [
-        # Runtime-config document + platform secrets (NEPTUNE_ENDPOINT and
-        # the loader's cold-start prefetches).
-        {
-          Effect   = "Allow"
-          Action   = ["ssm:GetParameter", "ssm:GetParameters"]
-          Resource = "arn:aws:ssm:${var.region}:${var.account_id}:parameter/thinkwork/${var.stage}/*"
-        },
-        {
-          Effect   = "Allow"
-          Action   = ["secretsmanager:GetSecretValue"]
-          Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/*"
-        },
-      ],
-      var.neptune_cluster_resource_id == "" ? [] : [
-        {
-          Sid      = "TwinNeptuneReadOnly"
-          Effect   = "Allow"
-          Action   = ["neptune-db:ReadDataViaQuery"]
-          Resource = "arn:aws:neptune-db:${var.region}:${var.account_id}:${var.neptune_cluster_resource_id}/*"
-          Condition = {
-            StringEquals = { "neptune-db:QueryLanguage" = "OpenCypher" }
-          }
-        },
-      ],
-    )
-  })
-}
 
 resource "aws_iam_role" "memory_retraction_drainer" {
   name = "thinkwork-${var.stage}-memory-retraction-drainer-role"
@@ -2033,12 +1947,6 @@ locals {
       # the mcp-admin-keys handler below. The shared API_AUTH_SECRET is
       # retained as a break-glass superuser path for bootstrap/debug.
       "POST /mcp/admin" = "admin-ops-mcp"
-
-      # Digital Twin MCP server (THINK-333). Streamable-HTTP JSON-RPC at
-      # /mcp/twin; auth in-handler (tkt_ tenant key hash lookup, or MCP
-      # OAuth token with twin:read). ANY so the handler serves the CORS
-      # preflight itself.
-      "ANY /mcp/twin" = "mcp-twin"
 
       # Analyst query broker — first-party MCP server exposing query
       # (THINK-228 U3). Callers present the tenant-wide broker service

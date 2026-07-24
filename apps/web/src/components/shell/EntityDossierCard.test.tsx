@@ -43,7 +43,6 @@ function renderCard(
   result: EntityDossierResult | null,
   overrides?: Partial<Parameters<typeof EntityDossierCard>[0]>,
 ) {
-  const onOpenEntity = vi.fn();
   const onOpenThread = vi.fn();
   const onOpenArtifact = vi.fn();
   const onSelectEntity = vi.fn();
@@ -51,7 +50,6 @@ function renderCard(
     <EntityDossierCard
       result={result}
       fetching={false}
-      onOpenEntity={onOpenEntity}
       onOpenThread={onOpenThread}
       onOpenArtifact={onOpenArtifact}
       onSelectEntity={onSelectEntity}
@@ -60,7 +58,6 @@ function renderCard(
   );
   return {
     ...utils,
-    onOpenEntity,
     onOpenThread,
     onOpenArtifact,
     onSelectEntity,
@@ -94,8 +91,8 @@ function matchResult(match: Record<string, unknown>): EntityDossierResult {
 describe("EntityDossierCard", () => {
   afterEach(cleanup);
 
-  it("renders a match with an entity open row plus memories, threads, and artifacts", () => {
-    const { onOpenEntity, onOpenThread } = renderCard(
+  it("renders a match with memories, threads, and artifacts (no entity open row — THINK-339 U15)", () => {
+    const { onOpenThread } = renderCard(
       matchResult({
         canonicalEntityId: "can-acme",
         entityType: "customer",
@@ -129,27 +126,21 @@ describe("EntityDossierCard", () => {
       }),
     );
 
-    // Entity label heading + open row with the Live chip.
+    // Entity label heading; the twin-explorer open row retired with the
+    // in-product Company Brain surfaces (THINK-339 U15).
     expect(screen.getByTestId("group-heading").textContent).toContain(
       "Acme Corp",
     );
-    expect(screen.getByText("Open Acme Corp")).toBeTruthy();
-    expect(screen.getByText("Live")).toBeTruthy();
+    expect(screen.queryByText("Open Acme Corp")).toBeNull();
     expect(screen.getByText("Acme renewed their contract")).toBeTruthy();
     expect(screen.getByText("Acme onboarding")).toBeTruthy();
     expect(screen.getByText("Acme proposal")).toBeTruthy();
-
-    fireEvent.click(screen.getByText("Open Acme Corp"));
-    expect(onOpenEntity).toHaveBeenCalledWith({
-      entityType: "customer",
-      canonicalId: "can-acme",
-    });
 
     fireEvent.click(screen.getByText("Acme onboarding"));
     expect(onOpenThread).toHaveBeenCalledWith({ id: "t9", spaceId: "space-2" });
   });
 
-  it("renders without an open action when there is no canonical id (no dead link)", () => {
+  it("renders memories and threads without any entity open action", () => {
     renderCard(
       matchResult({
         canonicalEntityId: null,

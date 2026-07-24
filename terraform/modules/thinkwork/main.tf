@@ -490,8 +490,9 @@ resource "terraform_data" "n8n_runtime_state_guardrails" {
 # Egress-only SG for the VPC-attached analyst data-path Lambdas
 # (analyst_lambda_vpc_egress). Their whole point is a stable NAT egress IP for
 # external database allowlists; they accept no inbound traffic.
-# Company Brain U5/U6: general egress for the VPC-attached twin Lambdas
-# (identity-graph-projector, twin-query). Pairs with the etl neptune stack's
+# Company Brain U5: general egress for the VPC-attached identity-graph-
+# projector (twin-query retired to the platform service — THINK-339 U15).
+# Pairs with the etl neptune stack's
 # client SG (8182-only) — this one covers Aurora (5432), Secrets/S3/Lambda
 # APIs (443) through the NAT-routed private subnets.
 resource "aws_security_group" "twin_lambda_egress" {

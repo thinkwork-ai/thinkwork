@@ -1,8 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
-import { Eye, EyeOff, Inbox, Plus, RefreshCw, Terminal } from "lucide-react";
+import { ExternalLink, Eye, EyeOff, Plus, RefreshCw } from "lucide-react";
 import { TooltipIconButton, cn } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
+import { useTenant } from "@/context/TenantContext";
+import { listMcpServers } from "@/lib/mcp-api";
 import {
   SettingsMemory,
   type MemoryRawUnitsController,
@@ -12,51 +14,96 @@ import {
   SettingsKnowledgeBases,
   type KnowledgeBasesHeaderController,
 } from "@/components/settings/SettingsKnowledgeBases";
-import { KnowledgeModelTab } from "@/components/settings/knowledge-model/KnowledgeModelTab";
-import type { OntologyMapHeaderController } from "@/components/settings/knowledge-model/OntologyMapView";
-import {
-  TwinExplorer,
-  type TwinExplorerHeaderController,
-} from "@/components/settings/twin-explorer/TwinExplorer";
 
 const RECORDS = "/settings/memory/records";
-const EXPLORER = "/settings/memory/explorer";
 const KNOWLEDGE_BASES = "/settings/memory/knowledge-bases";
-const ONTOLOGY = "/settings/memory/ontology";
 
-type MemoryTab = "memory" | "explorer" | "knowledge-bases" | "ontology";
+const BRAIN_CONSOLE_URL = "https://brain.thinkwork.ai";
+const BRAIN_CONNECTOR_SLUG = "digital-twin";
+
+type MemoryTab = "memory" | "knowledge-bases";
 
 function tabForPath(pathname: string): MemoryTab {
-  if (pathname.startsWith(EXPLORER)) return "explorer";
   if (pathname.startsWith(KNOWLEDGE_BASES)) return "knowledge-bases";
-  if (pathname.startsWith(ONTOLOGY)) return "ontology";
-  if (pathname.startsWith(RECORDS)) return "memory";
-  // Company Brain is the landing tab (customer feedback 2026-07-23) — the
-  // bare /settings/memory path renders the explorer; memory records moved
-  // to /settings/memory/records.
-  return "explorer";
+  // THINK-339 U15: the Company Brain and Ontology tabs moved to the
+  // standalone console (brain.thinkwork.ai) — Memory records are the
+  // landing tab again; the bare /settings/memory path renders them.
+  return "memory";
 }
 
 /**
- * The unified Memory settings page. Memory records, KBs, and the knowledge
- * Ontology tab are siblings rendered in the AppTopBar and driven by the route
- * so each tab is deep-linkable. The Ontology tab keeps its historical
- * /settings/memory/ontology path so existing links keep working.
+ * Company Brain moved to the standalone console (THINK-339 U15). When the
+ * tenant has an active Brain MCP registration (the approved `digital-twin`
+ * connector row), a small link-out card takes operators there. No
+ * registration (or any lookup failure) = no card.
+ */
+function useBrainConsoleAvailable(): boolean {
+  const { tenant } = useTenant();
+  const tenantSlug = tenant?.slug ?? null;
+  const [available, setAvailable] = useState(false);
+
+  useEffect(() => {
+    if (!tenantSlug) return;
+    let cancelled = false;
+    listMcpServers(tenantSlug)
+      .then(({ servers }) => {
+        if (cancelled) return;
+        setAvailable(
+          servers.some(
+            (server) =>
+              server.slug === BRAIN_CONNECTOR_SLUG &&
+              server.status !== "rejected",
+          ),
+        );
+      })
+      .catch(() => {
+        // Best-effort signal: an errored lookup renders no card.
+        if (!cancelled) setAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantSlug]);
+
+  return available;
+}
+
+function BrainConsoleCard() {
+  return (
+    <a
+      href={BRAIN_CONSOLE_URL}
+      target="_blank"
+      rel="noreferrer"
+      data-testid="brain-console-link-out"
+      className="text-muted-foreground hover:text-foreground hover:border-primary/40 mx-4 mt-3 flex items-center gap-2 self-start rounded-md border px-3 py-2 text-sm transition-colors"
+    >
+      <span>
+        <span className="text-foreground font-medium">Company Brain</span> has
+        moved to its own console
+      </span>
+      <ExternalLink className="size-3.5 shrink-0" />
+    </a>
+  );
+}
+
+/**
+ * The unified Memory settings page. Memory records and KBs are siblings
+ * rendered in the AppTopBar and driven by the route so each tab is
+ * deep-linkable. The Company Brain and Ontology tabs retired to the
+ * standalone console (THINK-339 U15) — a link-out card replaces them when
+ * the tenant's Brain MCP registration is active.
  */
 export function SettingsMemoryHome() {
   const pathname = useLocation({ select: (location) => location.pathname });
   const activeTab = tabForPath(pathname);
+  const brainConsoleAvailable = useBrainConsoleAvailable();
   const [refreshController, setRefreshController] =
     useState<MemoryRefreshController | null>(null);
   const [refreshPending, setRefreshPending] = useState(false);
   const [rawUnitsController, setRawUnitsController] =
     useState<MemoryRawUnitsController | null>(null);
-  const [ontologyMapController, setOntologyMapController] =
-    useState<OntologyMapHeaderController | null>(null);
   const [kbController, setKbController] =
     useState<KnowledgeBasesHeaderController | null>(null);
-  const [explorerController, setExplorerController] =
-    useState<TwinExplorerHeaderController | null>(null);
 
   const updateRefreshController = useCallback(
     (controller: MemoryRefreshController | null) => {
@@ -70,21 +117,9 @@ export function SettingsMemoryHome() {
     },
     [],
   );
-  const updateOntologyMapController = useCallback(
-    (controller: OntologyMapHeaderController | null) => {
-      setOntologyMapController(controller);
-    },
-    [],
-  );
   const updateKbController = useCallback(
     (controller: KnowledgeBasesHeaderController | null) => {
       setKbController(controller);
-    },
-    [],
-  );
-  const updateExplorerController = useCallback(
-    (controller: TwinExplorerHeaderController | null) => {
-      setExplorerController(controller);
     },
     [],
   );
@@ -147,40 +182,8 @@ export function SettingsMemoryHome() {
       </div>
     ) : null;
 
-  // Living Map header actions (sibling-UX parity): icon-only ghost buttons
-  // with hover tooltips at the far right of the page header — the same
-  // TooltipIconButton row the Agents page header uses — driven by the
-  // controller the map publishes while mounted.
-  const ontologyAction =
-    activeTab === "ontology" && ontologyMapController ? (
-      <div className="flex items-center gap-1">
-        <TooltipIconButton
-          label="Add triple"
-          onClick={() => ontologyMapController.openAddTriple()}
-        >
-          <Plus className="size-4" />
-        </TooltipIconButton>
-        <TooltipIconButton
-          label="Review queue"
-          className="relative"
-          aria-label={`Review queue (${ontologyMapController.pendingCount} pending)`}
-          onClick={() => ontologyMapController.openQueue()}
-        >
-          <Inbox className="size-4" />
-          {ontologyMapController.pendingCount > 0 ? (
-            <span
-              aria-hidden
-              className="bg-primary text-primary-foreground absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium leading-none"
-            >
-              {ontologyMapController.pendingCount}
-            </span>
-          ) : null}
-        </TooltipIconButton>
-      </div>
-    ) : null;
-
-  // KBs header action (Ontology-parity): the new-source gesture renders as
-  // a Plus TooltipIconButton in the page header while the KBs tab is active.
+  // KBs header action: the new-source gesture renders as a Plus
+  // TooltipIconButton in the page header while the KBs tab is active.
   const kbAction =
     activeTab === "knowledge-bases" && kbController ? (
       <TooltipIconButton
@@ -193,39 +196,12 @@ export function SettingsMemoryHome() {
       </TooltipIconButton>
     ) : null;
 
-  // Explorer header action (THINK-327): the Cypher console toggle rides
-  // the page header as a TooltipIconButton — the Ontology/KBs pattern.
-  const explorerAction =
-    activeTab === "explorer" && explorerController ? (
-      <TooltipIconButton
-        label="Cypher console"
-        aria-label="Toggle the Cypher console"
-        data-testid="settings-explorer-console"
-        className={cn(
-          explorerController.consoleOpen &&
-            "bg-primary/10 text-primary hover:text-primary",
-        )}
-        onClick={() => explorerController.toggleConsole()}
-      >
-        <Terminal className="size-4" />
-      </TooltipIconButton>
-    ) : null;
-
   usePageHeaderActions({
     // "Knowledge" umbrella naming (Company Brain U9): the nav item and this
     // page title read Knowledge. URLs unchanged.
     title: "Knowledge",
     breadcrumbs: [{ label: "Knowledge" }],
     tabs: [
-      // Company Brain leads and is the default tab (customer feedback
-      // 2026-07-23); explicit `active` keeps it highlighted on the bare
-      // /settings/memory path.
-      {
-        to: EXPLORER,
-        label: "Company Brain",
-        active: activeTab === "explorer",
-      },
-      { to: ONTOLOGY, label: "Ontology", active: activeTab === "ontology" },
       { to: RECORDS, label: "Memory", active: activeTab === "memory" },
       {
         to: KNOWLEDGE_BASES,
@@ -233,19 +209,13 @@ export function SettingsMemoryHome() {
         active: activeTab === "knowledge-bases",
       },
     ],
-    action:
-      activeTab === "ontology"
-        ? ontologyAction
-        : activeTab === "knowledge-bases"
-          ? kbAction
-          : activeTab === "explorer"
-            ? explorerAction
-            : refreshAction,
-    actionKey: `memory-refresh:${activeTab}:${explorerController ? `console:${explorerController.consoleOpen ? "open" : "closed"}` : "no-console"}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}:${rawUnitsController ? `${rawUnitsController.showRaw ? "raw" : "curated"}:${rawUnitsController.hiddenCount}` : "no-raw"}:${ontologyMapController ? `ontology:${ontologyMapController.pendingCount}` : "no-ontology"}:${kbController ? "kb" : "no-kb"}`,
+    action: activeTab === "knowledge-bases" ? kbAction : refreshAction,
+    actionKey: `memory-refresh:${activeTab}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}:${rawUnitsController ? `${rawUnitsController.showRaw ? "raw" : "curated"}:${rawUnitsController.hiddenCount}` : "no-raw"}:${kbController ? "kb" : "no-kb"}`,
   });
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
+      {brainConsoleAvailable ? <BrainConsoleCard /> : null}
       {activeTab === "memory" ? (
         <SettingsMemory
           embedded
@@ -253,18 +223,10 @@ export function SettingsMemoryHome() {
           onRawUnitsControllerChange={updateRawUnitsController}
         />
       ) : null}
-      {activeTab === "explorer" ? (
-        <TwinExplorer onHeaderControllerChange={updateExplorerController} />
-      ) : null}
       {activeTab === "knowledge-bases" ? (
         <SettingsKnowledgeBases
           embedded
           onHeaderControllerChange={updateKbController}
-        />
-      ) : null}
-      {activeTab === "ontology" ? (
-        <KnowledgeModelTab
-          onMapHeaderControllerChange={updateOntologyMapController}
         />
       ) : null}
     </div>
