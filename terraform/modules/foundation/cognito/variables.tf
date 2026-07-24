@@ -323,6 +323,28 @@ variable "cli_logout_urls" {
   ]
 }
 
+# ---------------------------------------------------------------------------
+# Company Brain console client (U13 — ship-inert, default off)
+# ---------------------------------------------------------------------------
+
+variable "console_client_enabled" {
+  description = "Create the optional Company Brain console app client. Default false = no client, console_client_id output is null (ship-inert until Eric reviews the console app)."
+  type        = bool
+  default     = false
+}
+
+variable "console_callback_urls" {
+  description = "OAuth callback URLs for the console client. MUST include the console's CloudFront/custom-domain URL BEFORE first login — Cognito rejects unregistered origins with redirect_mismatch. Required non-empty when console_client_enabled."
+  type        = list(string)
+  default     = []
+}
+
+variable "console_logout_urls" {
+  description = "OAuth logout URLs for the console client"
+  type        = list(string)
+  default     = []
+}
+
 variable "existing_auth_route_clients" {
   description = "Safe route-client manifest when using a BYO Cognito pool. Keys use <family>:<route>."
   type = map(object({

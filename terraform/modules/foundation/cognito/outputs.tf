@@ -18,6 +18,11 @@ output "mobile_client_id" {
   value       = local.mobile_client_id
 }
 
+output "console_client_id" {
+  description = "App client ID for the optional Company Brain console client (null while console_client_enabled = false)"
+  value       = one(aws_cognito_user_pool_client.console[*].id)
+}
+
 output "identity_pool_id" {
   description = "Identity pool ID (created or existing)"
   value       = local.identity_pool_id

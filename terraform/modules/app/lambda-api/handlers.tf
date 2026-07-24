@@ -124,9 +124,12 @@ locals {
     COGNITO_AUTH_BASE_URL       = local.mcp_oauth_cognito_base_url
     MCP_OAUTH_CALLBACK_URL      = "${local.mcp_oauth_api_base_url}/mcp/oauth/callback"
     MCP_OAUTH_REVOCATIONS_TABLE = aws_dynamodb_table.mcp_oauth_revocations.name
-    COGNITO_APP_CLIENT_IDS      = "${var.admin_client_id},${var.mobile_client_id}"
-    APPSYNC_ENDPOINT            = var.appsync_api_url
-    THINKWORK_API_URL           = local.api_base_url
+    # R16: comma-separated app-client allowlist. The optional console client id
+    # (U13) joins only when enabled; compact() drops the empty placeholder so
+    # the value is byte-identical to before while the console is off.
+    COGNITO_APP_CLIENT_IDS = join(",", compact([var.admin_client_id, var.mobile_client_id, var.console_client_id]))
+    APPSYNC_ENDPOINT       = var.appsync_api_url
+    THINKWORK_API_URL      = local.api_base_url
     # Deterministic routines v1 (plan 2026-07-03-004 U6): activates the
     # git-backed routine lifecycle tool suite on the admin-ops MCP server
     # (routine_repo_list/read/commit, routine_run_fixtures, routine_runs).

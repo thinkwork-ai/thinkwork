@@ -834,6 +834,13 @@ module "cognito" {
   cli_logout_urls       = var.cli_logout_urls
   mobile_callback_urls  = var.mobile_callback_urls
   mobile_logout_urls    = var.mobile_logout_urls
+
+  # Company Brain console client (U13 — ship-inert, default off). The console's
+  # CloudFront URL must be in console_callback_urls BEFORE first login
+  # (redirect_mismatch otherwise).
+  console_client_enabled = var.console_client_enabled
+  console_callback_urls  = var.console_callback_urls
+  console_logout_urls    = var.console_logout_urls
 }
 
 module "dns" {
@@ -1141,10 +1148,13 @@ module "api" {
 
   brain_artifacts_kms_key_arn = module.kms.key_arn
 
-  user_pool_id        = module.cognito.user_pool_id
-  user_pool_arn       = module.cognito.user_pool_arn
-  admin_client_id     = module.cognito.admin_client_id
-  mobile_client_id    = module.cognito.mobile_client_id
+  user_pool_id     = module.cognito.user_pool_id
+  user_pool_arn    = module.cognito.user_pool_arn
+  admin_client_id  = module.cognito.admin_client_id
+  mobile_client_id = module.cognito.mobile_client_id
+  # R16: console client id joins the COGNITO_APP_CLIENT_IDS allowlist when
+  # enabled ("" otherwise — the lambda-api module compacts it away).
+  console_client_id   = var.console_client_enabled ? module.cognito.console_client_id : ""
   cognito_auth_domain = module.cognito.auth_domain
 
   appsync_api_id  = module.appsync.graphql_api_id

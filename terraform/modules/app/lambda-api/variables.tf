@@ -148,6 +148,12 @@ variable "mobile_client_id" {
   type        = string
 }
 
+variable "console_client_id" {
+  description = "Optional Company Brain console client ID (U13). Empty when the console client is disabled — kept out of COGNITO_APP_CLIENT_IDS via compact()."
+  type        = string
+  default     = ""
+}
+
 variable "cognito_auth_domain" {
   description = "Cognito hosted UI domain prefix, e.g. thinkwork-dev. Empty disables MCP OAuth login."
   type        = string

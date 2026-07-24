@@ -14,11 +14,12 @@ describe("Cognito identity provider Terraform fixture", () => {
   it("documents the current shared-provider and shared-auth-flow client posture", () => {
     const main = read("terraform/modules/foundation/cognito/main.tf");
 
+    // web-family, mobile-family, and the optional console client (U13)
     expect(
       main.match(
         /supported_identity_providers\s*=\s*local\.identity_providers/g,
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     expect(main).toMatch(/\["COGNITO"\]/);
     expect(main).toMatch(/aws_cognito_identity_provider\.google/);
     expect(main).toMatch(/keys\(local\.oidc_identity_providers\)/);

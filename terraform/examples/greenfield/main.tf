@@ -388,6 +388,24 @@ variable "tenant_entra_connections" {
   default = []
 }
 
+variable "console_client_enabled" {
+  description = "Create the optional Company Brain console Cognito app client (U13). Default false = ship-inert."
+  type        = bool
+  default     = false
+}
+
+variable "console_callback_urls" {
+  description = "OAuth callback URLs for the console client — must include the console hosting URL BEFORE first login (redirect_mismatch otherwise)"
+  type        = list(string)
+  default     = []
+}
+
+variable "console_logout_urls" {
+  description = "OAuth logout URLs for the console client"
+  type        = list(string)
+  default     = []
+}
+
 variable "pre_signup_lambda_zip" {
   description = "Path to the Cognito pre-signup Lambda zip"
   type        = string
@@ -940,6 +958,9 @@ module "thinkwork" {
   microsoft_oauth_client_secret               = var.microsoft_oauth_client_secret
   microsoft_oauth_tenant                      = var.microsoft_oauth_tenant
   tenant_entra_connections                    = var.tenant_entra_connections
+  console_client_enabled                      = var.console_client_enabled
+  console_callback_urls                       = var.console_callback_urls
+  console_logout_urls                         = var.console_logout_urls
   pre_signup_lambda_zip                       = var.pre_signup_lambda_zip
   auth_retirement_phase                       = var.auth_retirement_phase
   auth_migration_recovery_deadline            = var.auth_migration_recovery_deadline
@@ -1194,6 +1215,11 @@ output "web_local_client_id" {
 output "mobile_client_id" {
   description = "Cognito app client ID for mobile"
   value       = module.thinkwork.mobile_client_id
+}
+
+output "console_client_id" {
+  description = "Cognito app client ID for the Company Brain console (null while console_client_enabled = false)"
+  value       = module.thinkwork.console_client_id
 }
 
 output "ecr_repository_url" {
