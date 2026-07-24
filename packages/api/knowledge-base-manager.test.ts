@@ -379,14 +379,22 @@ function seedSource(overrides: Record<string, unknown> = {}) {
   return source;
 }
 
-/** Drive the handler's poll-sleeps: advance fake time until it settles. */
+/**
+ * Drive the handler's poll-sleeps: advance fake time until the promise
+ * actually settles. Each iteration also yields a REAL event-loop turn
+ * (setImmediate is left unfaked below) so the handler's dynamic imports
+ * and mocked-IO microtasks can progress before the next advance — without
+ * the yield, a slow CI runner lets the loop burn its budget before the
+ * handler ever schedules its first sleep, and the test hangs.
+ */
 async function runWithTimers(promise: Promise<unknown>) {
   let done = false;
   const guarded = promise.finally(() => {
     done = true;
   });
-  for (let i = 0; i < 200 && !done; i++) {
+  for (let i = 0; i < 10_000 && !done; i++) {
     await vi.advanceTimersByTimeAsync(10_000);
+    await new Promise((resolve) => setImmediate(resolve));
   }
   return guarded;
 }
@@ -405,7 +413,7 @@ beforeEach(() => {
   h.ingestionJobStatus = "COMPLETE";
   h.assumeRoleFails = false;
   h.listAsRoleFails = false;
-  vi.useFakeTimers();
+  vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
   return () => vi.useRealTimers();
 });
 
