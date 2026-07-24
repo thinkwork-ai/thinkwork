@@ -1,8 +1,13 @@
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, it, expect } from "vitest";
 
 import {
   evaluateEtlCheckout,
   evaluateTenantResolution,
+  probeEtlCheckout,
 } from "../src/lib/twin-install-checks.js";
 
 describe("evaluateEtlCheckout", () => {
@@ -15,6 +20,7 @@ describe("evaluateEtlCheckout", () => {
     expect(r.pass).toBe(false);
     expect(r.detail).toMatch(/--etl-repo-dir/);
     expect(r.detail).toMatch(/THINKWORK_ETL_REPO/);
+    expect(r.detail).toMatch(/thinkwork-ai\/company-brain/);
   });
 
   it("fails naming the missing dir", () => {
@@ -35,6 +41,7 @@ describe("evaluateEtlCheckout", () => {
     });
     expect(r.pass).toBe(false);
     expect(r.detail).toMatch(/etl-platform/);
+    expect(r.detail).toMatch(/thinkwork-ai\/company-brain/);
   });
 
   it("passes on a valid checkout", () => {
@@ -45,6 +52,48 @@ describe("evaluateEtlCheckout", () => {
     });
     expect(r.pass).toBe(true);
     expect(r.detail).toContain("/home/me/etl");
+  });
+});
+
+describe("etl checkout dual-accept during transition (U8, KTD-10)", () => {
+  // Identity is established by the marker layout (etl-platform/), never the
+  // git remote — so a company-brain checkout and an old-repo checkout are
+  // indistinguishable and both accepted; unrelated repos lack the marker.
+  const mkRepo = (withMarker: boolean): string => {
+    const dir = mkdtempSync(join(tmpdir(), "etl-checkout-"));
+    if (withMarker) mkdirSync(join(dir, "etl-platform"));
+    return dir;
+  };
+
+  it("accepts a thinkwork-ai/company-brain checkout", () => {
+    const dir = mkRepo(true);
+    try {
+      const r = evaluateEtlCheckout(probeEtlCheckout(dir));
+      expect(r.pass).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts an old McPherson-Data/thinkwork checkout (transition window)", () => {
+    const dir = mkRepo(true);
+    try {
+      const r = evaluateEtlCheckout(probeEtlCheckout(dir));
+      expect(r.pass).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an unrelated repo without the etl-platform marker", () => {
+    const dir = mkRepo(false);
+    try {
+      const r = evaluateEtlCheckout(probeEtlCheckout(dir));
+      expect(r.pass).toBe(false);
+      expect(r.detail).toMatch(/etl-platform/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

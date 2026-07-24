@@ -10,7 +10,7 @@ enablement switch.
 
 ```bash
 thinkwork twin install -s <stage> [--tenant <slug>] \
-  --etl-repo-dir ~/src/mcpherson-thinkwork [--dry-run]
+  --etl-repo-dir ~/src/company-brain [--dry-run]
 ```
 
 ## What it does
@@ -57,15 +57,15 @@ neptune`) using its `accounts/<slug>.{backend.hcl,tfvars}` machinery.
 
 ## Flags
 
-| Flag              | Meaning                                                                                                                       |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `-s, --stage`     | Target stage.                                                                                                                 |
-| `-t, --tenant`    | Tenant slug. Required when the stage has more than one tenant; inferred when there is exactly one. Never "first tenant wins". |
-| `--etl-repo-dir`  | Local checkout of the etl repo (McPherson-Data/thinkwork). Falls back to `THINKWORK_ETL_REPO`.                                |
-| `--etl-account`   | etl `accounts/<slug>` entry to use. Defaults: `dev` → `thinkwork`, otherwise the stage name.                                  |
-| `--dry-run`       | Checks, Terraform plans, and channel diff only; no applies, deploys, or API writes.                                           |
-| `--allow-changes` | Permit Terraform _modifications_ to already-existing stacks. Destructive plans still abort.                                   |
-| `--rotate`        | Force MCP re-provisioning (rotates the `tkt_` key).                                                                           |
+| Flag              | Meaning                                                                                                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-s, --stage`     | Target stage.                                                                                                                                                                 |
+| `-t, --tenant`    | Tenant slug. Required when the stage has more than one tenant; inferred when there is exactly one. Never "first tenant wins".                                                 |
+| `--etl-repo-dir`  | Local checkout of the etl repo (thinkwork-ai/company-brain; a former McPherson-Data/thinkwork checkout also works during the transition). Falls back to `THINKWORK_ETL_REPO`. |
+| `--etl-account`   | etl `accounts/<slug>` entry to use. Defaults: `dev` → `thinkwork`, otherwise the stage name.                                                                                  |
+| `--dry-run`       | Checks, Terraform plans, and channel diff only; no applies, deploys, or API writes.                                                                                           |
+| `--allow-changes` | Permit Terraform _modifications_ to already-existing stacks. Destructive plans still abort.                                                                                   |
+| `--rotate`        | Force MCP re-provisioning (rotates the `tkt_` key).                                                                                                                           |
 
 ## Report and exit codes
 
