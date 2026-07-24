@@ -351,20 +351,23 @@ export type AutomaticIdentityLinkOutcome =
   | "identity_conflict";
 
 const AUTOMATIC_LINK_PROVIDER_KINDS = new Set([
+  "local",
   "google",
   "microsoft_organizations",
   "microsoft_tenant",
 ]);
 
 /**
- * Bind a newly authenticated Google or Microsoft Cognito subject to the
- * existing ThinkWork user with the same trusted, normalized provider email.
+ * Bind a newly authenticated local, Google, or Microsoft Cognito subject to
+ * the existing ThinkWork user with the same trusted, normalized provider
+ * email.
  *
  * The match is deliberately narrow: the Cognito JWT and route are verified by
- * `authenticate`, Google email must be verified (Entra instead supplies its
- * authenticated UPN), exactly one active user membership must permit that
- * route, and an existing subject can never be rebound. This makes provider
- * changes automatic without exposing an account-linking control in the UI.
+ * `authenticate`, local and Google email must be verified (Entra instead
+ * supplies its authenticated UPN), exactly one active user membership must
+ * permit that route, and an existing subject can never be rebound. This makes
+ * provider changes automatic without exposing an account-linking control in
+ * the UI.
  */
 export async function automaticallyLinkFederatedIdentity(
   auth: AuthResult,
@@ -427,7 +430,7 @@ export async function automaticallyLinkFederatedIdentity(
        AND tap.status = 'active'
       WHERE lower(btrim(u.email)) = ${normalizedEmail}
         AND (
-          ${route.providerKind} = 'google'
+          ${route.providerKind} IN ('local', 'google')
           OR (
             ${route.providerKind} = 'microsoft_organizations'
             AND NOT EXISTS (
@@ -469,7 +472,10 @@ export async function automaticallyLinkFederatedIdentity(
       provider_issuer: route.providerIssuer ?? cognitoIssuer,
       provider_subject: cognitoSub,
       status: "active",
-      proof_kind: "federated_login_email_match",
+      proof_kind:
+        route.providerKind === "local"
+          ? "local_login_email_match"
+          : "federated_login_email_match",
       evidence: {
         appClientId: route.appClientId,
         connectionKey: route.connectionKey,

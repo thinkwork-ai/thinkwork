@@ -316,6 +316,52 @@ describe("identity enrollment", () => {
     });
   });
 
+  it("automatically links a verified local password login to the one admitted user membership", async () => {
+    selectQueue.push([]);
+    routeRows.push({ user_id: "user-1", tenant_id: "tenant-1" });
+
+    await expect(
+      automaticallyLinkFederatedIdentity(
+        {
+          ...auth,
+          route: {
+            ...auth.route,
+            providerKind: "local",
+            connectionKey: "local",
+            providerIssuer: auth.cognitoIssuer,
+          },
+        },
+        new Date("2026-07-19T00:00:00Z"),
+      ),
+    ).resolves.toBe("linked");
+
+    expect(inserts[0]).toMatchObject({
+      values: expect.objectContaining({
+        tenant_id: "tenant-1",
+        user_id: "user-1",
+        cognito_sub: "cognito-sub-1",
+        status: "active",
+        proof_kind: "local_login_email_match",
+        evidence: expect.objectContaining({
+          emailClaimTrust: "cognito_email_verified",
+        }),
+      }),
+    });
+  });
+
+  it("does not link a local password login whose email is not verified", async () => {
+    selectQueue.push([]);
+
+    await expect(
+      automaticallyLinkFederatedIdentity({
+        ...auth,
+        emailVerified: false,
+        route: { ...auth.route, providerKind: "local", connectionKey: "local" },
+      }),
+    ).resolves.toBe("not_linked");
+    expect(inserts).toHaveLength(0);
+  });
+
   it("accepts an already-active exact provider binding without relinking it", async () => {
     selectQueue.push([
       {

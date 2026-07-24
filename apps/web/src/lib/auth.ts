@@ -99,8 +99,11 @@ export function signIn(
       Password: password,
     });
 
+    const succeed = (session: CognitoUserSession) => {
+      void linkLocalIdentityBestEffort(session).finally(() => resolve(session));
+    };
     user.authenticateUser(authDetails, {
-      onSuccess: (session) => resolve(session),
+      onSuccess: succeed,
       onFailure: (err) => reject(err),
       newPasswordRequired: () => {
         if (newPassword) {
@@ -109,7 +112,7 @@ export function signIn(
             newPassword,
             {},
             {
-              onSuccess: (session) => resolve(session),
+              onSuccess: succeed,
               onFailure: (err) => reject(err),
             },
           );
@@ -526,7 +529,7 @@ export function getAuthOptionIdentityMigrationUrl(
 export function isPasswordSignInConfigured(): boolean {
   return Boolean(
     readRuntimeEnv("VITE_COGNITO_USER_POOL_ID") &&
-    (passwordAuthClientId || readRuntimeEnv("VITE_COGNITO_CLIENT_ID")),
+      (passwordAuthClientId || readRuntimeEnv("VITE_COGNITO_CLIENT_ID")),
   );
 }
 
@@ -791,6 +794,36 @@ function consumePendingOAuthFlow(state: string): PendingOAuthFlow {
     throw new Error("OAuth state does not match this login attempt.");
   }
   return flow;
+}
+
+/**
+ * Password sign-ins never pass through the OAuth callback, so this is their
+ * only chance to bind an unlinked Cognito subject by verified email. It must
+ * stay best-effort: a pending invitee legitimately resolves `not_linked` here
+ * and completes binding later through the enrollment consume flow.
+ */
+async function linkLocalIdentityBestEffort(
+  session: CognitoUserSession,
+): Promise<void> {
+  try {
+    const response = await fetch(
+      `${apiBaseUrl()}/api/auth/enrollment/auto-link`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.getIdToken().getJwtToken()}`,
+        },
+      },
+    );
+    if (!response.ok) {
+      console.warn(
+        `Automatic identity linking responded with status ${response.status}.`,
+      );
+    }
+  } catch (linkError) {
+    console.warn("Automatic identity linking failed.", linkError);
+  }
 }
 
 async function automaticallyLinkNativeIdentity(idToken: string): Promise<void> {
