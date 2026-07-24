@@ -26,6 +26,10 @@ locals {
   # allowlist can admit — a non-VPC Lambda egresses from the shared AWS pool
   # and can never satisfy such an allowlist.
   analyst_vpc_enabled = length(var.analyst_egress_subnet_ids) > 0 && length(var.analyst_egress_security_group_ids) > 0
+  # Company Brain U5: the identity-graph-projector attaches to the VPC only
+  # when both Neptune network inputs are present (disjoint from the two
+  # blocks above — a function takes at most one vpc_config).
+  neptune_vpc_enabled = length(var.neptune_subnet_ids) > 0 && length(var.neptune_security_group_ids) > 0
   analyst_vpc_handlers = toset([
     "graphql-http",
     "analyst-query-broker",
@@ -79,15 +83,6 @@ resource "aws_apigatewayv2_stage" "default" {
     route_key              = "POST /api/auth/revoke"
     throttling_rate_limit  = 5
     throttling_burst_limit = 10
-  }
-
-  # Digital Twin MCP (THINK-333 KTD-4/KTD-6): edge throttle on the
-  # externally reachable query surface — bounds cost-DoS against Neptune
-  # before the Lambda concurrency layer.
-  route_settings {
-    route_key              = "ANY /mcp/twin"
-    throttling_rate_limit  = 10
-    throttling_burst_limit = 20
   }
 
   # UpdateStage 404s ("Unable to find Route by key … within the provided

@@ -11,6 +11,7 @@
  */
 
 import type { GraphQLContext } from "../../context.js";
+import { nudgeIdentityGraphProjector } from "../../../lib/entity-identity/graph-projection.js";
 import {
   authorEntitySourceMapping as authorEntitySourceMappingLib,
   revokeEntitySourceMapping as revokeEntitySourceMappingLib,
@@ -99,6 +100,8 @@ export async function splitCanonicalEntity(
     actorUserId,
     confirmImpact: toSplitImpact(args.confirmImpact),
   });
+  // Company Brain U5 (KTD-4): split committed — nudge the twin projector.
+  await nudgeIdentityGraphProjector(tenantId);
   return result;
 }
 
@@ -124,6 +127,8 @@ export async function authorEntitySourceMapping(
     actorUserId,
   });
   if (result.status === "created") {
+    // Company Brain U5 (KTD-4): mapping committed — nudge the twin projector.
+    await nudgeIdentityGraphProjector(tenantId);
     return {
       status: result.status,
       reason: null,
@@ -175,6 +180,8 @@ export async function revokeEntitySourceMapping(
     reason: args.reason?.trim() || undefined,
   });
   if (result.status === "revoked") {
+    // Company Brain U5 (KTD-4): revoke committed — nudge the twin projector.
+    await nudgeIdentityGraphProjector(tenantId);
     return {
       status: result.status,
       reason: null,

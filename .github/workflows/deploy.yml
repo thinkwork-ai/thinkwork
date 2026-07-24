@@ -1396,10 +1396,9 @@ jobs:
             -var "mcp_custom_domain=${{ vars.MCP_CUSTOM_DOMAIN }}"
             -var "mcp_custom_domain_ready=${{ vars.MCP_CUSTOM_DOMAIN_READY || 'false' }}"
             -var "analyst_policy_source=${{ vars.ANALYST_POLICY_SOURCE || 'row' }}"
-            # Company Brain Neptune wiring (THINK-339 U15: the twin Lambdas
-            # retired to the platform service — the endpoint feeds the
-            # wiki-compile soft-layer writer; the client SG / loader vars
-            # are deprecated no-ops kept for var compatibility).
+            # Company Brain twin (plan 2026-07-21-001 U5): Neptune wiring for
+            # the identity-graph-projector. Values come from the etl-platform
+            # neptune stack's outputs (repo vars; empty = twin disabled).
             -var "neptune_endpoint=${{ vars.NEPTUNE_ENDPOINT || '' }}"
             # Consolidation U14: platform-served Brain MCP endpoint. When set,
             # twin-connector provisioning registers agents against it instead
@@ -1407,6 +1406,10 @@ jobs:
             -var "brain_mcp_url=${{ vars.BRAIN_MCP_URL || '' }}"
             -var "neptune_cluster_resource_id=${{ vars.NEPTUNE_CLUSTER_RESOURCE_ID || '' }}"
             -var "neptune_client_security_group_id=${{ vars.NEPTUNE_CLIENT_SG_ID || '' }}"
+            # Bulk-rebuild lane (THINK-331): loader staging bucket + cluster
+            # loader role. Empty = bulk-rebuild returns "not configured".
+            # These must accompany neptune_endpoint in EVERY twin-attached
+            # stage now that the replay rebuild is retired.
             -var "neptune_load_bucket=${{ vars.NEPTUNE_LOAD_BUCKET || '' }}"
             -var "neptune_loader_role_arn=${{ vars.NEPTUNE_LOADER_ROLE_ARN || '' }}"
             # Governed autonomy — per-tenant self-extension opt-in allowlist.

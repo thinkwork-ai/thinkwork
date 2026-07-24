@@ -4,6 +4,7 @@
  * aborts on drift (merge.ts recomputes inside the transaction).
  */
 
+import { nudgeIdentityGraphProjector } from "../../../lib/entity-identity/graph-projection.js";
 import type { GraphQLContext } from "../../context.js";
 import { resolveCallerUserId } from "../core/resolve-auth-user.js";
 import {
@@ -57,5 +58,8 @@ export async function mergeCanonicalEntities(
     actorUserId,
     confirmImpact,
   });
+  // Company Brain U5 (KTD-4): the merge committed — nudge the twin graph
+  // projector (fire-and-forget; the cursor makes a missed nudge harmless).
+  await nudgeIdentityGraphProjector(tenantId);
   return result;
 }

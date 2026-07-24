@@ -71,9 +71,12 @@ locals {
     # signed sidecar block authoritative (budgets/policyClaims flow). Flip
     # ONLY after clean shadow parity on live traffic.
     ANALYST_POLICY_SOURCE = var.analyst_policy_source
-    # Neptune write seam for the wiki-compile soft-layer writer (Topic/
-    # Decision node upserts). Document, not env: graphql-http's env sits
-    # near the 4KB ceiling. Readers use getConfig.
+    # Neptune endpoint for the wiki-compile soft-layer writer and the
+    # identity-graph-projector's nudge gate (THINK-339 U15: the twin READ
+    # Lambdas retired to the platform service; the write/projection lane
+    # stays product-side — the platform identity_sync pipeline invokes it).
+    # Document, not env: graphql-http's env sits near the 4KB ceiling.
+    # Readers use getConfig; env still wins on the VPC projector.
     NEPTUNE_ENDPOINT = var.neptune_endpoint
     # Consolidation U14: platform-served Brain MCP endpoint. When set,
     # mcp-twin-provision registers the twin connector against it instead
@@ -516,6 +519,12 @@ locals {
       KB_SERVICE_ROLE_ARN  = var.kb_service_role_arn
       DATABASE_CLUSTER_ARN = var.db_cluster_arn
     }
+    # View-URL presigning for s3-connect documents: customer buckets are
+    # granted only to the KB service role, so the files handler assumes it
+    # (same trust path as the manager's preflight) to presign GETs.
+    "knowledge-base-files" = {
+      KB_SERVICE_ROLE_ARN = var.kb_service_role_arn
+    }
     # External S3 KB source U6 — scheduled access probes run AS the KB
     # service role (STS assume), and sync mode resolves the kb-manager fn
     # ARN from SSM.
@@ -526,6 +535,17 @@ locals {
     # structured-output call inside this Lambda. KG_EXTRACTION_MODEL_ID pins
     # the gpt-oss extraction model (Bedrock IAM via the shared lambda_bedrock
     # invoke policy, same as the promotion-gate classifier).
+    # Company Brain U5: Neptune coordinates for the twin graph projector.
+    # Empty endpoint leaves the projector inert (nudge helper skips too).
+    "identity-graph-projector" = {
+      NEPTUNE_ENDPOINT       = var.neptune_endpoint
+      NEPTUNE_PORT           = "8182"
+      BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
+      # Bulk-rebuild lane (THINK-331): loader staging coordinates. Empty =
+      # bulk-rebuild mode returns a structured "not configured" error.
+      NEPTUNE_LOAD_BUCKET     = var.neptune_load_bucket
+      NEPTUNE_LOADER_ROLE_ARN = var.neptune_loader_role_arn
+    }
     "knowledge-graph-observations-ingest" = {
       BRAIN_ARTIFACTS_BUCKET          = aws_s3_bucket.brain_artifacts.bucket
       OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
@@ -851,6 +871,11 @@ resource "aws_lambda_function" "handler" {
     # startIdentityMatchJob; the drift EventBridge Scheduler rule targets it
     # directly (identity_drift_match_enabled, ships DISABLED).
     "identity-match",
+    # Company Brain U5 (KTD-4): identity → twin graph projector. VPC-attached
+    # (Neptune). Event-invoked as a post-commit nudge by identity mutations;
+    # RequestResponse for the rebuild command. The per-tenant cursor row is
+    # the source of truth — missed nudges are harmless.
+    "identity-graph-projector",
     "wiki-lint",
     "wiki-export",
     "okf-materialize",
@@ -1074,8 +1099,8 @@ resource "aws_lambda_function" "handler" {
   # headroom for transient slowness.
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "knowledge-base-manager" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "knowledge-base-manager" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(4096, var.lambda_max_memory_mb) : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
@@ -1129,6 +1154,17 @@ resource "aws_lambda_function" "handler" {
     content {
       subnet_ids         = var.analyst_egress_subnet_ids
       security_group_ids = var.analyst_egress_security_group_ids
+    }
+  }
+
+  # Company Brain U5: the identity-graph-projector reaches Neptune inside
+  # the VPC (neptune-client SG). Disjoint from the two blocks above.
+  dynamic "vpc_config" {
+    for_each = each.key == "identity-graph-projector" && local.neptune_vpc_enabled ? [1] : []
+
+    content {
+      subnet_ids         = var.neptune_subnet_ids
+      security_group_ids = var.neptune_security_group_ids
     }
   }
 

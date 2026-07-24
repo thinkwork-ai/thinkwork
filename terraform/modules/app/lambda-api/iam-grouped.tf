@@ -521,6 +521,10 @@ locals {
           # retainTurn when the tenant's wiki_compile_enabled flag is on.
           # compileWikiNow admin mutation also Event-invokes.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile",
+          # identity-graph-projector (Company Brain U5): identity mutations
+          # Event-invoke this as a post-commit nudge; the rebuild command is
+          # a RequestResponse invoke. Cursor makes missed nudges harmless.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-identity-graph-projector",
           # knowledge-graph-observations-ingest: graphql-http's
           # startKnowledgeGraphObservationsIngest mutation invokes this with
           # RequestResponse, and memory-stage-worker's graph stage (THINK-193
@@ -1076,16 +1080,20 @@ locals {
         Resource = aws_sqs_queue.eval_fanout_dlq[0].arn
       },
     ] : [],
-    # Neptune data access on the SHARED role for the wiki-compile soft-layer
-    # writer's Topic/Decision node upserts (THINK-339 U15: the in-product
-    # identity projector, bulk-rebuild lane, and twin-query read path moved
-    # to the platform Company Brain service — this write seam is all the
-    # product retains).
+    # Company Brain twin (plan 2026-07-21-001 U5): Neptune data access for
+    # the identity-graph-projector (and the wiki-compile soft-layer writer)
+    # on the SHARED role. The twin-query read Lambda and its dedicated
+    # read-only role retired to the platform service (THINK-339 U15) — no
+    # caller-supplied query path remains product-side.
     # Lives in the ai envelope for size balance (data-plane sits ~430 chars
     # under IAM's 6,144 cap). Grouped — not inline — so the no-terraform
     # targeted deploy path (which applies exactly these grouped policies)
-    # self-heals the grant. Data actions are condition-pinned to openCypher,
+    # self-heals the grant; the original inline resource never survived a
+    # superseded full apply. Data actions are condition-pinned to openCypher,
     # mirroring the etl-side policies.
+    # (Two segments, not one: the data statement carries a Condition the
+    # status statement can't — mixed shapes in one conditional tuple fail
+    # Terraform's type unification.)
     var.neptune_cluster_resource_id == "" ? [] : [
       {
         Sid    = "TwinNeptuneData"
@@ -1099,6 +1107,37 @@ locals {
         Condition = {
           StringEquals = { "neptune-db:QueryLanguage" = "OpenCypher" }
         }
+      },
+    ],
+    var.neptune_cluster_resource_id == "" ? [] : [
+      {
+        Sid      = "TwinEngineStatus"
+        Effect   = "Allow"
+        Action   = ["neptune-db:GetEngineStatus", "neptune-db:GetGraphSummary"]
+        Resource = "arn:aws:neptune-db:${var.region}:${var.account_id}:${var.neptune_cluster_resource_id}/*"
+      },
+    ],
+    # Bulk-rebuild lane (THINK-331 U4): the projector stages openCypher CSVs
+    # under the tenant-scoped thinkwork-identity/ prefix of the etl-platform
+    # load bucket (Put for upload, Delete for the terminal-state cleanup)
+    # and drives the loader job API. A NEW statement group — the existing
+    # TwinNeptuneData statement is condition-pinned to QueryLanguage=
+    # OpenCypher, which the loader actions don't satisfy. Gated on the
+    # bulk-loader variables so stages without the twin stack ship inert
+    # (KTD-9). No iam:PassRole needed: the loader role is assumed by the
+    # Neptune service via its cluster association, not passed by this role.
+    var.neptune_load_bucket == "" || var.neptune_loader_role_arn == "" || var.neptune_cluster_resource_id == "" ? [] : [
+      {
+        Sid      = "TwinBulkLoaderStage"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:AbortMultipartUpload", "s3:DeleteObject"]
+        Resource = "arn:aws:s3:::${var.neptune_load_bucket}/thinkwork-identity/*"
+      },
+      {
+        Sid      = "TwinBulkLoaderJobs"
+        Effect   = "Allow"
+        Action   = ["neptune-db:StartLoaderJob", "neptune-db:GetLoaderJobStatus", "neptune-db:CancelLoaderJob"]
+        Resource = "arn:aws:neptune-db:${var.region}:${var.account_id}:${var.neptune_cluster_resource_id}/*"
       },
     ],
   )
