@@ -14,9 +14,14 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
-import { knowledgeBases, tenants } from "@thinkwork/database-pg/schema";
+import {
+  knowledgeBases,
+  knowledgeBaseDocuments,
+  knowledgeBaseSources,
+  tenants,
+} from "@thinkwork/database-pg/schema";
 import { authenticate } from "./src/lib/cognito-auth.js";
 import { resolveCallerFromAuth } from "./src/graphql/resolvers/core/resolve-auth-user.js";
 import {
@@ -85,6 +90,123 @@ function s3Prefix(tenantSlug: string, kbSlug: string): string {
   return `tenants/${tenantSlug}/knowledge-bases/${kbSlug}/documents/`;
 }
 
+/** Content types the browser can render inline in a new tab. Everything else
+ * presigns as a download (attachment disposition). */
+const INLINE_CONTENT_TYPES: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".txt": "text/plain",
+  ".md": "text/plain",
+  ".html": "text/html",
+  ".csv": "text/plain",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+};
+
+function extensionOf(key: string): string {
+  const base = key.slice(key.lastIndexOf("/") + 1);
+  const dot = base.lastIndexOf(".");
+  return dot >= 0 ? base.slice(dot).toLowerCase() : "";
+}
+
+/**
+ * Customer buckets (s3-connect sources) are granted ONLY to the KB service
+ * role — presigning a GET with this Lambda's own credentials would produce a
+ * URL that 403s. Assume the KB role (same trust path the manager's preflight
+ * and sync listing use) and presign with the assumed credentials.
+ */
+async function assumeKbRoleS3Client(): Promise<S3Client> {
+  const roleArn = getConfig("KB_SERVICE_ROLE_ARN", "");
+  if (!roleArn) {
+    throw new Error("KB_SERVICE_ROLE_ARN not configured");
+  }
+  const { STSClient, AssumeRoleCommand } = await import("@aws-sdk/client-sts");
+  const sts = new STSClient({
+    region: process.env.AWS_REGION || "us-east-1",
+  });
+  const assumed = await sts.send(
+    new AssumeRoleCommand({
+      RoleArn: roleArn,
+      RoleSessionName: "kb-document-view",
+      DurationSeconds: 900,
+    }),
+  );
+  const credentials = assumed.Credentials;
+  if (!credentials?.AccessKeyId) {
+    throw new Error(`No credentials returned assuming ${roleArn}`);
+  }
+  return new S3Client({
+    region: process.env.AWS_REGION || "us-east-1",
+    credentials: {
+      accessKeyId: credentials.AccessKeyId,
+      secretAccessKey: credentials.SecretAccessKey!,
+      sessionToken: credentials.SessionToken!,
+    },
+  });
+}
+
+interface ManifestDocRow {
+  id: string;
+  document_key: string;
+  ingest_status: string;
+  updated_at: Date;
+  source_id: string | null;
+  source_kind: string | null;
+  source_bucket: string | null;
+}
+
+async function manifestDocById(
+  kbId: string,
+  documentId: string,
+): Promise<ManifestDocRow | null> {
+  const [row] = await db
+    .select({
+      id: knowledgeBaseDocuments.id,
+      document_key: knowledgeBaseDocuments.document_key,
+      ingest_status: knowledgeBaseDocuments.ingest_status,
+      updated_at: knowledgeBaseDocuments.updated_at,
+      source_id: knowledgeBaseDocuments.source_id,
+      source_kind: knowledgeBaseSources.kind,
+      source_bucket: knowledgeBaseSources.bucket,
+    })
+    .from(knowledgeBaseDocuments)
+    .leftJoin(
+      knowledgeBaseSources,
+      eq(knowledgeBaseDocuments.source_id, knowledgeBaseSources.id),
+    )
+    .where(
+      and(
+        eq(knowledgeBaseDocuments.knowledge_base_id, kbId),
+        eq(knowledgeBaseDocuments.id, documentId),
+      ),
+    );
+  return row ?? null;
+}
+
+/** Presign a GET for a manifest document. s3-connect documents live in the
+ * customer's bucket (read AS the KB service role); managed uploads live in
+ * the workspace bucket under the KB prefix. */
+async function presignDocumentView(row: ManifestDocRow): Promise<string> {
+  const isExternal = row.source_kind === "s3-connect" && row.source_bucket;
+  const bucket = isExternal ? row.source_bucket! : workspaceBucket();
+  const client = isExternal ? await assumeKbRoleS3Client() : s3;
+  const ext = extensionOf(row.document_key);
+  const inlineType = INLINE_CONTENT_TYPES[ext];
+  const filename = row.document_key.slice(
+    row.document_key.lastIndexOf("/") + 1,
+  );
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: row.document_key,
+    ResponseContentDisposition: inlineType
+      ? `inline; filename="${filename.replace(/"/g, "")}"`
+      : `attachment; filename="${filename.replace(/"/g, "")}"`,
+    ...(inlineType ? { ResponseContentType: inlineType } : {}),
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return getSignedUrl(client as any, command as any, { expiresIn: 300 });
+}
+
 async function resolveKb(
   kbId: string,
 ): Promise<{ tenantId: string; tenantSlug: string; kbSlug: string } | null> {
@@ -138,8 +260,53 @@ export async function handler(
   }
 
   const { action, kbId, filename, content } = body;
-  if (!action || !kbId) {
+  if (!action || (!kbId && action !== "getViewUrlByKey")) {
     return json(400, { ok: false, error: "action and kbId are required" });
+  }
+
+  // Cross-KB lookup used by the thread Sources block: the client only knows
+  // the cited document key, not which KB it lives in. Tenant-scoped by the
+  // caller's tenant, so citations can never presign another tenant's files.
+  if (action === "getViewUrlByKey") {
+    const documentKey = String(body.documentKey ?? "");
+    if (!documentKey) {
+      return json(400, {
+        ok: false,
+        error: "documentKey is required for getViewUrlByKey",
+      });
+    }
+    try {
+      const [row] = await db
+        .select({
+          id: knowledgeBaseDocuments.id,
+          document_key: knowledgeBaseDocuments.document_key,
+          ingest_status: knowledgeBaseDocuments.ingest_status,
+          updated_at: knowledgeBaseDocuments.updated_at,
+          source_id: knowledgeBaseDocuments.source_id,
+          source_kind: knowledgeBaseSources.kind,
+          source_bucket: knowledgeBaseSources.bucket,
+        })
+        .from(knowledgeBaseDocuments)
+        .leftJoin(
+          knowledgeBaseSources,
+          eq(knowledgeBaseDocuments.source_id, knowledgeBaseSources.id),
+        )
+        .where(
+          and(
+            eq(knowledgeBaseDocuments.tenant_id, callerTenantId),
+            eq(knowledgeBaseDocuments.document_key, documentKey),
+          ),
+        )
+        .limit(1);
+      if (!row) {
+        return json(404, { ok: false, error: "Document not found" });
+      }
+      const viewUrl = await presignDocumentView(row);
+      return json(200, { ok: true, viewUrl });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return json(500, { ok: false, error: `View URL failed: ${message}` });
+    }
   }
 
   const resolved = await resolveKb(kbId);
@@ -278,6 +445,63 @@ export async function handler(
         documentKey: `${prefix}${filename}`,
       });
       return json(200, { ok: true });
+    }
+
+    if (action === "listManifest") {
+      // Paginated manifest view: every indexed document across ALL of the
+      // KB's sources (managed uploads AND s3-connect), which the plain S3
+      // `list` (workspace prefix only) cannot see.
+      const limit = Math.min(Math.max(Number(body.limit) || 10, 1), 1000);
+      const offset = Math.max(Number(body.offset) || 0, 0);
+      const [{ value: total }] = await db
+        .select({ value: count() })
+        .from(knowledgeBaseDocuments)
+        .where(eq(knowledgeBaseDocuments.knowledge_base_id, kbId));
+      const rows = await db
+        .select({
+          id: knowledgeBaseDocuments.id,
+          document_key: knowledgeBaseDocuments.document_key,
+          ingest_status: knowledgeBaseDocuments.ingest_status,
+          updated_at: knowledgeBaseDocuments.updated_at,
+          source_kind: knowledgeBaseSources.kind,
+        })
+        .from(knowledgeBaseDocuments)
+        .leftJoin(
+          knowledgeBaseSources,
+          eq(knowledgeBaseDocuments.source_id, knowledgeBaseSources.id),
+        )
+        .where(eq(knowledgeBaseDocuments.knowledge_base_id, kbId))
+        .orderBy(asc(knowledgeBaseDocuments.document_key))
+        .limit(limit)
+        .offset(offset);
+      return json(200, {
+        ok: true,
+        total,
+        documents: rows.map((row) => ({
+          id: row.id,
+          documentKey: row.document_key,
+          name: row.document_key.slice(row.document_key.lastIndexOf("/") + 1),
+          status: row.ingest_status,
+          sourceKind: row.source_kind ?? "managed-upload",
+          updatedAt: row.updated_at?.toISOString() ?? null,
+        })),
+      });
+    }
+
+    if (action === "getViewUrl") {
+      const documentId = String(body.documentId ?? "");
+      if (!documentId) {
+        return json(400, {
+          ok: false,
+          error: "documentId is required for getViewUrl",
+        });
+      }
+      const row = await manifestDocById(kbId, documentId);
+      if (!row) {
+        return json(404, { ok: false, error: "Document not found" });
+      }
+      const viewUrl = await presignDocumentView(row);
+      return json(200, { ok: true, viewUrl });
     }
 
     return json(400, { ok: false, error: "Unsupported action" });

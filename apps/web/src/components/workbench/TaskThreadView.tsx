@@ -113,6 +113,10 @@ import {
 } from "@/components/ai-elements/reasoning";
 import { Response } from "@/components/ai-elements/response";
 import {
+  KnowledgeSourcesCard,
+  knowledgeSourceKeysFromInvocations,
+} from "@/components/ai-elements/sources";
+import {
   formatDuration,
   formatTurnHeader,
   isRunningStatus,
@@ -2248,6 +2252,9 @@ function ThreadTurnActivity({
   const usage = parseRecord(turn.usageJson);
   const rows = actionRowsForTurn(turn, usage, message);
   const emailApprovalIds = emailApprovalIdsForTurn(usage);
+  const knowledgeSourceKeys = knowledgeSourceKeysFromInvocations(
+    parseArray(usage.tool_invocations),
+  );
   const goalRun = goalRunFromTurnEvidence(turn.resultJson, turn.usageJson);
 
   // Single source of truth for the header label (KTD2): derived from
@@ -2355,6 +2362,9 @@ function ThreadTurnActivity({
           </Button>
         ) : null}
       </div>
+      {knowledgeSourceKeys.length > 0 && !running ? (
+        <KnowledgeSourcesCard documentKeys={knowledgeSourceKeys} />
+      ) : null}
       {emailApprovalIds.map((approvalId) => (
         <InlineEmailApprovalCard key={approvalId} approvalId={approvalId} />
       ))}

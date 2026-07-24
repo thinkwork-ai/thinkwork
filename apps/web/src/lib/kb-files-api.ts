@@ -73,3 +73,61 @@ export async function deleteDocument(
 ): Promise<void> {
   await kbFilesApi({ action: "delete", kbId, filename });
 }
+
+/** One manifest row: a document indexed (or in flight) in the KB, across
+ * managed uploads and connected external buckets alike. */
+export interface KbManifestDocument {
+  id: string;
+  documentKey: string;
+  name: string;
+  status: string;
+  sourceKind: string;
+  updatedAt: string | null;
+}
+
+interface ListManifestResponse {
+  documents?: KbManifestDocument[];
+  total?: number;
+}
+
+export async function listManifestDocuments(
+  kbId: string,
+  limit: number,
+  offset: number,
+): Promise<{ documents: KbManifestDocument[]; total: number }> {
+  const data = await kbFilesApi<ListManifestResponse>({
+    action: "listManifest",
+    kbId,
+    limit,
+    offset,
+  });
+  return { documents: data.documents ?? [], total: data.total ?? 0 };
+}
+
+interface ViewUrlResponse {
+  viewUrl?: string;
+}
+
+export async function getDocumentViewUrl(
+  kbId: string,
+  documentId: string,
+): Promise<string> {
+  const data = await kbFilesApi<ViewUrlResponse>({
+    action: "getViewUrl",
+    kbId,
+    documentId,
+  });
+  if (!data.viewUrl) throw new Error("Failed to get view URL");
+  return data.viewUrl;
+}
+
+export async function getDocumentViewUrlByKey(
+  documentKey: string,
+): Promise<string> {
+  const data = await kbFilesApi<ViewUrlResponse>({
+    action: "getViewUrlByKey",
+    documentKey,
+  });
+  if (!data.viewUrl) throw new Error("Failed to get view URL");
+  return data.viewUrl;
+}

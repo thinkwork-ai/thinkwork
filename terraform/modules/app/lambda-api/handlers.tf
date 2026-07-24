@@ -519,6 +519,12 @@ locals {
       KB_SERVICE_ROLE_ARN  = var.kb_service_role_arn
       DATABASE_CLUSTER_ARN = var.db_cluster_arn
     }
+    # View-URL presigning for s3-connect documents: customer buckets are
+    # granted only to the KB service role, so the files handler assumes it
+    # (same trust path as the manager's preflight) to presign GETs.
+    "knowledge-base-files" = {
+      KB_SERVICE_ROLE_ARN = var.kb_service_role_arn
+    }
     # External S3 KB source U6 — scheduled access probes run AS the KB
     # service role (STS assume), and sync mode resolves the kb-manager fn
     # ARN from SSM.
