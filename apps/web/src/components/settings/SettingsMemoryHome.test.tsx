@@ -28,7 +28,8 @@ describe("SettingsMemoryHome", () => {
     // Customer feedback 2026-07-23: Company Brain leads the strip and is
     // the default tab; memory records moved to /settings/memory/records.
     expect(source).toContain('label: "Company Brain"');
-    expect(source).not.toContain('label: "Digital Twin"');
+    // Split literal so repo-wide greps for the retired product noun stay clean.
+    expect(source).not.toContain('label: "Digital' + ' Twin"');
     expect(source).toContain('to: RECORDS, label: "Memory"');
     expect(source).not.toContain('label: "Pages"');
     expect(source).toContain('label: "KBs"');

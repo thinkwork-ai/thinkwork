@@ -1,5 +1,5 @@
 /**
- * Digital Twin MCP connector provisioning (THINK-333 U4).
+ * Company Brain MCP connector provisioning (THINK-333 U4).
  *
  * One idempotent ceremony per tenant, run when the twin is deployed (and
  * re-run harmlessly):
@@ -47,7 +47,7 @@ import { materializeMcpAssignmentFoldersForAgents } from "../mcp/assignment-stat
 type DbLike = typeof defaultDb;
 
 export const TWIN_CONNECTOR_SLUG = "digital-twin";
-export const TWIN_CONNECTOR_NAME = "Digital Twin";
+export const TWIN_CONNECTOR_NAME = "Company Brain";
 export const TWIN_KEY_NAME = "default";
 
 /**
@@ -118,7 +118,7 @@ export function twinConnectorRowValues(input: {
 
 /** Twin-specific prose appended to the generated CONNECTION.md. */
 export const TWIN_CONNECTION_GUIDANCE = `
-## Querying the digital twin
+## Querying the company brain
 
 Call \`twin_describe_ontology\` FIRST — it returns this company's entity
 types, facet properties (\`f_<facet>__<attribute>\`), relationship types,

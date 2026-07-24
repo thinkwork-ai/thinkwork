@@ -1,5 +1,5 @@
 /**
- * tenant_mcp_twin_keys — per-tenant Bearer keys for the Digital Twin MCP
+ * tenant_mcp_twin_keys — per-tenant Bearer keys for the Company Brain MCP
  * server (THINK-333).
  *
  * The agent path to `/mcp/twin` authenticates with a `tkt_` key; the

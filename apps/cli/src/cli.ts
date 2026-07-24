@@ -167,7 +167,7 @@ registerCleanupSpaceHindsightBanksCommand(program);
 // Wiki (Compounding Memory) pipeline controls — admin-only.
 registerWikiCommand(program);
 
-// Digital Twin white-glove installation (THINK-334) — engineer-run.
+// Company Brain white-glove installation (THINK-334) — engineer-run.
 registerTwinCommand(program);
 
 // Accept `--json` after any subcommand too (not just right after `thinkwork`).

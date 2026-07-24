@@ -165,17 +165,25 @@ The one recursive shape an agent takes at any level of the workspace: `INSTRUCTI
 
 How a sub-agent gets capabilities: the presence of a grant folder inside its agent folder, never a frontmatter name-list. `agents/<slug>/connectors/<conn>/` holds only a platform-signed narrowing `.assignment.json` whose operations must be a subset of the root connector's grant (compile-enforced); `agents/<slug>/skills/<skill>/` holds a minimal signed marker referencing the root install. Definitions and credentials never copy down, so revoking the root connector withers every child grant with no child edit, and a dangling skill grant is visible absence at compile — the `SKILL_NOT_AVAILABLE`/`MCP_SERVER_NOT_AVAILABLE` runtime spawn-error class is retired for folder-format sub-agents. A deliberate deviation from Vercel Eve's copy-everything subagents, chosen for single-point revocation and drift-impossibility.
 
+### Capability Scope
+
+One of the four places a capability can be granted — agent root, sub-agent folder, space, or user — each holding its own `skills/`, `tools/`, and `mcp/` folders (THINK-302 direction). A turn's effective set is the additive union of all four; no scope can subtract what another granted, so confinement is achieved by granting only at the confining scope (a space acts as a security group this way). On slug collision the most specific scope wins whole (user > space > sub-agent > root) and the manifest records the winning scope — this is what makes per-user override work.
+
+### Context Plane vs Enforcement Plane
+
+The THINK-315 layer split: the workspace tree (`INSTRUCTIONS.md` + `skills/` + `agents/`) is the context plane — agent-shaping prose the model reads — while the capability registry + AgentCore Identity + AgentCore Gateway form the enforcement plane that decides every tool call. Tool, MCP, and connector grants are registry-only (no workspace folders; supersedes the THINK-302 `mcp/` folder and connector grants-by-presence direction for those classes), with mounted-vs-searchable tier as a binding attribute rather than a storage location. Spaces are context-first: they scope memory/KB/document access; space-scoped tool bindings stay legal but exceptional. The registry is the authored policy truth; the Gateway Policy engine is a compiled projection of it, never an authoring surface.
+
+### Approval Registry
+
+The platform-side record of which capability definition bytes are approved: tenant-scoped rows keyed by (class, slug, content sha) carrying `signed_by` provenance (operator / autonomous / backfill), extending the `capability_definitions`/`capability_definition_versions` pair (THINK-302 direction). Replaces per-folder Ed25519 `.assignment.json` signature envelopes; the compiler consults the registry at compile time and the signed compiled manifest remains the only trust artifact the runtime verifies. Any edit to a marker file changes its sha → `definition_drift` withhold until re-approved.
+
+### Parked-Turn Approval
+
+Runtime human-in-the-loop for capability invocation (Eve's HITL model; the THINK-174 placeholder named in the manifest compiler): a definition's `approval: never|once|always` frontmatter gates invocation, not admission. The gated tool appears in the manifest; calling it checkpoints the turn at the pending call, surfaces an approval card through the existing question-card UI, and a later dispatch resumes at the call site (approve → execute; deny → denial returned to the model as the tool result; `once` = first invocation per thread). Distinct from the compile-time trust gate (unsigned/drift/invalid → withheld), which is about whether a definition is admitted at all.
+
 ### Sub-Agent Freshness
 
 Sub-agent definitions are compiled state: edits take effect at the next capabilities compile + workspace sync boundary, never mid-thread at the next dispatch. The manifest's agent entry pins the compiled `INSTRUCTIONS.md` etag; Pi verifies the synced file against the pin before spawning and skips the profile loudly on mismatch, so the fingerprint recorded on a run (the eval-comparability join key) is always truthful.
-
-### Delegation Card
-
-The user-facing rendering of one sub-agent run in the web thread (THINK-322 visibility slice): an openable card inline at the handoff point showing specialist identity, live run state, and final verdict at a glance; opening it reveals the two-party parent↔specialist exchange — delegated task, each handoff, each send-back with the parent's revise reason, closing verdict. Calm-by-default alternative to always-streaming delegation messages; applies to runs after the provenance schema lands (no historical backfill).
-
-### Send-Back
-
-A user-visible revise cycle inside a delegation: the parent's `revise` verdict on a specialist handoff, rendered with its reason as a distinct entry in the Delegation Card's exchange. Send-back count is the trust signal distinguishing a reviewed answer ("pass, 2 send-backs") from one that passed first try. Maps from the existing 4-verdict handoff machinery; clarification escalations render as send-backs too, without consuming the revise budget (R20).
 
 ### Eve Deviations (recorded)
 
@@ -214,14 +222,6 @@ The recurring background consolidation pass over memory banks. It does two jobs:
 ### Evidence-Threshold Promotion
 
 The mechanical rule deciding which knowledge-graph entities earn wiki pages: an entity is promoted when it crosses observable evidence thresholds (distinct-thread mentions over time, relationship count, referenced by another page). Ontology types are optional labels and never gate promotion. Sub-threshold entities remain fully agent-queryable in the graph; promotion controls only the human wiki window.
-
-### Living Map
-
-The Ontology tab's landing surface: the schema graph rendered as a canvas where approved entity/relationship types are solid nodes and edges, and candidates (from suggestion scans, untyped entities, or operator authoring) appear as ghost nodes with evidence counts. Focusing a candidate or adding a triple opens a form editor whose Save always emits a change-set item — review and authoring share one gesture and one governed exit path; the canvas never writes definitions directly.
-
-### Ontology Pack
-
-A bundle of seed ontology entity-type templates installable from the Ontology tab. Install creates a pre-staged change set for admin approval — never a direct write. The templates ship in code (14 exist; 4 install at tenant bootstrap as the baseline, the rest activate only via pack install).
 
 ### Progressive Discovery
 
@@ -269,11 +269,23 @@ Answering a cross-system question by federation instead of replication: the agen
 
 ### Projector Lanes
 
-The identity graph projector's two write paths into the Neptune twin. The nudge lane is steady state: fire-and-forget invokes drain the per-tenant event cursor, which carries ordering and idempotency (missed or duplicate nudges are harmless). The bulk-rebuild lane is the only full-rebuild path: read all tenant canonicals and tenant-visible mappings from Postgres, load via the Neptune bulk loader (deterministic node/edge ids so re-runs converge), optionally behind the id-prefix-fenced clear, and fast-forward the cursor to a watermark captured at extract time so reflected events don't replay while mid-load events stay pending for the nudge lane. Clear + bulk-rebuild is the recovery for a retyped canonical's stale-labeled node. Supersedes the replay-based `rebuild` mode, which could not finish above ~20k canonicals inside one Lambda invoke (THINK-331).
+The identity graph projector's two write paths into the Neptune twin. The nudge lane is steady state: fire-and-forget invokes drain the per-tenant event cursor, which carries ordering and idempotency (missed or duplicate nudges are harmless). The bulk-rebuild lane is the only full-rebuild path: read all tenant canonicals and tenant-visible mappings from Postgres, load via the Neptune bulk loader (deterministic node/edge ids so re-runs converge), optionally behind the id-prefix-fenced clear, and fast-forward the cursor on success so reflected events don't replay. Clear + bulk-rebuild is the recovery for a retyped canonical's stale-labeled node. Supersedes the replay-based `rebuild` mode, which could not finish above ~20k canonicals inside one Lambda invoke (THINK-331).
+
+### Company Brain (formerly Digital Twin)
+
+The deep-cloned instance graph of a tenant's structured world: ingestion pipelines materialize every declared facet of every entity type by default (per-facet limiting is the escape valve for very large data) into a Neptune Serverless graph shaped by the ontology — entity nodes with cloned facets, entity-to-entity edges populated deterministically from declared source foreign-key bindings, and external-system nodes whose incoming edges carry each system's external ID while the node carries fetch metadata. The graph is the agent's entire brain read surface; identity writes stay in the relational Canonical Identity machinery and project into the graph on every change. Inverts Routed Fetch's federation-over-replication stance at the brain layer — staleness is managed by sync cadence, not avoided by refusing to cache — while the crosswalk stays load-bearing for identity and live follow-out. Introduced by the company-brain arc (2026-07-21).
 
 ### Context Tree
 
-The bounded "related parties" view of a single Digital Twin node, computed from relationship-type cardinality rather than hop depth: edges that are to-one from the current node's perspective expand transitively (an Order reaches its Customer, and the Customer's Sales Rep), while to-many edges expand only from the focal node itself (the Order shows its Order Items, but the Customer's other thousand orders never appear). Null cardinality is treated as to-many; a per-type `expand_through` override lets a to-many edge expand below the root. Edge direction stays purely semantic — one canonical stored direction per relationship type, with `inverse_name` carrying the reverse-direction display label. Replaces the depth-selector neighborhood view in the Twin Explorer (2026-07-22 brainstorm).
+The bounded "related parties" view of a single Company Brain node, computed from relationship-type cardinality rather than hop depth: edges that are to-one from the current node's perspective expand transitively (an Order reaches its Customer, and the Customer's Sales Rep), while to-many edges expand only from the focal node itself (the Order shows its Order Items, but the Customer's other thousand orders never appear). Null cardinality is treated as to-many; a per-type `expand_through` override lets a to-many edge expand below the root. Edge direction stays purely semantic — one canonical stored direction per relationship type, with `inverse_name` carrying the reverse-direction display label. Replaces the depth-selector neighborhood view in the Twin Explorer (2026-07-22 brainstorm).
+
+### Summary Node
+
+The aggregated neighbor group rendered during twin graph traversal: one node per (relationship, entity type) pair among a focal entity's 1-degree neighbors, labeled with the neighbor type and count ("Customers (20)" on a `serves` edge). Clicking a summary node bursts it into individual entity nodes in place (top-N batches with a "+N more…" node for large groups); clicking it again collapses the group. Distinct from the Context Tree, which is a cardinality-bounded read view — summary nodes are the interactive expansion gesture of the traversal explorer (2026-07-23 brainstorm).
+
+### Entity-Page Projection
+
+The wiki reimagined as a live projection of the Company Brain: per entity type, operators declare which sections a page shows — facet-backed (cached, freshness stamped), live-routed (fetched on view via the entity→system edge), or Knowledge (distilled memories from the soft kg/memory layer, joined by canonical ID and visibly distinct from source-backed fact). Topics and Decisions become node types with projected pages; nothing is hand-compiled into page storage.
 
 ### External-Memory Rollout Gates
 
@@ -447,14 +459,6 @@ One execution of a workflow: a `workflow_runs` record carrying versioned inputs,
 
 A typed unit in a workflow definition — `agent`, `routine`, `tool`, `approval`, `wait`, `http`, or `emit_event`. A routine step invokes the routine's existing engine unchanged; an approval or wait step suspends the run via task token until resolved.
 
-### Stall Clock
-
-The activity timestamp (`thread_turns.last_activity_at`, coalesced to `started_at`) the stall-monitor cron reads to decide whether a `running` turn is stuck. Activity means observed runtime liveness — mid-turn activity event batches and document emissions on the chat path, and the wakeup path's existing bump — not merely dispatch. A turn whose clock goes stale past the stall threshold is marked `timed_out` and enters automatic recovery (THINK-301).
-
-### Superseded Retry
-
-A `retry_queue` row terminal status meaning "recovery was queued but is no longer needed" — the origin turn succeeded or was cancelled, showed fresh Stall Clock activity, or the row was stale backlog older than the dispatch cutoff. Superseded rows are records, never deleted, and are distinct from `exhausted` (recovery ran out of attempts) so recovery surfaces stay truthful (THINK-301 U3/U4).
-
 ### Delivery Step
 
 A typed workflow step that sends the workflow's maintained document to an operator-configured recipient list after the agent step finalizes: an email-safe inline rendering plus a share link to the living document (THINK-227). The operator-saved recipient list is the standing send grant (version-audited via automation versions); step outcomes — sent, failed, skipped when no new edition — are run evidence, and sends ride the outbound email ledger.
@@ -474,6 +478,20 @@ The single static Step Functions state machine per Stage that executes all inter
 ### Engine Binding
 
 The record linking a canonical Workflow to the backend that executes it — binding type, connection reference (such as a state-machine ARN), capability flags, and readiness state. Distinct binding types (per-routine state machine, shared interpreter) let runs of different execution eras coexist under one workflow identity.
+
+## Lifecycle
+
+### Lifecycle Machine
+
+The declarative statechart governing a status-bearing entity's transitions: XState machine-config JSON (states, events, guards by name, parallel regions, terminal states) evaluated with XState's pure transition API — no actor runtime — and persisted as ThinkWork-owned `{stateValue, context, machineVersion}` columns with guards executed as single conditional writes. "Lifecycle" is the product noun; XState is an implementation term confined to the kernel, per the Workflow/Routine naming precedent.
+
+### Reopen
+
+The explicit lifecycle event that exits a terminal work-item state (done/skipped back to active), available to human and agent actors alike and recorded with actor and reason. Terminal states are final for ordinary status writes; reopen is the only way out, replacing the silent GraphQL-side reversal that agents were forbidden but humans could perform undetected.
+
+### Mode Computer
+
+The single pure derivation of an agent loop's goal-mode state from its run and iteration rows, persisted to `agent_loop_runs.goal_mode_action`. The Pi invoke payload builders render this persisted value rather than computing goal-mode fields independently — the fix for the payload-parity bug class, named for aviation's Flight Mode Annunciator pattern.
 
 ## Deterministic Routines
 

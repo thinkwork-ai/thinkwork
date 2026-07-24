@@ -1,5 +1,5 @@
 /**
- * Agent-facing ontology description for the Digital Twin MCP server
+ * Agent-facing ontology description for the Company Brain MCP server
  * (THINK-333 KTD-5).
  *
  * Renders the compiled twin-mapping export (`twin-mapping/v1` — the same
@@ -35,7 +35,7 @@ export async function describeTwinOntology(
 export function renderTwinOntology(exported: TwinMappingExport): string {
   const lines: string[] = [];
   lines.push(
-    `# Digital Twin ontology (version ${exported.ontologyVersion})`,
+    `# Company Brain ontology (version ${exported.ontologyVersion})`,
     "",
     "Query this graph with the `twin_cypher` tool (openCypher, read-only).",
     "",

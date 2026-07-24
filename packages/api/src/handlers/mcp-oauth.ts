@@ -57,7 +57,7 @@ const SCOPES_SUPPORTED_LIST = [
   "context:read",
   "open_engine:work_items",
   "capabilities:search",
-  // THINK-333: the Digital Twin MCP resource.
+  // THINK-333: the Company Brain MCP resource.
   "twin:read",
 ];
 const MCP_RESOURCE_PATHS = new Set([
@@ -66,7 +66,7 @@ const MCP_RESOURCE_PATHS = new Set([
   "/mcp/open-engine",
   // THINK-280 U8: the scoped external capability search resource.
   "/mcp/capabilities",
-  // THINK-333: the Digital Twin MCP server.
+  // THINK-333: the Company Brain MCP server.
   "/mcp/twin",
 ]);
 
