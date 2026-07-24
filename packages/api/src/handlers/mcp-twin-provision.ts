@@ -10,8 +10,9 @@
  * Routes:
  *   POST /api/tenants/:tenantId/mcp-twin-provision
  *     body: { url?: string, action?: "republish-keys" }
- *       url — override the MCP endpoint. Defaults to the stage API
- *             Gateway URL + /mcp/twin.
+ *       url — override the MCP endpoint. Defaults to BRAIN_MCP_URL
+ *             (platform-served Brain MCP, consolidation U14) when
+ *             configured, else the stage API Gateway URL + /mcp/twin.
  *       action "republish-keys" — idempotent backfill: publish the
  *             hashed-key manifest (twin-mcp-keys/<tenantId>/latest.json)
  *             from the CURRENT active keys WITHOUT rotating anything.
@@ -37,6 +38,17 @@ import { provisionTwinConnector } from "../lib/twin/provision-connector.js";
 const STAGE = process.env.STAGE || "dev";
 
 function defaultTwinMcpUrl(): string {
+  // Consolidation U14: when the stage has a platform-served Brain MCP
+  // endpoint configured, register agents against it instead of the
+  // product's /mcp/twin route — same tkt_ keys, verified platform-side
+  // via the hashed-key manifest. Empty/unset keeps the legacy default.
+  let brainMcpUrl = "";
+  try {
+    brainMcpUrl = (getConfig("BRAIN_MCP_URL") || "").trim();
+  } catch {
+    brainMcpUrl = "";
+  }
+  if (brainMcpUrl) return brainMcpUrl.replace(/\/+$/, "");
   const apiUrl = getConfig("THINKWORK_API_URL");
   if (!apiUrl) throw new Error("THINKWORK_API_URL is not set");
   return `${apiUrl.replace(/\/+$/, "")}/mcp/twin`;

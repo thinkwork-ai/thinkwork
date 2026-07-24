@@ -153,6 +153,12 @@ variable "neptune_endpoint" {
   description = "Company Brain twin: Neptune writer endpoint (etl-platform neptune stack output; empty = twin disabled)"
 }
 
+variable "brain_mcp_url" {
+  type        = string
+  default     = ""
+  description = "Platform-served Brain MCP endpoint (consolidation U14); empty = legacy product-served /mcp/twin"
+}
+
 variable "neptune_cluster_resource_id" {
   type        = string
   default     = ""
@@ -926,6 +932,7 @@ module "thinkwork" {
   agentcore_turn_assertion_active_key_version = var.agentcore_turn_assertion_active_key_version
   analyst_lambda_vpc_egress                   = var.analyst_lambda_vpc_egress
   neptune_endpoint                            = var.neptune_endpoint
+  brain_mcp_url                               = var.brain_mcp_url
   neptune_cluster_resource_id                 = var.neptune_cluster_resource_id
   neptune_client_security_group_id            = var.neptune_client_security_group_id
   neptune_load_bucket                         = var.neptune_load_bucket

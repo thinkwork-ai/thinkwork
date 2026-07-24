@@ -78,6 +78,10 @@ locals {
     # Document, not env: graphql-http's env sits near the 4KB ceiling.
     # Readers use getConfig; env still wins on the VPC twin handlers.
     NEPTUNE_ENDPOINT = var.neptune_endpoint
+    # Consolidation U14: platform-served Brain MCP endpoint. When set,
+    # mcp-twin-provision registers the twin connector against it instead
+    # of the product /mcp/twin route. Empty = legacy default.
+    BRAIN_MCP_URL = var.brain_mcp_url
     # Same class of bug, second instance (2026-07-22): the ontology-reprocess
     # post-apply twin-export hook read BRAIN_ARTIFACTS_BUCKET from env it
     # never had and silently returned skipped_no_bucket on every apply.
