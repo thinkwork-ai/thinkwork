@@ -114,7 +114,7 @@ import {
 import { Response } from "@/components/ai-elements/response";
 import {
   KnowledgeSourcesCard,
-  knowledgeSourceKeysFromInvocations,
+  knowledgeSourcesFromInvocations,
 } from "@/components/ai-elements/sources";
 import {
   formatDuration,
@@ -2252,7 +2252,7 @@ function ThreadTurnActivity({
   const usage = parseRecord(turn.usageJson);
   const rows = actionRowsForTurn(turn, usage, message);
   const emailApprovalIds = emailApprovalIdsForTurn(usage);
-  const knowledgeSourceKeys = knowledgeSourceKeysFromInvocations(
+  const knowledgeSources = knowledgeSourcesFromInvocations(
     parseArray(usage.tool_invocations),
   );
   const goalRun = goalRunFromTurnEvidence(turn.resultJson, turn.usageJson);
@@ -2362,8 +2362,8 @@ function ThreadTurnActivity({
           </Button>
         ) : null}
       </div>
-      {knowledgeSourceKeys.length > 0 && !running ? (
-        <KnowledgeSourcesCard documentKeys={knowledgeSourceKeys} />
+      {knowledgeSources.length > 0 && !running ? (
+        <KnowledgeSourcesCard sources={knowledgeSources} />
       ) : null}
       {emailApprovalIds.map((approvalId) => (
         <InlineEmailApprovalCard key={approvalId} approvalId={approvalId} />

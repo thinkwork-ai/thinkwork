@@ -224,6 +224,13 @@ export const knowledgeBaseSources = pgTable(
       "knowledge_base_sources_access_status_check",
       sql`${table.access_status} IN ('pending', 'healthy', 'degraded', 'access_revoked', 'failed')`,
     ),
+    // 'TRANSCRIBE' routes image-bearing pages through the kb-transcribe
+    // preprocessor before ingestion; 'DEFAULT' hands bytes to Bedrock's
+    // standard parser (no OCR, no visual extraction).
+    check(
+      "knowledge_base_sources_parsing_strategy_check",
+      sql`${table.parsing_strategy} IN ('DEFAULT', 'TRANSCRIBE')`,
+    ),
     // s3-connect rows must know where they point.
     check(
       "knowledge_base_sources_s3_connect_location_check",
@@ -313,6 +320,20 @@ export const knowledgeBaseDocuments = pgTable(
     ingest_status: text("ingest_status").notNull().default("pending"),
     projection_status: text("projection_status").notNull().default("pending"),
     last_error: text("last_error"),
+    /** Workspace-bucket prefix holding this document's preprocessor output
+     * (pages/<n>.md + report.json), when parsing_strategy is 'TRANSCRIBE'. */
+    derived_prefix: text("derived_prefix"),
+    /** Page count of the source PDF — also the fan-out width of the
+     * '<document_key>#p=<n>' page documents ingested for it. */
+    page_count: integer("page_count"),
+    /** Preprocessor pipeline version. Part of the change-detection predicate:
+     * a version bump forces reprocessing even when the S3 etag is unchanged. */
+    preprocessor_version: text("preprocessor_version"),
+    /** Per-page route, model used, and flags — see PageReport in
+     * packages/api/src/lib/knowledge/kb-transcribe-report.ts. */
+    page_report: jsonb("page_report"),
+    /** Any page came back low-signal. Indexed with a warning, never dropped. */
+    needs_review: boolean("needs_review").notNull().default(false),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -350,6 +371,10 @@ export const knowledgeBaseDocuments = pgTable(
       "knowledge_base_documents_edition_positive",
       sql`${table.edition} >= 1`,
     ),
+    // Operator surface: documents with pages the preprocessor flagged.
+    index("idx_kb_documents_needs_review")
+      .on(table.knowledge_base_id)
+      .where(sql`${table.needs_review}`),
   ],
 );
 

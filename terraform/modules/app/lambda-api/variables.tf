@@ -175,6 +175,18 @@ variable "kb_service_role_arn" {
   type        = string
 }
 
+variable "kb_transcribe_model_ladder" {
+  description = <<-EOT
+    Ordered, comma-separated Bedrock model ids the KB page transcriber tries.
+    The first model the ACCOUNT can actually call wins, and the worker records
+    which one ran. Model availability is per-account — the Opus tiers return
+    AccessDeniedException on accounts AWS has not allowlisted — so a single
+    pinned model would strand those tenants with no transcription at all.
+  EOT
+  type        = string
+  default     = "us.anthropic.claude-opus-5,us.anthropic.claude-opus-4-8,us.anthropic.claude-sonnet-4-6"
+}
+
 variable "agentcore_harness_execution_role_arn" {
   description = "Legacy Harness execution-role input retained for module compatibility. Request-path PassRole/control-plane grants were removed by THINK-316 U2."
   type        = string
