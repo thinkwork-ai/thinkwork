@@ -114,7 +114,9 @@ import {
 import { Response } from "@/components/ai-elements/response";
 import {
   KnowledgeSourcesCard,
+  knowledgeCitationsFromInvocations,
   knowledgeSourcesFromInvocations,
+  type KnowledgeCitation,
 } from "@/components/ai-elements/sources";
 import {
   formatDuration,
@@ -2021,10 +2023,16 @@ function TranscriptSegment({
   // pre-U6 historical messages).
   const hasTypedParts = streamState != null && streamState.parts.length > 0;
   const skillDraft = skillDraftStatusFromMessage(message);
+  // Numbered knowledge citations for this turn — the answer's `[n]` markers
+  // resolve against these to become links to the cited document and page.
+  const knowledgeCitations = knowledgeCitationsFromInvocations(
+    parseArray(parseRecord(turn?.usageJson).tool_invocations),
+  );
   return (
     <>
       <TranscriptMessage
         message={message}
+        knowledgeCitations={knowledgeCitations}
         documentCards={documentCards}
         canvasesByStablePartId={canvasesByStablePartId}
         threadId={threadId}
@@ -2763,6 +2771,7 @@ function CollapsibleUserMessageBody({
 
 function TranscriptMessage({
   message,
+  knowledgeCitations,
   documentCards,
   canvasesByStablePartId,
   threadId,
@@ -2777,6 +2786,8 @@ function TranscriptMessage({
   onJsonRenderActionSuccess,
 }: {
   message: TaskThreadMessage;
+  /** Numbered knowledge citations for the turn this message belongs to. */
+  knowledgeCitations?: Map<number, KnowledgeCitation>;
   documentCards?: DocumentCardData[];
   canvasesByStablePartId?: ReadonlyMap<string, ArtifactCardData>;
   threadId?: string;
@@ -2890,6 +2901,7 @@ function TranscriptMessage({
           sourceMessageId: message.id,
           threadId,
           userQuestion,
+          citations: knowledgeCitations,
           onJsonRenderActionSuccess,
           suppressJsonRenderPartIds:
             suppressedPartIds.size > 0 ? suppressedPartIds : undefined,

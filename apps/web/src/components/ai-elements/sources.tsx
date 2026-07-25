@@ -21,6 +21,96 @@ export interface KnowledgeSource {
 }
 
 /**
+ * One numbered passage the answer can cite inline. `n` is the marker the
+ * runtime handed the model (`[3]`), stable across every search in the turn.
+ */
+export interface KnowledgeCitation {
+  n: number;
+  key: string;
+  page?: number;
+  /** Excerpt shown in the citation hover card. */
+  quote?: string;
+}
+
+/** Iterate the search_knowledge invocations of one turn. */
+function forEachKnowledgeInvocation(
+  invocations: unknown[],
+  visit: (record: Record<string, unknown>) => void,
+): void {
+  for (const value of invocations) {
+    if (!value || typeof value !== "object") continue;
+    const record = value as Record<string, unknown>;
+    const name =
+      (typeof record.tool_name === "string" && record.tool_name) ||
+      (typeof record.toolName === "string" && record.toolName) ||
+      (typeof record.name === "string" && record.name) ||
+      "";
+    if (name !== "search_knowledge") continue;
+    visit(record);
+  }
+}
+
+/**
+ * Numbered citations for a turn, newest-wins-never: the FIRST occurrence of a
+ * marker is authoritative, because that is the one the model was looking at
+ * when it wrote the marker into its answer.
+ *
+ * Prefers the structured `details.hits` the Pi runner returns — parsing the
+ * rendered text is a fallback for ledger-shaped records that only kept an
+ * output preview.
+ */
+export function knowledgeCitationsFromInvocations(
+  invocations: unknown[],
+): Map<number, KnowledgeCitation> {
+  const citations = new Map<number, KnowledgeCitation>();
+  const add = (citation: KnowledgeCitation) => {
+    if (!citation.key || !Number.isFinite(citation.n)) return;
+    if (!citations.has(citation.n)) citations.set(citation.n, citation);
+  };
+
+  forEachKnowledgeInvocation(invocations, (record) => {
+    const result = record.result as Record<string, unknown> | undefined;
+    const details = result?.details as Record<string, unknown> | undefined;
+    const hits = Array.isArray(details?.hits) ? details.hits : [];
+    for (const raw of hits) {
+      if (!raw || typeof raw !== "object") continue;
+      const hit = raw as Record<string, unknown>;
+      if (typeof hit.citation !== "number") continue;
+      add({
+        n: hit.citation,
+        key: typeof hit.documentKey === "string" ? hit.documentKey : "",
+        page: typeof hit.pageNumber === "number" ? hit.pageNumber : undefined,
+        quote: typeof hit.quote === "string" ? hit.quote : undefined,
+      });
+    }
+
+    // Fallback: recover markers from the rendered text.
+    const texts: string[] = [];
+    const content = Array.isArray(result?.content) ? result.content : [];
+    for (const block of content) {
+      const text = (block as Record<string, unknown>)?.text;
+      if (typeof text === "string") texts.push(text);
+    }
+    if (typeof record.output_preview === "string") {
+      texts.push(record.output_preview);
+    }
+    for (const text of texts) {
+      for (const match of text.matchAll(
+        /^\s*\[(\d+)\][^\n]*\n\s*Source:\s*(.+?)(?:\s+\(page (\d+)\))?(?:\s+\(edition \d+\))?(?:\s+\[[^\]]*\])?\s*$/gm,
+      )) {
+        add({
+          n: Number(match[1]),
+          key: match[2].trim(),
+          page: match[3] ? Number(match[3]) : undefined,
+        });
+      }
+    }
+  });
+
+  return citations;
+}
+
+/**
  * Extract cited documents from a turn's tool invocations. Handles both the Pi
  * runner shape ({name, result.content[].text}) and the ledger shape
  * ({tool_name, output_preview}). Order of first citation is preserved.

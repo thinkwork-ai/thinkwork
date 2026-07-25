@@ -73,6 +73,49 @@ describe("buildKnowledgeTools", () => {
     expect(tools[0].description).toContain("CX SOPs");
   });
 
+  it("numbers citations continuously across searches in one turn", async () => {
+    // Two searches that both restarted at [1] would make the answer's markers
+    // ambiguous — the reader could not tell which document a claim came from.
+    h.responsesByKbId.set("KBAAAA", {
+      retrievalResults: [
+        hit("first passage", "a.pdf#p=1", 0.9),
+        hit("second passage", "b.pdf#p=2", 0.8),
+      ],
+    });
+    const [tool] = buildKnowledgeTools({
+      knowledgeBases: [KB_A],
+      tenantId: "t1",
+    });
+
+    const first = await tool.execute("call-1", { query: "one" });
+    expect(firstText(first)).toContain("[1]");
+    expect(firstText(first)).toContain("[2]");
+    expect(
+      first.details.hits.map((x: { citation: number }) => x.citation),
+    ).toEqual([1, 2]);
+
+    const second = await tool.execute("call-2", { query: "two" });
+    expect(firstText(second)).toContain("[3]");
+    expect(firstText(second)).toContain("[4]");
+    expect(
+      second.details.hits.map((x: { citation: number }) => x.citation),
+    ).toEqual([3, 4]);
+  });
+
+  it("carries a quote excerpt for the citation hover card", async () => {
+    h.responsesByKbId.set("KBAAAA", {
+      retrievalResults: [
+        hit("Always add new code at bottom", "a.pdf#p=1", 0.9),
+      ],
+    });
+    const [tool] = buildKnowledgeTools({
+      knowledgeBases: [KB_A],
+      tenantId: "t1",
+    });
+    const result = await tool.execute("call-q", { query: "reason code" });
+    expect(result.details.hits[0].quote).toBe("Always add new code at bottom");
+  });
+
   it("derives the page number from a page-document id, not from metadata", async () => {
     // Page provenance CANNOT ride inline metadata attributes: with an
     // RDS-backed vector store Bedrock writes each attribute to its own table

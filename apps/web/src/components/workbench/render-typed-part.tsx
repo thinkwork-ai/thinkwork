@@ -20,6 +20,7 @@
  */
 
 import type { ReactNode } from "react";
+import type { KnowledgeCitation } from "@/components/ai-elements/sources";
 import {
   DraftAppletPreview,
   isDraftAppPreviewOutput,
@@ -67,6 +68,11 @@ export interface RenderTypedPartOptions {
   userQuestion?: UserQuestionRecord | null;
   /** True while rendering a live stream before the assistant message persists. */
   live?: boolean;
+  /**
+   * Numbered knowledge-base citations for this turn. Text parts render the
+   * model's `[n]` markers as badges linking to the cited document and page.
+   */
+  citations?: Map<number, KnowledgeCitation>;
   /** Thread/source context for server-verified generated UI actions. */
   threadId?: string;
   sourceMessageId?: string;
@@ -87,6 +93,7 @@ export function renderTypedPart(
     index,
     userQuestion,
     live = false,
+    citations,
     sourceMessageId,
     threadId,
     onJsonRenderActionSuccess,
@@ -100,6 +107,7 @@ export function renderTypedPart(
       return (
         <Response
           key={key}
+          citations={citations}
           className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3"
         >
           {part.text}
@@ -285,6 +293,8 @@ export function renderTypedParts(
     keyPrefix: string;
     userQuestion?: UserQuestionRecord | null;
     live?: boolean;
+    /** Numbered knowledge citations for the turn (see RenderTypedPartOptions). */
+    citations?: Map<number, KnowledgeCitation>;
     threadId?: string;
     sourceMessageId?: string;
     onJsonRenderActionSuccess?: JsonRenderActionSuccessHandler;
