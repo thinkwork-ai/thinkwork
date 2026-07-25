@@ -18,6 +18,26 @@ describe("linkCitationMarkers", () => {
     );
   });
 
+  it("collapses a run of adjacent markers into one pill", () => {
+    // Three pills jammed together mid-sentence is unreadable; the trigger
+    // shows the first source and a +N count instead.
+    expect(linkCitationMarkers("Per the SOPs [1][2][3].", citations(1, 2, 3))).toBe(
+      "Per the SOPs [1](thinkwork-cite:1,2,3).",
+    );
+  });
+
+  it("collapses a space-separated run too", () => {
+    expect(linkCitationMarkers("See [1] [2].", citations(1, 2))).toBe(
+      "See [1](thinkwork-cite:1,2).",
+    );
+  });
+
+  it("drops unknown markers from a run but keeps the known ones", () => {
+    expect(linkCitationMarkers("See [1][9].", citations(1))).toBe(
+      "See [1](thinkwork-cite:1).",
+    );
+  });
+
   it("escapes markers the turn never returned so they render as literal text", () => {
     // The model can invent a marker. Left bare, the markdown renderer treats
     // `[9]` as an unfinished link and leaks a visible
@@ -105,6 +125,40 @@ describe("knowledgeCitationsFromInvocations", () => {
       invocation([{ citation: 1, documentKey: "second.pdf" }]),
     ]);
     expect(map.get(1)?.key).toBe("first.pdf");
+  });
+
+  it("reads the Pi runner shape: result.content[].text", () => {
+    // What production actually emits. The runtime does NOT return
+    // `details.hits` — it returns one rendered text block holding every hit,
+    // each as a `[n] …` passage followed by an indented `Source:` line. A
+    // reader that only understood `details.hits` produced an empty map, and
+    // the answer's markers rendered as literal "[1]".
+    const map = knowledgeCitationsFromInvocations([
+      {
+        name: "search_knowledge",
+        result: {
+          content: [
+            {
+              text:
+                '[1] [CX SOPs] # CX-0215 Setting Up New Reason Code.pdf  _Page 1 of 1_  ' +
+                '5. Always add new code at bottom\n' +
+                '   Source: cx/files/CX-0215 Setting Up New Reason Code.pdf (page 1)\n\n' +
+                '[2] [CX SOPs] Row data (partially visible)\n' +
+                '   Source: cx/files/CX-0038A Credit - No Inventory Impact.pdf (page 6)\n',
+            },
+          ],
+        },
+      },
+    ]);
+    expect(map.size).toBe(2);
+    expect(map.get(1)).toMatchObject({
+      key: "cx/files/CX-0215 Setting Up New Reason Code.pdf",
+      page: 1,
+    });
+    expect(map.get(2)).toMatchObject({
+      key: "cx/files/CX-0038A Credit - No Inventory Impact.pdf",
+      page: 6,
+    });
   });
 
   it("falls back to the rendered text for ledger-shaped records", () => {
