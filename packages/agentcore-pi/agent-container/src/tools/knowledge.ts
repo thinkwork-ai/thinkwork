@@ -80,6 +80,7 @@ function requireScope(context: KnowledgeToolsContext): void {
 function hitIdentity(result: any): {
   documentKey?: string;
   sourceUri?: string;
+  pageNumber?: number;
 } {
   const s3Uri: string | undefined = result?.location?.s3Location?.uri;
   const customId: string | undefined =
@@ -89,8 +90,18 @@ function hitIdentity(result: any): {
     // under '<s3 key>#p=<n>'. Everything downstream — presigned-URL lookup,
     // the manifest join, the Sources card — keys on the SOURCE document, so
     // the page suffix is stripped here and surfaced as pageNumber instead.
+    //
+    // The id is where page provenance lives: an RDS-backed vector store
+    // cannot carry custom inline metadata attributes (Bedrock writes each one
+    // to its own table column, which these tables do not have), so the id and
+    // the page's markdown header are the only carriers.
+    const page = /#p=(\d+)$/.exec(customId);
     const documentKey = customId.replace(/#p=\d+$/, "");
-    return { documentKey, sourceUri: documentKey };
+    return {
+      documentKey,
+      sourceUri: documentKey,
+      ...(page ? { pageNumber: Number(page[1]) } : {}),
+    };
   }
   if (s3Uri) {
     return {
@@ -225,8 +236,10 @@ export function buildKnowledgeTools(
                 passage,
                 score: result.score,
                 knowledgeBase: kb.name ?? undefined,
-                ...hitIdentity(result),
+                // hitMetadata first: identity wins on overlap, because the
+                // page number derived from the document id is authoritative.
                 ...hitMetadata(result),
+                ...hitIdentity(result),
               });
             }
           } catch (err) {
