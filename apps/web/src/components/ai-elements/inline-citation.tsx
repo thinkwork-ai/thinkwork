@@ -20,9 +20,17 @@ import type { KnowledgeCitation } from "./sources";
  * jammed together mid-sentence.
  */
 
-/** Href scheme the markdown rewrite emits; the value is a comma-joined list
- * of citation numbers, e.g. `thinkwork-cite:2,3`. */
-export const CITATION_HREF_PREFIX = "thinkwork-cite:";
+/**
+ * Custom element the markdown rewrite emits, carrying a comma-joined list of
+ * citation numbers: `<cite data-cite="2,3"></cite>`.
+ *
+ * A custom tag, not a link with a custom URI scheme: the markdown renderer
+ * sanitizes hrefs and replaces an unknown scheme with a literal "[blocked]"
+ * placeholder, so `thinkwork-cite:2` never reaches the anchor override.
+ * `allowedTags` is the renderer's documented extension point for exactly
+ * this — entity/mention tags in AI output.
+ */
+export const CITATION_HREF_PREFIX = "#thinkwork-cite-";
 
 /** Human label for a citation: file name, plus page when the passage came
  * from one page of a transcribed document. */
@@ -194,14 +202,15 @@ export function linkCitationMarkers(
     .join("");
 }
 
-/** Resolve a `thinkwork-cite:` href back to the citations it names. */
+/** Resolve a `#thinkwork-cite-` href back to the citations it names. */
 export function citationsFromHref(
-  href: string,
+  href: string | undefined,
   citations: Map<number, KnowledgeCitation>,
 ): KnowledgeCitation[] {
+  if (!href?.startsWith(CITATION_HREF_PREFIX)) return [];
   return href
     .slice(CITATION_HREF_PREFIX.length)
     .split(",")
-    .map((part) => citations.get(Number(part)))
+    .map((part) => citations.get(Number(part.trim())))
     .filter((c): c is KnowledgeCitation => !!c);
 }

@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils";
 import { Streamdown } from "streamdown";
 import { useMemo, type ComponentProps, type ReactNode } from "react";
 import {
-  CITATION_HREF_PREFIX,
   InlineCitation,
   citationsFromHref,
   linkCitationMarkers,
@@ -58,13 +57,8 @@ export const Response = ({
       href?: string;
       children?: ReactNode;
     }) => {
-      if (href?.startsWith(CITATION_HREF_PREFIX)) {
-        const resolved = citationsFromHref(href, citations);
-        // Fall through to a plain anchor if the markers went stale between
-        // rewrite and render — never render a pill that cannot resolve.
-        if (resolved.length > 0)
-          return <InlineCitation citations={resolved} />;
-      }
+      const resolved = citationsFromHref(href, citations);
+      if (resolved.length > 0) return <InlineCitation citations={resolved} />;
       return (
         <a href={href} {...anchorProps}>
           {anchorChildren}

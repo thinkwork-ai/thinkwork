@@ -5949,3 +5949,64 @@ describe("TaskThreadView dispatch indicator", () => {
     expect(screen.queryByTestId("retry-dispatch-message-1")).toBeNull();
   });
 });
+
+describe("knowledge citations anchor to the agent's reply", () => {
+  // The turn is keyed by the message that TRIGGERED it — the user's. The
+  // `[n]` markers live in the agent's reply, whose own id is absent from that
+  // map. Deriving citations from `turn` inside the reply's segment therefore
+  // yielded an empty map and every marker rendered as literal "[1]" text.
+  const threadWithCitedAnswer = {
+    id: "thread-cite",
+    title: "how do I set up a new reason code?",
+    lifecycleStatus: "COMPLETED" as const,
+    messages: [
+      {
+        id: "message-user",
+        role: "USER",
+        content: "how do I set up a new reason code?",
+      },
+      {
+        id: "message-agent",
+        role: "ASSISTANT",
+        content: "Always add the new code at the bottom [1].",
+      },
+    ],
+    turns: [
+      {
+        id: "turn-cite",
+        status: "succeeded",
+        invocationSource: "chat_message",
+        finishedAt: "2026-07-25T18:00:00Z",
+        usageJson: {
+          tool_invocations: [
+            {
+              name: "search_knowledge",
+              result: {
+                content: [
+                  {
+                    text:
+                      "[1] [CX SOPs] Always add new code at bottom\n" +
+                      "   Source: cx/files/CX-0215 Setting Up New Reason Code.pdf (page 1)\n",
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    ],
+  };
+
+  it("renders a source pill naming the document and page, not a bare marker", () => {
+    render(<TaskThreadView thread={threadWithCitedAnswer} />);
+
+    // The pill names the source; a bare "[1]" means the map never arrived.
+    expect(
+      screen.getByRole("button", {
+        name: /Open source CX-0215 Setting Up New Reason Code · p\.1/i,
+      }),
+    ).toBeTruthy();
+    // A bare "[1]" (or a "[blocked]" placeholder) means the pill never rendered.
+    expect(document.body.textContent).not.toMatch(/\[1\]|\[blocked\]/);
+  });
+});
