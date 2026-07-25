@@ -830,7 +830,15 @@ module "cognito" {
       "https://d3q9a98mhsakjf.cloudfront.net/auth/callback",
       "https://brain.thinkwork.ai",
       "https://brain.thinkwork.ai/auth/callback",
-    ] : []
+    ] : [],
+    # Operator-supplied web-family callback origins. Customer stacks host the
+    # Company Brain console in their OWN account (separate repo/CloudFront), so
+    # the product stack can't derive those URLs — they arrive here from the
+    # deployment runner (runner-secrets `adminCallbackUrls`). Empty by default;
+    # both bare and /auth/callback entries should be supplied by the caller.
+    # This is what keeps the console origins from being stripped on every
+    # controller apply (dev has the hardcoded block above; customers use this).
+    var.additional_admin_callback_urls,
   ))
   admin_logout_urls = distinct(concat(
     var.admin_logout_urls,
@@ -845,7 +853,9 @@ module "cognito" {
       "https://d3q9a98mhsakjf.cloudfront.net/auth/callback",
       "https://brain.thinkwork.ai",
       "https://brain.thinkwork.ai/auth/callback",
-    ] : []
+    ] : [],
+    # Operator-supplied web-family logout origins — see admin_callback_urls.
+    var.additional_admin_logout_urls,
   ))
   desktop_callback_urls = var.desktop_callback_urls
   cli_callback_urls     = var.cli_callback_urls

@@ -756,6 +756,18 @@ variable "customer_domain_legacy_retired" {
   default     = false
 }
 
+variable "additional_admin_callback_urls" {
+  description = "Extra OAuth callback URLs appended to the web-family Cognito clients (e.g. a hosted Company Brain console origin). Supply both the bare origin and its /auth/callback variant. Empty leaves behavior unchanged."
+  type        = list(string)
+  default     = []
+}
+
+variable "additional_admin_logout_urls" {
+  description = "Extra OAuth logout URLs appended to the web-family Cognito clients (companion to additional_admin_callback_urls)."
+  type        = list(string)
+  default     = []
+}
+
 locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
   docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
@@ -1061,6 +1073,9 @@ module "thinkwork" {
   customer_domain                = var.customer_domain
   customer_domain_delegated      = var.customer_domain_delegated
   customer_domain_legacy_retired = var.customer_domain_legacy_retired
+
+  additional_admin_callback_urls = var.additional_admin_callback_urls
+  additional_admin_logout_urls   = var.additional_admin_logout_urls
 
   # Greenfield: create everything (all defaults are true)
 }
