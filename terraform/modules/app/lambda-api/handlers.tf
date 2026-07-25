@@ -541,7 +541,11 @@ locals {
     "kb-transcribe" = {
       KB_SERVICE_ROLE_ARN        = var.kb_service_role_arn
       KB_TRANSCRIBE_MODEL_LADDER = var.kb_transcribe_model_ladder
-      KB_TRANSCRIBE_CONCURRENCY  = "6"
+      # In-flight Bedrock calls are this TIMES the reserved concurrency above.
+      # Kept low by default because a model's requests-per-minute quota, not
+      # Lambda, is the real ceiling — and an account can be provisioned with a
+      # far lower RPM limit than the AWS default.
+      KB_TRANSCRIBE_CONCURRENCY = "2"
     }
     # Observations → Knowledge Graph worker. Extraction is now a Bedrock
     # structured-output call inside this Lambda. KG_EXTRACTION_MODEL_ID pins
@@ -1141,7 +1145,7 @@ resource "aws_lambda_function" "handler" {
   # analyst-connection-reconciler is capped at 1: the probe holds one
   # analyst_reader connection and overlapping probes are pointless (the
   # cluster-global reader has one grant surface / one live schema).
-  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : each.key == "analyst-query-broker" ? 4 : each.key == "analyst-connection-reconciler" ? 1 : each.key == "kb-source-reconciler" ? 1 : -1
+  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : each.key == "analyst-query-broker" ? 4 : each.key == "analyst-connection-reconciler" ? 1 : each.key == "kb-source-reconciler" ? 1 : each.key == "kb-transcribe" ? var.kb_transcribe_reserved_concurrency : -1
 
   environment {
     variables = merge(

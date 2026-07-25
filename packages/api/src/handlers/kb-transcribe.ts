@@ -57,10 +57,15 @@ function modelLadder(): string[] {
   ];
 }
 
-/** Pages transcribed concurrently within one document. Bedrock calls are
- * ~3-10s each; a 41-page document is the worst case in the reference corpus
- * and finishes well inside the Lambda ceiling at this width. */
-const PAGE_CONCURRENCY = Number(process.env.KB_TRANSCRIBE_CONCURRENCY || "6");
+/** Pages transcribed concurrently within one document.
+ *
+ * Deliberately small. The binding limit is the model's Bedrock
+ * requests-per-minute quota, not this Lambda: an account can be provisioned
+ * far below the AWS default (McPherson runs at 10 RPM against a 10,000
+ * default), and past that ceiling extra width only buys throttle backoff.
+ * Total in-flight model calls are this times the function's reserved
+ * concurrency. Raise both together, and only with a verified quota. */
+const PAGE_CONCURRENCY = Number(process.env.KB_TRANSCRIBE_CONCURRENCY || "2");
 
 const TRANSCRIBE_PROMPT = [
   "Transcribe this page completely and literally into markdown.",

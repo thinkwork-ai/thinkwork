@@ -175,6 +175,22 @@ variable "kb_service_role_arn" {
   type        = string
 }
 
+variable "kb_transcribe_reserved_concurrency" {
+  description = <<-EOT
+    Reserved concurrent executions for the KB page transcriber. Each invocation
+    fans out KB_TRANSCRIBE_CONCURRENCY Bedrock calls, so total in-flight model
+    requests are the product of the two — and Bedrock's per-model
+    requests-per-minute quota is what a large corpus actually runs into.
+    A sync enqueues one invocation PER DOCUMENT at once, so without a reserve a
+    200-document corpus would open hundreds of parallel model calls and spend
+    most of its time in throttle backoff.
+
+    Raise this only alongside a verified requests-per-minute quota.
+  EOT
+  type        = number
+  default     = 2
+}
+
 variable "kb_transcribe_model_ladder" {
   description = <<-EOT
     Ordered, comma-separated Bedrock model ids the KB page transcriber tries.
