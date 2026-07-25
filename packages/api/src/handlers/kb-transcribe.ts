@@ -25,6 +25,7 @@
  */
 
 import { PDFDict, PDFName, type PDFPage } from "pdf-lib";
+import { getConfig } from "@thinkwork/runtime-config";
 import {
   PREPROCESSOR_VERSION,
   derivedPrefix,
@@ -92,8 +93,11 @@ export interface KbTranscribeResult {
 }
 
 function workspaceBucket(): string {
-  const bucket = process.env.WORKSPACE_BUCKET;
-  if (!bucket) throw new Error("WORKSPACE_BUCKET is not set");
+  // WORKSPACE_BUCKET lives only in the SSM runtime-config document, not in the
+  // Lambda environment — reading process.env for it returns undefined in
+  // production. getConfig still prefers env when set, so tests can override.
+  const bucket = getConfig("WORKSPACE_BUCKET", "");
+  if (!bucket) throw new Error("WORKSPACE_BUCKET is not configured");
   return bucket;
 }
 
@@ -215,6 +219,53 @@ async function extractPagePdf(pdf: Uint8Array, n: number): Promise<Uint8Array> {
   return out.save();
 }
 
+/** Bedrock throttles hard when many pages are in flight across concurrent
+ * document invocations. A throttle says nothing about the page — retry it. */
+function isThrottle(err: unknown): boolean {
+  const name = (err as { name?: string })?.name;
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    name === "ThrottlingException" ||
+    name === "TooManyRequestsException" ||
+    name === "ServiceQuotaExceededException" ||
+    message.includes("Too many requests")
+  );
+}
+
+/**
+ * Retry a Bedrock call through throttling with exponential backoff and jitter.
+ * Jitter matters: without it, every page throttled by the same burst retries
+ * in lockstep and re-creates the burst.
+ */
+async function withThrottleRetry<T>(call: () => Promise<T>): Promise<T> {
+  const maxAttempts = 6;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await call();
+    } catch (err) {
+      if (!isThrottle(err) || attempt >= maxAttempts - 1) throw err;
+      const backoff = 2 ** attempt * 1_000 + Math.floor(Math.random() * 1_000);
+      // Log every wait: a silent backoff loop is indistinguishable from a hang
+      // when a large corpus is being transcribed.
+      console.warn(
+        `[kb-transcribe] throttled, retrying in ${backoff}ms (attempt ${attempt + 1}/${maxAttempts})`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, backoff));
+    }
+  }
+}
+
+/** The ladder ran out of models this account can call. Transient in the sense
+ * that it is fixed by an account change, not by re-reading the page — but
+ * retrying is right, because caching a degraded page would hide it. */
+function isLadderExhausted(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("No model in the ladder is available") ||
+    message.includes("is not available for this account")
+  );
+}
+
 /** The model this account can actually call, resolved once per container.
  * Held as a promise so concurrent page workers share ONE probe — otherwise
  * every worker re-walks the blocked tiers and burns a round-trip each. */
@@ -267,8 +318,8 @@ async function transcribePage(
   });
 
   const invoke = async (modelId: string) => {
-    const response = await client.send(
-      new InvokeModelCommand({ modelId, body }),
+    const response = await withThrottleRetry(() =>
+      client.send(new InvokeModelCommand({ modelId, body })),
     );
     const payload = JSON.parse(
       new TextDecoder().decode(response.body as Uint8Array),
@@ -436,13 +487,20 @@ export async function handler(
   const results = await mapLimit(
     pageNumbers,
     PAGE_CONCURRENCY,
-    async (page): Promise<{ result: PageResult; markdown: string }> => {
+    async (
+      page,
+    ): Promise<{
+      result: PageResult;
+      markdown: string;
+      retryable: boolean;
+    }> => {
       const { text: native, imageCount } = signals[page - 1];
       const route = routePage({ nativeChars: native.length, imageCount });
 
       let body = native;
       let model: string | null = null;
       let error: string | undefined;
+      let retryable = false;
 
       if (route === "transcribed") {
         try {
@@ -459,7 +517,12 @@ export async function handler(
           body = text && text !== "(no readable content)" ? text : native;
         } catch (err) {
           error = err instanceof Error ? err.message : String(err);
-          console.error(`[kb-transcribe] ${event.key} p${page}: ${error}`);
+          // Throttling and an exhausted model ladder are conditions of the
+          // ACCOUNT, not the page — they will pass. A malformed page will not.
+          retryable = isThrottle(err) || isLadderExhausted(err);
+          console.error(
+            `[kb-transcribe] ${event.key} p${page} (${retryable ? "retryable" : "permanent"}): ${error}`,
+          );
         }
       }
 
@@ -473,6 +536,7 @@ export async function handler(
       );
 
       return {
+        retryable,
         result: {
           page,
           route,
@@ -498,6 +562,22 @@ export async function handler(
       }),
     ),
   );
+
+  // A page that failed for a TRANSIENT reason must not be frozen into the
+  // report. The report is the idempotency record: writing one now would cache
+  // "this page is just its caption line" forever, and no later sync would ever
+  // retry it — a momentary throttle would become permanent data loss, visible
+  // only as a suspiciously thin page. Fail the invocation instead and let the
+  // next sync re-enqueue the whole document (retry-0 + DLQ: the next sync IS
+  // the retry). Pages that succeeded are already on disk and short-circuit.
+  const transientFailures = results.filter((entry) => entry.retryable);
+  if (transientFailures.length > 0) {
+    throw new Error(
+      `${transientFailures.length}/${pageCount} pages failed to transcribe for ` +
+        `${event.key}; not writing a report so the next sync retries. ` +
+        `First error: ${transientFailures[0].result.error}`,
+    );
+  }
 
   const report: TranscribeReport = {
     preprocessorVersion: PREPROCESSOR_VERSION,
