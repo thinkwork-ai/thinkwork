@@ -6,43 +6,80 @@ import { getDocumentViewUrlByKey } from "@/lib/kb-files-api";
 import type { KnowledgeCitation } from "./sources";
 
 /**
- * Inline knowledge-base citations (AI-Elements InlineCitation shape).
+ * Inline knowledge-base citations, following the AI Elements InlineCitation
+ * shape: a citation *pill naming the source* sits inline with the sentence it
+ * supports, and hovering it reveals the document and the quoted passage.
  *
- * The runtime hands the model a numbered marker per retrieved passage and
- * asks it to place that marker after the claim it supports; this renders each
- * marker as a badge that previews the source on hover and opens the original
- * document — at the cited page — on click.
+ * The pill shows the document — "CX-0215 · p.1" — not a bare footnote number.
+ * A number is a lookup task: the reader has to leave the sentence, find the
+ * matching entry, and come back. Naming the source in place is the entire
+ * point of the component, and it is what makes a claim checkable at a glance.
  *
- * A flat "used N sources" list cannot tell you which document backs which
- * sentence. That is the whole difference this makes: a reader can check one
- * specific claim without re-reading every source.
- *
- * Built on the shared HoverCard rather than the upstream carousel variant —
- * a marker resolves to exactly one passage here, so there is nothing to page
- * through, and it avoids pulling a carousel dependency into the app.
+ * Consecutive markers collapse into one pill with a "+N" count, matching the
+ * upstream trigger's behaviour, so `[1][2][3]` does not produce three pills
+ * jammed together mid-sentence.
  */
 
-/** Marker text the runtime emits and the model reproduces, e.g. `[3]`. */
+/** Href scheme the markdown rewrite emits; the value is a comma-joined list
+ * of citation numbers, e.g. `thinkwork-cite:2,3`. */
 export const CITATION_HREF_PREFIX = "thinkwork-cite:";
 
 /** Human label for a citation: file name, plus page when the passage came
  * from one page of a transcribed document. */
-function citationLabel(citation: KnowledgeCitation): string {
+export function citationLabel(citation: KnowledgeCitation): string {
   const base = citation.key.slice(citation.key.lastIndexOf("/") + 1);
-  return citation.page ? `${base} · p.${citation.page}` : base;
+  const withoutExt = base.replace(/\.(pdf|docx?|xlsx?|pptx?|md|txt)$/i, "");
+  return citation.page ? `${withoutExt} · p.${citation.page}` : withoutExt;
+}
+
+/** One row in the hover card: the document, its page, and the passage. */
+function CitationSource({
+  citation,
+  onOpen,
+  opening,
+}: {
+  citation: KnowledgeCitation;
+  onOpen: (citation: KnowledgeCitation) => void;
+  opening: boolean;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex items-start gap-1.5">
+        <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 break-words font-medium">
+          {citationLabel(citation)}
+        </span>
+      </div>
+      {citation.quote ? (
+        <blockquote className="border-l-2 pl-2 text-muted-foreground">
+          {citation.quote}
+        </blockquote>
+      ) : null}
+      <button
+        type="button"
+        onClick={() => onOpen(citation)}
+        className="justify-self-start text-primary hover:underline"
+      >
+        {opening
+          ? "Opening…"
+          : `Open document${citation.page ? ` at page ${citation.page}` : ""}`}
+      </button>
+    </div>
+  );
 }
 
 export function InlineCitation({
-  citation,
+  citations,
   className,
 }: {
-  citation: KnowledgeCitation;
+  /** Every passage this marker run refers to; at least one. */
+  citations: KnowledgeCitation[];
   className?: string;
 }) {
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const open = useCallback(async () => {
+  const open = useCallback(async (citation: KnowledgeCitation) => {
     setError(null);
     setOpening(true);
     // Open synchronously — popup blockers kill window.open after an await.
@@ -58,51 +95,50 @@ export function InlineCitation({
     } finally {
       setOpening(false);
     }
-  }, [citation.key, citation.page]);
+  }, []);
+
+  const [primary, ...rest] = citations;
+  if (!primary) return null;
 
   return (
-    <HoverCard openDelay={120} closeDelay={80}>
+    <HoverCard openDelay={120} closeDelay={120}>
       <HoverCardTrigger asChild>
         <button
           type="button"
-          onClick={() => void open()}
-          aria-label={`Open source ${citationLabel(citation)}`}
+          onClick={() => void open(primary)}
+          aria-label={`Open source ${citationLabel(primary)}`}
           className={cn(
-            "mx-0.5 inline-flex h-4 min-w-4 shrink-0 translate-y-[-1px] items-center justify-center",
-            "rounded-full border border-primary/25 bg-primary/10 px-1 align-middle",
-            "text-[10px] font-medium leading-none text-primary tabular-nums",
-            "transition-colors hover:bg-primary/20 focus-visible:outline-none",
-            "focus-visible:ring-1 focus-visible:ring-ring",
+            "mx-0.5 inline-flex max-w-[18rem] shrink-0 items-center gap-1",
+            "rounded-full border border-border bg-muted/70 px-2 py-0.5 align-baseline",
+            "text-[11px] font-medium leading-4 text-muted-foreground",
+            "transition-colors hover:bg-muted hover:text-foreground",
+            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
             className,
           )}
         >
           {opening ? (
-            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            <Loader2 className="h-2.5 w-2.5 shrink-0 animate-spin" />
           ) : (
-            citation.n
+            <FileText className="h-2.5 w-2.5 shrink-0" />
           )}
+          <span className="truncate">{citationLabel(primary)}</span>
+          {rest.length > 0 ? (
+            <span className="shrink-0 tabular-nums opacity-70">
+              +{rest.length}
+            </span>
+          ) : null}
         </button>
       </HoverCardTrigger>
       <HoverCardContent align="start" className="w-80 text-xs">
-        <div className="grid gap-2">
-          <div className="flex items-start gap-1.5">
-            <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 break-words font-medium">
-              {citationLabel(citation)}
-            </span>
-          </div>
-          {citation.quote ? (
-            <blockquote className="border-l-2 pl-2 text-muted-foreground">
-              {citation.quote}
-            </blockquote>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void open()}
-            className="justify-self-start text-primary hover:underline"
-          >
-            Open document{citation.page ? ` at page ${citation.page}` : ""}
-          </button>
+        <div className="grid gap-3">
+          {citations.map((citation) => (
+            <CitationSource
+              key={citation.n}
+              citation={citation}
+              onOpen={(c) => void open(c)}
+              opening={opening}
+            />
+          ))}
           {error ? <p className="text-destructive">{error}</p> : null}
         </div>
       </HoverCardContent>
@@ -114,8 +150,11 @@ export function InlineCitation({
  * Rewrite bare `[n]` markers into links the markdown renderer hands back to
  * us, so citations survive markdown parsing without a custom remark plugin.
  *
+ * A run of adjacent markers becomes ONE link carrying every number, so the
+ * renderer can collapse them into a single "+N" pill.
+ *
  * Only markers the turn actually returned are rewritten — the model can write
- * `[0]` or `[9]` by mistake, and an unresolvable badge is worse than plain
+ * `[0]` or `[9]` by mistake, and an unresolvable pill is worse than plain
  * text. Markers already inside a markdown link, an image, or a fenced/inline
  * code span are left exactly as they are.
  */
@@ -131,18 +170,38 @@ export function linkCitationMarkers(
     .map((segment, index) => {
       // Odd indices are the captured code spans.
       if (index % 2 === 1) return segment;
+      // A run of markers, optionally separated by spaces, optionally followed
+      // by `(` — which would mean the last one is really a markdown link.
       return segment.replace(
-        /(!?)(\[(\d+)\])(\()?/g,
-        (whole, bang: string, _marker: string, digits: string, paren) => {
+        /(!?)((?:\[\d+\][ \t]*)+)(\()?/g,
+        (whole, bang: string, run: string, paren) => {
           // `![n](` is an image and `[n](` is already a link — leave both.
           if (bang || paren) return whole;
-          // A marker the turn never returned must be ESCAPED, not left bare:
-          // the markdown renderer treats a lone `[9]` as an unfinished link
-          // and emits a visible `](streamdown:incomplete-link)` placeholder.
-          if (!citations.has(Number(digits))) return `\\[${digits}\\]`;
-          return `[${digits}](${CITATION_HREF_PREFIX}${digits})`;
+          const numbers = [...run.matchAll(/\[(\d+)\]/g)].map((m) =>
+            Number(m[1]),
+          );
+          const known = numbers.filter((n) => citations.has(n));
+          // Nothing resolvable: ESCAPE the markers rather than leave them
+          // bare. The markdown renderer treats a lone `[9]` as an unfinished
+          // link and emits a visible `](streamdown:incomplete-link)`.
+          if (known.length === 0) {
+            return numbers.map((n) => `\\[${n}\\]`).join("");
+          }
+          return `[${known[0]}](${CITATION_HREF_PREFIX}${known.join(",")})`;
         },
       );
     })
     .join("");
+}
+
+/** Resolve a `thinkwork-cite:` href back to the citations it names. */
+export function citationsFromHref(
+  href: string,
+  citations: Map<number, KnowledgeCitation>,
+): KnowledgeCitation[] {
+  return href
+    .slice(CITATION_HREF_PREFIX.length)
+    .split(",")
+    .map((part) => citations.get(Number(part)))
+    .filter((c): c is KnowledgeCitation => !!c);
 }

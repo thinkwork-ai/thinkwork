@@ -18,6 +18,7 @@ import { useMemo, type ComponentProps, type ReactNode } from "react";
 import {
   CITATION_HREF_PREFIX,
   InlineCitation,
+  citationsFromHref,
   linkCitationMarkers,
 } from "./inline-citation";
 import type { KnowledgeCitation } from "./sources";
@@ -58,11 +59,11 @@ export const Response = ({
       children?: ReactNode;
     }) => {
       if (href?.startsWith(CITATION_HREF_PREFIX)) {
-        const n = Number(href.slice(CITATION_HREF_PREFIX.length));
-        const citation = citations.get(n);
-        // Fall through to a plain anchor if the marker went stale between
-        // rewrite and render — never render a badge that cannot resolve.
-        if (citation) return <InlineCitation citation={citation} />;
+        const resolved = citationsFromHref(href, citations);
+        // Fall through to a plain anchor if the markers went stale between
+        // rewrite and render — never render a pill that cannot resolve.
+        if (resolved.length > 0)
+          return <InlineCitation citations={resolved} />;
       }
       return (
         <a href={href} {...anchorProps}>

@@ -2990,7 +2990,12 @@ function TranscriptMessage({
                   {renderedTypedParts}
                 </div>
               ) : body ? (
-                <Response className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
+                // citations: this path renders whole-message markdown (no
+                // typed parts) and is what most historical assistant turns
+                // take — without it the answer's markers stay literal text.
+                <Response
+                  citations={knowledgeCitations}
+                  className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
                   {body}
                 </Response>
               ) : canvasCards.length > 0 || documentCards?.length ? null : ( // A collapsed emission's ArtifactCard IS the message content (THINK-168) — no placeholder above it.
