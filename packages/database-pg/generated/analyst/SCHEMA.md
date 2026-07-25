@@ -1918,6 +1918,11 @@ Join hints:
 | ingest_status | text | not null |
 | projection_status | text | not null |
 | last_error | text |  |
+| derived_prefix | text |  |
+| page_count | integer |  |
+| preprocessor_version | text |  |
+| page_report | jsonb |  |
+| needs_review | boolean | not null |
 | created_at | timestamp with time zone | not null |
 | updated_at | timestamp with time zone | not null |
 
@@ -1959,6 +1964,7 @@ Join hints:
 Enum values:
 
 - `kind`: `managed-upload`, `s3-connect`, `snapshot`
+- `parsing_strategy`: `DEFAULT`, `TRANSCRIBE`
 - `access_status`: `pending`, `healthy`, `degraded`, `access_revoked`, `failed`
 
 Join hints:
