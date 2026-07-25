@@ -12,22 +12,41 @@ import { getDocumentViewUrlByKey } from "@/lib/kb-files-api";
  * this works for managed uploads and connected external buckets alike.
  */
 
-/** Extract cited document keys from a turn's tool invocations. Handles both
- * the Pi runner shape ({name, result.content[].text}) and the ledger shape
- * ({tool_name, output_preview}). Order of first citation is preserved. */
-export function knowledgeSourceKeysFromInvocations(
+/** One cited document, with the page the passage came from when the runtime
+ * reported one (transcribed documents are ingested one page at a time). */
+export interface KnowledgeSource {
+  key: string;
+  /** 1-based page of the source document, used to deep-link the viewer. */
+  page?: number;
+}
+
+/**
+ * Extract cited documents from a turn's tool invocations. Handles both the Pi
+ * runner shape ({name, result.content[].text}) and the ledger shape
+ * ({tool_name, output_preview}). Order of first citation is preserved.
+ *
+ * The runtime emits `Source: <key>` followed by optional ` (page N)`,
+ * ` (edition N)` and ` [transcribed…]` suffixes; the key must come back
+ * unadorned or the presigned-URL lookup misses.
+ */
+export function knowledgeSourcesFromInvocations(
   invocations: unknown[],
-): string[] {
-  const keys: string[] = [];
+): KnowledgeSource[] {
+  const sources: KnowledgeSource[] = [];
   const seen = new Set<string>();
   const collect = (text: string) => {
     for (const match of text.matchAll(
-      /^\s*Source:\s*(.+?)(?:\s+\(edition \d+\))?\s*$/gm,
+      /^\s*Source:\s*(.+?)(?:\s+\(page (\d+)\))?(?:\s+\(edition \d+\))?(?:\s+\[[^\]]*\])?\s*$/gm,
     )) {
       const key = match[1].trim();
+      // First citation wins the page: the same document may be cited from
+      // several pages, and the row can only open one of them.
       if (key && !seen.has(key)) {
         seen.add(key);
-        keys.push(key);
+        sources.push({
+          key,
+          page: match[2] ? Number(match[2]) : undefined,
+        });
       }
     }
   };
@@ -50,7 +69,16 @@ export function knowledgeSourceKeysFromInvocations(
       collect(record.output_preview);
     }
   }
-  return keys;
+  return sources;
+}
+
+/** Back-compat: callers that only need the keys. */
+export function knowledgeSourceKeysFromInvocations(
+  invocations: unknown[],
+): string[] {
+  return knowledgeSourcesFromInvocations(invocations).map(
+    (source) => source.key,
+  );
 }
 
 function displayName(documentKey: string): string {
@@ -59,10 +87,10 @@ function displayName(documentKey: string): string {
 }
 
 export function KnowledgeSourcesCard({
-  documentKeys,
+  sources,
   className,
 }: {
-  documentKeys: string[];
+  sources: KnowledgeSource[];
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -70,11 +98,16 @@ export function KnowledgeSourcesCard({
   const [error, setError] = useState<string | null>(null);
 
   const names = useMemo(
-    () => documentKeys.map((key) => ({ key, name: displayName(key) })),
-    [documentKeys],
+    () =>
+      sources.map((source) => ({
+        key: source.key,
+        page: source.page,
+        name: displayName(source.key),
+      })),
+    [sources],
   );
 
-  const openSource = useCallback(async (documentKey: string) => {
+  const openSource = useCallback(async (documentKey: string, page?: number) => {
     setError(null);
     setOpening(documentKey);
     // Open the tab synchronously — popup blockers kill window.open calls
@@ -82,10 +115,13 @@ export function KnowledgeSourcesCard({
     const tab = window.open("about:blank", "_blank");
     try {
       const url = await getDocumentViewUrlByKey(documentKey);
+      // PDF viewers honour the #page= fragment, so a citation lands on the
+      // page the passage was actually read from.
+      const target = page ? `${url}#page=${page}` : url;
       if (tab) {
-        tab.location.href = url;
+        tab.location.href = target;
       } else {
-        window.location.href = url;
+        window.location.href = target;
       }
     } catch (e) {
       tab?.close();
@@ -95,7 +131,7 @@ export function KnowledgeSourcesCard({
     }
   }, []);
 
-  if (documentKeys.length === 0) return null;
+  if (sources.length === 0) return null;
 
   return (
     <div className={cn("min-w-0", className)}>
@@ -105,8 +141,7 @@ export function KnowledgeSourcesCard({
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
       >
-        Used {documentKeys.length}{" "}
-        {documentKeys.length === 1 ? "source" : "sources"}
+        Used {sources.length} {sources.length === 1 ? "source" : "sources"}
         <ChevronDown
           className={cn("h-3.5 w-3.5 transition-transform", {
             "rotate-180": open,
@@ -115,13 +150,13 @@ export function KnowledgeSourcesCard({
       </button>
       {open ? (
         <ul className="mt-1.5 grid gap-1">
-          {names.map(({ key, name }) => (
+          {names.map(({ key, name, page }) => (
             <li key={key} className="min-w-0">
               <button
                 type="button"
                 className="flex min-w-0 max-w-full items-center gap-1.5 text-left text-xs text-primary hover:underline"
-                title={key}
-                onClick={() => void openSource(key)}
+                title={page ? `${key} (page ${page})` : key}
+                onClick={() => void openSource(key, page)}
               >
                 {opening === key ? (
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
@@ -129,6 +164,11 @@ export function KnowledgeSourcesCard({
                   <BookOpen className="h-3.5 w-3.5 shrink-0" />
                 )}
                 <span className="truncate">{name}</span>
+                {page ? (
+                  <span className="shrink-0 text-muted-foreground">
+                    p.{page}
+                  </span>
+                ) : null}
               </button>
             </li>
           ))}

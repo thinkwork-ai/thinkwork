@@ -53,6 +53,13 @@ interface KnowledgeHit {
   knowledgeBase?: string;
   edition?: number;
   effectiveFrom?: string;
+  /** 1-based page of the source document, for transcribed page documents. */
+  pageNumber?: number;
+  /** Human document title, when the ingestion recorded one. */
+  docTitle?: string;
+  /** The passage came from a page transcribed out of a scan or screenshot,
+   * not from a text layer — the agent should attribute it as such. */
+  transcribed?: boolean;
 }
 
 function requireScope(context: KnowledgeToolsContext): void {
@@ -78,7 +85,12 @@ function hitIdentity(result: any): {
   const customId: string | undefined =
     result?.location?.customDocumentLocation?.id;
   if (customId) {
-    return { documentKey: customId, sourceUri: customId };
+    // A transcribed document is ingested as one Bedrock document per page
+    // under '<s3 key>#p=<n>'. Everything downstream — presigned-URL lookup,
+    // the manifest join, the Sources card — keys on the SOURCE document, so
+    // the page suffix is stripped here and surfaced as pageNumber instead.
+    const documentKey = customId.replace(/#p=\d+$/, "");
+    return { documentKey, sourceUri: documentKey };
   }
   if (s3Uri) {
     return {
@@ -93,14 +105,24 @@ function hitIdentity(result: any): {
 function hitMetadata(result: any): {
   edition?: number;
   effectiveFrom?: string;
+  pageNumber?: number;
+  docTitle?: string;
+  transcribed?: boolean;
 } {
   const metadata = result?.metadata ?? {};
   const edition = Number(metadata["edition"]);
   const effectiveFrom = metadata["effective_from"];
+  const pageNumber = Number(metadata["page_number"]);
+  const docTitle = metadata["doc_title"];
+  const transcribed = metadata["transcribed"];
   return {
     edition: Number.isFinite(edition) ? edition : undefined,
     effectiveFrom:
       typeof effectiveFrom === "string" ? effectiveFrom : undefined,
+    pageNumber: Number.isFinite(pageNumber) ? pageNumber : undefined,
+    docTitle: typeof docTitle === "string" ? docTitle : undefined,
+    // Bedrock returns inline attributes as strings.
+    transcribed: transcribed === "true" || transcribed === true,
   };
 }
 
@@ -110,8 +132,18 @@ function formatHits(hits: KnowledgeHit[]): string {
   }
   return hits
     .map((hit, index) => {
+      // The document KEY leads the line and stays unadorned: the web Sources
+      // card parses it out of this text to resolve a presigned view URL, so
+      // every optional part below has to be a suffix that parser can strip.
+      const page = hit.pageNumber ? ` (page ${hit.pageNumber})` : "";
+      const edition = hit.edition ? ` (edition ${hit.edition})` : "";
+      // Say so when the passage was read out of an image, so the agent can
+      // attribute it honestly rather than presenting it as source text.
+      const provenance = hit.transcribed
+        ? " [transcribed from a scan/screenshot]"
+        : "";
       const source = hit.documentKey
-        ? `\n   Source: ${hit.documentKey}${hit.edition ? ` (edition ${hit.edition})` : ""}`
+        ? `\n   Source: ${hit.documentKey}${page}${edition}${provenance}`
         : "";
       const kb = hit.knowledgeBase ? ` [${hit.knowledgeBase}]` : "";
       return `${index + 1}.${kb} ${hit.passage.trim()}${source}`;
@@ -233,6 +265,11 @@ export function buildKnowledgeTools(
               sourceUri: hit.sourceUri,
               score: hit.score,
               edition: hit.edition,
+              // Carried through so the Sources card can deep-link the
+              // original PDF at the page the passage came from.
+              pageNumber: hit.pageNumber,
+              docTitle: hit.docTitle,
+              transcribed: hit.transcribed || undefined,
             })),
           },
         };

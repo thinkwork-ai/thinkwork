@@ -577,6 +577,13 @@ build_handler "analyst-connection-reconciler" \
 build_handler "kb-source-reconciler" \
   "$REPO_ROOT/packages/api/src/handlers/kb-source-reconciler.ts"
 
+# KB page transcription U3: splits image-bearing PDFs page by page (pdf-lib)
+# and transcribes each page with a Claude vision model via the Bedrock
+# document content block. Bundled, not externalized — pdf-lib and pdfjs-dist
+# are not on the Lambda runtime.
+build_handler "kb-transcribe" \
+  "$REPO_ROOT/packages/api/src/handlers/kb-transcribe.ts"
+
 # Unit 8 — composable-skills webhook ingress pattern. Each integration
 # has a thin handler under handlers/webhooks/; the shared helper
 # (_shared.ts) owns HMAC + bootstrap + dispatch.

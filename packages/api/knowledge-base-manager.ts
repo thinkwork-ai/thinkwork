@@ -18,7 +18,7 @@
  * background sync stays fire-and-forget with status rows.
  */
 
-import { getConfig } from "@thinkwork/runtime-config";
+import { deriveFunctionName, getConfig } from "@thinkwork/runtime-config";
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import {
@@ -43,6 +43,12 @@ import {
   type LiveObject,
   type SourceFilterPatterns,
 } from "./src/lib/knowledge/kb-source-sync.js";
+import {
+  derivedPrefix,
+  foldPageStatuses,
+  pageDocumentId,
+  type TranscribeReport,
+} from "./src/lib/knowledge/kb-transcribe-report.js";
 
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
 
@@ -469,6 +475,112 @@ async function syncManagedUploadSource(
   throw new Error("Ingestion job timed out after 10 minutes");
 }
 
+/** One document whose preprocessor output is on disk and ready to ingest. */
+interface TranscribedDocument {
+  object: LiveObject;
+  derivedPrefix: string;
+  report: TranscribeReport;
+  pages: { page: number; text: string }[];
+}
+
+/**
+ * Read a document's preprocessor report, or null when transcription has not
+ * finished. The report is written LAST by the worker, so its presence means
+ * the whole page set is on disk — a partially written set never looks ready.
+ */
+async function readTranscribeReport(
+  prefix: string,
+): Promise<TranscribeReport | null> {
+  const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
+  const s3 = new S3Client({ region: AWS_REGION });
+  try {
+    const object = await s3.send(
+      new GetObjectCommand({
+        Bucket: workspaceBucket(),
+        Key: `${prefix}/report.json`,
+      }),
+    );
+    return JSON.parse(await object.Body!.transformToString());
+  } catch (err) {
+    const name = (err as { name?: string })?.name;
+    if (name === "NoSuchKey" || name === "NotFound") return null;
+    throw err;
+  }
+}
+
+/** Read every page markdown file for a transcribed document. */
+async function readTranscribedPages(
+  prefix: string,
+  pageCount: number,
+): Promise<{ page: number; text: string }[]> {
+  const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
+  const s3 = new S3Client({ region: AWS_REGION });
+  const pages: { page: number; text: string }[] = [];
+  for (let page = 1; page <= pageCount; page++) {
+    const object = await s3.send(
+      new GetObjectCommand({
+        Bucket: workspaceBucket(),
+        Key: `${prefix}/pages/${page}.md`,
+      }),
+    );
+    pages.push({ page, text: await object.Body!.transformToString() });
+  }
+  return pages;
+}
+
+/**
+ * Kick off transcription for one document. Fire-and-forget (Event): a corpus
+ * of hundreds of documents far outlasts this Lambda, and the sync converges
+ * across runs by re-checking for reports rather than waiting on any of them.
+ */
+async function invokeTranscribe(event: {
+  tenantSlug: string;
+  knowledgeBaseId: string;
+  bucket: string;
+  key: string;
+  etag: string | null;
+  bucketOwnerAccountId?: string | null;
+}): Promise<void> {
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
+  const lambda = new LambdaClient({ region: AWS_REGION });
+  await lambda.send(
+    new InvokeCommand({
+      FunctionName: deriveFunctionName("kb-transcribe"),
+      InvocationType: "Event",
+      Payload: Buffer.from(JSON.stringify(event)),
+    }),
+  );
+}
+
+/**
+ * Metadata carried on each page document. `page_number` and `doc_title` are
+ * what let a retrieved chunk cite "CX-0215, page 1" and deep-link the
+ * original PDF; `transcribed` tells the agent the passage came from a
+ * transcribed image so it can attribute it honestly.
+ */
+function pageAttributes(
+  document: TranscribedDocument,
+  page: number,
+  bucket: string,
+): { key: string; value: { type: "STRING"; stringValue: string } }[] {
+  const pageResult = document.report.pages.find((entry) => entry.page === page);
+  const attributes: Record<string, string> = {
+    source_uri: `s3://${bucket}/${document.object.key}`,
+    document_key: document.object.key,
+    doc_title: document.object.key.split("/").pop() ?? document.object.key,
+    page_number: String(page),
+    page_count: String(document.report.pageCount),
+    transcribed: String(pageResult?.route === "transcribed"),
+    preprocessor_version: document.report.preprocessorVersion,
+  };
+  if (pageResult?.model) attributes.transcribe_model = pageResult.model;
+  return Object.entries(attributes).map(([key, value]) => ({
+    key,
+    value: { type: "STRING" as const, stringValue: value },
+  }));
+}
+
 /**
  * Direct-ingestion sync for one s3-connect source: list the customer bucket
  * in place, apply the source's include/exclude globs, Ingest the changed
@@ -479,10 +591,16 @@ async function syncManagedUploadSource(
 async function syncS3ConnectSource(
   kb: typeof knowledgeBases.$inferSelect,
   source: SourceRow,
+  tenantSlug: string,
 ): Promise<{
-  status: "COMPLETE" | "FAILED";
+  /** 'TRANSCRIBING' means the sync did its part and some documents are still
+   * being preprocessed — not finished, but not a failure either. */
+  status: "COMPLETE" | "FAILED" | "TRANSCRIBING";
   docCount: number;
   skippedOversize: number;
+  /** Documents whose transcription is still running — they ingest on a
+   * later sync, once their report lands. */
+  awaitingTranscription: number;
 }> {
   const awsKbId = kb.aws_kb_id!;
   const dataSourceId = source.aws_data_source_id!;
@@ -603,9 +721,69 @@ async function syncS3ConnectSource(
     }
   };
 
-  // 3. Ingest new/changed documents in batches (content stays in the
-  // customer bucket — S3_LOCATION source).
-  for (const group of batch(plan.toIngest)) {
+  // 3. Transcription pass (KB page transcription U4). Under the 'TRANSCRIBE'
+  // parsing strategy an image-bearing PDF cannot be handed to Bedrock as
+  // bytes — its default parser would index the scan as nothing and a
+  // screenshot SOP as its captions only. Instead the kb-transcribe worker
+  // writes one markdown file per page to the workspace bucket, and those
+  // pages are ingested here as INLINE page documents.
+  //
+  // Transcription is asynchronous and a large corpus far outlasts this
+  // Lambda, so a sync ingests whatever is READY and reports the rest as
+  // still running. Re-running the sync converges — the next pass finds the
+  // reports that have since landed. Nothing blocks on a model call.
+  const transcribing = source.parsing_strategy === "TRANSCRIBE";
+  const transcribed: TranscribedDocument[] = [];
+  const awaitingTranscription: string[] = [];
+  let directIngest = plan.toIngest;
+
+  if (transcribing) {
+    const eligible = plan.toIngest.filter((object) =>
+      object.key.toLowerCase().endsWith(".pdf"),
+    );
+    // Anything the transcriber cannot read (xlsx, docx, plain text) keeps the
+    // existing S3_LOCATION path.
+    directIngest = plan.toIngest.filter(
+      (object) => !object.key.toLowerCase().endsWith(".pdf"),
+    );
+
+    for (const object of eligible) {
+      const prefix = derivedPrefix({
+        tenantSlug,
+        knowledgeBaseId: kb.id,
+        documentKey: object.key,
+        etag: object.etag,
+      });
+      const ready = await readTranscribeReport(prefix);
+      if (!ready) {
+        await invokeTranscribe({
+          tenantSlug,
+          knowledgeBaseId: kb.id,
+          bucket,
+          key: object.key,
+          etag: object.etag,
+          bucketOwnerAccountId: source.bucket_owner_account_id,
+        });
+        awaitingTranscription.push(object.key);
+        continue;
+      }
+      transcribed.push({
+        object,
+        derivedPrefix: prefix,
+        report: ready,
+        pages: await readTranscribedPages(prefix, ready.pageCount),
+      });
+    }
+    console.log(
+      `[kb-manager] transcription for source ${source.id}: ready=${transcribed.length} awaiting=${awaitingTranscription.length} passthrough=${directIngest.length}`,
+    );
+  }
+
+  // 4. Ingest new/changed documents in batches. Non-transcribed content stays
+  // in the customer bucket (S3_LOCATION); transcribed pages are sent inline,
+  // one Bedrock document per page, so a retrieved chunk carries its page
+  // number and cites precisely.
+  for (const group of batch(directIngest)) {
     await sendWithThrottleRetry(
       new IngestKnowledgeBaseDocumentsCommand({
         knowledgeBaseId: awsKbId,
@@ -630,23 +808,67 @@ async function syncS3ConnectSource(
     await drainInFlight(group.map((object) => object.key));
   }
 
-  // 4. Delete removed/now-excluded documents from the index (R12/AE1 —
+  const pageDocuments = transcribed.flatMap((document) =>
+    document.pages.map((page) => ({
+      id: pageDocumentId(document.object.key, page.page),
+      text: page.text,
+      attributes: pageAttributes(document, page.page, bucket),
+    })),
+  );
+  for (const group of batch(pageDocuments)) {
+    await sendWithThrottleRetry(
+      new IngestKnowledgeBaseDocumentsCommand({
+        knowledgeBaseId: awsKbId,
+        dataSourceId,
+        documents: group.map((page) => ({
+          metadata: {
+            type: "IN_LINE_ATTRIBUTE" as const,
+            inlineAttributes: page.attributes,
+          },
+          content: {
+            dataSourceType: "CUSTOM" as const,
+            custom: {
+              customDocumentIdentifier: { id: page.id },
+              sourceType: "IN_LINE" as const,
+              inlineContent: {
+                type: "TEXT" as const,
+                textContent: { data: page.text },
+              },
+            },
+          },
+        })),
+      }),
+    );
+    await drainInFlight(group.map((page) => page.id));
+  }
+
+  // 5. Delete removed/now-excluded documents from the index (R12/AE1 —
   // exclusion takes effect on the sync after the move, no crawler involved).
-  for (const group of batch(plan.toDelete)) {
+  // A transcribed document was ingested as N page documents, so deletion has
+  // to fan out over the same ids or its pages stay retrievable forever.
+  const deleteIds = plan.toDelete.flatMap((key) => {
+    const row = manifest.find((entry) => entry.document_key === key);
+    const pageCount = row?.page_count ?? 0;
+    if (!pageCount) return [key];
+    return Array.from({ length: pageCount }, (_, index) =>
+      pageDocumentId(key, index + 1),
+    );
+  });
+  for (const group of batch(deleteIds)) {
     await sendWithThrottleRetry(
       new DeleteKnowledgeBaseDocumentsCommand({
         knowledgeBaseId: awsKbId,
         dataSourceId,
-        documentIdentifiers: group.map((key) => ({
+        documentIdentifiers: group.map((id) => ({
           dataSourceType: "CUSTOM" as const,
-          custom: { id: key },
+          custom: { id },
         })),
       }),
     );
     await drainInFlight(group);
   }
 
-  // 5. Wait for terminal per-document statuses (bounded ~5 minutes).
+  // 6. Wait for terminal per-document statuses (bounded ~5 minutes).
   const pollDeadline = Date.now() + 5 * 60_000;
   let bedrockStatusByKey = new Map<string, string>();
   for (;;) {
@@ -668,6 +890,11 @@ async function syncS3ConnectSource(
       nextToken = page.nextToken;
     } while (nextToken);
 
+    // Page documents are an ingestion-level fan-out of ONE source document;
+    // the manifest holds one row per document, so collapse '<key>#p=<n>'
+    // statuses down to their base key (worst status wins).
+    bedrockStatusByKey = foldPageStatuses(bedrockStatusByKey);
+
     const inFlight = [...bedrockStatusByKey.values()].filter(
       (status) =>
         status === "PENDING" ||
@@ -680,7 +907,7 @@ async function syncS3ConnectSource(
     await new Promise((r) => setTimeout(r, 10_000));
   }
 
-  // 6. Reconcile the manifest against the FILTERED live view so excluded/
+  // 7. Reconcile the manifest against the FILTERED live view so excluded/
   // removed documents get delete intent stamped, then run settlement.
   const included: ManifestS3Object[] = liveObjects
     .filter(
@@ -701,13 +928,46 @@ async function syncS3ConnectSource(
     `[kb-manager] s3-connect manifest reconciled for source ${source.id}: created=${result.created} editions=${result.editionsBumped} statusUpdated=${result.statusUpdated} deleting=${result.deletingNeedingRetraction.length}`,
   );
 
+  // Record what the preprocessor produced, so the operator surface can show
+  // page counts and flagged pages, and so a pipeline-version bump forces
+  // reprocessing on the next sync.
+  for (const document of transcribed) {
+    await db
+      .update(knowledgeBaseDocuments)
+      .set({
+        derived_prefix: document.derivedPrefix,
+        page_count: document.report.pageCount,
+        preprocessor_version: document.report.preprocessorVersion,
+        page_report: document.report.pages,
+        needs_review: document.report.needsReview,
+        updated_at: new Date(),
+      })
+      .where(
+        and(
+          eq(knowledgeBaseDocuments.knowledge_base_id, kb.id),
+          eq(knowledgeBaseDocuments.data_source_id, dataSourceId),
+          eq(knowledgeBaseDocuments.document_key, document.object.key),
+        ),
+      );
+  }
+
   const failed = [...bedrockStatusByKey.values()].filter(
     (status) => status === "FAILED",
   ).length;
+  // Documents still transcribing are not a failure — they are not finished.
+  // Reporting COMPLETE here would let the source read as fully indexed while
+  // most of the corpus is still being preprocessed; reporting FAILED would
+  // cry wolf on a healthy first pass over a large corpus.
   return {
-    status: failed > 0 ? "FAILED" : "COMPLETE",
+    status:
+      failed > 0
+        ? "FAILED"
+        : awaitingTranscription.length > 0
+          ? "TRANSCRIBING"
+          : "COMPLETE",
     docCount: included.length,
     skippedOversize: plan.skippedOversize.length,
+    awaitingTranscription: awaitingTranscription.length,
   };
 }
 
@@ -755,7 +1015,7 @@ async function handleSync(kbId: string): Promise<void> {
       const outcome =
         source.kind === "managed-upload"
           ? await syncManagedUploadSource(kb, source)
-          : await syncS3ConnectSource(kb, source);
+          : await syncS3ConnectSource(kb, source, tenantSlug);
       totalDocs += outcome.docCount ?? 0;
 
       // Canary-gated health (R11): job success alone never marks healthy.

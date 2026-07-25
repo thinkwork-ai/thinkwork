@@ -531,6 +531,18 @@ locals {
     "kb-source-reconciler" = {
       KB_SERVICE_ROLE_ARN = var.kb_service_role_arn
     }
+    # KB page transcription U3. Reads source documents AS the KB service role
+    # (connected customer buckets are granted to it, never to this Lambda's
+    # own role) and writes derived pages to the workspace bucket. The model
+    # ladder is walked in order and the first model the ACCOUNT can call
+    # wins — availability is per-account, so pinning one model strands
+    # tenants whose account lacks it.
+    # WORKSPACE_BUCKET comes from the shared env block above.
+    "kb-transcribe" = {
+      KB_SERVICE_ROLE_ARN        = var.kb_service_role_arn
+      KB_TRANSCRIBE_MODEL_LADDER = var.kb_transcribe_model_ladder
+      KB_TRANSCRIBE_CONCURRENCY  = "6"
+    }
     # Observations → Knowledge Graph worker. Extraction is now a Bedrock
     # structured-output call inside this Lambda. KG_EXTRACTION_MODEL_ID pins
     # the gpt-oss extraction model (Bedrock IAM via the shared lambda_bedrock
@@ -835,6 +847,10 @@ resource "aws_lambda_function" "handler" {
     # External S3 KB source U6 — hourly access probe (fail closed to
     # access_revoked) + daily sync dispatch for s3-connect sources.
     "kb-source-reconciler",
+    # KB page transcription U3 — splits image-bearing PDFs page by page and
+    # transcribes each with a Claude vision model so scanned pages and
+    # embedded screenshots reach the index at all.
+    "kb-transcribe",
     "knowledge-base-files",
     "email-send",
     "email-inbound",
@@ -1099,8 +1115,8 @@ resource "aws_lambda_function" "handler" {
   # headroom for transient slowness.
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "knowledge-base-manager" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(4096, var.lambda_max_memory_mb) : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "knowledge-base-manager" ? 900 : each.key == "kb-transcribe" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(4096, var.lambda_max_memory_mb) : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : each.key == "kb-transcribe" ? 2048 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null

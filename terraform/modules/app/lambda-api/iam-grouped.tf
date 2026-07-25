@@ -513,6 +513,10 @@ locals {
         Resource = [
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke",
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-knowledge-base-manager",
+          # KB page transcription U3: knowledge-base-manager Event-invokes
+          # the transcriber once per image-bearing document during an
+          # s3-connect sync, then ingests the derived pages on a later pass.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-kb-transcribe",
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-schedule-manager",
           # eval-runner: graphql-http's startEvalRun mutation Event-invokes
           # this asynchronously after inserting the eval_runs row.
