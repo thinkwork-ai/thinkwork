@@ -1,10 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
-import { ExternalLink, Eye, EyeOff, Plus, RefreshCw } from "lucide-react";
+import { Eye, EyeOff, Plus, RefreshCw } from "lucide-react";
 import { TooltipIconButton, cn } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
-import { useTenant } from "@/context/TenantContext";
-import { listMcpServers } from "@/lib/mcp-api";
 import {
   SettingsMemory,
   type MemoryRawUnitsController,
@@ -18,9 +16,6 @@ import {
 const RECORDS = "/settings/memory/records";
 const KNOWLEDGE_BASES = "/settings/memory/knowledge-bases";
 
-const BRAIN_CONSOLE_URL = "https://brain.thinkwork.ai";
-const BRAIN_CONNECTOR_SLUG = "digital-twin";
-
 type MemoryTab = "memory" | "knowledge-bases";
 
 function tabForPath(pathname: string): MemoryTab {
@@ -32,71 +27,14 @@ function tabForPath(pathname: string): MemoryTab {
 }
 
 /**
- * Company Brain moved to the standalone console (THINK-339 U15). When the
- * tenant has an active Brain MCP registration (the approved `digital-twin`
- * connector row), a small link-out card takes operators there. No
- * registration (or any lookup failure) = no card.
- */
-function useBrainConsoleAvailable(): boolean {
-  const { tenant } = useTenant();
-  const tenantSlug = tenant?.slug ?? null;
-  const [available, setAvailable] = useState(false);
-
-  useEffect(() => {
-    if (!tenantSlug) return;
-    let cancelled = false;
-    listMcpServers(tenantSlug)
-      .then(({ servers }) => {
-        if (cancelled) return;
-        setAvailable(
-          servers.some(
-            (server) =>
-              server.slug === BRAIN_CONNECTOR_SLUG &&
-              server.status !== "rejected",
-          ),
-        );
-      })
-      .catch(() => {
-        // Best-effort signal: an errored lookup renders no card.
-        if (!cancelled) setAvailable(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tenantSlug]);
-
-  return available;
-}
-
-function BrainConsoleCard() {
-  return (
-    <a
-      href={BRAIN_CONSOLE_URL}
-      target="_blank"
-      rel="noreferrer"
-      data-testid="brain-console-link-out"
-      className="text-muted-foreground hover:text-foreground hover:border-primary/40 mx-4 mt-3 flex items-center gap-2 self-start rounded-md border px-3 py-2 text-sm transition-colors"
-    >
-      <span>
-        <span className="text-foreground font-medium">Company Brain</span> has
-        moved to its own console
-      </span>
-      <ExternalLink className="size-3.5 shrink-0" />
-    </a>
-  );
-}
-
-/**
  * The unified Memory settings page. Memory records and KBs are siblings
  * rendered in the AppTopBar and driven by the route so each tab is
  * deep-linkable. The Company Brain and Ontology tabs retired to the
- * standalone console (THINK-339 U15) — a link-out card replaces them when
- * the tenant's Brain MCP registration is active.
+ * standalone console (THINK-339 U15).
  */
 export function SettingsMemoryHome() {
   const pathname = useLocation({ select: (location) => location.pathname });
   const activeTab = tabForPath(pathname);
-  const brainConsoleAvailable = useBrainConsoleAvailable();
   const [refreshController, setRefreshController] =
     useState<MemoryRefreshController | null>(null);
   const [refreshPending, setRefreshPending] = useState(false);
@@ -215,7 +153,6 @@ export function SettingsMemoryHome() {
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
-      {brainConsoleAvailable ? <BrainConsoleCard /> : null}
       {activeTab === "memory" ? (
         <SettingsMemory
           embedded

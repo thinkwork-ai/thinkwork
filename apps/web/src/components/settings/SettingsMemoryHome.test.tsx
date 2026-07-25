@@ -35,15 +35,11 @@ describe("SettingsMemoryHome", () => {
     expect(source).toContain('return "memory";');
   });
 
-  it("links out to the standalone Company Brain console when registered", () => {
-    // THINK-339 U15: the link-out card renders only when the tenant has an
-    // active Brain MCP registration (the `digital-twin` connector row).
-    expect(source).toContain("https://brain.thinkwork.ai");
-    expect(source).toContain('"digital-twin"');
-    expect(source).toContain("listMcpServers");
-    expect(source).toContain(
-      "brainConsoleAvailable ? <BrainConsoleCard /> : null",
-    );
+  it("carries no Company Brain link-out (banner removed, Eric 2026-07-25)", () => {
+    // The console link-out card shipped with THINK-339 U15 and was removed
+    // by request — Knowledge stays purely Memory/KBs.
+    expect(source).not.toContain("BrainConsoleCard");
+    expect(source).not.toContain("https://brain.thinkwork.ai");
   });
 
   it("keeps the Memory refresh control visually interactive", () => {
