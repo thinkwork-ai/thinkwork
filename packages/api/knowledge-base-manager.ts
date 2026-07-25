@@ -854,6 +854,30 @@ async function syncS3ConnectSource(
       pageDocumentId(key, index + 1),
     );
   });
+
+  // A document that was previously ingested whole — before this source was
+  // switched to 'TRANSCRIBE', or before the page count shrank — leaves a
+  // stale Bedrock document behind under its bare key or a now-surplus page
+  // id. Nothing else deletes those: the object is still live in S3, so the
+  // plan never lists it for deletion, and the stale copy would keep serving
+  // the very text this feature exists to replace.
+  for (const document of transcribed) {
+    const row = manifest.find(
+      (entry) => entry.document_key === document.object.key,
+    );
+    // No manifest row means Bedrock has never seen this document — there is
+    // nothing stale to clean up, and asking it to delete an unknown id is a
+    // pointless request against the 10-operation concurrency budget.
+    if (!row) continue;
+    const priorPages = row.page_count ?? 0;
+    if (priorPages === 0) {
+      deleteIds.push(document.object.key);
+      continue;
+    }
+    for (let page = document.report.pageCount + 1; page <= priorPages; page++) {
+      deleteIds.push(pageDocumentId(document.object.key, page));
+    }
+  }
   for (const group of batch(deleteIds)) {
     await sendWithThrottleRetry(
       new DeleteKnowledgeBaseDocumentsCommand({
