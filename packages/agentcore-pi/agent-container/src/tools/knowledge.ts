@@ -137,7 +137,15 @@ function hitMetadata(result: any): {
   };
 }
 
-function formatHits(hits: KnowledgeHit[]): string {
+/**
+ * Render hits with a citation marker the agent can reproduce inline.
+ *
+ * `startAt` continues the numbering across every search_knowledge call in a
+ * turn: two searches that both restarted at [1] would make the answer's
+ * markers ambiguous, and the reader could not tell which document a claim
+ * came from — which is the whole point of citing.
+ */
+function formatHits(hits: KnowledgeHit[], startAt: number): string {
   if (hits.length === 0) {
     return "No matching passages found in the connected knowledge bases.";
   }
@@ -157,7 +165,7 @@ function formatHits(hits: KnowledgeHit[]): string {
         ? `\n   Source: ${hit.documentKey}${page}${edition}${provenance}`
         : "";
       const kb = hit.knowledgeBase ? ` [${hit.knowledgeBase}]` : "";
-      return `${index + 1}.${kb} ${hit.passage.trim()}${source}`;
+      return `[${startAt + index}]${kb} ${hit.passage.trim()}${source}`;
     })
     .join("\n\n");
 }
@@ -172,6 +180,9 @@ export function buildKnowledgeTools(
   const kbNames = context.knowledgeBases
     .map((kb) => kb.name)
     .filter((name): name is string => !!name);
+  // One counter per tool instance — i.e. per turn — so citation markers stay
+  // unique and stable across repeated searches within the same answer.
+  let nextCitation = 1;
   return [
     {
       name: "search_knowledge",
@@ -181,7 +192,12 @@ export function buildKnowledgeTools(
         (kbNames.length ? ` (${kbNames.join(", ")})` : "") +
         ". Use memory for what the team knows and has discussed; use this to find and quote " +
         "the authoritative source document (SOPs, procedures, reference sheets). " +
-        "Results include the source document so you can cite it.",
+        "Every passage is returned with a citation marker like [1] and its source document. " +
+        "CITE INLINE: put the matching marker immediately after each sentence or step it " +
+        "supports, e.g. 'Add the new code at the bottom of the list [3].' Markers render as " +
+        "links to the exact document and page, so a claim without one cannot be checked. " +
+        "Reuse a marker whenever you use that passage again, and never invent a marker " +
+        "that was not returned to you.",
       parameters: Type.Object({
         query: Type.String({
           description:
@@ -265,15 +281,22 @@ export function buildKnowledgeTools(
 
         hits.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
         const top = hits.slice(0, limit);
+        // Claim this call's marker range before rendering, so a second search
+        // in the same turn continues the numbering instead of colliding.
+        const startAt = nextCitation;
+        nextCitation += top.length;
         return {
-          content: [{ type: "text" as const, text: formatHits(top) }],
+          content: [{ type: "text" as const, text: formatHits(top, startAt) }],
           details: {
             tenantId: context.tenantId,
             query: trimmed,
             hitCount: top.length,
             knowledgeBaseCount: context.knowledgeBases.length,
             failures: failures.length > 0 ? failures : undefined,
-            hits: top.map((hit) => ({
+            hits: top.map((hit, index) => ({
+              // The marker the answer text refers to. The web thread renders
+              // each [n] as a link to this document at this page.
+              citation: startAt + index,
               documentKey: hit.documentKey,
               sourceUri: hit.sourceUri,
               score: hit.score,
@@ -283,6 +306,8 @@ export function buildKnowledgeTools(
               pageNumber: hit.pageNumber,
               docTitle: hit.docTitle,
               transcribed: hit.transcribed || undefined,
+              // Short excerpt for the citation hover card.
+              quote: hit.passage.trim().slice(0, 320),
             })),
           },
         };

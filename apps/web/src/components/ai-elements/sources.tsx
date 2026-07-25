@@ -12,12 +12,124 @@ import { getDocumentViewUrlByKey } from "@/lib/kb-files-api";
  * this works for managed uploads and connected external buckets alike.
  */
 
+/**
+ * Split a `<key>#p=<n>` page-document id into its source key and page.
+ *
+ * Transcribed documents are ingested one Bedrock document per page, so the
+ * runtime's citation lines can carry the page suffix. Presigned-URL lookup and
+ * the KB manifest both key on the SOURCE document, so the suffix has to come
+ * off here too — the web must not depend on the runtime version having
+ * stripped it, or an older runtime silently breaks every source link.
+ */
+export function splitPageDocumentKey(raw: string): {
+  key: string;
+  page?: number;
+} {
+  const match = /^(.*)#p=(\d+)$/.exec(raw);
+  if (!match) return { key: raw };
+  return { key: match[1], page: Number(match[2]) };
+}
+
 /** One cited document, with the page the passage came from when the runtime
  * reported one (transcribed documents are ingested one page at a time). */
 export interface KnowledgeSource {
   key: string;
   /** 1-based page of the source document, used to deep-link the viewer. */
   page?: number;
+}
+
+/**
+ * One numbered passage the answer can cite inline. `n` is the marker the
+ * runtime handed the model (`[3]`), stable across every search in the turn.
+ */
+export interface KnowledgeCitation {
+  n: number;
+  key: string;
+  page?: number;
+  /** Excerpt shown in the citation hover card. */
+  quote?: string;
+}
+
+/** Iterate the search_knowledge invocations of one turn. */
+function forEachKnowledgeInvocation(
+  invocations: unknown[],
+  visit: (record: Record<string, unknown>) => void,
+): void {
+  for (const value of invocations) {
+    if (!value || typeof value !== "object") continue;
+    const record = value as Record<string, unknown>;
+    const name =
+      (typeof record.tool_name === "string" && record.tool_name) ||
+      (typeof record.toolName === "string" && record.toolName) ||
+      (typeof record.name === "string" && record.name) ||
+      "";
+    if (name !== "search_knowledge") continue;
+    visit(record);
+  }
+}
+
+/**
+ * Numbered citations for a turn, newest-wins-never: the FIRST occurrence of a
+ * marker is authoritative, because that is the one the model was looking at
+ * when it wrote the marker into its answer.
+ *
+ * Prefers the structured `details.hits` the Pi runner returns — parsing the
+ * rendered text is a fallback for ledger-shaped records that only kept an
+ * output preview.
+ */
+export function knowledgeCitationsFromInvocations(
+  invocations: unknown[],
+): Map<number, KnowledgeCitation> {
+  const citations = new Map<number, KnowledgeCitation>();
+  const add = (citation: KnowledgeCitation) => {
+    if (!citation.key || !Number.isFinite(citation.n)) return;
+    if (!citations.has(citation.n)) citations.set(citation.n, citation);
+  };
+
+  forEachKnowledgeInvocation(invocations, (record) => {
+    const result = record.result as Record<string, unknown> | undefined;
+    const details = result?.details as Record<string, unknown> | undefined;
+    const hits = Array.isArray(details?.hits) ? details.hits : [];
+    for (const raw of hits) {
+      if (!raw || typeof raw !== "object") continue;
+      const hit = raw as Record<string, unknown>;
+      if (typeof hit.citation !== "number") continue;
+      const split = splitPageDocumentKey(
+        typeof hit.documentKey === "string" ? hit.documentKey : "",
+      );
+      add({
+        n: hit.citation,
+        key: split.key,
+        page: typeof hit.pageNumber === "number" ? hit.pageNumber : split.page,
+        quote: typeof hit.quote === "string" ? hit.quote : undefined,
+      });
+    }
+
+    // Fallback: recover markers from the rendered text.
+    const texts: string[] = [];
+    const content = Array.isArray(result?.content) ? result.content : [];
+    for (const block of content) {
+      const text = (block as Record<string, unknown>)?.text;
+      if (typeof text === "string") texts.push(text);
+    }
+    if (typeof record.output_preview === "string") {
+      texts.push(record.output_preview);
+    }
+    for (const text of texts) {
+      for (const match of text.matchAll(
+        /^\s*\[(\d+)\][^\n]*\n\s*Source:\s*(.+?)(?:\s+\(page (\d+)\))?(?:\s+\(edition \d+\))?(?:\s+\[[^\]]*\])?\s*$/gm,
+      )) {
+        const split = splitPageDocumentKey(match[2].trim());
+        add({
+          n: Number(match[1]),
+          key: split.key,
+          page: match[3] ? Number(match[3]) : split.page,
+        });
+      }
+    }
+  });
+
+  return citations;
 }
 
 /**
@@ -38,14 +150,15 @@ export function knowledgeSourcesFromInvocations(
     for (const match of text.matchAll(
       /^\s*Source:\s*(.+?)(?:\s+\(page (\d+)\))?(?:\s+\(edition \d+\))?(?:\s+\[[^\]]*\])?\s*$/gm,
     )) {
-      const key = match[1].trim();
+      const split = splitPageDocumentKey(match[1].trim());
+      const key = split.key;
       // First citation wins the page: the same document may be cited from
       // several pages, and the row can only open one of them.
       if (key && !seen.has(key)) {
         seen.add(key);
         sources.push({
           key,
-          page: match[2] ? Number(match[2]) : undefined,
+          page: match[2] ? Number(match[2]) : split.page,
         });
       }
     }
