@@ -780,40 +780,101 @@ async function syncS3ConnectSource(
     await drainInFlight(group.map((object) => object.key));
   }
 
-  const pageDocuments = transcribed.flatMap((document) =>
-    document.pages.map((page) => ({
+  // Ingest and settle ONE DOCUMENT AT A TIME, stamping its manifest row as
+  // soon as its pages land.
+  //
+  // This is what makes a large corpus converge. The sync runs under a Lambda
+  // timeout; a 760-page corpus does not finish in one invocation. If the
+  // manifest were only written at the very end, a timeout would leave every
+  // row unstamped, the next sync would re-plan all 80 documents and re-ingest
+  // from page one, and the corpus would never finish — measured: 900s
+  // timeout, 370/760 pages in, zero rows stamped. Stamping per document makes
+  // each invocation's work durable, so successive syncs pick up where the
+  // last left off.
+  for (const document of transcribed) {
+    const pages = document.pages.map((page) => ({
       id: pageDocumentId(document.object.key, page.page),
       text: page.text,
-    })),
-  );
-  for (const group of batch(pageDocuments)) {
-    await sendWithThrottleRetry(
-      new IngestKnowledgeBaseDocumentsCommand({
-        knowledgeBaseId: awsKbId,
-        dataSourceId,
-        // NO inline metadata. With an RDS/Aurora vector store Bedrock writes
-        // each custom metadata attribute to its OWN COLUMN of the vector
-        // table, and the platform's tables carry only a generic `metadata`
-        // jsonb — so every attributed document lands FAILED with an empty
-        // statusReason. Page provenance rides the document id ('<key>#p=<n>')
-        // and the page's own markdown header instead, which needs no schema
-        // coupling and no per-tenant column management.
-        documents: group.map((page) => ({
-          content: {
-            dataSourceType: "CUSTOM" as const,
-            custom: {
-              customDocumentIdentifier: { id: page.id },
-              sourceType: "IN_LINE" as const,
-              inlineContent: {
-                type: "TEXT" as const,
-                textContent: { data: page.text },
+    }));
+
+    for (const group of batch(pages)) {
+      await sendWithThrottleRetry(
+        new IngestKnowledgeBaseDocumentsCommand({
+          knowledgeBaseId: awsKbId,
+          dataSourceId,
+          // NO inline metadata. With an RDS/Aurora vector store Bedrock writes
+          // each custom metadata attribute to its OWN COLUMN of the vector
+          // table, and the platform's tables carry only a generic `metadata`
+          // jsonb — so every attributed document lands FAILED with an empty
+          // statusReason. Page provenance rides the document id
+          // ('<key>#p=<n>') and the page's own markdown header instead, which
+          // needs no schema coupling and no per-tenant column management.
+          documents: group.map((page) => ({
+            content: {
+              dataSourceType: "CUSTOM" as const,
+              custom: {
+                customDocumentIdentifier: { id: page.id },
+                sourceType: "IN_LINE" as const,
+                inlineContent: {
+                  type: "TEXT" as const,
+                  textContent: { data: page.text },
+                },
               },
             },
-          },
-        })),
-      }),
+          })),
+        }),
+      );
+      await drainInFlight(group.map((page) => page.id));
+    }
+
+    // The whole-document copy this replaces. Nothing else removes it: the S3
+    // object is still live, so the plan never lists it for deletion, and the
+    // stale copy would keep serving the very text this replaces.
+    const priorRow = manifest.find(
+      (entry) => entry.document_key === document.object.key,
     );
-    await drainInFlight(group.map((page) => page.id));
+    const priorPages = priorRow?.page_count ?? 0;
+    const stale: string[] = [];
+    if (priorRow && priorPages === 0) stale.push(document.object.key);
+    for (let page = document.report.pageCount + 1; page <= priorPages; page++) {
+      stale.push(pageDocumentId(document.object.key, page));
+    }
+    for (const group of batch(stale)) {
+      await sendWithThrottleRetry(
+        new DeleteKnowledgeBaseDocumentsCommand({
+          knowledgeBaseId: awsKbId,
+          dataSourceId,
+          documentIdentifiers: group.map((id) => ({
+            dataSourceType: "CUSTOM" as const,
+            custom: { id },
+          })),
+        }),
+      );
+      await drainInFlight(group);
+    }
+
+    // Durable progress marker. The etag is what planDirectIngestion diffs on,
+    // so writing it here is what stops the next sync from redoing this
+    // document.
+    await db
+      .update(knowledgeBaseDocuments)
+      .set({
+        etag: document.object.etag,
+        content_hash: document.object.etag,
+        derived_prefix: document.derivedPrefix,
+        page_count: document.report.pageCount,
+        preprocessor_version: document.report.preprocessorVersion,
+        page_report: document.report.pages,
+        needs_review: document.report.needsReview,
+        updated_at: new Date(),
+      })
+      .where(
+        and(
+          eq(knowledgeBaseDocuments.knowledge_base_id, kb.id),
+          eq(knowledgeBaseDocuments.data_source_id, dataSourceId),
+          eq(knowledgeBaseDocuments.document_key, document.object.key),
+        ),
+      );
   }
 
   // 5. Delete removed/now-excluded documents from the index (R12/AE1 —
@@ -829,29 +890,6 @@ async function syncS3ConnectSource(
     );
   });
 
-  // A document that was previously ingested whole — before this source was
-  // switched to 'TRANSCRIBE', or before the page count shrank — leaves a
-  // stale Bedrock document behind under its bare key or a now-surplus page
-  // id. Nothing else deletes those: the object is still live in S3, so the
-  // plan never lists it for deletion, and the stale copy would keep serving
-  // the very text this feature exists to replace.
-  for (const document of transcribed) {
-    const row = manifest.find(
-      (entry) => entry.document_key === document.object.key,
-    );
-    // No manifest row means Bedrock has never seen this document — there is
-    // nothing stale to clean up, and asking it to delete an unknown id is a
-    // pointless request against the 10-operation concurrency budget.
-    if (!row) continue;
-    const priorPages = row.page_count ?? 0;
-    if (priorPages === 0) {
-      deleteIds.push(document.object.key);
-      continue;
-    }
-    for (let page = document.report.pageCount + 1; page <= priorPages; page++) {
-      deleteIds.push(pageDocumentId(document.object.key, page));
-    }
-  }
   for (const group of batch(deleteIds)) {
     await sendWithThrottleRetry(
       new DeleteKnowledgeBaseDocumentsCommand({
@@ -925,29 +963,6 @@ async function syncS3ConnectSource(
   console.log(
     `[kb-manager] s3-connect manifest reconciled for source ${source.id}: created=${result.created} editions=${result.editionsBumped} statusUpdated=${result.statusUpdated} deleting=${result.deletingNeedingRetraction.length}`,
   );
-
-  // Record what the preprocessor produced, so the operator surface can show
-  // page counts and flagged pages, and so a pipeline-version bump forces
-  // reprocessing on the next sync.
-  for (const document of transcribed) {
-    await db
-      .update(knowledgeBaseDocuments)
-      .set({
-        derived_prefix: document.derivedPrefix,
-        page_count: document.report.pageCount,
-        preprocessor_version: document.report.preprocessorVersion,
-        page_report: document.report.pages,
-        needs_review: document.report.needsReview,
-        updated_at: new Date(),
-      })
-      .where(
-        and(
-          eq(knowledgeBaseDocuments.knowledge_base_id, kb.id),
-          eq(knowledgeBaseDocuments.data_source_id, dataSourceId),
-          eq(knowledgeBaseDocuments.document_key, document.object.key),
-        ),
-      );
-  }
 
   const failed = [...bedrockStatusByKey.values()].filter(
     (status) => status === "FAILED",
