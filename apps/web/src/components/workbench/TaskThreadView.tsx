@@ -740,6 +740,24 @@ export function TaskThreadView({
       .find((candidate) => candidate.role.toUpperCase() !== "USER");
     documentCardsByMessageId.set(reply?.id ?? message.id, cards);
   });
+  // Knowledge citations anchor to the AGENT'S REPLY, not the user's message.
+  // `turnByUserMessageId` is keyed by the message that *triggered* the turn,
+  // but the `[n]` markers live in the reply — looking the turn up by the
+  // reply's own id returns undefined, leaving every marker as literal text.
+  // Same reply-anchoring the document cards above use.
+  const citationsByMessageId = new Map<string, Map<number, KnowledgeCitation>>();
+  transcriptMessages.forEach((message, index) => {
+    const turn = turnByUserMessageId.get(message.id);
+    if (!turn) return;
+    const citations = knowledgeCitationsFromInvocations(
+      parseArray(parseRecord(turn.usageJson).tool_invocations),
+    );
+    if (citations.size === 0) return;
+    const reply = transcriptMessages
+      .slice(index + 1)
+      .find((candidate) => candidate.role.toUpperCase() !== "USER");
+    citationsByMessageId.set(reply?.id ?? message.id, citations);
+  });
   // Card self-heal: the logical documentId behind each card-recorded
   // artifactId, from EVERY turn's cards (not just message-anchored ones) —
   // the docked panel re-resolves by it when the artifactId dangles.
@@ -811,6 +829,9 @@ export function TaskThreadView({
                           key={message.id}
                           message={message}
                           turn={turn}
+                          knowledgeCitations={citationsByMessageId.get(
+                            message.id,
+                          )}
                           documentCards={documentCardsByMessageId.get(
                             message.id,
                           )}
@@ -1965,6 +1986,7 @@ function skillDraftStatusFromMessage(
 function TranscriptSegment({
   message,
   turn,
+  knowledgeCitations: knowledgeCitationsProp,
   documentCards,
   canvasesByStablePartId,
   threadId,
@@ -1987,6 +2009,8 @@ function TranscriptSegment({
 }: {
   message: TaskThreadMessage;
   turn?: TaskThreadTurn;
+  /** Citations for THIS message, anchored to the agent's reply upstream. */
+  knowledgeCitations?: Map<number, KnowledgeCitation>;
   documentCards?: DocumentCardData[];
   canvasesByStablePartId?: ReadonlyMap<string, ArtifactCardData>;
   threadId?: string;
@@ -2023,11 +2047,11 @@ function TranscriptSegment({
   // pre-U6 historical messages).
   const hasTypedParts = streamState != null && streamState.parts.length > 0;
   const skillDraft = skillDraftStatusFromMessage(message);
-  // Numbered knowledge citations for this turn — the answer's `[n]` markers
-  // resolve against these to become links to the cited document and page.
-  const knowledgeCitations = knowledgeCitationsFromInvocations(
-    parseArray(parseRecord(turn?.usageJson).tool_invocations),
-  );
+  // Knowledge citations arrive as a prop, anchored to THIS message. They
+  // cannot be derived from `turn` here: `turn` is the turn this message
+  // *triggered* (set only on user messages), while the `[n]` markers live in
+  // the agent's reply, whose own id has no entry in that map.
+  const knowledgeCitations = knowledgeCitationsProp;
   return (
     <>
       <TranscriptMessage

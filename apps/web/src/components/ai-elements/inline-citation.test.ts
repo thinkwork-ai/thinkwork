@@ -14,7 +14,7 @@ const citations = (...ns: number[]) =>
 describe("linkCitationMarkers", () => {
   it("rewrites a marker the turn actually returned", () => {
     expect(linkCitationMarkers("Add it at the bottom [3].", citations(3))).toBe(
-      "Add it at the bottom [3](thinkwork-cite:3).",
+      "Add it at the bottom [3](#thinkwork-cite-3).",
     );
   });
 
@@ -22,19 +22,19 @@ describe("linkCitationMarkers", () => {
     // Three pills jammed together mid-sentence is unreadable; the trigger
     // shows the first source and a +N count instead.
     expect(linkCitationMarkers("Per the SOPs [1][2][3].", citations(1, 2, 3))).toBe(
-      "Per the SOPs [1](thinkwork-cite:1,2,3).",
+      "Per the SOPs [1](#thinkwork-cite-1,2,3).",
     );
   });
 
   it("collapses a space-separated run too", () => {
     expect(linkCitationMarkers("See [1] [2].", citations(1, 2))).toBe(
-      "See [1](thinkwork-cite:1,2).",
+      "See [1](#thinkwork-cite-1,2).",
     );
   });
 
   it("drops unknown markers from a run but keeps the known ones", () => {
     expect(linkCitationMarkers("See [1][9].", citations(1))).toBe(
-      "See [1](thinkwork-cite:1).",
+      "See [1](#thinkwork-cite-1).",
     );
   });
 
@@ -60,20 +60,20 @@ describe("linkCitationMarkers", () => {
   it("does not touch markers inside inline code", () => {
     const input = "Use `arr[3]` for the index [3].";
     expect(linkCitationMarkers(input, citations(3))).toBe(
-      "Use `arr[3]` for the index [3](thinkwork-cite:3).",
+      "Use `arr[3]` for the index [3](#thinkwork-cite-3).",
     );
   });
 
   it("does not touch markers inside a fenced block", () => {
     const input = "```js\nconst x = arr[2];\n```\n\nSee [2].";
     expect(linkCitationMarkers(input, citations(2))).toBe(
-      "```js\nconst x = arr[2];\n```\n\nSee [2](thinkwork-cite:2).",
+      "```js\nconst x = arr[2];\n```\n\nSee [2](#thinkwork-cite-2).",
     );
   });
 
   it("rewrites every occurrence of a reused marker", () => {
     expect(linkCitationMarkers("First [1]. Again [1].", citations(1))).toBe(
-      "First [1](thinkwork-cite:1). Again [1](thinkwork-cite:1).",
+      "First [1](#thinkwork-cite-1). Again [1](#thinkwork-cite-1).",
     );
   });
 
