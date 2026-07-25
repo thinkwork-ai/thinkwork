@@ -2057,6 +2057,54 @@ def test_write_runner_files_cognito_email_vars_prefer_runner_secrets_and_default
     assert vars_json_retired["finalize_auth_retirement"] is True
 
 
+def test_write_runner_files_threads_additional_admin_callback_urls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    _cognito_email_runner_env(runner, tmp_path, monkeypatch)
+
+    # runner-secrets carries the customer's hosted console origins; a
+    # comma-separated string and a JSON-array string must both parse, and the
+    # module wiring must be present so the URLs actually reach the web clients.
+    vars_json = runner.write_runner_files(
+        {
+            "stage": "mcpherson",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "024350822488",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+        },
+        {
+            "adminCallbackUrls": (
+                "https://console.example.net, https://console.example.net/auth/callback"
+            ),
+            "adminLogoutUrls": '["https://console.example.net"]',
+        },
+    )
+    assert vars_json["additional_admin_callback_urls"] == [
+        "https://console.example.net",
+        "https://console.example.net/auth/callback",
+    ]
+    assert vars_json["additional_admin_logout_urls"] == ["https://console.example.net"]
+    main_tf = (runner.TF / "main.tf").read_text(encoding="utf-8")
+    assert "additional_admin_callback_urls = var.additional_admin_callback_urls" in main_tf
+    assert "additional_admin_logout_urls   = var.additional_admin_logout_urls" in main_tf
+
+    # Default: no runner-secrets keys -> empty lists (no behavior change).
+    vars_json_default = runner.write_runner_files(
+        {
+            "stage": "mcpherson",
+            "awsRegion": "us-east-1",
+            "awsAccountId": "024350822488",
+            "dbPassword": "db-secret",
+            "apiAuthSecret": "api-secret",
+        },
+        {},
+    )
+    assert vars_json_default["additional_admin_callback_urls"] == []
+    assert vars_json_default["additional_admin_logout_urls"] == []
+
+
 def test_write_runner_files_defaults_existing_preauth_stack_to_coexistence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

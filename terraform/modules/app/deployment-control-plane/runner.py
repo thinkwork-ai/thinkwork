@@ -2423,6 +2423,42 @@ def config_string_list(desired_config, key, env_name, default=None):
     return list(default or [])
 
 
+def coerce_string_list(value):
+    """Normalize a runner-secrets / payload value into a list[str].
+
+    Accepts a native list, a JSON-array string (``["a","b"]``), or a
+    comma-separated string. Blank entries are dropped. Anything else yields
+    an empty list. Order and duplicates are preserved for the caller; the
+    Terraform side applies distinct().
+    """
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        if text.startswith("["):
+            try:
+                parsed = json.loads(text)
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        return [item.strip() for item in text.split(",") if item.strip()]
+    return []
+
+
+def runner_secret_string_list(runner_secrets, payload, *keys):
+    """First non-empty list found across runner_secrets then payload for keys."""
+    for source in (runner_secrets or {}, payload or {}):
+        for key in keys:
+            if key in source:
+                result = coerce_string_list(source.get(key))
+                if result:
+                    return result
+    return []
+
+
 def required_config_value(
     desired_config,
     manifest_images,
@@ -4572,6 +4608,20 @@ def write_runner_files(payload, runner_secrets):
             "customerDomainLegacyRetired",
             default=False,
         ),
+        # Extra web-family OAuth callback/logout origins (e.g. the customer's
+        # Company Brain console CloudFront domain, hosted in their own account).
+        # Persisted in runner-secrets so they survive every controller apply
+        # instead of being stripped back to the computed defaults.
+        "additional_admin_callback_urls": runner_secret_string_list(
+            runner_secrets,
+            reviewed_payload,
+            "adminCallbackUrls",
+        ),
+        "additional_admin_logout_urls": runner_secret_string_list(
+            runner_secrets,
+            reviewed_payload,
+            "adminLogoutUrls",
+        ),
         "lambda_artifact_bucket": os.environ["THINKWORK_RELEASE_ARTIFACT_BUCKET"],
         "lambda_artifact_prefix": f"releases/{release_version}/lambdas",
         "deployment_release_version": release_version,
@@ -4844,6 +4894,16 @@ variable "customer_domain_delegated" {{
 
 variable "customer_domain_legacy_retired" {{
   type = bool
+}}
+
+variable "additional_admin_callback_urls" {{
+  type    = list(string)
+  default = []
+}}
+
+variable "additional_admin_logout_urls" {{
+  type    = list(string)
+  default = []
 }}
 
 variable "google_oauth_client_id" {{
@@ -5226,6 +5286,9 @@ module "thinkwork" {{
   customer_domain                = var.customer_domain
   customer_domain_delegated      = var.customer_domain_delegated
   customer_domain_legacy_retired = var.customer_domain_legacy_retired
+
+  additional_admin_callback_urls = var.additional_admin_callback_urls
+  additional_admin_logout_urls   = var.additional_admin_logout_urls
 
   lambda_artifact_bucket   = var.lambda_artifact_bucket
   lambda_artifact_prefix   = var.lambda_artifact_prefix

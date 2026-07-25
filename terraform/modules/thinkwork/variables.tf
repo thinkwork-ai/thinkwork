@@ -1062,6 +1062,18 @@ variable "admin_logout_urls" {
   ]
 }
 
+variable "additional_admin_callback_urls" {
+  type        = list(string)
+  default     = []
+  description = "Extra OAuth callback URLs appended to the web-family Cognito clients, beyond the computed defaults (localhost, customer/app domains, dev console). Customer stacks host the Company Brain console in their own account, so those origins can't be derived here and arrive from the deployment runner (runner-secrets `adminCallbackUrls`). Supply both the bare origin and its /auth/callback variant. Purely additive — empty leaves behavior unchanged."
+}
+
+variable "additional_admin_logout_urls" {
+  type        = list(string)
+  default     = []
+  description = "Extra OAuth logout URLs appended to the web-family Cognito clients (companion to additional_admin_callback_urls; runner-secrets `adminLogoutUrls`)."
+}
+
 variable "desktop_callback_urls" {
   type = list(string)
   default = [
