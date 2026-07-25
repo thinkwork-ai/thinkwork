@@ -554,34 +554,6 @@ async function invokeTranscribe(event: {
 }
 
 /**
- * Metadata carried on each page document. `page_number` and `doc_title` are
- * what let a retrieved chunk cite "CX-0215, page 1" and deep-link the
- * original PDF; `transcribed` tells the agent the passage came from a
- * transcribed image so it can attribute it honestly.
- */
-function pageAttributes(
-  document: TranscribedDocument,
-  page: number,
-  bucket: string,
-): { key: string; value: { type: "STRING"; stringValue: string } }[] {
-  const pageResult = document.report.pages.find((entry) => entry.page === page);
-  const attributes: Record<string, string> = {
-    source_uri: `s3://${bucket}/${document.object.key}`,
-    document_key: document.object.key,
-    doc_title: document.object.key.split("/").pop() ?? document.object.key,
-    page_number: String(page),
-    page_count: String(document.report.pageCount),
-    transcribed: String(pageResult?.route === "transcribed"),
-    preprocessor_version: document.report.preprocessorVersion,
-  };
-  if (pageResult?.model) attributes.transcribe_model = pageResult.model;
-  return Object.entries(attributes).map(([key, value]) => ({
-    key,
-    value: { type: "STRING" as const, stringValue: value },
-  }));
-}
-
-/**
  * Direct-ingestion sync for one s3-connect source: list the customer bucket
  * in place, apply the source's include/exclude globs, Ingest the changed
  * set (S3_LOCATION content — Bedrock reads from their bucket), Delete
@@ -812,7 +784,6 @@ async function syncS3ConnectSource(
     document.pages.map((page) => ({
       id: pageDocumentId(document.object.key, page.page),
       text: page.text,
-      attributes: pageAttributes(document, page.page, bucket),
     })),
   );
   for (const group of batch(pageDocuments)) {
@@ -820,11 +791,14 @@ async function syncS3ConnectSource(
       new IngestKnowledgeBaseDocumentsCommand({
         knowledgeBaseId: awsKbId,
         dataSourceId,
+        // NO inline metadata. With an RDS/Aurora vector store Bedrock writes
+        // each custom metadata attribute to its OWN COLUMN of the vector
+        // table, and the platform's tables carry only a generic `metadata`
+        // jsonb — so every attributed document lands FAILED with an empty
+        // statusReason. Page provenance rides the document id ('<key>#p=<n>')
+        // and the page's own markdown header instead, which needs no schema
+        // coupling and no per-tenant column management.
         documents: group.map((page) => ({
-          metadata: {
-            type: "IN_LINE_ATTRIBUTE" as const,
-            inlineAttributes: page.attributes,
-          },
           content: {
             dataSourceType: "CUSTOM" as const,
             custom: {

@@ -73,6 +73,49 @@ describe("buildKnowledgeTools", () => {
     expect(tools[0].description).toContain("CX SOPs");
   });
 
+  it("derives the page number from a page-document id, not from metadata", async () => {
+    // Page provenance CANNOT ride inline metadata attributes: with an
+    // RDS-backed vector store Bedrock writes each attribute to its own table
+    // column, so an attributed document fails ingestion outright. The id is
+    // the carrier.
+    h.responsesByKbId.set("KBAAAA", {
+      retrievalResults: [
+        hit(
+          "Always add new code at bottom",
+          "cx/files/CX-0215 Reason Code.pdf#p=1",
+          0.9,
+        ),
+      ],
+    });
+    const [tool] = buildKnowledgeTools({
+      knowledgeBases: [KB_A],
+      tenantId: "t1",
+    });
+    const result = await tool.execute("call-p", { query: "reason code" });
+    // The KEY must come back without the page suffix — the presigned-URL
+    // lookup and the manifest both key on the source document.
+    expect(result.details.hits[0]).toMatchObject({
+      documentKey: "cx/files/CX-0215 Reason Code.pdf",
+      pageNumber: 1,
+    });
+    expect(firstText(result)).toContain(
+      "Source: cx/files/CX-0215 Reason Code.pdf (page 1)",
+    );
+  });
+
+  it("leaves documents ingested whole without a page number", async () => {
+    h.responsesByKbId.set("KBAAAA", {
+      retrievalResults: [hit("Reference sheet", "cx/files/CX-0144.xlsx", 0.8)],
+    });
+    const [tool] = buildKnowledgeTools({
+      knowledgeBases: [KB_A],
+      tenantId: "t1",
+    });
+    const result = await tool.execute("call-n", { query: "codes" });
+    expect(result.details.hits[0].pageNumber).toBeUndefined();
+    expect(firstText(result)).not.toContain("page");
+  });
+
   it("AE4: a Retrieve hit's document identity + edition ride the tool result", async () => {
     h.responsesByKbId.set("KBAAAA", {
       retrievalResults: [
