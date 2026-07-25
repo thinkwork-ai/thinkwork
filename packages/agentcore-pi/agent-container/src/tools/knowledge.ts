@@ -241,6 +241,17 @@ export function buildKnowledgeTools(
                 retrievalConfiguration: {
                   vectorSearchConfiguration: {
                     numberOfResults: Math.min(limit, MAX_RESULTS_PER_KB),
+                    // Hybrid (semantic + keyword), not pure semantic. SOP
+                    // corpora are dense with near-identical prose, so the
+                    // literal identifiers are what actually separate one
+                    // document from another — a short page whose distinctive
+                    // signal is "reason code" loses on embedding distance to
+                    // long documents that merely discuss the same topic.
+                    // Measured on the McPherson CX corpus: the page answering
+                    // "how do I set up a new reason code" moved from rank 8 of
+                    // 8 (barely inside the window) to rank 1, and two other
+                    // questions stopped returning the wrong document first.
+                    overrideSearchType: "HYBRID",
                   },
                 },
               }),
