@@ -133,10 +133,13 @@ export function linkCitationMarkers(
       if (index % 2 === 1) return segment;
       return segment.replace(
         /(!?)(\[(\d+)\])(\()?/g,
-        (whole, bang: string, marker: string, digits: string, paren) => {
+        (whole, bang: string, _marker: string, digits: string, paren) => {
           // `![n](` is an image and `[n](` is already a link — leave both.
           if (bang || paren) return whole;
-          if (!citations.has(Number(digits))) return whole;
+          // A marker the turn never returned must be ESCAPED, not left bare:
+          // the markdown renderer treats a lone `[9]` as an unfinished link
+          // and emits a visible `](streamdown:incomplete-link)` placeholder.
+          if (!citations.has(Number(digits))) return `\\[${digits}\\]`;
           return `[${digits}](${CITATION_HREF_PREFIX}${digits})`;
         },
       );

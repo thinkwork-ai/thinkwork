@@ -15,9 +15,13 @@ describe("linkCitationMarkers", () => {
     );
   });
 
-  it("leaves markers the turn never returned as plain text", () => {
-    // The model can invent a marker; an unresolvable badge is worse than text.
-    expect(linkCitationMarkers("See [9].", citations(1, 2))).toBe("See [9].");
+  it("escapes markers the turn never returned so they render as literal text", () => {
+    // The model can invent a marker. Left bare, the markdown renderer treats
+    // `[9]` as an unfinished link and leaks a visible
+    // `](streamdown:incomplete-link)` placeholder into the answer.
+    expect(linkCitationMarkers("See [9].", citations(1, 2))).toBe(
+      "See \\[9\\].",
+    );
   });
 
   it("leaves an existing markdown link alone", () => {
