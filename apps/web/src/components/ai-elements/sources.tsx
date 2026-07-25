@@ -12,6 +12,24 @@ import { getDocumentViewUrlByKey } from "@/lib/kb-files-api";
  * this works for managed uploads and connected external buckets alike.
  */
 
+/**
+ * Split a `<key>#p=<n>` page-document id into its source key and page.
+ *
+ * Transcribed documents are ingested one Bedrock document per page, so the
+ * runtime's citation lines can carry the page suffix. Presigned-URL lookup and
+ * the KB manifest both key on the SOURCE document, so the suffix has to come
+ * off here too — the web must not depend on the runtime version having
+ * stripped it, or an older runtime silently breaks every source link.
+ */
+export function splitPageDocumentKey(raw: string): {
+  key: string;
+  page?: number;
+} {
+  const match = /^(.*)#p=(\d+)$/.exec(raw);
+  if (!match) return { key: raw };
+  return { key: match[1], page: Number(match[2]) };
+}
+
 /** One cited document, with the page the passage came from when the runtime
  * reported one (transcribed documents are ingested one page at a time). */
 export interface KnowledgeSource {
@@ -76,10 +94,13 @@ export function knowledgeCitationsFromInvocations(
       if (!raw || typeof raw !== "object") continue;
       const hit = raw as Record<string, unknown>;
       if (typeof hit.citation !== "number") continue;
+      const split = splitPageDocumentKey(
+        typeof hit.documentKey === "string" ? hit.documentKey : "",
+      );
       add({
         n: hit.citation,
-        key: typeof hit.documentKey === "string" ? hit.documentKey : "",
-        page: typeof hit.pageNumber === "number" ? hit.pageNumber : undefined,
+        key: split.key,
+        page: typeof hit.pageNumber === "number" ? hit.pageNumber : split.page,
         quote: typeof hit.quote === "string" ? hit.quote : undefined,
       });
     }
@@ -98,10 +119,11 @@ export function knowledgeCitationsFromInvocations(
       for (const match of text.matchAll(
         /^\s*\[(\d+)\][^\n]*\n\s*Source:\s*(.+?)(?:\s+\(page (\d+)\))?(?:\s+\(edition \d+\))?(?:\s+\[[^\]]*\])?\s*$/gm,
       )) {
+        const split = splitPageDocumentKey(match[2].trim());
         add({
           n: Number(match[1]),
-          key: match[2].trim(),
-          page: match[3] ? Number(match[3]) : undefined,
+          key: split.key,
+          page: match[3] ? Number(match[3]) : split.page,
         });
       }
     }
@@ -128,14 +150,15 @@ export function knowledgeSourcesFromInvocations(
     for (const match of text.matchAll(
       /^\s*Source:\s*(.+?)(?:\s+\(page (\d+)\))?(?:\s+\(edition \d+\))?(?:\s+\[[^\]]*\])?\s*$/gm,
     )) {
-      const key = match[1].trim();
+      const split = splitPageDocumentKey(match[1].trim());
+      const key = split.key;
       // First citation wins the page: the same document may be cited from
       // several pages, and the row can only open one of them.
       if (key && !seen.has(key)) {
         seen.add(key);
         sources.push({
           key,
-          page: match[2] ? Number(match[2]) : undefined,
+          page: match[2] ? Number(match[2]) : split.page,
         });
       }
     }

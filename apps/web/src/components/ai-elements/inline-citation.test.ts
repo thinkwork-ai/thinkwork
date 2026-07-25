@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { linkCitationMarkers } from "./inline-citation";
-import { knowledgeCitationsFromInvocations } from "./sources";
+import {
+  knowledgeCitationsFromInvocations,
+  knowledgeSourcesFromInvocations,
+} from "./sources";
 import type { KnowledgeCitation } from "./sources";
 
 const citations = (...ns: number[]) =>
@@ -124,5 +127,34 @@ describe("knowledgeCitationsFromInvocations", () => {
         },
       ]).size,
     ).toBe(0);
+  });
+});
+
+describe("page-suffix tolerance (older runtimes)", () => {
+  it("strips '#p=n' the runtime left on the key and recovers the page", () => {
+    // A runtime that predates id-stripping emits the raw page-document id.
+    // Left intact it would 404 every presigned lookup.
+    const map = knowledgeCitationsFromInvocations([
+      {
+        name: "search_knowledge",
+        result: {
+          details: {
+            hits: [{ citation: 1, documentKey: "cx/files/CX-0215.pdf#p=1" }],
+          },
+        },
+      },
+    ]);
+    expect(map.get(1)).toMatchObject({ key: "cx/files/CX-0215.pdf", page: 1 });
+  });
+
+  it("strips the suffix in the Sources list too", () => {
+    expect(
+      knowledgeSourcesFromInvocations([
+        {
+          tool_name: "search_knowledge",
+          output_preview: "[1] passage\n   Source: cx/files/CX-0024.pdf#p=12",
+        },
+      ]),
+    ).toEqual([{ key: "cx/files/CX-0024.pdf", page: 12 }]);
   });
 });
