@@ -29,9 +29,11 @@ export default defineConfig({
       // and never talk to real infra. See that directory's README.
       "test/integration/**/*.test.ts",
       "../../seeds/eval-test-cases/__tests__/**/*.test.ts",
-      // The knowledge-base-manager Lambda entry lives at the package root
-      // (not src/); its suite sits beside it.
+      // The knowledge-base Lambda entries live at the package root (not
+      // src/); their suites sit beside them. Root-level tests are listed
+      // one by one here — a new file that is not added is silently skipped.
       "knowledge-base-manager.test.ts",
+      "knowledge-base-files.test.ts",
     ],
     // Sandbox E2E tests hit live infra (deployed stage). They are
     // opted into via `pnpm sandbox:e2e` (separate config below).

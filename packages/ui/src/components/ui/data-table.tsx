@@ -80,6 +80,8 @@ interface DataTableProps<TData, TValue> {
   filterColumn?: string;
   /** Callback when a row is clicked */
   onRowClick?: (row: TData) => void;
+  /** Extra classes per row — e.g. marking the row a side panel is showing. */
+  rowClassName?: (row: TData) => string | undefined;
   /** Page size for pagination. 0 = no pagination. Default 20. */
   pageSize?: number;
   /** Hide the table header row */
@@ -122,6 +124,7 @@ export function DataTable<TData, TValue>({
   filterValue,
   filterColumn,
   onRowClick,
+  rowClassName,
   pageSize = 10,
   hideHeader = false,
   enableRowSelection = false,
@@ -271,6 +274,7 @@ export function DataTable<TData, TValue>({
             className={cn(
               ROW_HEIGHT_40PX_CLASSES,
               onRowClick && "cursor-pointer",
+              rowClassName?.(row.original),
             )}
             onClick={() => onRowClick?.(row.original)}
           >

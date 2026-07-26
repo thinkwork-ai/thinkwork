@@ -83,6 +83,15 @@ export interface KbManifestDocument {
   status: string;
   sourceKind: string;
   updatedAt: string | null;
+  /** Projection (Hindsight) status, distinct from Bedrock ingest status. */
+  projectionStatus?: string | null;
+  edition?: number | null;
+  /** Null for documents the transcription pipeline never paginated. */
+  pageCount?: number | null;
+  lastError?: string | null;
+  /** When this edition became current — the "last indexed" signal.
+   * `updatedAt` stays the row's modification time and means something else. */
+  effectiveFrom?: string | null;
 }
 
 interface ListManifestResponse {

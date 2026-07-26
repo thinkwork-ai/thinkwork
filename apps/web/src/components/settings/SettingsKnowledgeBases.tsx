@@ -78,15 +78,31 @@ export function SettingsKnowledgeBases({
       {
         accessorKey: "name",
         header: "Name",
+        // Sized so Description is the only unsized column and absorbs the
+        // row's leftover width. Two unsized columns split it, which is what
+        // left Description truncating with space to spare (THINK-345 R1).
+        size: 260,
+        meta: { cellClassName: "max-w-0" },
         cell: ({ row }) => (
-          <span className="font-medium">{row.original.name}</span>
+          <span
+            className="block truncate font-medium"
+            title={row.original.name}
+          >
+            {row.original.name}
+          </span>
         ),
       },
       {
         accessorKey: "description",
         header: "Description",
+        // No explicit size: takes all remaining width. max-w-0 is what lets
+        // truncate actually clip under table-fixed.
+        meta: { cellClassName: "max-w-0" },
         cell: ({ row }) => (
-          <span className="block max-w-md truncate text-muted-foreground">
+          <span
+            className="block truncate text-muted-foreground"
+            title={row.original.description ?? undefined}
+          >
             {row.original.description ?? "—"}
           </span>
         ),
