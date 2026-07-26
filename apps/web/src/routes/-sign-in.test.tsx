@@ -34,17 +34,6 @@ const authOptionsMocks = vi.hoisted(() => ({
   fetchPublicAuthOptions: vi.fn(),
 }));
 
-const desktopRuntimeMocks = vi.hoisted(() => ({
-  getDesktopBridge: vi.fn(),
-  isDesktopBuild: vi.fn(),
-  normalizeDesktopNext: (value: unknown) =>
-    typeof value === "string" &&
-    value.startsWith("/") &&
-    !value.startsWith("//")
-      ? value
-      : undefined,
-}));
-
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
     children,
@@ -82,8 +71,6 @@ vi.mock("@/lib/auth-options", () => ({
   fetchPublicAuthOptions: authOptionsMocks.fetchPublicAuthOptions,
 }));
 
-vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
-
 const ORIGINAL_LOCATION = window.location;
 
 function setWindowLocation(url: string): void {
@@ -96,27 +83,6 @@ function setWindowLocation(url: string): void {
       origin: parsed.origin,
       pathname: parsed.pathname,
     },
-  });
-}
-
-function publishDesktopGoogleOption(): void {
-  authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
-    password: { enabled: false },
-    oauthOptions: [
-      {
-        key: "google",
-        label: "Continue with Google",
-        icon: "google",
-        provider: "google",
-        providerSpecific: true,
-        route: {
-          type: "cognitoHostedUi",
-          clientId: "desktop-google-client",
-          identityProvider: "Google",
-          prompt: "select_account",
-        },
-      },
-    ],
   });
 }
 
@@ -148,7 +114,6 @@ beforeEach(() => {
     oauthOptions: [],
   });
   routerMocks.search = { next: undefined, legacyMigration: undefined };
-  desktopRuntimeMocks.isDesktopBuild.mockReturnValue(false);
 });
 
 afterEach(() => {
@@ -215,8 +180,6 @@ describe("SignInPage", () => {
     ]);
   });
   it("renders no browser OAuth button when public auth options are empty", () => {
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
-
     render(<SignInPage />);
 
     expect(
@@ -234,23 +197,22 @@ describe("SignInPage", () => {
   });
 
   it("renders a single OAuth provider full-width (no two-column grid)", async () => {
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
     authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
       password: { enabled: false },
       oauthOptions: [
         {
-        key: "google",
-        label: "Continue with Google",
-        icon: "google",
-        provider: "google",
-        providerSpecific: true,
-        route: {
-          type: "cognitoHostedUi",
-          clientId: "web-google-client",
-          identityProvider: "Google",
-          prompt: "select_account",
+          key: "google",
+          label: "Continue with Google",
+          icon: "google",
+          provider: "google",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "web-google-client",
+            identityProvider: "Google",
+            prompt: "select_account",
+          },
         },
-      },
       ],
     });
 
@@ -263,36 +225,35 @@ describe("SignInPage", () => {
   });
 
   it("renders two OAuth providers in a two-column grid", async () => {
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
     authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
       password: { enabled: false },
       oauthOptions: [
         {
-        key: "google",
-        label: "Continue with Google",
-        icon: "google",
-        provider: "google",
-        providerSpecific: true,
-        route: {
-          type: "cognitoHostedUi",
-          clientId: "web-google-client",
-          identityProvider: "Google",
-          prompt: "select_account",
+          key: "google",
+          label: "Continue with Google",
+          icon: "google",
+          provider: "google",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "web-google-client",
+            identityProvider: "Google",
+            prompt: "select_account",
+          },
         },
-      },
         {
-        key: "microsoft",
-        label: "Continue with Microsoft",
-        icon: "microsoft",
-        provider: "microsoft",
-        providerSpecific: true,
-        route: {
-          type: "cognitoHostedUi",
-          clientId: "web-microsoft-client",
-          identityProvider: "Microsoft",
-          prompt: "select_account",
+          key: "microsoft",
+          label: "Continue with Microsoft",
+          icon: "microsoft",
+          provider: "microsoft",
+          providerSpecific: true,
+          route: {
+            type: "cognitoHostedUi",
+            clientId: "web-microsoft-client",
+            identityProvider: "Microsoft",
+            prompt: "select_account",
+          },
         },
-      },
       ],
     });
 
@@ -306,7 +267,6 @@ describe("SignInPage", () => {
 
   it("shows environment creation only on the central app host", () => {
     setWindowLocation("https://app.thinkwork.ai/sign-in");
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
 
@@ -317,7 +277,6 @@ describe("SignInPage", () => {
 
   it("hides environment creation on customer hosts", () => {
     setWindowLocation("https://mcpherson.thinkwork.ai/sign-in");
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
 
@@ -360,208 +319,6 @@ describe("SignInPage", () => {
     ).toBe(true);
   });
 
-  it("starts desktop OAuth with the sanitized next destination", async () => {
-    const startOAuth = vi.fn().mockResolvedValue({
-      url: "https://auth.example/oauth2/authorize?state=xyz",
-      state: "xyz",
-    });
-    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
-    publishDesktopGoogleOption();
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
-      startOAuth,
-      onOAuthError: () => () => {},
-    });
-    routerMocks.search = {
-      next: "/automations/123",
-      legacyMigration: undefined,
-    };
-
-    render(<SignInPage />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Continue with Google" }),
-    );
-
-    await waitFor(() =>
-      expect(startOAuth).toHaveBeenCalledWith({
-        authOptionKey: "google",
-        next: "/automations/123",
-      }),
-    );
-  });
-
-  it("renders draggable desktop chrome in the Electron sign-in shell", async () => {
-    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
-    publishDesktopGoogleOption();
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
-
-    render(<SignInPage />);
-
-    expect(screen.getByRole("banner").textContent).toContain("ThinkWork");
-    expect(
-      await screen.findByRole("button", { name: "Continue with Google" }),
-    ).toBeTruthy();
-  });
-
-  it("shows incomplete packaged desktop configuration before OAuth starts", async () => {
-    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
-    publishDesktopGoogleOption();
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
-      getDesktopConfig: vi.fn().mockResolvedValue({
-        stage: "dev",
-        configured: false,
-        missing: ["VITE_API_URL", "VITE_COGNITO_DOMAIN"],
-        oauthRedirectUri: "thinkwork-dev://oauth/callback",
-        endpoints: {
-          apiUrl: null,
-          graphqlHttpUrl: "https://api.example.com/graphql",
-          graphqlUrl: "https://appsync.example.com/graphql",
-          graphqlWsUrl: "wss://appsync.example.com/graphql",
-          cognitoDomain: null,
-        },
-      }),
-      startOAuth: vi.fn(),
-      onOAuthError: () => () => {},
-    });
-
-    render(<SignInPage />);
-
-    await screen.findByText("Configuration incomplete for dev");
-    expect(screen.getByText(/Missing VITE_API_URL/)).toBeTruthy();
-    expect(
-      (await screen.findByRole("button", {
-        name: "Continue with Google",
-      })) as HTMLButtonElement,
-    ).toHaveProperty("disabled", true);
-  });
-
-  it("shows the active desktop deployment profile before OAuth starts", async () => {
-    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
-      getDesktopConfig: vi.fn().mockResolvedValue({
-        stage: "customer-dev",
-        configured: true,
-        missing: [],
-        oauthRedirectUri: "thinkwork-dev://oauth/callback",
-        endpoints: {
-          apiUrl: "https://api.customer.example.com",
-          graphqlHttpUrl: "https://api.customer.example.com/graphql",
-          graphqlUrl: "https://appsync.customer.example.com/graphql",
-          graphqlWsUrl: "wss://appsync.customer.example.com/graphql",
-          cognitoDomain: "https://auth.customer.example.com",
-        },
-        deployment: {
-          source: "profile",
-          deploymentId: "acme-dev",
-          displayName: "Acme ThinkWork",
-          stage: "customer-dev",
-          region: "us-west-2",
-          profileSha256: "abc123",
-          trustStatus: "unsigned",
-          trustLabel: "Unsigned development profile",
-        },
-      }),
-      startOAuth: vi.fn(),
-      clearTokenStorage: vi.fn(),
-      onOAuthError: () => () => {},
-      onDeepLink: () => () => {},
-    });
-
-    render(<SignInPage />);
-
-    await screen.findByText(
-      "Connected to Acme ThinkWork · customer-dev · us-west-2",
-    );
-    expect(screen.getByText("Unsigned development profile")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
-    expect(screen.queryByText("File")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Create one" })).toBeNull();
-  });
-
-  it("imports desktop deployment profile JSON from a deep link", async () => {
-    const clearTokenStorage = vi.fn().mockResolvedValue(undefined);
-    const importDeploymentProfile = vi.fn().mockResolvedValue({
-      stage: "customer-dev",
-      configured: true,
-      missing: [],
-      oauthRedirectUri: "thinkwork-dev://oauth/callback",
-      endpoints: {
-        apiUrl: "https://api.customer.example.com",
-        graphqlHttpUrl: "https://api.customer.example.com/graphql",
-        graphqlUrl: "https://appsync.customer.example.com/graphql",
-        graphqlWsUrl: "wss://appsync.customer.example.com/graphql",
-        cognitoDomain: "https://auth.customer.example.com",
-      },
-      deployment: {
-        source: "profile",
-        deploymentId: "acme-dev",
-        displayName: "Acme ThinkWork",
-        stage: "customer-dev",
-        region: "us-west-2",
-        profileSha256: "abc123",
-        trustStatus: "unsigned",
-        trustLabel: "Unsigned development profile",
-      },
-    });
-    const deepLink: {
-      listener:
-        | ((callback: { type: "deployment-profile"; json: string }) => void)
-        | null;
-    } = { listener: null };
-    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
-      getDesktopConfig: vi.fn().mockResolvedValue({
-        stage: "dev",
-        configured: true,
-        missing: [],
-        oauthRedirectUri: "thinkwork-dev://oauth/callback",
-        endpoints: {
-          apiUrl: "https://api.example.com",
-          graphqlHttpUrl: "https://api.example.com/graphql",
-          graphqlUrl: "https://appsync.example.com/graphql",
-          graphqlWsUrl: "wss://appsync.example.com/graphql",
-          cognitoDomain: "thinkwork-dev",
-        },
-      }),
-      importDeploymentProfile,
-      clearTokenStorage,
-      startOAuth: vi.fn(),
-      onOAuthError: () => () => {},
-      onDeepLink(
-        listener: (callback: {
-          type: "deployment-profile";
-          json: string;
-        }) => void,
-      ) {
-        deepLink.listener = listener;
-        return () => {
-          deepLink.listener = null;
-        };
-      },
-    });
-
-    render(<SignInPage />);
-    await screen.findByText("Connected to dev");
-    expect(screen.queryByLabelText("Deployment profile JSON")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
-    expect(screen.queryByText("File")).toBeNull();
-
-    deepLink.listener?.({
-      type: "deployment-profile",
-      json: '{"schemaVersion":1}',
-    });
-
-    await waitFor(() =>
-      expect(importDeploymentProfile).toHaveBeenCalledWith({
-        json: '{"schemaVersion":1}',
-      }),
-    );
-    expect(clearTokenStorage).toHaveBeenCalled();
-    await screen.findByText(
-      "Connected to Acme ThinkWork · customer-dev · us-west-2",
-    );
-  });
-
   it("uses the direct Google option from public auth options outside desktop mode", async () => {
     authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
       password: { enabled: true, clientId: "local-client" },
@@ -593,7 +350,6 @@ describe("SignInPage", () => {
         },
       },
     });
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
     fireEvent.click(
@@ -652,7 +408,6 @@ describe("SignInPage", () => {
       ],
     });
     authMocks.getAuthOptionSignInUrl.mockReturnValue(new Promise(() => {}));
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
     fireEvent.click(
@@ -698,7 +453,6 @@ describe("SignInPage", () => {
       VITE_STAGE: "tei-e2e",
       VITE_AWS_REGION: "us-east-1",
     });
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
 
@@ -723,7 +477,6 @@ describe("SignInPage", () => {
         },
       },
     });
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
 
@@ -734,32 +487,8 @@ describe("SignInPage", () => {
     expect(navigations).toEqual([]);
   });
 
-  it("surfaces desktop OAuth errors broadcast by main", async () => {
-    const oauthError = {
-      listener: null as ((event: { message: string }) => void) | null,
-    };
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue({
-      startOAuth: vi.fn(),
-      onOAuthError(listener: (event: { message: string }) => void) {
-        oauthError.listener = listener;
-        return () => {
-          oauthError.listener = null;
-        };
-      },
-    });
-
-    render(<SignInPage />);
-    expect(oauthError.listener).not.toBeNull();
-    oauthError.listener?.({
-      message: "No in-flight OAuth attempt for callback state",
-    });
-
-    await screen.findByText("No in-flight OAuth attempt for callback state");
-  });
-
   it("renders the email/password form when password sign-in is configured", async () => {
     authMocks.isPasswordSignInConfigured.mockReturnValue(true);
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
 
@@ -816,7 +545,6 @@ describe("SignInPage", () => {
         },
       },
     });
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
 
     render(<SignInPage />);
     expect(
@@ -843,35 +571,5 @@ describe("SignInPage", () => {
       expect.any(Object),
       "/new",
     );
-  });
-
-  it("renders published email/password and OAuth options in the desktop shell", async () => {
-    authMocks.isPasswordSignInConfigured.mockReturnValue(true);
-    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
-    desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
-    authOptionsMocks.fetchPublicAuthOptions.mockResolvedValue({
-      password: { enabled: true, clientId: "desktop-local-client" },
-      oauthOptions: [
-        {
-          key: "microsoft",
-          label: "Continue with Microsoft",
-          icon: "microsoft",
-          provider: "microsoft",
-          providerSpecific: true,
-          route: {
-            type: "cognitoHostedUi",
-            clientId: "desktop-microsoft-client",
-            identityProvider: "MicrosoftOrganizations",
-          },
-        },
-      ],
-    });
-
-    render(<SignInPage />);
-
-    expect(await screen.findByLabelText("Email")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Continue with Microsoft" }),
-    ).toBeTruthy();
   });
 });

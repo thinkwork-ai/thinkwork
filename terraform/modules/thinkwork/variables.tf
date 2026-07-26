@@ -1074,15 +1074,6 @@ variable "additional_admin_logout_urls" {
   description = "Extra OAuth logout URLs appended to the web-family Cognito clients (companion to additional_admin_callback_urls; runner-secrets `adminLogoutUrls`)."
 }
 
-variable "desktop_callback_urls" {
-  type = list(string)
-  default = [
-    "thinkwork://oauth/callback",
-    "thinkwork-dev://oauth/callback",
-    "thinkwork-canary://oauth/callback",
-  ]
-}
-
 variable "cli_callback_urls" {
   type = list(string)
   default = [
@@ -1279,7 +1270,7 @@ variable "computer_sandbox_certificate_arn" {
 }
 
 variable "computer_sandbox_allowed_parent_origins" {
-  description = "Comma-separated list of trusted web parent origins that may frame the sandbox iframe (e.g. 'https://thinkwork.ai,https://dev.thinkwork.ai'). Desktop custom-protocol origins are appended automatically. Wired into the sandbox CSP frame-ancestors directive AND mirrored at iframe-shell build time as __ALLOWED_PARENT_ORIGINS__. The two trust sets MUST stay in sync. Leave empty to allow only desktop custom-protocol parents."
+  description = "Comma-separated list of trusted web parent origins that may frame the sandbox iframe (e.g. 'https://thinkwork.ai,https://dev.thinkwork.ai'). Wired into the sandbox CSP frame-ancestors directive AND mirrored at iframe-shell build time as __ALLOWED_PARENT_ORIGINS__. The two trust sets MUST stay in sync. Leave empty to disallow framing entirely."
   type        = string
   default     = ""
 }

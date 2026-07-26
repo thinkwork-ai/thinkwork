@@ -42,11 +42,6 @@ locals {
       logout_urls        = var.mobile_logout_urls
       refresh_token_days = 90
     }
-    desktop = {
-      callback_urls      = var.desktop_callback_urls
-      logout_urls        = var.desktop_callback_urls
-      refresh_token_days = 30
-    }
     cli = {
       callback_urls      = var.cli_callback_urls
       logout_urls        = var.cli_logout_urls
@@ -607,8 +602,8 @@ resource "aws_cognito_user_pool_client" "admin" {
 
   supported_identity_providers = local.identity_providers
 
-  callback_urls = distinct(concat(var.admin_callback_urls, var.desktop_callback_urls, var.cli_callback_urls))
-  logout_urls   = distinct(concat(var.admin_logout_urls, var.desktop_callback_urls, var.cli_logout_urls))
+  callback_urls = distinct(concat(var.admin_callback_urls, var.cli_callback_urls))
+  logout_urls   = distinct(concat(var.admin_logout_urls, var.cli_logout_urls))
 
   access_token_validity  = 1
   id_token_validity      = 1

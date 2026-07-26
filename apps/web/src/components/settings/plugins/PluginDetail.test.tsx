@@ -7,66 +7,61 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { desktopState, mocks, queryDocs, tenantState, paramsState } = vi.hoisted(
-  () => ({
-    desktopState: {
-      bridge: null as null | { getDesktopConfig: ReturnType<typeof vi.fn> },
-    },
-    paramsState: { pluginKey: "acme" },
-    mocks: {
-      activate: vi.fn(),
-      activateCredentials: vi.fn(),
-      deactivate: vi.fn(),
-      install: vi.fn(),
-      navigate: vi.fn(),
-      retry: vi.fn(),
-      saveCredential: vi.fn(),
-      setHeader: vi.fn(),
-      uninstall: vi.fn(),
-      updateN8nPackages: vi.fn(),
-      upgrade: vi.fn(),
-      useQuery: vi.fn(),
-    },
-    queryDocs: {
-      SettingsActivatePluginMutation: Symbol("activatePlugin"),
-      SettingsActivatePluginWithCredentialsMutation: Symbol(
-        "activatePluginWithCredentials",
-      ),
-      SettingsDeactivatePluginMutation: Symbol("deactivatePlugin"),
-      SettingsInstallPluginMutation: Symbol("installPlugin"),
-      SettingsEmailChannelQuery: Symbol("emailChannel"),
-      SettingsSaveEmailProviderCredentialMutation: Symbol(
-        "saveEmailProviderCredential",
-      ),
-      SettingsRunEmailReadinessProbeMutation: Symbol("runEmailReadinessProbe"),
-      SettingsUpsertEmailSpacePolicyMutation: Symbol("upsertEmailSpacePolicy"),
-      SettingsAddEmailSpaceSenderAllowlistMutation: Symbol(
-        "addEmailSpaceSenderAllowlist",
-      ),
-      SettingsRemoveEmailSpaceSenderAllowlistMutation: Symbol(
-        "removeEmailSpaceSenderAllowlist",
-      ),
-      SettingsManagedApplicationDeploymentQuery: Symbol(
-        "managedApplicationDeployment",
-      ),
-      SettingsCreateTenantCredentialMutation: Symbol("createTenantCredential"),
-      SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
-      SettingsN8nPluginSettingsQuery: Symbol("n8nPluginSettings"),
-      SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
-      SettingsPluginInstallsQuery: Symbol("pluginInstalls"),
-      SettingsRotateTenantCredentialMutation: Symbol("rotateTenantCredential"),
-      SettingsRetryPluginComponentMutation: Symbol("retryPluginComponent"),
-      SettingsTenantCredentialsQuery: Symbol("tenantCredentials"),
-      SettingsUpdateTenantCredentialMutation: Symbol("updateTenantCredential"),
-      SettingsUpdateN8nPluginPackageSettingsMutation: Symbol(
-        "updateN8nPluginPackageSettings",
-      ),
-      SettingsUninstallPluginMutation: Symbol("uninstallPlugin"),
-      SettingsUpgradePluginMutation: Symbol("upgradePlugin"),
-    },
-    tenantState: { isOperator: true, roleResolved: true },
-  }),
-);
+const { mocks, queryDocs, tenantState, paramsState } = vi.hoisted(() => ({
+  paramsState: { pluginKey: "acme" },
+  mocks: {
+    activate: vi.fn(),
+    activateCredentials: vi.fn(),
+    deactivate: vi.fn(),
+    install: vi.fn(),
+    navigate: vi.fn(),
+    retry: vi.fn(),
+    saveCredential: vi.fn(),
+    setHeader: vi.fn(),
+    uninstall: vi.fn(),
+    updateN8nPackages: vi.fn(),
+    upgrade: vi.fn(),
+    useQuery: vi.fn(),
+  },
+  queryDocs: {
+    SettingsActivatePluginMutation: Symbol("activatePlugin"),
+    SettingsActivatePluginWithCredentialsMutation: Symbol(
+      "activatePluginWithCredentials",
+    ),
+    SettingsDeactivatePluginMutation: Symbol("deactivatePlugin"),
+    SettingsInstallPluginMutation: Symbol("installPlugin"),
+    SettingsEmailChannelQuery: Symbol("emailChannel"),
+    SettingsSaveEmailProviderCredentialMutation: Symbol(
+      "saveEmailProviderCredential",
+    ),
+    SettingsRunEmailReadinessProbeMutation: Symbol("runEmailReadinessProbe"),
+    SettingsUpsertEmailSpacePolicyMutation: Symbol("upsertEmailSpacePolicy"),
+    SettingsAddEmailSpaceSenderAllowlistMutation: Symbol(
+      "addEmailSpaceSenderAllowlist",
+    ),
+    SettingsRemoveEmailSpaceSenderAllowlistMutation: Symbol(
+      "removeEmailSpaceSenderAllowlist",
+    ),
+    SettingsManagedApplicationDeploymentQuery: Symbol(
+      "managedApplicationDeployment",
+    ),
+    SettingsCreateTenantCredentialMutation: Symbol("createTenantCredential"),
+    SettingsMyPluginActivationsQuery: Symbol("myPluginActivations"),
+    SettingsN8nPluginSettingsQuery: Symbol("n8nPluginSettings"),
+    SettingsPluginCatalogQuery: Symbol("pluginCatalog"),
+    SettingsPluginInstallsQuery: Symbol("pluginInstalls"),
+    SettingsRotateTenantCredentialMutation: Symbol("rotateTenantCredential"),
+    SettingsRetryPluginComponentMutation: Symbol("retryPluginComponent"),
+    SettingsTenantCredentialsQuery: Symbol("tenantCredentials"),
+    SettingsUpdateTenantCredentialMutation: Symbol("updateTenantCredential"),
+    SettingsUpdateN8nPluginPackageSettingsMutation: Symbol(
+      "updateN8nPluginPackageSettings",
+    ),
+    SettingsUninstallPluginMutation: Symbol("uninstallPlugin"),
+    SettingsUpgradePluginMutation: Symbol("upgradePlugin"),
+  },
+  tenantState: { isOperator: true, roleResolved: true },
+}));
 
 vi.mock("urql", () => ({
   useMutation: (doc: unknown) => {
@@ -110,10 +105,6 @@ vi.mock("@/context/PageHeaderContext", () => ({
 
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => tenantState,
-}));
-
-vi.mock("@/lib/desktop-runtime", () => ({
-  getDesktopBridge: () => desktopState.bridge,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -244,7 +235,6 @@ beforeEach(() => {
   paramsState.pluginKey = "acme";
   tenantState.isOperator = true;
   tenantState.roleResolved = true;
-  desktopState.bridge = null;
   mocks.upgrade.mockResolvedValue({
     data: { upgradePlugin: { id: "install-1", state: "installing" } },
   });
@@ -406,29 +396,6 @@ describe("PluginDetail", () => {
         "Could not start connection: navigation stopped for test",
       ),
     ).toBeTruthy();
-  });
-
-  it("uses the stage-scoped desktop app route as the OAuth return URL", async () => {
-    desktopState.bridge = {
-      getDesktopConfig: vi.fn().mockResolvedValue({
-        oauthRedirectUri: "thinkwork-canary://oauth/callback",
-      }),
-    };
-    mocks.activate.mockResolvedValue({
-      error: new Error("navigation stopped for test"),
-    });
-    render(<PluginDetail />);
-
-    fireEvent.click(screen.getByRole("button", { name: /reconnect/i }));
-
-    await waitFor(() => {
-      expect(mocks.activate).toHaveBeenCalledWith({
-        input: {
-          installId: "install-1",
-          returnTo: "thinkwork-canary://app/settings/plugins/acme",
-        },
-      });
-    });
   });
 
   it("shows the success notice, refetches activations, and clears the OAuth return params", async () => {

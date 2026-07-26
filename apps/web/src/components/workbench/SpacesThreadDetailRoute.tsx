@@ -98,7 +98,6 @@ import {
 import { uploadThreadAttachments } from "@/lib/upload-thread-attachments";
 import { getIdToken } from "@/lib/auth";
 import { readRuntimeEnv } from "@/lib/runtime-config";
-import { notifyAgentCompletion } from "@/lib/desktop-notifications";
 import { apiFetch } from "@/lib/api-fetch";
 import {
   desktopToolbarActiveButtonClassName,
@@ -1379,30 +1378,11 @@ export function SpacesThreadDetailRoute({
     linkedTasksFetching ||
     progressMarkdownFetching ||
     goalFilesFetching;
-  const completionNotificationRef = useRef<{
-    threadId: string;
-    hasDurableAssistant: boolean;
-  } | null>(null);
-
   useEffect(() => {
     if (hasDurableAssistant) {
       resetStreamingChunks();
     }
   }, [hasDurableAssistant, resetStreamingChunks]);
-
-  useEffect(() => {
-    function handleDesktopRefresh(event: Event) {
-      event.preventDefault();
-      void handleRefreshThread();
-    }
-
-    window.addEventListener("thinkwork:desktop-refresh", handleDesktopRefresh);
-    return () =>
-      window.removeEventListener(
-        "thinkwork:desktop-refresh",
-        handleDesktopRefresh,
-      );
-  }, [handleRefreshThread]);
 
   useEffect(() => {
     if (manualRefreshStartedAt === null) return;
@@ -1415,9 +1395,6 @@ export function SpacesThreadDetailRoute({
     const elapsedMs = Date.now() - manualRefreshStartedAt;
     const timeout = window.setTimeout(
       () => {
-        window.dispatchEvent(
-          new CustomEvent("thinkwork:desktop-refresh-complete"),
-        );
         setManualRefreshStartedAt(null);
         setManualRefreshObservedFetching(false);
       },
@@ -1429,27 +1406,6 @@ export function SpacesThreadDetailRoute({
     manualRefreshObservedFetching,
     manualRefreshStartedAt,
   ]);
-
-  useEffect(() => {
-    const previous = completionNotificationRef.current;
-    completionNotificationRef.current = { threadId, hasDurableAssistant };
-
-    if (
-      !visibleThread ||
-      previous?.threadId !== threadId ||
-      previous.hasDurableAssistant ||
-      !hasDurableAssistant
-    ) {
-      return;
-    }
-
-    void notifyAgentCompletion({
-      title: "Agent finished",
-      body: visibleThread.title
-        ? `${visibleThread.title} is ready.`
-        : "Thread response is ready.",
-    });
-  }, [hasDurableAssistant, threadId, visibleThread]);
 
   const handleReviewGoal = useCallback(
     async (
@@ -1668,7 +1624,7 @@ export function SpacesThreadDetailRoute({
   // Space breadcrumb: a clickable parent crumb (the thread's Space) before the
   // thread title, navigating to that Space's scoped thread list — mirroring the
   // sidebar's "Thread list" action. The final crumb hosts the inline-rename
-  // titleContent (see AppTopBar/DesktopApplicationHeader). Degrades to the
+  // titleContent (see AppTopBar). Degrades to the
   // title-only header when the thread has no resolved space yet (R4).
   const spaceLabel = spaceCrumbLabel(routeThread?.space ?? null);
   const displayThreadTitle = shortcutDisplayText(threadTitle, {

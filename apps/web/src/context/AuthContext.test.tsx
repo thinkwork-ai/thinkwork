@@ -6,7 +6,6 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ThinkworkBridge } from "@thinkwork/desktop-ipc";
 import type { TokenStorage } from "@/lib/token-storage";
 
 const ORIGINAL_LOCATION = Object.getOwnPropertyDescriptor(window, "location");
@@ -72,7 +71,6 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-  vi.stubGlobal("__DESKTOP_BUILD__", true);
   vi.stubEnv("VITE_API_URL", "https://api.example.com");
   vi.stubEnv("VITE_GRAPHQL_HTTP_URL", "https://api.example.com/graphql");
   vi.stubEnv("VITE_GRAPHQL_URL", "https://appsync.example.com/graphql");
@@ -97,103 +95,7 @@ beforeEach(() => {
   bindingMocks.markAuthStorageDeploymentProfile.mockReset();
 });
 
-describe("AuthProvider desktop mode", () => {
-  it("hydrates desktop token storage on every mount", async () => {
-    const { AuthProvider, useAuth } = await import("./AuthContext");
-    const storage = new MemoryTokenStorage(sessionItems("user@example.com"));
-    const bridge = makeBridge();
-
-    function Probe() {
-      const { user, isLoading } = useAuth();
-      return <p>{isLoading ? "loading" : (user?.email ?? "anonymous")}</p>;
-    }
-
-    const first = render(
-      <AuthProvider tokenStorage={storage} desktopBridge={bridge}>
-        <Probe />
-      </AuthProvider>,
-    );
-    await screen.findByText("user@example.com");
-    first.unmount();
-
-    render(
-      <AuthProvider tokenStorage={storage} desktopBridge={bridge}>
-        <Probe />
-      </AuthProvider>,
-    );
-    await screen.findByText("user@example.com");
-
-    expect(storage.hydrateCalls).toBe(2);
-  });
-
-  it("rehydrates when a desktop deep-link event arrives after mount", async () => {
-    const { AuthProvider, useAuth } = await import("./AuthContext");
-    const storage = new MemoryTokenStorage();
-    const bridge = makeBridge();
-
-    function Probe() {
-      const { user, isLoading } = useAuth();
-      return <p>{isLoading ? "loading" : (user?.email ?? "anonymous")}</p>;
-    }
-
-    render(
-      <AuthProvider tokenStorage={storage} desktopBridge={bridge}>
-        <Probe />
-      </AuthProvider>,
-    );
-    await screen.findByText("anonymous");
-
-    storage.replace(sessionItems("late@example.com"));
-    bridge.emitDeepLink();
-
-    await screen.findByText("late@example.com");
-    expect(storage.hydrateCalls).toBe(2);
-  });
-
-  it("uses the desktop bridge for sign-out and clears local auth state", async () => {
-    const { AuthProvider, useAuth } = await import("./AuthContext");
-    const storage = new MemoryTokenStorage(sessionItems("user@example.com"));
-    const bridge = makeBridge();
-    const navigations: string[] = [];
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: {
-        pathname: "/new",
-        set href(target: string) {
-          navigations.push(target);
-        },
-        get href() {
-          return navigations.at(-1) ?? "thinkwork://app/new";
-        },
-      },
-    });
-
-    function Probe() {
-      const { user, isLoading, signOut } = useAuth();
-      return (
-        <button onClick={signOut}>
-          {isLoading ? "loading" : (user?.email ?? "anonymous")}
-        </button>
-      );
-    }
-
-    render(
-      <AuthProvider tokenStorage={storage} desktopBridge={bridge}>
-        <Probe />
-      </AuthProvider>,
-    );
-    const button = await screen.findByRole("button", {
-      name: "user@example.com",
-    });
-
-    fireEvent.click(button);
-    bridge.emitSignedOut();
-
-    await waitFor(() => expect(button.textContent).toBe("anonymous"));
-    expect(bridge.signOutCalls()).toBe(1);
-    expect(navigations).toEqual(["/sign-in"]);
-  });
-
+describe("AuthProvider", () => {
   it("does not restore stale cached auth during web sign-out", async () => {
     const { AuthProvider, useAuth } = await import("./AuthContext");
     const storage = new MemoryTokenStorage({
@@ -212,7 +114,7 @@ describe("AuthProvider desktop mode", () => {
     }
 
     render(
-      <AuthProvider tokenStorage={storage} desktopBridge={null}>
+      <AuthProvider tokenStorage={storage}>
         <Probe />
       </AuthProvider>,
     );
@@ -238,7 +140,6 @@ describe("AuthProvider desktop mode", () => {
       ...sessionItems("user@example.com"),
       [bindingMocks.storageKey]: "0".repeat(64),
     });
-    const bridge = makeBridge();
     bindingMocks.ensureAuthStorageMatchesDeploymentProfile.mockReturnValue(
       false,
     );
@@ -249,7 +150,7 @@ describe("AuthProvider desktop mode", () => {
     }
 
     render(
-      <AuthProvider tokenStorage={storage} desktopBridge={bridge}>
+      <AuthProvider tokenStorage={storage}>
         <Probe />
       </AuthProvider>,
     );
@@ -258,7 +159,7 @@ describe("AuthProvider desktop mode", () => {
     expect(authMocks.clearLocalAuthSession).toHaveBeenCalled();
   });
 
-  it("times out a stuck desktop session restore instead of leaving the shell loading", async () => {
+  it("times out a stuck session restore instead of leaving the shell loading", async () => {
     const restoreError = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
@@ -266,7 +167,6 @@ describe("AuthProvider desktop mode", () => {
 
     const { AuthProvider, useAuth } = await import("./AuthContext");
     const storage = new MemoryTokenStorage(sessionItems("user@example.com"));
-    const bridge = makeBridge();
 
     function Probe() {
       const { user, isLoading } = useAuth();
@@ -274,11 +174,7 @@ describe("AuthProvider desktop mode", () => {
     }
 
     render(
-      <AuthProvider
-        tokenStorage={storage}
-        desktopBridge={bridge}
-        sessionRestoreTimeoutMs={1}
-      >
+      <AuthProvider tokenStorage={storage} sessionRestoreTimeoutMs={1}>
         <Probe />
       </AuthProvider>,
     );
@@ -344,143 +240,4 @@ class MemoryTokenStorage implements TokenStorage {
   private emit(): void {
     for (const listener of this.listeners) listener();
   }
-}
-
-function makeBridge(): ThinkworkBridge & {
-  emitDeepLink(): void;
-  emitSignedOut(): void;
-  signOutCalls(): number;
-} {
-  let deepLinkListener: (() => void) | null = null;
-  let signedOutListener: (() => void) | null = null;
-  let signOutCalls = 0;
-
-  return {
-    async getSessionTokens() {
-      return { items: {}, version: 0 };
-    },
-    async setTokenStorageItem() {},
-    async removeTokenStorageItem() {},
-    async clearTokenStorage() {},
-    onTokensChanged() {
-      return () => {};
-    },
-    async startOAuth() {
-      return {
-        url: "https://auth.example/oauth2/authorize?state=xyz",
-        state: "xyz",
-      };
-    },
-    async signOut() {
-      signOutCalls += 1;
-      return { ok: true, revokeFailed: false };
-    },
-    onSignedOut(listener) {
-      signedOutListener = () => listener({ ok: true, revokeFailed: false });
-      return () => {
-        signedOutListener = null;
-      };
-    },
-    async consumePendingOAuth() {
-      return null;
-    },
-    onDeepLink(listener) {
-      deepLinkListener = () => listener({ code: "code", state: "state" });
-      return () => {
-        deepLinkListener = null;
-      };
-    },
-    onOAuthError() {
-      return () => {};
-    },
-    async getDesktopConfig() {
-      return {
-        stage: "dev",
-        configured: true,
-        missing: [],
-        oauthRedirectUri: "thinkwork-dev://oauth/callback",
-        endpoints: {
-          apiUrl: "https://api.example.com",
-          graphqlHttpUrl: "https://api.example.com/graphql",
-          graphqlUrl: "https://appsync.example.com/graphql",
-          graphqlWsUrl: "wss://appsync.example.com/graphql",
-          cognitoDomain: "https://auth.example.com",
-        },
-      };
-    },
-    async importDeploymentProfile() {
-      return {
-        stage: "dev",
-        configured: true,
-        missing: [],
-        oauthRedirectUri: "thinkwork-dev://oauth/callback",
-        endpoints: {
-          apiUrl: "https://api.example.com",
-          graphqlHttpUrl: "https://api.example.com/graphql",
-          graphqlUrl: "https://appsync.example.com/graphql",
-          graphqlWsUrl: "wss://appsync.example.com/graphql",
-          cognitoDomain: "https://auth.example.com",
-        },
-      };
-    },
-    async removeDeploymentProfile() {
-      return {
-        stage: "dev",
-        configured: true,
-        missing: [],
-        oauthRedirectUri: "thinkwork-dev://oauth/callback",
-        endpoints: {
-          apiUrl: "https://api.example.com",
-          graphqlHttpUrl: "https://api.example.com/graphql",
-          graphqlUrl: "https://appsync.example.com/graphql",
-          graphqlWsUrl: "wss://appsync.example.com/graphql",
-          cognitoDomain: "https://auth.example.com",
-        },
-      };
-    },
-    async getUpdateState() {
-      return {
-        status: "disabled",
-        currentVersion: "0.1.0",
-        availableVersion: null,
-        downloadedVersion: null,
-        downloadPercent: null,
-        hostArch: "arm64",
-        appArch: "arm64",
-        runningUnderArm64Translation: false,
-        checkedAt: null,
-        message: null,
-        errorContext: null,
-        canRetry: false,
-        channel: "latest",
-      };
-    },
-    async checkForUpdates() {},
-    async downloadUpdate() {},
-    async installUpdate() {},
-    onUpdateState() {
-      return () => {};
-    },
-    onUpdateTelemetry() {
-      return () => {};
-    },
-    async reportInstallOutcome() {},
-    async raiseThreadNotification() {},
-    onOpenThread() {
-      return () => {};
-    },
-    onWindowFocusChange() {
-      return () => {};
-    },
-    setNativeTheme() {},
-    emitDeepLink() {
-      deepLinkListener?.();
-    },
-    emitSignedOut() {
-      signedOutListener?.();
-    },
-    signOutCalls() {
-      return signOutCalls;
-    },
-  };
 }

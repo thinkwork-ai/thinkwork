@@ -14,7 +14,6 @@ import {
 } from "@thinkwork/ui";
 import { SettingsSidebar } from "@/components/settings/SettingsSidebar";
 import { SettingsHeaderBar } from "@/components/settings/SettingsHeaderBar";
-import { isDesktopBuild } from "@/lib/desktop-runtime";
 
 export const Route = createFileRoute("/_authed/settings")({
   component: SettingsLayout,
@@ -25,23 +24,12 @@ export const Route = createFileRoute("/_authed/settings")({
 // the left column; section content renders in the right pane below a header
 // bar that carries the section title as a breadcrumb (relocated out of the
 // content body) plus back/forward navigation.
-//
-// On desktop we mirror the main shell's window chrome: `desktop-shell` defines
-// --desktop-app-header-height and the OS drag region, the SettingsHeaderBar is
-// the draggable strip over the content pane, and the SettingsSidebar reserves
-// the macOS traffic-light band to its left.
 function SettingsLayout() {
-  const isDesktop = isDesktopBuild();
   const isMobile = useIsMobile();
   const [navOpen, setNavOpen] = useState(false);
 
   return (
-    <div
-      className={cn(
-        "relative flex h-svh min-h-0 w-full overflow-hidden bg-background",
-        isDesktop && "desktop-shell",
-      )}
-    >
+    <div className="relative flex h-svh min-h-0 w-full overflow-hidden bg-background">
       {/* Wide screens dock the nav; narrow screens collapse it into a left
           Sheet opened by the floating trigger below (mirrors the main shell). */}
       {isMobile ? (
@@ -52,10 +40,7 @@ function SettingsLayout() {
               variant="ghost"
               size="icon-sm"
               aria-label="Open settings navigation"
-              className={cn(
-                "absolute top-2 z-50 size-8 bg-background/70 backdrop-blur hover:bg-accent",
-                isDesktop ? "left-20" : "left-2",
-              )}
+              className="absolute top-2 left-2 z-50 size-8 bg-background/70 backdrop-blur hover:bg-accent"
             >
               <Menu className="size-4" />
               <span className="sr-only">Open settings navigation</span>
@@ -73,10 +58,7 @@ function SettingsLayout() {
               <SheetTitle>Settings navigation</SheetTitle>
               <SheetDescription>Browse settings sections.</SheetDescription>
             </SheetHeader>
-            <SettingsSidebar
-              forceWebChrome
-              onNavigate={() => setNavOpen(false)}
-            />
+            <SettingsSidebar inSheet onNavigate={() => setNavOpen(false)} />
           </SheetContent>
         </Sheet>
       ) : (

@@ -54,7 +54,7 @@ record durable actions, and the status ledger records the current agent state.
 ## What ships in v1
 
 - **Six product modules:** Agents, Threads, Connectors, Automations, Control, Memory
-- **Three clients:** a unified web/operator app (`apps/web`), a mobile client (`apps/mobile`, Expo), and a macOS desktop shell for the Spaces surface (`apps/desktop`)
+- **Two clients:** a unified web/operator app (`apps/web`) and a mobile client (`apps/mobile`, Expo)
 - **A real CLI** (`thinkwork-cli`) with two surfaces: **deploy-side** (`login`, `init`, `plan`, `deploy`, `bootstrap`, `destroy`, `doctor`, `status`, `outputs`, `config`, `update`) and **API-side** (`login --stage`, `logout`, `me`, `user`, `mcp`, `tools`, `eval`, `wiki`, plus a scaffolded roadmap of `thread`, `agent`, `template`, `tenant`, `member`, `team`, `kb`, `routine`, `scheduled-job`, `turn`, `wakeup`, `webhook`, `connector`, `skill`, `memory`, `recipe`, `artifact`, `cost`, `budget`, `performance`, `trace`, `inbox`, `dashboard` — see [apps/cli/README.md#roadmap](./apps/cli/README.md#roadmap))
 - **Three connectors at launch:** Slack, GitHub, Google Workspace
 - **Threads with structured channels** (CHAT, AUTO, EMAIL, SLACK, GITHUB) for task intake and execution
@@ -81,10 +81,6 @@ The unified web surface. A React SPA at `apps/web`, authenticated through Cognit
 </p>
 
 The end-user surface. An Expo + React Native client at `apps/mobile`, currently shipping on iOS via TestFlight. Users get a unified inbox across chat threads, scheduled automations, and emails — with narrow-policy push notifications and realtime activity on every turn. The companion **Wiki** tab surfaces Compounding Memory pages (Entity, Topic, Decision) that the agent builds as it learns — browseable on device, linked to each other, and scoped per agent. The mobile app owns per-user OAuth and MCP tokens; tenant configuration stays on the admin side. See the [mobile docs](https://docs.thinkwork.ai/applications/mobile/) for the full surface.
-
-## Desktop shell
-
-`apps/desktop` is an Electron shell around the end-user Spaces app, with system-browser Cognito OAuth, OS-backed token storage, native update UX, and signed/notarized macOS release packaging. See [`apps/desktop/README.md`](./apps/desktop/README.md) for local development, packaging, and release runbooks.
 
 ## Roadmap
 
@@ -152,7 +148,7 @@ for the full external-environment runbook.
 
 ```
 thinkwork/
-  apps/        # runnable products: admin, spaces, desktop, mobile, cli
+  apps/        # runnable products: web, mobile, cli
   packages/    # shared libraries
   terraform/   # IaC modules (registry-shaped) and reference examples
   examples/    # runnable reference packs: skill-pack, eval-pack, connector-recipe

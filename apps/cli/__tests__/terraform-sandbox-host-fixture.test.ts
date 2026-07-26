@@ -43,10 +43,6 @@ const THINKWORK_VARS = resolve(
 );
 const BUILD_COMPUTER = resolve(REPO_ROOT, "scripts/build-web.sh");
 const DEPLOY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/deploy.yml");
-const RELEASE_DESKTOP_WORKFLOW = resolve(
-  REPO_ROOT,
-  ".github/workflows/release-desktop.yml",
-);
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -400,10 +396,9 @@ describe("Computer Mapbox production wiring", () => {
     expect(read(DEPLOY_WORKFLOW)).toMatch(
       /TF_VAR_mapbox_public_token="\$\{\{ secrets\.MAPBOX_PUBLIC_TOKEN/,
     );
-    // The Spaces web build moved to release-desktop.yml (deploy-sync: web ships
-    // on the desktop release cut), which is where the MAPBOX_PUBLIC_TOKEN env
-    // now feeds build-web.sh → VITE_MAPBOX_PUBLIC_TOKEN.
-    expect(read(RELEASE_DESKTOP_WORKFLOW)).toMatch(
+    // The build-web job in deploy.yml feeds MAPBOX_PUBLIC_TOKEN into
+    // build-web.sh → VITE_MAPBOX_PUBLIC_TOKEN.
+    expect(read(DEPLOY_WORKFLOW)).toMatch(
       /MAPBOX_PUBLIC_TOKEN:\s*\$\{\{ secrets\.MAPBOX_PUBLIC_TOKEN/,
     );
   });

@@ -2073,10 +2073,45 @@ jobs:
           export DATABASE_URL="postgresql://thinkwork_admin:${DB_PASS}@${{ steps.outputs.outputs.db_endpoint }}:5432/thinkwork?sslmode=require"
           bash scripts/db-migrate-manual.sh
 
-  # NOTE: the web app (apps/web → app.thinkwork.ai) is intentionally NOT
-  # deployed on every push to main. It now ships only when a desktop release is
-  # cut (release-desktop.yml on a `desktop-v*` tag), so the web app and the
-  # desktop app always update together. See the `build-web` step there.
+  # ── Build & deploy web app ──────────────────────────────────────
+  # The web app (apps/web → app.thinkwork.ai) previously shipped only on a
+  # `desktop-v*` tag from release-desktop.yml, so web and desktop always
+  # updated together. The desktop app is gone, so web deploys per-merge again.
+  build-web:
+    name: Build & Deploy Web
+    needs: [terraform-apply]
+    if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: terraform/examples/greenfield
+        run: |
+          terraform init
+          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
+
+      - name: Build & deploy
+        env:
+          MAPBOX_PUBLIC_TOKEN: ${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}
+        run: bash scripts/build-web.sh ${{ env.STAGE }}
 
   # ── Build & deploy docs site ────────────────────────────────────
   build-docs:

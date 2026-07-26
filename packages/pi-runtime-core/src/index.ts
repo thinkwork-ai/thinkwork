@@ -4,7 +4,6 @@ export * from "./agent-loop.js";
 export * from "./canvas-provider.js";
 export * from "./collision-registry.js";
 export * from "./delegation.js";
-export * from "./desktop-session.js";
 export * from "./durable-session-manager.js";
 export * from "./finalize-client.js";
 export * from "./history.js";

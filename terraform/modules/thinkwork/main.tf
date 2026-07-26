@@ -807,8 +807,8 @@ module "cognito" {
   # entry — login works on both domains. Flipping
   # customer_domain_legacy_retired REMOVES the legacy (non-customer-domain)
   # app entries — the CloudFront default domain, the legacy app/computer
-  # domains — as a reviewable Terraform change. Explicit caller-supplied,
-  # localhost dev, and desktop entries are never retired here.
+  # domains — as a reviewable Terraform change. Explicit caller-supplied and
+  # localhost dev entries are never retired here.
   admin_callback_urls = distinct(concat(
     var.admin_callback_urls,
     local.customer_domain_legacy_retired ? [] : ["https://${module.computer_site.distribution_domain}", "https://${module.computer_site.distribution_domain}/auth/callback"],
@@ -857,11 +857,10 @@ module "cognito" {
     # Operator-supplied web-family logout origins — see admin_callback_urls.
     var.additional_admin_logout_urls,
   ))
-  desktop_callback_urls = var.desktop_callback_urls
-  cli_callback_urls     = var.cli_callback_urls
-  cli_logout_urls       = var.cli_logout_urls
-  mobile_callback_urls  = var.mobile_callback_urls
-  mobile_logout_urls    = var.mobile_logout_urls
+  cli_callback_urls    = var.cli_callback_urls
+  cli_logout_urls      = var.cli_logout_urls
+  mobile_callback_urls = var.mobile_callback_urls
+  mobile_logout_urls   = var.mobile_logout_urls
 
   # Company Brain console client (U13 — ship-inert, default off). The console's
   # CloudFront URL must be in console_callback_urls BEFORE first login
@@ -1841,7 +1840,7 @@ module "customer_domain" {
 #     https://*.tile.openstreetmap.org https://api.mapbox.com;
 #   font-src 'self' data:; connect-src 'none';
 #   frame-src https://www.openstreetmap.org; object-src 'none';
-#   base-uri 'self'; frame-ancestors <web parents + desktop custom protocols>;
+#   base-uri 'self'; frame-ancestors <web parents>;
 #
 # Provisioning is gated on var.computer_sandbox_domain — leave empty in
 # stages that haven't allocated the subdomain yet.
@@ -1850,18 +1849,10 @@ module "customer_domain" {
 locals {
   computer_sandbox_enabled = var.computer_sandbox_domain != ""
 
-  computer_sandbox_desktop_parent_origins = [
-    "thinkwork://app",
-    "thinkwork-dev://app",
-    "thinkwork-canary://app",
-  ]
-  computer_sandbox_allowed_parent_origin_list = distinct(concat(
-    [
-      for origin in split(",", replace(var.computer_sandbox_allowed_parent_origins, " ", "")) :
-      origin if origin != ""
-    ],
-    local.computer_sandbox_desktop_parent_origins
-  ))
+  computer_sandbox_allowed_parent_origin_list = distinct([
+    for origin in split(",", replace(var.computer_sandbox_allowed_parent_origins, " ", "")) :
+    origin if origin != ""
+  ])
   computer_sandbox_allowed_parent_origins_effective = join(",", local.computer_sandbox_allowed_parent_origin_list)
   computer_sandbox_frame_ancestors                  = local.computer_sandbox_enabled && length(local.computer_sandbox_allowed_parent_origin_list) > 0 ? join(" ", local.computer_sandbox_allowed_parent_origin_list) : "'none'"
 

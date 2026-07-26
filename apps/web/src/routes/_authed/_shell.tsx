@@ -13,14 +13,11 @@ import {
   useSidebar,
 } from "@thinkwork/ui";
 import { AppTopBar } from "@/components/AppTopBar";
-import { DesktopApplicationHeader } from "@/components/DesktopApplicationHeader";
 import { SpacesSidebar } from "@/components/SpacesSidebar";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { NoTenantAssigned } from "@/components/NoTenantAssigned";
 import { useAuth } from "@/context/AuthContext";
 import { useTenant } from "@/context/TenantContext";
-import { isDesktopBuild } from "@/lib/desktop-runtime";
-import { requestDesktopNotificationPermission } from "@/lib/desktop-notifications";
 
 export const Route = createFileRoute("/_authed/_shell")({
   component: ShellLayout,
@@ -33,13 +30,8 @@ function ShellLayout() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
-  const isDesktop = isDesktopBuild();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(DESKTOP_SIDEBAR_WIDTH);
-
-  useEffect(() => {
-    void requestDesktopNotificationPermission();
-  }, []);
 
   useEffect(() => {
     if (authLoading || isAuthenticated) return;
@@ -66,7 +58,7 @@ function ShellLayout() {
     <>
       <SpacesSidebar />
       <SidebarInset className="relative flex h-full min-h-0 min-w-0 flex-col">
-        {isDesktop ? <DesktopApplicationHeader /> : <AppTopBar />}
+        <AppTopBar />
         <main className="flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden">
           <Outlet />
         </main>
@@ -78,7 +70,7 @@ function ShellLayout() {
     <SidebarProvider
       open={sidebarOpen}
       onOpenChange={setSidebarOpen}
-      className={`relative h-svh min-h-0 overflow-hidden ${isDesktop ? "desktop-shell" : ""}`}
+      className="relative h-svh min-h-0 overflow-hidden"
       style={
         {
           "--sidebar-width": `${sidebarWidth}px`,
@@ -92,10 +84,9 @@ function ShellLayout() {
         width={sidebarWidth}
         onWidthChange={setSidebarWidth}
       />
-      {/* The desktop header renders its own collapsed-chrome trigger; the web
-          build's top bar can be hidden entirely (e.g. /new), so it needs a
-          header-independent floating trigger to reopen the nav sheet. */}
-      {isDesktop ? null : <MobileSidebarTrigger />}
+      {/* The top bar can be hidden entirely (e.g. /new), so the nav sheet needs
+          a header-independent floating trigger to reopen it. */}
+      <MobileSidebarTrigger />
       <div className="flex h-full min-h-0 w-full">{shellChrome}</div>
     </SidebarProvider>
   );

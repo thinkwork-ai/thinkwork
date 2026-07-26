@@ -47,7 +47,7 @@ vi.mock("urql", () => ({
 }));
 
 // Radix ToggleGroup is finicky under jsdom — mock the @thinkwork/ui pieces this
-// page uses (matching the repo's approach in DesktopApplicationHeader.test).
+// page uses.
 // ToggleGroupItem clicks drive the parent's onValueChange via toggleRef.
 vi.mock("@thinkwork/ui", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@thinkwork/ui")>()),

@@ -492,7 +492,7 @@ locals {
       TURN_ASSERTION_REQUIRED             = "true"
     }
     # THINK-324 C19: activity + finalize verify presented assertions
-    # (tolerant posture — legacy/desktop producers don't echo yet).
+    # (tolerant posture — legacy producers don't echo yet).
     "chat-agent-activity" = {
       AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.turn_assertion_active_key_arn
     }
@@ -739,13 +739,6 @@ resource "aws_lambda_function" "handler" {
     # Client Engagement app API. Calls Twenty REST API directly server-side;
     # it is not backed by ThinkWork GraphQL or the agent MCP runtime.
     "twenty-client-engagement",
-    # Desktop-local Pi tombstone endpoints. Kept temporarily so old packaged
-    # desktop clients receive a stable 410 while all supported Pi execution
-    # routes through managed AgentCore.
-    "desktop-runtime-session",
-    "desktop-workspace-prewarm",
-    "managed-delegation",
-    "desktop-eval-runs",
     # chat-agent-finalize — POST /api/threads/{threadId}/finalize. The
     # AgentCore runtime POSTs here at end-of-turn so the post-AgentCore
     # bookkeeping (cost recording, message insert, AppSync notify,
@@ -1676,21 +1669,6 @@ locals {
 
       # Agent actions (start/stop/heartbeat/budget)
       "ANY /api/agent-actions/{proxy+}" = "agent-actions"
-
-      # Desktop-local Pi tombstones. Specific routes before broad REST handlers;
-      # OPTIONS is handled inside the Lambda before auth.
-      "POST /api/desktop/runtime-session"               = "desktop-runtime-session"
-      "OPTIONS /api/desktop/runtime-session"            = "desktop-runtime-session"
-      "POST /api/desktop/workspace-prewarm"             = "desktop-workspace-prewarm"
-      "OPTIONS /api/desktop/workspace-prewarm"          = "desktop-workspace-prewarm"
-      "POST /api/desktop/managed-delegation"            = "managed-delegation"
-      "OPTIONS /api/desktop/managed-delegation"         = "managed-delegation"
-      "POST /api/desktop/eval-runs"                     = "desktop-eval-runs"
-      "OPTIONS /api/desktop/eval-runs"                  = "desktop-eval-runs"
-      "POST /api/desktop/eval-runs/{runId}/sessions"    = "desktop-eval-runs"
-      "OPTIONS /api/desktop/eval-runs/{runId}/sessions" = "desktop-eval-runs"
-      "POST /api/desktop/eval-runs/{runId}/results"     = "desktop-eval-runs"
-      "OPTIONS /api/desktop/eval-runs/{runId}/results"  = "desktop-eval-runs"
 
       # Mobile agent harness model proxy (cloud Bedrock Converse). OPTIONS is
       # handled inside the Lambda before auth.

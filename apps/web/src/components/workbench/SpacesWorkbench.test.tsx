@@ -83,7 +83,6 @@ let approvedModels:
 let tenantDefaultModel: string | null;
 
 beforeEach(() => {
-  vi.stubGlobal("__DESKTOP_BUILD__", true);
   navigate.mockReset();
   createThread.mockReset();
   sendMessage.mockReset();
@@ -225,28 +224,14 @@ beforeEach(() => {
       vi.fn(),
     ];
   }) as typeof useQuery);
-  Object.defineProperty(window, "thinkworkBridge", {
-    configurable: true,
-    value: {},
-  });
 });
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  delete window.thinkworkBridge;
 });
 
 describe("SpacesWorkbench", () => {
-  it("does not prewarm a desktop runtime workspace when New Thread loads", async () => {
-    render(<SpacesWorkbench />);
-
-    await waitFor(() => {
-      expect(screen.getByLabelText("Send message")).toBeTruthy();
-    });
-    expect(createThread).not.toHaveBeenCalled();
-  });
-
   it("shows Agent Profiles in the mention menu even when deployed mention targets are users-only", async () => {
     render(<SpacesWorkbench />);
 

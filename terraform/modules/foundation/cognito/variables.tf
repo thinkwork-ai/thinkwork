@@ -295,16 +295,6 @@ variable "admin_logout_urls" {
   ]
 }
 
-variable "desktop_callback_urls" {
-  description = "OAuth callback and logout URLs for the desktop client that reuses the ThinkworkAdmin public Cognito client."
-  type        = list(string)
-  default = [
-    "thinkwork://oauth/callback",
-    "thinkwork-dev://oauth/callback",
-    "thinkwork-canary://oauth/callback",
-  ]
-}
-
 variable "cli_callback_urls" {
   description = "OAuth loopback callbacks reserved for the CLI client family."
   type        = list(string)

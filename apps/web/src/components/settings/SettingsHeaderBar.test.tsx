@@ -12,10 +12,6 @@ vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeader: () => ({ actions: pageHeaderMock.actions }),
 }));
 
-vi.mock("@/lib/desktop-runtime", () => ({
-  isDesktopBuild: () => false,
-}));
-
 const viewportMock = vi.hoisted(() => ({
   isMobile: false,
 }));

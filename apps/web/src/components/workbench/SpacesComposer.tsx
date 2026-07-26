@@ -656,8 +656,8 @@ async function fileUiPartsToFiles(
   const files: File[] = [];
   for (const part of parts) {
     // Prefer the original File captured at selection time — reifying via
-    // fetch(blob:/data:) is blocked by connect-src CSP in packaged desktop and
-    // deployed web builds (only the dev server's loose CSP allowed it), which
+    // fetch(blob:/data:) is blocked by connect-src CSP in deployed web
+    // builds (only the dev server's loose CSP allowed it), which
     // silently dropped every attachment.
     if (part?.file instanceof File) {
       files.push(part.file);
