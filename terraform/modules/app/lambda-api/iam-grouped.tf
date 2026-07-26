@@ -119,13 +119,6 @@ locals {
           "${var.bucket_arn}/*",
         ]
       },
-      # (was inline policy "wiki-exports-s3" in handlers.tf) — wiki-export
-      # writes markdown vault bundles to the per-stage wiki-exports bucket.
-      {
-        Effect   = "Allow"
-        Action   = ["s3:PutObject", "s3:AbortMultipartUpload"]
-        Resource = "${aws_s3_bucket.wiki_exports.arn}/*"
-      },
       # Canonical ThinkWork Brain artifacts: durable source artifacts,
       # ingestion manifests, migration snapshots, vault projections, and
       # exports, and OKF Wiki Navigator bundles/current manifests.
@@ -521,10 +514,6 @@ locals {
           # eval-runner: graphql-http's startEvalRun mutation Event-invokes
           # this asynchronously after inserting the eval_runs row.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-eval-runner",
-          # wiki-compile: memory-retain Event-invokes this after a successful
-          # retainTurn when the tenant's wiki_compile_enabled flag is on.
-          # compileWikiNow admin mutation also Event-invokes.
-          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-compile",
           # identity-graph-projector (Company Brain U5): identity mutations
           # Event-invoke this as a post-commit nudge; the rebuild command is
           # a RequestResponse invoke. Cursor makes missed nudges harmless.
@@ -539,9 +528,6 @@ locals {
           # recursive-loop detection terminated those chains; backlog drains
           # in-process now.)
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-knowledge-graph-observations-ingest",
-          # wiki-bootstrap-import: bootstrapJournalImport admin mutation
-          # Event-invokes this for the long-running ingest path.
-          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-wiki-bootstrap-import",
           # harness-runner: chat-agent-invoke Event-invokes this for chat
           # turns routed to the AWS AgentCore runtime (THINK-311 trial).
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-harness-runner",
@@ -994,13 +980,6 @@ locals {
     # Handler-gated SQS grants. Each statement was a count-gated inline
     # policy whose queue exists only when local.deploy_lambda_handlers.
     local.deploy_lambda_handlers ? [
-      # (was inline policy "thinkwork-${stage}-wiki-compile-dlq-send")
-      {
-        Sid      = "WikiCompileDlqSend"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.wiki_compile_dlq[0].arn
-      },
       # (was inline policy "thinkwork-${stage}-ontology-scan-dlq-send")
       {
         Sid      = "OntologyScanDlqSend"

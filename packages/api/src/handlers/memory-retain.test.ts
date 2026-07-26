@@ -23,7 +23,6 @@ const retainTurnMock = vi.hoisted(() => vi.fn());
 const retainDailyMemoryMock = vi.hoisted(() => vi.fn());
 const upsertMarkdownMemoryDocumentMock = vi.hoisted(() => vi.fn());
 const getMemoryServicesMock = vi.hoisted(() => vi.fn());
-const maybeEnqueueMock = vi.hoisted(() => vi.fn());
 const buildRetainSourceEventKeyMock = vi.hoisted(() => vi.fn());
 const upsertRetainAttemptMock = vi.hoisted(() => vi.fn());
 const claimRetainAttemptMock = vi.hoisted(() => vi.fn());
@@ -36,10 +35,6 @@ const writeUserContextMdForUserMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../lib/memory/index.js", () => ({
   getMemoryServices: getMemoryServicesMock,
-}));
-
-vi.mock("../lib/wiki/enqueue.js", () => ({
-  maybeEnqueuePostTurnCompile: maybeEnqueueMock,
 }));
 
 vi.mock("../lib/memory/retain-attempts.js", () => ({
@@ -297,7 +292,6 @@ describe("memory-retain handler", () => {
     retainDailyMemoryMock.mockReset();
     upsertMarkdownMemoryDocumentMock.mockReset();
     getMemoryServicesMock.mockReset();
-    maybeEnqueueMock.mockReset();
     buildRetainSourceEventKeyMock.mockReset().mockReturnValue("source-key");
     upsertRetainAttemptMock.mockReset().mockResolvedValue(BASE_ATTEMPT);
     claimRetainAttemptMock.mockReset().mockResolvedValue(BASE_ATTEMPT);
@@ -317,7 +311,6 @@ describe("memory-retain handler", () => {
         errorMessage: message,
       };
     });
-    maybeEnqueueMock.mockResolvedValue({ status: "skipped" });
   });
 
   it("rejects events without a tenantId", async () => {
@@ -408,11 +401,10 @@ describe("memory-retain handler", () => {
     expect(retainConversationMock.mock.calls[0][0].metadata).toMatchObject({
       evalTraffic: true,
     });
-    // No synthetic high-confidence facts, no user_profiles projection, no
-    // wiki compile from eval traffic.
+    // No synthetic high-confidence facts and no user_profiles projection
+    // from eval traffic.
     expect(executeMock).not.toHaveBeenCalled();
     expect(writeUserContextMdForUserMock).not.toHaveBeenCalled();
-    expect(maybeEnqueueMock).not.toHaveBeenCalled();
   });
 
   it("smoke-prefixed thread ids are suppressed at the door: no retain, no ledger row", async () => {
@@ -435,7 +427,6 @@ describe("memory-retain handler", () => {
     expect(result).toEqual({ ok: true, engine: "suppressed_smoke" });
     expect(retainConversationMock).not.toHaveBeenCalled();
     expect(upsertRetainAttemptMock).not.toHaveBeenCalled();
-    expect(maybeEnqueueMock).not.toHaveBeenCalled();
   });
 
   it("normal UUID-style thread ids are not caught by the smoke suppression (regression)", async () => {
@@ -635,7 +626,7 @@ describe("memory-retain handler", () => {
     expect(retainConversationMock.mock.calls[0][0].ownerType).toBe("user");
   });
 
-  it("unmarked traffic still extracts facts and enqueues wiki compile", async () => {
+  it("unmarked traffic still extracts facts", async () => {
     buildRetainConversationServices();
     buildSelectChain([]);
 
@@ -651,7 +642,6 @@ describe("memory-retain handler", () => {
 
     expect(result.ok).toBe(true);
     expect(retainConversationMock).toHaveBeenCalledTimes(1);
-    expect(maybeEnqueueMock).toHaveBeenCalledTimes(1);
   });
 
   it("happy path: 32 DB rows + matching event tail → adapter receives 32 messages", async () => {

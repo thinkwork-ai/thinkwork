@@ -23,7 +23,7 @@ vi.mock("@thinkwork/database-pg", async (importOriginal) => {
   return {
     getDb: () => ({ execute: primaryExecute }),
     getHindsightDb: () => ({ execute: hindsightExecute }),
-    resolveHindsightDb: <T,>(primary: T) => primary,
+    resolveHindsightDb: <T>(primary: T) => primary,
     // Real chunk: renders `hindsight.` (env unset) or `public.` (env set).
     hindsightSql: actual.hindsightSql,
   };
@@ -31,9 +31,6 @@ vi.mock("@thinkwork/database-pg", async (importOriginal) => {
 
 // Unrelated collaborators pulled in by the handler module; stub to no-ops.
 vi.mock("../lib/memory/index.js", () => ({ getMemoryServices: vi.fn() }));
-vi.mock("../lib/wiki/enqueue.js", () => ({
-  maybeEnqueuePostTurnCompile: vi.fn(),
-}));
 vi.mock("../lib/user-context-md-writer.js", () => ({
   writeUserContextMdForUser: vi.fn(),
 }));

@@ -7,7 +7,6 @@ const repoMocks = vi.hoisted(() => ({
 }));
 const stageMocks = vi.hoisted(() => ({
   runAcquire: vi.fn(),
-  runWiki: vi.fn(),
 }));
 
 vi.mock("../lib/memory-sources/stages.js", async (importOriginal) => {
@@ -16,7 +15,6 @@ vi.mock("../lib/memory-sources/stages.js", async (importOriginal) => {
   return {
     ...actual,
     runAcquire: stageMocks.runAcquire,
-    runWiki: stageMocks.runWiki,
   };
 });
 
@@ -243,42 +241,6 @@ describe("memory-stage-worker", () => {
     // Persist-then-send: the failed result is durable on the consumed row.
     expect(state.row?.status).toBe("consumed");
     expect((state.row?.result as { status?: string })?.status).toBe("failed");
-  });
-
-  it("wiki dispatches to the real runWiki implementation for shared processors (U4)", async () => {
-    repoMocks.getProcessorConfig.mockResolvedValue(activeProcessor());
-    repoMocks.getSourceConfig.mockResolvedValue({
-      source: {
-        id: SRC_ID,
-        source_family: "twenty",
-        enabled: true,
-        boundary: {},
-      },
-      processor: activeProcessor(),
-    });
-    stageMocks.runWiki.mockResolvedValue({
-      status: "succeeded",
-      stage: "wiki",
-      counts: { compiled: 1 },
-      output: { jobId: "job-1", jobStatus: "succeeded" },
-    });
-    const { tokenOps } = makeTokenOps(pendingRow());
-
-    const { result } = await runMemoryStageWorker(
-      baseEvent({ stage: "wiki" }),
-      {
-        db: fakeDb(bindingSelects({ stage: "wiki" })),
-        sfnClient: sfn,
-        tokenOps,
-      },
-    );
-
-    // assertTargetInTenant's tenant target check passes (target_id ===
-    // tenant_id), then the wiki stage settles the compile job (U4).
-    expect(stageMocks.runWiki).toHaveBeenCalledTimes(1);
-    expect(result.status).toBe("succeeded");
-    expect(result.counts?.compiled).toBe(1);
-    expect(result.output?.jobId).toBe("job-1");
   });
 
   it("wiki hard-rejects a user_* target bank (AE7)", async () => {

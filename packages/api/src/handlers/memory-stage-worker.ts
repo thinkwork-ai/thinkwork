@@ -44,7 +44,6 @@ import {
   runProject,
   runResolve,
   runRetain,
-  runWiki,
   type StageContext,
 } from "../lib/memory-sources/stages.js";
 import { runPreflight } from "../lib/memory-sources/preflight.js";
@@ -277,12 +276,12 @@ async function executeStage(
       return runCompound(ctx);
     case "graph":
       return runGraph(ctx);
-    case "wiki":
-      return runWiki(ctx);
+    // "wiki" remains in MEMORY_RUN_ITEM_STAGES for historic run-item rows,
+    // but the compile pipeline it drove is retired — it dispatches nowhere.
     default:
       return failed(
         event.stage,
-        `unknown memory stage "${event.stage}" — supported: preflight|acquire|extract|project|resolve|retain|compound|graph|wiki`,
+        `unknown memory stage "${event.stage}" — supported: preflight|acquire|extract|project|resolve|retain|compound|graph`,
       );
   }
 }

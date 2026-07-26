@@ -42,11 +42,6 @@ import {
 } from "../lib/knowledge-graph/runs.js";
 import { applySourceDeclaredFallback } from "../lib/knowledge-graph/source-fallback.js";
 import { resolveSnapshotCanonicalIdentity } from "../lib/entity-identity/snapshot-resolution.js";
-import {
-  enqueueGraphWikiCompileTx,
-  invokeWikiCompile,
-  type GraphCompileTxEnqueueResult,
-} from "../lib/wiki/enqueue.js";
 
 export interface KnowledgeGraphObservationsIngestEvent {
   runId?: string;
@@ -423,13 +418,6 @@ async function processTenantObservationsIngest(
       snapshot: fallbackSnapshot,
     });
     const snapshot = identity.snapshot;
-    const dirtyCanonicalEntityIds = [
-      ...new Set(
-        snapshot.entities
-          .map((entity) => entity.canonicalEntityId)
-          .filter((id): id is string => !!id),
-      ),
-    ];
     const identityMetrics = {
       ...identity.metrics,
       identityDeferrals: identity.deferrals.slice(0, 50),
@@ -439,11 +427,6 @@ async function processTenantObservationsIngest(
     // source_ref across runs and each run sees only its cursor-gated new
     // packets — a full-snapshot replace would wipe the mirror to the newest
     // batch every sweep. The merge is additive, so the shrink guard is moot.
-    //
-    // The graph→wiki compile handoff (U4 dead-trigger fix) enqueues INSIDE
-    // this transaction (outbox): a run can never commit as succeeded
-    // without a compile-job outcome. The async invoke happens post-commit.
-    let compileEnqueue: GraphCompileTxEnqueueResult | null = null;
     await mergeKnowledgeGraphSnapshot({
       db: database,
       run,
@@ -474,33 +457,8 @@ async function processTenantObservationsIngest(
       runMetadata: fullRebuild ? { fullRebuild: true } : undefined,
       extraWork: async (tx) => {
         await upsertObservationCursors(tx, run.tenant_id, source.nextCursors);
-        compileEnqueue = await enqueueGraphWikiCompileTx(tx, {
-          tenantId: run.tenant_id,
-          dirtyCanonicalEntityIds,
-        });
       },
     });
-
-    // Post-commit: invoke wiki-compile for a freshly inserted job. Invoke
-    // failure is non-fatal (the job row survives for the drainer) but is
-    // surfaced in the run metrics rather than silently dropped.
-    const enqueueOutcome = compileEnqueue as GraphCompileTxEnqueueResult | null;
-    let wikiCompileEnqueue: Record<string, unknown> = {
-      status: enqueueOutcome?.status ?? "error_not_attempted",
-      ...(enqueueOutcome?.jobId ? { jobId: enqueueOutcome.jobId } : {}),
-    };
-    if (enqueueOutcome?.inserted && enqueueOutcome.jobId) {
-      const invokeErr = await invokeWikiCompile(enqueueOutcome.jobId).catch(
-        (err) => err as Error,
-      );
-      wikiCompileEnqueue = {
-        ...wikiCompileEnqueue,
-        status:
-          invokeErr instanceof Error ? "enqueued_invoke_failed" : "enqueued",
-        ...(invokeErr instanceof Error ? { error: invokeErr.message } : {}),
-      };
-    }
-    await patchRunMetrics(database, run.id, { wikiCompileEnqueue });
 
     // Backlog signal: this run hit the per-run candidate cap AND made
     // forward progress (promoted something or advanced cursors), so more
@@ -525,7 +483,6 @@ async function processTenantObservationsIngest(
         evidenceCount: snapshot.evidence.length,
         ingestMode: "bedrock_extraction",
         extractionBatchesTotal: extraction.batchesTotal,
-        wikiCompileEnqueue,
       },
     };
   } catch (err) {
@@ -553,31 +510,6 @@ async function processTenantObservationsIngest(
       status: "failed",
       error: message,
     };
-  }
-}
-
-/**
- * Merge a post-commit metrics fragment onto the run row (jsonb shallow
- * merge). Best-effort — a metrics-patch failure must not fail an already
- * committed run.
- */
-async function patchRunMetrics(
-  db: Database,
-  runId: string,
-  fragment: Record<string, unknown>,
-): Promise<void> {
-  try {
-    await db
-      .update(kgIngestRuns)
-      .set({
-        metrics: sql`COALESCE(${kgIngestRuns.metrics}, '{}'::jsonb) || ${JSON.stringify(fragment)}::jsonb`,
-      })
-      .where(eq(kgIngestRuns.id, runId));
-  } catch (err) {
-    console.warn("[knowledge-graph-observations-ingest] metrics patch failed", {
-      runId,
-      error: (err as Error)?.message ?? String(err),
-    });
   }
 }
 

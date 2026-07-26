@@ -35,10 +35,10 @@ ESBUILD_FLAGS=(
 
 # graphql-http, memory-retain, mcp-user-memory,
 # mcp-context-engine, requester-memory-dreaming, eval-runner, eval-worker,
-# wakeup-processor, wiki-compile, and ontology-scan use AWS Bedrock SDKs
+# wakeup-processor and ontology-scan use AWS Bedrock SDKs
 # (@aws-sdk/client-bedrock-agentcore for memory adapter commands;
 # @aws-sdk/client-bedrock-runtime for eval-runner's Converse judge and
-# wiki-compile's InvokeModel planner/section-writer) that aren't in the default
+# InvokeModel callers) that aren't in the default
 # Lambda Node 20 runtime's built-in SDK, or are newer than what ships there.
 # Bundle them inline so the pinned node_modules version is used.
 # analyst-query-broker is here for @aws-sdk/rds-signer (THINK-229 U1 IAM
@@ -88,7 +88,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "chat-agent-invoke" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wakeup-processor" ] || [ "$name" = "wiki-compile" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "wiki-bootstrap-import" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "analyst-query-broker" ] || [ "$name" = "analyst-connection-reconciler" ] || [ "$name" = "knowledge-base-manager" ] || [ "$name" = "skills" ] || [ "$name" = "identity-graph-projector" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "chat-agent-invoke" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wakeup-processor" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "analyst-query-broker" ] || [ "$name" = "analyst-connection-reconciler" ] || [ "$name" = "knowledge-base-manager" ] || [ "$name" = "skills" ] || [ "$name" = "identity-graph-projector" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -623,9 +623,6 @@ build_handler "memory" \
 build_handler "memory-retain" \
   "$REPO_ROOT/packages/api/src/handlers/memory-retain.ts"
 
-build_handler "wiki-compile" \
-  "$REPO_ROOT/packages/api/src/handlers/wiki-compile.ts"
-
 # Uses BUNDLED_AGENTCORE_ESBUILD_FLAGS — the promotion-gate classifier needs
 # @aws-sdk/client-bedrock-runtime newer than the runtime's built-in SDK.
 # Company Brain U5 — bundled (BUNDLED_AGENTCORE_ESBUILD_FLAGS) for
@@ -650,20 +647,11 @@ build_handler "ontology-reprocess" \
 build_handler "identity-match" \
   "$REPO_ROOT/packages/api/src/handlers/identity-match.ts"
 
-build_handler "wiki-lint" \
-  "$REPO_ROOT/packages/api/src/handlers/wiki-lint.ts"
-
-build_handler "wiki-export" \
-  "$REPO_ROOT/packages/api/src/handlers/wiki-export.ts"
-
 build_handler "okf-materialize" \
   "$REPO_ROOT/packages/api/src/handlers/okf-materialize.ts"
 
 build_handler "okf-efs-refresh" \
   "$REPO_ROOT/packages/api/src/handlers/okf-efs-refresh.ts"
-
-build_handler "wiki-bootstrap-import" \
-  "$REPO_ROOT/packages/api/src/handlers/wiki-bootstrap-import.ts"
 
 build_handler "artifact-deliver" \
   "$REPO_ROOT/packages/api/src/handlers/artifact-deliver.ts"
