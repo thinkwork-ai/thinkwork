@@ -70,7 +70,7 @@ describe("Context Engine source families", () => {
     expect(
       sourceFamilyForProvider(
         provider({
-          id: "wiki-source-agent",
+          id: "custom-source-agent",
           family: "sub-agent",
           sourceFamily: "pages",
         }),
