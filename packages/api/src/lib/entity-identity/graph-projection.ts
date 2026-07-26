@@ -21,14 +21,13 @@
  *     system node   t#<tenant>#sys#<systemSlug>    label = ExternalSystem
  *     system edge   t#<tenant>#x#<canonicalId>#<systemSlug>#<namespace>
  *                   type = external_identity, carries externalId (R1/R7)
- *     alias edge    t#<tenant>#m#<loserId>         type = merged_into
  *
- * Merge (KTD-4): the loser node retires (state='merged', mergedInto set),
- * its external_identity edges drop (the relational merge already repointed
- * the mappings — the survivor resync recreates them), and a merged_into
- * alias edge redirects traversals. The identity-mapping snapshot this
- * module cuts (KTD-3) carries the same redirect so the etl facet-upsert
- * path lands on the survivor instead of resurrecting the retired node.
+ * Merge (KTD-4): the loser node is DETACH DELETEd — merge lineage stays
+ * relational (merged_into_id chains in Postgres; matcher and GraphQL
+ * resolve them there) and projected losers were raw-uuid ghosts in the
+ * tenant graph view. The identity-mapping snapshot this module cuts
+ * (KTD-3) carries the loser→survivor redirect so the etl facet-upsert
+ * path lands on the survivor instead of resurrecting the deleted node.
  *
  * The snapshot (`identity-mapping-snapshot/v1`) is cut off the same cursor
  * after each projection pass, to the brain-artifacts bucket at
@@ -148,8 +147,8 @@ export interface MappingRowForSync {
  * Ops that make the graph match one canonical entity's current relational
  * state: upsert the entity node, upsert system nodes + external_identity
  * edges for every current tenant-visible mapping, drop stale
- * external_identity edges, and (for merged losers) retire the node behind a
- * merged_into alias edge.
+ * external_identity edges, and DETACH DELETE merged losers (lineage stays
+ * relational; the graph carries only surviving entities).
  */
 export function buildCanonicalResyncOps(args: {
   tenantId: string;
@@ -161,49 +160,18 @@ export function buildCanonicalResyncOps(args: {
   const label = safeLabel(canonical.entity_type_slug);
   const ops: GraphOp[] = [];
 
-  if (canonical.status === "merged" && canonical.merged_into_id) {
-    const survivorNodeId = entityNodeId(tenantId, canonical.merged_into_id);
-    // Retire the loser: mark it, drop its external_identity edges (the
-    // relational merge repointed the mappings; the survivor's resync
-    // recreates them), and lay the alias edge for traversals.
-    //
-    // BOTH MERGE patterns carry the entity-type label. Neptune's MERGE
-    // treats a label mismatch as create-with-same-~id — "Cannot create
-    // node; id already in use" — so an UNLABELED merge here would mint a
-    // label-less survivor whenever the loser is resynced first, and the
-    // survivor's own labeled resync would then explode (seen live on the
-    // first dev rebuild, 2026-07-22). Merges are same-type, so the loser's
-    // label is the survivor's label.
+  if (canonical.status === "merged") {
+    // The loser leaves the graph entirely. Merge lineage stays relational
+    // (merged_into_id chains in Postgres; matcher/GraphQL resolve them
+    // there) — projected loser nodes were raw-uuid ghosts in the tenant
+    // graph view with nothing traversing their alias edge. DETACH also
+    // drops the external_identity edges the relational merge repointed;
+    // the survivor's own resync recreates its set. MATCH (not MERGE) so a
+    // loser already absent — e.g. loaded after this rule — is a no-op
+    // rather than a mint-then-delete.
     ops.push({
-      query:
-        `MERGE (n:${label} {\`~id\`: $nodeId}) ` +
-        "SET n.tenantId = $tenantId, n.canonicalId = $canonicalId, " +
-        "n.state = 'merged', n.mergedInto = $mergedInto",
-      parameters: {
-        nodeId,
-        tenantId,
-        canonicalId: canonical.id,
-        mergedInto: canonical.merged_into_id,
-      },
-    });
-    ops.push({
-      query: "MATCH (n {`~id`: $nodeId})-[r:external_identity]->() DELETE r",
+      query: "MATCH (n {`~id`: $nodeId}) DETACH DELETE n",
       parameters: { nodeId },
-    });
-    ops.push({
-      query:
-        `MERGE (loser:${label} {\`~id\`: $nodeId}) ` +
-        `MERGE (survivor:${label} {\`~id\`: $survivorId}) ` +
-        "MERGE (loser)-[a:merged_into {`~id`: $aliasId}]->(survivor) " +
-        // Stamp the survivor too: a survivor first minted here must never
-        // be a property-less ghost invisible to tenant-scoped maintenance.
-        "SET a.tenantId = $tenantId, survivor.tenantId = $tenantId",
-      parameters: {
-        nodeId,
-        survivorId: survivorNodeId,
-        aliasId: `t#${tenantId}#m#${canonical.id}`,
-        tenantId,
-      },
     });
     return ops;
   }

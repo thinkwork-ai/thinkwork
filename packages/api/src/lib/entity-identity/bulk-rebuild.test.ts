@@ -140,7 +140,7 @@ describe("buildBulkLoadCsvFiles", () => {
       entityNodes: 1,
       systemNodes: 2,
       externalIdentityEdges: 2,
-      mergedIntoEdges: 0,
+      mergedLosersSkipped: 0,
     });
     const byName = new Map(files.map((f) => [f.name, f.content]));
     const nodes = byName.get(BULK_CSV_FILE_NAMES.entityNodes)!;
@@ -199,7 +199,7 @@ describe("buildBulkLoadCsvFiles", () => {
     expect(nodes.split("\n")[1].split(",")[1]).toBe("Entity");
   });
 
-  it("merged loser: state/mergedInto + alias edge, no external-identity edges", () => {
+  it("merged loser: skipped entirely — no node, no edges, counted", () => {
     const { files, counts } = buildBulkLoadCsvFiles({
       tenantId: "tenant-1",
       canonicals: [mergedLoser],
@@ -208,28 +208,11 @@ describe("buildBulkLoadCsvFiles", () => {
       mappingsByCanonical: mapOf([["can-loser", twoMappings]]),
     });
     expect(counts.externalIdentityEdges).toBe(0);
-    expect(counts.mergedIntoEdges).toBe(1);
+    expect(counts.mergedLosersSkipped).toBe(1);
+    expect(counts.entityNodes).toBe(0);
     expect(counts.systemNodes).toBe(0);
-    const nodes = files.find(
-      (f) => f.name === BULK_CSV_FILE_NAMES.entityNodes,
-    )!.content;
-    expect(nodes).toContain(
-      `${entityNodeId("tenant-1", "can-loser")},customer,tenant-1,can-loser,,merged,can-777`,
-    );
-    const edges = files.find(
-      (f) => f.name === BULK_CSV_FILE_NAMES.edges,
-    )!.content;
-    expect(edges).toContain(
-      [
-        "t#tenant-1#m#can-loser",
-        entityNodeId("tenant-1", "can-loser"),
-        entityNodeId("tenant-1", "can-777"),
-        "merged_into",
-        "tenant-1",
-        "",
-        "",
-      ].join(","),
-    );
+    // Zero rows means no files at all — the loser leaves no trace.
+    expect(files).toEqual([]);
   });
 
   it("private mappings produce no edges and no orphan system nodes", () => {
@@ -427,9 +410,9 @@ describe("bulkRebuildTenantGraph", () => {
     expect((result as { counts: { canonicals: number } }).counts).toMatchObject(
       {
         canonicals: 2,
-        entityNodes: 2,
+        entityNodes: 1,
         externalIdentityEdges: 1,
-        mergedIntoEdges: 1,
+        mergedLosersSkipped: 1,
       },
     );
 
