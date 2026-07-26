@@ -13,7 +13,6 @@ Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Pi AgentC
 - `packages/api` — GraphQL (Yoga) resolvers, Lambda handlers, AppSync subscription bridge
 - `packages/lambda` — additional Lambda handlers (job-schedule-manager, job-trigger, agentcore-admin, github-workspace)
 - `packages/agentcore-pi` — active AgentCore Pi runtime (Bedrock models, MCP tools, Docker image)
-- `packages/agentcore` — tenant-router + auth-agent (separate AgentCore image)
 - Tenant S3 skill catalogs — per-tenant folders at `tenants/<tenant-slug>/skill-catalog/<skill-slug>/`; installed skills materialize into workspace `skills/<slug>/` folders
 - Agent workspace anatomy (subagent-folders program 2026-07): one recursive shape — `INSTRUCTIONS.md` + `skills/` + `connectors/` + `agents/` at every level. Sub-agents are `agents/<slug>/` folders (strict frontmatter, required `description`) compiled into the capabilities manifest; grants are folder presence with signed narrowing sidecars, never frontmatter lists. Root instructions live in `INSTRUCTIONS.md` (AGENTS.md dual-read window); `connections/` renamed `connectors/` (DB table NOT renamed). See CONCEPTS.md → Agent Folder / Grants-by-Presence / Eve Deviations.
 - `packages/workspace-defaults` — canonical workspace defaults (CAPABILITIES/GUARDRAILS/PLATFORM/MEMORY_GUIDE)
@@ -51,7 +50,7 @@ Per-workspace scripts are in each `package.json`. CLI's "lint" is a no-op stub �
 ### Running a single test
 
 - **TypeScript (vitest)** — from a package dir: `npx vitest run path/to/file.test.ts` or `npx vitest run -t "test name"`. Suite locations vary: `packages/api` uses `src/**/*.test.ts` **and** `test/integration/**/*.test.ts`; `apps/cli` uses `__tests__/**/*.test.ts`.
-- **Python (pytest)** — from repo root: `uv run --with pytest pytest packages/agentcore/agent-container/test_<name>.py::test_<case>` or the specific Python helper test path. `pyproject.toml` limits `testpaths` to `packages/`.
+- **Python (pytest)** — from repo root: `uv run --with pytest pytest <path>::test_<case>`. `pyproject.toml` limits `testpaths` to `packages/` and the deployment-control-plane module.
 
 ### Database / GraphQL schema
 
