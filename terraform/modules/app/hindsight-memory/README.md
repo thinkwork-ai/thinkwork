@@ -18,7 +18,7 @@ low-cost/development opt-out.
 
 The agent container automatically emits a `CreateEvent` into AgentCore
 Memory after every turn (user message + assistant response), via
-`memory.store_turn_pair` in `packages/agentcore/agent-container/memory.py`.
+the Pi runtime memory provider in `packages/agentcore-pi`.
 AgentCore's background strategies extract facts into four namespaces:
 
 - `assistant_{actorId}` — semantic facts

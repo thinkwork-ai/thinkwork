@@ -121,7 +121,6 @@ jobs:
               - 'packages/lambda/**'
             container:
               - 'packages/agentcore-pi/**'
-              - 'packages/agentcore/**'
               - 'packages/pi-aws/**'
               - 'packages/pi-extensions/**'
               - 'packages/pi-runtime-core/**'

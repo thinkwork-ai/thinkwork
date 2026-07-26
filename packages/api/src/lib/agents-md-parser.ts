@@ -16,13 +16,11 @@
  * ─────────────────────────────────────────────────────────────────────────
  * PINNED_SHAPE_CONTRACT
  * ─────────────────────────────────────────────────────────────────────────
- * The Python mirror lives at:
- *   `packages/agentcore/agent-container/agents_md_parser.py`
- * with the matching contract block. The shared fixture lives at:
- *   `packages/agentcore/agent-container/fixtures/agents-md-sample.md`
- * Both parsers run a fixture-parity test that fails when either drifts.
+ * The fixture lives at:
+ *   `packages/api/src/__tests__/fixtures/agents-md-sample.md`
+ * and a fixture-parity test fails when the parser drifts from it.
  *
- * Public surface (must stay in sync, both sides):
+ * Public surface:
  *   parseAgentsMd(md) → {
  *     routing: RoutingRow[],
  *     rawMarkdown: string,

@@ -184,21 +184,4 @@ describe("constant centralisation invariant", () => {
     // The parser still has to actually consult the set somewhere.
     expect(file).toMatch(/RESERVED_FOLDER_NAMES\.has\(/);
   });
-
-  it("Python mirror declares the same set", () => {
-    const file = readFileSync(
-      resolve(
-        __dirname,
-        "../../../agentcore/agent-container/agents_md_parser.py",
-      ),
-      "utf8",
-    );
-    // The Python frozenset is the runtime mirror; this assertion
-    // guards against a drift where the TS side adds a name and the
-    // Python side falls behind.
-    for (const name of RESERVED_FOLDER_NAMES) {
-      expect(file).toContain(`"${name}"`);
-    }
-    expect(file).toMatch(/RESERVED_FOLDER_NAMES\s*:\s*frozenset/);
-  });
 });

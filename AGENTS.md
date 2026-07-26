@@ -13,7 +13,6 @@ Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Pi AgentC
 - `packages/api` — GraphQL (Yoga) resolvers, Lambda handlers, AppSync subscription bridge
 - `packages/lambda` — additional Lambda handlers (job-schedule-manager, job-trigger, agentcore-admin, github-workspace)
 - `packages/agentcore-pi` — active AgentCore Pi runtime (Bedrock models, MCP tools, Docker image)
-- `packages/agentcore` — tenant-router + auth-agent (separate AgentCore image)
 - Tenant S3 skill catalogs — per-tenant folders at `tenants/<tenant-slug>/skill-catalog/<skill-slug>/`; installed skills materialize into workspace `skills/<slug>/` folders
 - `packages/system-workspace` — canonical workspace defaults (CAPABILITIES/GUARDRAILS/PLATFORM/MEMORY_GUIDE)
 - `terraform/modules/{foundation,data,app,thinkwork}` — three-tier Terraform Registry modules (`thinkwork-ai/thinkwork/aws`)
@@ -49,7 +48,7 @@ Per-workspace scripts are in each `package.json`. CLI's "lint" is a no-op stub �
 ### Running a single test
 
 - **TypeScript (vitest)** — from a package dir: `npx vitest run path/to/file.test.ts` or `npx vitest run -t "test name"`. Suite locations vary: `packages/api` uses `src/**/*.test.ts` **and** `test/integration/**/*.test.ts`; `apps/cli` uses `__tests__/**/*.test.ts`.
-- **Python (pytest)** — from repo root: `uv run --with pytest pytest packages/agentcore/agent-container/test_<name>.py::test_<case>` or the specific Python helper test path. `pyproject.toml` limits `testpaths` to `packages/`.
+- **Python (pytest)** — from repo root: `uv run --with pytest pytest <path>::test_<case>`. `pyproject.toml` limits `testpaths` to `packages/` and the deployment-control-plane module.
 
 ### Database / GraphQL schema
 

@@ -8,21 +8,16 @@
  * dedicated paths, never via `delegate_to_workspace`.
  *
  * Single source of truth for the TypeScript surface (composer enumeration,
- * routing-table parser, bundle importer). The Python runtime mirrors the
- * same set in `packages/agentcore/agent-container/agents_md_parser.py`
- * (`RESERVED_FOLDER_NAMES`); the small-constant-mirrored-across-languages
- * pattern is per
- * `docs/solutions/best-practices/inline-helpers-vs-shared-package-for-cross-surface-code-2026-04-21.md`.
+ * routing-table parser, bundle importer).
  *
  * Callers should compare folder segments after stripping any trailing slash:
  *
  *   const seg = goTo.replace(/\/$/, "");
  *   if (RESERVED_FOLDER_NAMES.has(seg)) { … }
  *
- * Adding a new reserved name requires updating both this constant and the
- * Python mirror, and refreshing fixtures in
- * `packages/agentcore/agent-container/fixtures/agents-md-sample.md` so the
- * parity test stays meaningful.
+ * Adding a new reserved name requires updating this constant and refreshing
+ * `packages/api/src/__tests__/fixtures/agents-md-sample.md` so the parity
+ * test stays meaningful.
  */
 export const RESERVED_FOLDER_NAMES: ReadonlySet<string> = new Set([
   "memory",

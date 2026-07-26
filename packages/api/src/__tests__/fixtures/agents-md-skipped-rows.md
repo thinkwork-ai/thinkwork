@@ -9,8 +9,8 @@ shape contract should never silently drift.
 
 ## Routing
 
-| Task              | Go to       | Read                  | Skills            |
-| ----------------- | ----------- | --------------------- | ----------------- |
-| Hidden memory     | memory/     | memory/CONTEXT.md     | leak-private      |
-| Bad path          | Not A Path  | bad/CONTEXT.md        | bogus             |
-| Real specialist   | expenses/   | expenses/CONTEXT.md   | approve-receipt   |
+| Task            | Go to      | Read                | Skills          |
+| --------------- | ---------- | ------------------- | --------------- |
+| Hidden memory   | memory/    | memory/CONTEXT.md   | leak-private    |
+| Bad path        | Not A Path | bad/CONTEXT.md      | bogus           |
+| Real specialist | expenses/  | expenses/CONTEXT.md | approve-receipt |

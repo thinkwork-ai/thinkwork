@@ -1,11 +1,10 @@
 /**
  * Tests for the AGENTS.md routing-table parser (Plan §008 U6).
  *
- * The TS parser at `packages/api/src/lib/agents-md-parser.ts` and the
- * Python mirror at `packages/agentcore/agent-container/agents_md_parser.py`
- * (U7) share a fixture under `packages/agentcore/agent-container/fixtures/
- * agents-md-sample.md` so a shape-parity test on each side catches drift —
- * see PINNED_SHAPE_CONTRACT in either file.
+ * The fixtures under `./fixtures/` pin the U6/U7 shape contract for the TS
+ * parser at `packages/api/src/lib/agents-md-parser.ts` — see
+ * PINNED_SHAPE_CONTRACT there. They were previously shared with a Python
+ * mirror in the retired `packages/agentcore` runtime.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -306,21 +305,12 @@ describe("parseAgentsMd — fixture parity", () => {
     warn.mockRestore();
   });
 
-  it("parses the shared U6/U7 fixture and produces the expected shape", () => {
-    const fixture = resolve(
-      __dirname,
-      "..",
-      "..",
-      "..",
-      "agentcore",
-      "agent-container",
-      "fixtures",
-      "agents-md-sample.md",
-    );
+  it("parses the U6/U7 fixture and produces the expected shape", () => {
+    const fixture = resolve(__dirname, "fixtures", "agents-md-sample.md");
     const md = readFileSync(fixture, "utf8");
     const result = parseAgentsMd(md);
-    // The shared fixture is the source of truth for the U6/U7 shape
-    // contract. Three rows: expenses, recruiting, legal.
+    // The fixture is the source of truth for the U6/U7 shape contract.
+    // Three rows: expenses, recruiting, legal.
     expect(result.routing.map((r) => r.goTo)).toEqual([
       "expenses/",
       "recruiting/",
@@ -329,20 +319,10 @@ describe("parseAgentsMd — fixture parity", () => {
     expect(result.routing[0].skills).toEqual(["approve-receipt", "tag-vendor"]);
   });
 
-  it("parses the shared U4 skipped-rows fixture (TS+Py parity)", () => {
-    // Plan 2026-04-25-004 U4 fixture parity. The TS parser must emit the
-    // same warnings + skippedRows shape as the Python mirror.
+  it("parses the U4 skipped-rows fixture", () => {
+    // Plan 2026-04-25-004 U4: pins the warnings + skippedRows shape.
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const fixture = resolve(
-      __dirname,
-      "..",
-      "..",
-      "..",
-      "agentcore",
-      "agent-container",
-      "fixtures",
-      "agents-md-skipped-rows.md",
-    );
+    const fixture = resolve(__dirname, "fixtures", "agents-md-skipped-rows.md");
     const md = readFileSync(fixture, "utf8");
     const result = parseAgentsMd(md);
     expect(result.routing.map((r) => r.goTo)).toEqual(["expenses/"]);
