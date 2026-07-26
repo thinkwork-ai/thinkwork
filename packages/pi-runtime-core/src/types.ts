@@ -6,7 +6,6 @@ import type { ThreadJsonRenderPart } from "@thinkwork/thread-json-render";
 import type { SessionStore } from "./durable-session-manager.js";
 import type { McpAppPart } from "./mcp-app-runtime.js";
 import type { ModelRoutedToolCallRecord } from "./model-routing-policy.js";
-import type { OkfWikiContextTrace } from "./okf-wiki-navigator.js";
 
 export type DurableUiMessagePart = ThreadJsonRenderPart | McpAppPart;
 
@@ -122,7 +121,6 @@ export interface ToolInvocationRecord {
   status?: string;
   model_routing?: ModelRoutedToolCallRecord;
   agent_profile_run?: AgentProfileRunRecord;
-  okf_wiki_trace?: OkfWikiContextTrace;
   started_at?: string;
   finished_at?: string;
   runtime: "pi";

@@ -58,7 +58,6 @@ import {
   createSearchExtension,
   createSkillsExtension,
   createMemoryExtension,
-  createOkfWikiNavigatorExtension,
   createRequestIdentityExtension,
   createSendEmailExtension,
   buildTurnContextBlock,
@@ -83,7 +82,6 @@ import { LambdaClient } from "@aws-sdk/client-lambda";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import {
   BUILTIN_TOOL_NAMES,
-  OKF_WIKI_NAVIGATOR_LIMITS,
   buildEmitJsonRenderUiTool,
   collectToolCosts,
   createActivityEmitter,
@@ -193,7 +191,6 @@ import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-mem
 import { createApiIdentityResolutionProvider } from "./runtime/providers/identity-resolution-provider.js";
 import { createApiKnowledgeGraphProvider } from "./runtime/providers/knowledge-graph-provider.js";
 import { createApiSearchProvider } from "./runtime/providers/search-provider.js";
-import { createOkfWikiProvider } from "./runtime/providers/okf-wiki-provider.js";
 import {
   AuroraSessionStore,
   type AuroraSessionStoreOptions,
@@ -1933,8 +1930,8 @@ export async function buildInvocationResources(
   // ThinkWork Search (THINK-263 U8) — the unified fan-out broker as one
   // agent tool, reaching the API's GraphQL `search` query over the callback
   // fetch (no HTTP egress). Fixes the wrong-source problem: one `search`
-  // call fans out across threads/wiki/entities instead of the model guessing
-  // between recall/search_wiki/graph tools. Gated on `search_tool_enabled`
+  // call fans out across threads/entities instead of the model guessing
+  // between recall/graph tools. Gated on `search_tool_enabled`
   // (ships inert until tool policy opts a turn in); skipped in eval mode
   // (user-less). Identity is turn-bound — the provider snapshots the
   // thread-turn reference and the API derives BOTH tenant and the invoking
@@ -1983,64 +1980,6 @@ export async function buildInvocationResources(
         hasApiUrl: Boolean(searchApiUrl),
         hasApiSecret: Boolean(searchApiSecret),
         hasTurnReference: Boolean(searchThreadTurnId || searchThreadId),
-      });
-    }
-  }
-
-  // OKF Wiki Navigator (THNK-63 U5) — direct read-only traversal of the
-  // tenant's materialized OKF wiki on EFS. The API must opt the turn in via
-  // tool policy, and this runtime must independently prove the mount/root and
-  // tenant slug before exposing any wiki_* tools to the model.
-  if (
-    args.payload.eval_mode !== true &&
-    args.payload.okf_wiki_navigator_enabled === true
-  ) {
-    const okfRoot = asString(args.env.okfWikiRoot);
-    const tenantSlug = asString(args.identity.tenantSlug);
-    const currentRoot =
-      okfRoot && tenantSlug
-        ? path.join(okfRoot, "tenants", tenantSlug, "current")
-        : "";
-    const hasCurrentRoot = currentRoot
-      ? await isAccessibleDirectory(currentRoot)
-      : false;
-    if (
-      args.env.okfWikiNavigatorEnabled === true &&
-      okfRoot &&
-      tenantSlug &&
-      hasCurrentRoot
-    ) {
-      addExtension(
-        createOkfWikiNavigatorExtension({
-          onError: (error, { phase }) =>
-            logStructured({
-              level: "warn",
-              event: "okf_wiki_navigator_failed",
-              phase,
-              tenantId: args.identity.tenantId,
-              threadId: args.identity.threadId,
-              error: error instanceof Error ? error.message : String(error),
-            }),
-        }),
-        {
-          okfWiki: createOkfWikiProvider({
-            currentRoot,
-            maxResults: OKF_WIKI_NAVIGATOR_LIMITS.maxResults,
-            maxBytes: OKF_WIKI_NAVIGATOR_LIMITS.maxBytes,
-            maxDepth: OKF_WIKI_NAVIGATOR_LIMITS.maxDepth,
-          }),
-        },
-      );
-    } else {
-      logStructured({
-        level: "warn",
-        event: "okf_wiki_navigator_skipped_missing_mount",
-        tenantId: args.identity.tenantId,
-        threadId: args.identity.threadId,
-        runtimeEnabled: args.env.okfWikiNavigatorEnabled,
-        hasRoot: Boolean(okfRoot),
-        hasTenantSlug: Boolean(tenantSlug),
-        hasCurrentRoot,
       });
     }
   }

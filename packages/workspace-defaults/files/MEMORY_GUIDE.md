@@ -15,8 +15,6 @@ answers the question:
 2. **The tenant Brain (shared institutional knowledge)** — for questions about
    customers, projects, people, decisions, and how they connect across the
    company:
-   - compiled wiki pages via the wiki navigator tools (`wiki_rg`, `wiki_read`,
-     `wiki_ls`, `wiki_links`) for narrative answers;
    - the knowledge graph via `knowledge_graph_search`, then
      `knowledge_graph_get_entity` / `knowledge_graph_neighbors` to traverse
      entities and relationships.

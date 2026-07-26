@@ -1863,9 +1863,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
               spaceSlug: renderedWorkspace.activeSpace?.slug ?? spaceSlug,
             }
           : null,
-        okfWikiNavigatorEnabled: isAnyToolAllowed(
-          ...toolPolicyAliases("okf_wiki_navigator"),
-        ),
         includeFinalizeCallback: true,
         // KTD-3: same fingerprint function the capability inspector stamps
         // on predicted sets; the container forwards it into the per-turn

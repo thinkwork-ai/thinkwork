@@ -19,8 +19,6 @@ Three things change when memory compounds into pages.
 
 **Context gets precise.** When the agent needs to answer "what restaurants do I like in Lisbon?", it reads one page instead of re-reading fifty memories.
 
-**Agents can traverse the page graph when it is explicitly enabled.** The [OKF Wiki Navigator](/concepts/knowledge/okf-wiki-navigator/) projects compiled pages into a read-only linked markdown filesystem so a Pi runtime can search, read, and follow links with trace evidence. That projection is rebuildable output, not the source of truth.
-
 ## The three kinds of pages
 
 Every page is one of three types. The type shapes what kind of page it is.
@@ -92,7 +90,6 @@ Two modes run this pipeline: a **personal** processor per user (opt-in sources, 
 
 - [Memory Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how a memory actually becomes a page
 - [Memory Page Model](/concepts/knowledge/compounding-memory-pages/) — the full data model
-- [OKF Wiki Navigator](/concepts/knowledge/okf-wiki-navigator/) — read-only filesystem traversal over compiled pages
 - [Operating Compiled Memory Pages](/guides/compounding-memory-operations/) — turning it on, troubleshooting
 - [Compiled Pages API](/api/compounding-memory/) — GraphQL reference
 - [Retained Memory](/concepts/knowledge/memory/) — the raw memory compiled pages sit on top of
