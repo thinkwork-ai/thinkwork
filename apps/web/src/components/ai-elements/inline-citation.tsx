@@ -116,7 +116,7 @@ export function InlineCitation({
           onClick={() => void open(primary)}
           aria-label={`Open source ${citationLabel(primary)}`}
           className={cn(
-            "mx-0.5 inline-flex max-w-[18rem] shrink-0 items-center gap-1",
+            "mx-0.5 inline-flex shrink-0 items-center gap-1",
             "rounded-full border border-border bg-muted/70 px-2 py-0.5 align-baseline",
             "text-[11px] font-medium leading-4 text-muted-foreground",
             "transition-colors hover:bg-muted hover:text-foreground",
@@ -129,7 +129,9 @@ export function InlineCitation({
           ) : (
             <FileText className="h-2.5 w-2.5 shrink-0" />
           )}
-          <span className="truncate">{citationLabel(primary)}</span>
+          {/* 75px keeps the pill from swallowing the sentence it annotates —
+              the full name and page are one hover away in the card. */}
+          <span className="max-w-[75px] truncate">{citationLabel(primary)}</span>
           {rest.length > 0 ? (
             <span className="shrink-0 tabular-nums opacity-70">
               +{rest.length}
