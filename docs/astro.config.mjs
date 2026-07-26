@@ -387,10 +387,6 @@ export default defineConfig({
                   slug: "concepts/knowledge/compounding-memory",
                 },
                 {
-                  label: "OKF Wiki Navigator",
-                  slug: "concepts/knowledge/okf-wiki-navigator",
-                },
-                {
                   label: "Business Ontology",
                   slug: "concepts/knowledge/business-ontology",
                 },

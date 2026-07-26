@@ -1,5 +1,3 @@
-import { OKF_WIKI_NAVIGATOR_TOOL_NAMES } from "@thinkwork/pi-runtime-core";
-
 const CONTEXT_ENGINE_ALIASES = [
   "query_context",
   "context_engine",
@@ -25,12 +23,6 @@ const IDENTITY_RESOLUTION_ALIASES = [
   "identity_resolution",
 ] as const;
 
-const OKF_WIKI_NAVIGATOR_ALIASES = [
-  "okf_wiki_navigator",
-  "okf-wiki-navigator",
-  ...OKF_WIKI_NAVIGATOR_TOOL_NAMES,
-] as const;
-
 const TOOL_POLICY_ALIASES: Record<string, readonly string[]> = {
   knowledge_graph_search: KNOWLEDGE_GRAPH_ALIASES,
   knowledge_graph_get_entity: KNOWLEDGE_GRAPH_ALIASES,
@@ -42,12 +34,6 @@ const TOOL_POLICY_ALIASES: Record<string, readonly string[]> = {
   confirm_mapping: IDENTITY_RESOLUTION_ALIASES,
   "identity-resolution": IDENTITY_RESOLUTION_ALIASES,
   identity_resolution: IDENTITY_RESOLUTION_ALIASES,
-  okf_wiki_navigator: OKF_WIKI_NAVIGATOR_ALIASES,
-  "okf-wiki-navigator": OKF_WIKI_NAVIGATOR_ALIASES,
-  wiki_ls: OKF_WIKI_NAVIGATOR_ALIASES,
-  wiki_rg: OKF_WIKI_NAVIGATOR_ALIASES,
-  wiki_read: OKF_WIKI_NAVIGATOR_ALIASES,
-  wiki_links: OKF_WIKI_NAVIGATOR_ALIASES,
   "web-search": ["web-search", "web_search"],
   web_search: ["web-search", "web_search"],
   "web-extract": ["web-extract", "web_extract"],

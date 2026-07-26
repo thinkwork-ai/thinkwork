@@ -98,13 +98,6 @@ import {
   goalRunFromTurnEvidence,
   type GoalRunEvidence,
 } from "@/components/workbench/GoalRunCard";
-import {
-  formatWikiContextTraceDetail,
-  WikiContextTraceCard,
-  wikiContextTraceFromRecord,
-  wikiContextTraceKey,
-  wikiContextTraceTitle,
-} from "@/components/workbench/WikiContextTraceCard";
 import { IconCircleCheckFilled, IconPlus } from "@tabler/icons-react";
 import {
   Reasoning,
@@ -745,7 +738,10 @@ export function TaskThreadView({
   // but the `[n]` markers live in the reply — looking the turn up by the
   // reply's own id returns undefined, leaving every marker as literal text.
   // Same reply-anchoring the document cards above use.
-  const citationsByMessageId = new Map<string, Map<number, KnowledgeCitation>>();
+  const citationsByMessageId = new Map<
+    string,
+    Map<number, KnowledgeCitation>
+  >();
   transcriptMessages.forEach((message, index) => {
     const turn = turnByUserMessageId.get(message.id);
     if (!turn) return;
@@ -3019,7 +3015,8 @@ function TranscriptMessage({
                 // take — without it the answer's markers stay literal text.
                 <Response
                   citations={knowledgeCitations}
-                  className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3">
+                  className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3"
+                >
                   {body}
                 </Response>
               ) : canvasCards.length > 0 || documentCards?.length ? null : ( // A collapsed emission's ArtifactCard IS the message content (THINK-168) — no placeholder above it.
@@ -4766,8 +4763,6 @@ interface ActionRowData {
   children?: ActionRowData[];
 }
 
-const OKF_WIKI_TRACE_EVENT_TYPE = "wiki_context_trace";
-
 // Exported for convergence testing (plan 2026-06-03-001 R1): live step events
 // and the finalized usage.tool_invocations must collapse to one row set.
 export function actionRowsForTurn(
@@ -4841,14 +4836,6 @@ export function actionRowsForTurn(
       );
       continue;
     }
-    const okfWikiRow = okfWikiContextTraceActionRow(record);
-    if (okfWikiRow) {
-      const key = `okf_wiki_trace:${wikiContextTraceKey(record)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      rows.push(okfWikiRow);
-      continue;
-    }
     const wikiRow = wikiContextActionRow(record);
     if (wikiRow) {
       const key = `wiki_context:${wikiContextKey(record)}`;
@@ -4904,15 +4891,6 @@ export function actionRowsForTurn(
       const payload = parseRecord(event.payload);
       const profileKey = profileKeyFromAgentProfileRun(payload);
       if (seen.has(`agent_profile:${profileKey.toLowerCase()}`)) continue;
-    }
-    if (stringValue(event.eventType) === OKF_WIKI_TRACE_EVENT_TYPE) {
-      const key = `okf_wiki_trace:${wikiContextTraceKey(parseRecord(event.payload))}`;
-      if (seen.has(key)) continue;
-      const row = actionRowForEvent(event);
-      if (!row) continue;
-      seen.add(key);
-      rows.push(row);
-      continue;
     }
     const row = actionRowForEvent(event);
     if (!row) continue;
@@ -5265,15 +5243,6 @@ function actionRowForEvent(event: TaskThreadEvent): ActionRowData | null {
     return (
       wikiContextActionRow(payload) ?? {
         title: "Wiki returned 0 pages",
-        detail,
-        kind: "source" as const,
-      }
-    );
-  }
-  if (eventType === "wiki_context_trace") {
-    return (
-      okfWikiContextTraceActionRow(payload) ?? {
-        title: "OKF wiki trace",
         detail,
         kind: "source" as const,
       }
@@ -5959,19 +5928,6 @@ function wikiContextKey(record: Record<string, unknown>) {
     .join(":");
 }
 
-function okfWikiContextTraceActionRow(
-  record: Record<string, unknown>,
-): ActionRowData | null {
-  const trace = wikiContextTraceFromRecord(record);
-  if (!trace) return null;
-  return {
-    title: wikiContextTraceTitle(trace),
-    detail: formatWikiContextTraceDetail(trace),
-    content: <WikiContextTraceCard trace={trace} />,
-    kind: "source",
-  };
-}
-
 function wikiContextActionRow(
   record: Record<string, unknown>,
 ): ActionRowData | null {
@@ -6034,9 +5990,6 @@ function wikiContextFromRecord(
 }
 
 function toolInvocationDetail(record: Record<string, unknown>) {
-  const okfWikiRow = okfWikiContextTraceActionRow(record);
-  if (okfWikiRow?.detail) return okfWikiRow.detail;
-
   const wikiRow = wikiContextActionRow(record);
   if (wikiRow?.detail) return wikiRow.detail;
 

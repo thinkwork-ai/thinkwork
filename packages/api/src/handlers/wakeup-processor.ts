@@ -2122,9 +2122,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const effectiveIdentityResolutionEnabled =
     (process.env.IDENTITY_RESOLUTION_ENABLED || "").toLowerCase() === "true" &&
     isAnyToolAllowed(...toolPolicyAliases("resolve_entities"));
-  const effectiveOkfWikiNavigatorEnabled = isAnyToolAllowed(
-    ...toolPolicyAliases("okf_wiki_navigator"),
-  );
   const effectiveBrowserAutomationEnabled =
     browserAutomationEnabled &&
     isAnyToolAllowed("browser_automation", "browser");
@@ -2538,7 +2535,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
               spaceSlug: renderedWorkspace.activeSpace?.slug ?? runSpaceSlug,
             }
           : null,
-        okfWikiNavigatorEnabled: effectiveOkfWikiNavigatorEnabled,
         includeFinalizeCallback: false,
         configFingerprint: dispatchConfigFingerprint,
       }),
@@ -3320,7 +3316,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                       renderedWorkspace.activeSpace?.slug ?? runSpaceSlug,
                   }
                 : null,
-              okfWikiNavigatorEnabled: effectiveOkfWikiNavigatorEnabled,
               includeFinalizeCallback: false,
               configFingerprint: dispatchConfigFingerprint,
             }),

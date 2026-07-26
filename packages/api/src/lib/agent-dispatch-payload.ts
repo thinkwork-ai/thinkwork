@@ -44,7 +44,6 @@ export const REQUIRED_DISPATCH_FIELDS = [
   "finalize_callback_secret",
   "activity_callback_url",
   "activity_callback_secret",
-  "okf_wiki_navigator_enabled",
   "document_plates",
   "withheld_connections",
   "member_spaces",
@@ -133,7 +132,6 @@ export interface AgentDispatchControlFieldArgs {
   approvedModelIds: string[] | undefined;
   renderedWorkspacePrefix: string | undefined;
   turnContext: DispatchTurnContext | null;
-  okfWikiNavigatorEnabled: boolean;
   /**
    * Chat dispatches AgentCore Event-mode: the runtime POSTs its end-of-turn
    * result to the finalize callback and answers the invoke with
@@ -312,7 +310,6 @@ export function buildAgentDispatchControlFields(
       : undefined,
     activity_callback_secret:
       args.apiAuthSecret && args.threadTurnId ? args.apiAuthSecret : undefined,
-    okf_wiki_navigator_enabled: args.okfWikiNavigatorEnabled || undefined,
     document_plates: args.documentPlates,
     member_spaces:
       args.memberSpaces && args.memberSpaces.length > 0

@@ -11,7 +11,6 @@ export * from "./identity-resolution.js";
 export * from "./knowledge-graph.js";
 export * from "./search.js";
 export * from "./memory.js";
-export * from "./okf-wiki-navigator.js";
 export * from "./request-identity.js";
 export * from "./send-email.js";
 export * from "./skills.js";

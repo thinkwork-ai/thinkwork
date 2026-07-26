@@ -34,11 +34,6 @@ import {
   mergeFinalUiMessageParts,
 } from "./mcp-app-runtime.js";
 import { textFromAssistant } from "./history.js";
-import {
-  OKF_WIKI_CONTEXT_TRACE_EVENT_TYPE,
-  okfWikiContextTraceFromToolResult,
-  okfWikiContextTraceMessage,
-} from "./okf-wiki-navigator.js";
 import { collectToolCosts } from "./tool-costs.js";
 import type { ToolExecutionEmitEvent } from "./tool-execution-client.js";
 import type {
@@ -919,10 +914,6 @@ export async function runAgentLoop(
           result: event.result,
         });
         const agentProfileRun = findAgentProfileRunRecord(event.result);
-        const okfWikiTrace = okfWikiContextTraceFromToolResult(event.result, {
-          toolCallId: event.toolCallId,
-          toolName: event.toolName,
-        });
         deps.log?.({
           level: event.isError ? "error" : "info",
           event: "agentcore_phase",
@@ -953,7 +944,6 @@ export async function runAgentLoop(
           existing.finished_at = finished;
           if (modelRouting) existing.model_routing = modelRouting;
           if (agentProfileRun) existing.agent_profile_run = agentProfileRun;
-          if (okfWikiTrace) existing.okf_wiki_trace = okfWikiTrace;
         } else {
           toolsCalled.add(event.toolName);
           toolInvocations.push({
@@ -966,7 +956,6 @@ export async function runAgentLoop(
             status: event.isError ? "error" : "ok",
             ...(modelRouting ? { model_routing: modelRouting } : {}),
             ...(agentProfileRun ? { agent_profile_run: agentProfileRun } : {}),
-            ...(okfWikiTrace ? { okf_wiki_trace: okfWikiTrace } : {}),
             finished_at: finished,
             runtime: "pi",
           });
@@ -998,15 +987,6 @@ export async function runAgentLoop(
               : { outputPreview: { preview: toolPreview(event.result) } }),
             ...(started ? { durationMs: Date.now() - started } : {}),
             ...(toolCostUsd > 0 ? { providerCostUsd: toolCostUsd } : {}),
-          });
-        }
-        if (okfWikiTrace) {
-          emitActivitySafely(deps, {
-            eventType: OKF_WIKI_CONTEXT_TRACE_EVENT_TYPE,
-            message: okfWikiContextTraceMessage(okfWikiTrace),
-            stream: "step",
-            color: okfWikiTrace.truncated ? "amber" : "blue",
-            payload: okfWikiTrace,
           });
         }
         const jsonRenderPart =

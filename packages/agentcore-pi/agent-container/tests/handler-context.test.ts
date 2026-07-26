@@ -180,8 +180,6 @@ describe("snapshotRuntimeEnv", () => {
       workspaceDir: "/workspace",
       piAgentDir: "/tmp/thinkwork-pi-agent",
       gitSha: "unknown",
-      okfWikiNavigatorEnabled: false,
-      okfWikiRoot: "",
     });
   });
 
@@ -267,15 +265,6 @@ describe("snapshotRuntimeEnv", () => {
     expect(env.chatAgentActivityFnName).toBe(
       "thinkwork-dev-api-chat-agent-activity",
     );
-  });
-
-  it("snapshots OKF wiki navigator mount settings", () => {
-    const env = snapshotRuntimeEnv({
-      OKF_WIKI_NAVIGATOR_ENABLED: "true",
-      OKF_WIKI_ROOT: "/mnt/thinkwork-okf",
-    } as NodeJS.ProcessEnv);
-    expect(env.okfWikiNavigatorEnabled).toBe(true);
-    expect(env.okfWikiRoot).toBe("/mnt/thinkwork-okf");
   });
 });
 
