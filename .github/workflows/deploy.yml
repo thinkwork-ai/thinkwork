@@ -2110,7 +2110,15 @@ jobs:
       - name: Build & deploy
         env:
           MAPBOX_PUBLIC_TOKEN: ${{ secrets.MAPBOX_PUBLIC_TOKEN || '' }}
-        run: bash scripts/build-web.sh ${{ env.STAGE }}
+        # Dev tracks main's tip, not a release tag, so there is no
+        # `v0.1.0-canary.N` to stamp here — release tags only publish artifacts,
+        # and `release deploy` installs them on customer stages. Without this the
+        # bundle shipped an empty VITE_RELEASE_VERSION and the sidebar footer
+        # rendered a bare "unknown". The merge SHA is the only honest identifier
+        # for what dev is actually running.
+        run: |
+          export VITE_RELEASE_VERSION="dev-${GITHUB_SHA::9}"
+          bash scripts/build-web.sh ${{ env.STAGE }}
 
   # ── Build & deploy docs site ────────────────────────────────────
   build-docs:
