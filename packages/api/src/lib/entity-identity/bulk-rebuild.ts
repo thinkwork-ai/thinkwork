@@ -94,7 +94,7 @@ export interface BulkLoadCounts {
   entityNodes: number;
   systemNodes: number;
   externalIdentityEdges: number;
-  mergedIntoEdges: number;
+  mergedLosersSkipped: number;
 }
 
 export interface BulkLoadCsvFiles {
@@ -123,11 +123,13 @@ const EDGES_HEADER =
  * property names exactly match what `buildCanonicalResyncOps` MERGEs, so
  * interleaved resyncs and re-runs converge instead of duplicating.
  *
- * Mirrored rules: merged losers carry state='merged' + mergedInto and a
- * merged_into alias edge but NO external-identity edges (the survivor's
- * own row recreates them); only tenant-visible mappings with a valid
- * source-system slug produce edges and ExternalSystem nodes; a malformed
- * entity_type_slug falls back to the generic `Entity` label.
+ * Mirrored rules: merged losers are SKIPPED — they exist only relationally
+ * (merged_into_id chains in Postgres resolve lineage; nothing traverses the
+ * graph for it), and projecting them surfaced raw-uuid ghost nodes in the
+ * tenant graph view. The resync lane deletes them on merge for the same
+ * reason. Only tenant-visible mappings with a valid source-system slug
+ * produce edges and ExternalSystem nodes; a malformed entity_type_slug
+ * falls back to the generic `Entity` label.
  */
 export function buildBulkLoadCsvFiles(args: {
   tenantId: string;
@@ -140,38 +142,16 @@ export function buildBulkLoadCsvFiles(args: {
   const edgeRows: string[] = [];
   const seenSystems = new Set<string>();
   let externalIdentityEdges = 0;
-  let mergedIntoEdges = 0;
+  let mergedLosersSkipped = 0;
 
   for (const canonical of args.canonicals) {
     const nodeId = entityNodeId(tenantId, canonical.id);
     const label = safeLabel(canonical.entity_type_slug);
 
-    if (canonical.status === "merged" && canonical.merged_into_id) {
-      // Loser: retired marker + alias edge, no displayName, no
-      // external-identity edges (mirrors the resync loser path).
-      entityRows.push(
-        [
-          csvField(nodeId),
-          csvField(label),
-          csvField(tenantId),
-          csvField(canonical.id),
-          "", // displayName — the resync loser path never sets it
-          "merged",
-          csvField(canonical.merged_into_id),
-        ].join(","),
-      );
-      edgeRows.push(
-        [
-          csvField(`t#${tenantId}#m#${canonical.id}`),
-          csvField(nodeId),
-          csvField(entityNodeId(tenantId, canonical.merged_into_id)),
-          "merged_into",
-          csvField(tenantId),
-          "",
-          "",
-        ].join(","),
-      );
-      mergedIntoEdges += 1;
+    if (canonical.status === "merged") {
+      // Loser: not projected. Merge lineage lives in Postgres
+      // (merged_into_id); the graph carries only surviving entities.
+      mergedLosersSkipped += 1;
       continue;
     }
 
@@ -247,7 +227,7 @@ export function buildBulkLoadCsvFiles(args: {
       entityNodes: entityRows.length,
       systemNodes: systemRows.length,
       externalIdentityEdges,
-      mergedIntoEdges,
+      mergedLosersSkipped,
     },
   };
 }

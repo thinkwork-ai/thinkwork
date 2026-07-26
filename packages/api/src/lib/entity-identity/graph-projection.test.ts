@@ -108,7 +108,7 @@ describe("buildCanonicalResyncOps", () => {
     expect(convergence.parameters.keepIds).toEqual([]);
   });
 
-  it("retires a merged loser behind an alias edge and drops its edges (KTD-4)", () => {
+  it("deletes a merged loser from the graph entirely (KTD-4)", () => {
     const ops = buildCanonicalResyncOps({
       tenantId: "tenant-1",
       canonical: {
@@ -119,24 +119,18 @@ describe("buildCanonicalResyncOps", () => {
       },
       mappings: [],
     });
-    expect(ops[0].query).toContain("n.state = 'merged'");
-    expect(ops[0].parameters.mergedInto).toBe("can-777");
-    expect(ops[1].query).toContain("DELETE r");
-    expect(ops[2].query).toContain("merged_into");
-    expect(ops[2].parameters.survivorId).toBe(
-      entityNodeId("tenant-1", "can-777"),
+    // One op: DETACH DELETE by ~id. Lineage stays relational
+    // (merged_into_id); the graph carries only surviving entities. MATCH,
+    // not MERGE, so an already-absent loser is a no-op instead of a
+    // mint-then-delete.
+    expect(ops).toHaveLength(1);
+    expect(ops[0].query).toContain("MATCH (n {`~id`: $nodeId})");
+    expect(ops[0].query).toContain("DETACH DELETE n");
+    expect(ops[0].parameters.nodeId).toBe(
+      entityNodeId("tenant-1", "can-loser"),
     );
-    // Loser AND survivor MERGEs carry the entity-type label: an unlabeled
-    // MERGE would mint a label-less survivor when the loser resyncs first,
-    // and the survivor's own labeled resync would collide on ~id ("Cannot
-    // create node; id already in use" — first dev rebuild, 2026-07-22).
-    expect(ops[0].query).toContain("MERGE (n:customer");
-    expect(ops[2].query).toContain("MERGE (loser:customer");
-    expect(ops[2].query).toContain("MERGE (survivor:customer");
-    // No external_identity re-creation on the loser.
-    expect(ops.some((op) => op.query.includes("external_identity {"))).toBe(
-      false,
-    );
+    // No node upsert, no alias edge, no external_identity re-creation.
+    expect(ops.some((op) => op.query.includes("MERGE"))).toBe(false);
   });
 
   it("falls back to the generic label for a malformed type slug", () => {
@@ -298,8 +292,13 @@ describe("projectPendingIdentityEvents", () => {
     });
 
     expect(result.resyncedCanonicals).toBe(2);
-    const aliasOp = neptune.ops.find((op) => op.query.includes("merged_into"));
-    expect(aliasOp).toBeDefined();
+    const deleteOp = neptune.ops.find((op) =>
+      op.query.includes("DETACH DELETE"),
+    );
+    expect(deleteOp).toBeDefined();
+    expect(deleteOp!.parameters.nodeId).toBe(
+      entityNodeId("tenant-1", "can-loser"),
+    );
     const body = JSON.parse(s3Send.mock.calls[0][0].input.Body as string);
     expect(body.redirects).toEqual([
       { fromCanonicalEntityId: "can-loser", toCanonicalEntityId: "can-777" },
