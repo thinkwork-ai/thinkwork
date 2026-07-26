@@ -7,14 +7,10 @@ const USER_ID = process.env.USER_ID ?? "";
 const AGENT_ID = process.env.AGENT_ID ?? "";
 const QUERY =
   process.env.CONTEXT_ENGINE_E2E_QUERY ?? "favorite restaurant in paris";
-const REQUIRE_WIKI_HIT =
-  process.env.CONTEXT_ENGINE_E2E_REQUIRE_WIKI_HIT === "true";
 const PROVIDER_IDS = (
   process.env.CONTEXT_ENGINE_E2E_PROVIDER_IDS ??
   [
     "memory",
-    "wiki",
-    "wiki-source-agent",
     "workspace-files",
     "bedrock-knowledge-base",
     "erp-customer",
@@ -28,7 +24,7 @@ const PROVIDER_IDS = (
   .filter(Boolean);
 const REQUIRED_FAMILIES = (
   process.env.CONTEXT_ENGINE_E2E_EXPECT_FAMILIES ??
-  "memory,wiki,workspace,knowledge-base,sub-agent"
+  "memory,workspace,knowledge-base,sub-agent"
 )
   .split(",")
   .map((item) => item.trim())
@@ -84,7 +80,7 @@ describe.skipIf(!canRun)("Context Engine live E2E", () => {
       .filter((provider) => provider.enabled !== false)
       .filter((provider) => PROVIDER_IDS.includes(provider.id))
       .map((provider) => provider.id);
-    expect(selectedIds).toEqual(expect.arrayContaining(["memory", "wiki"]));
+    expect(selectedIds).toEqual(expect.arrayContaining(["memory"]));
 
     const result = await callTool("query_context", {
       query: QUERY,
@@ -115,12 +111,5 @@ describe.skipIf(!canRun)("Context Engine live E2E", () => {
 
     expect(hits.length, JSON.stringify({ statuses, hits })).toBeGreaterThan(0);
     expect(statuses.filter((status) => status.state === "error")).toEqual([]);
-
-    if (REQUIRE_WIKI_HIT) {
-      expect(
-        hits.some((hit) => hit.family === "wiki"),
-        `expected at least one wiki hit for ${USER_ID}; statuses=${JSON.stringify(statuses)}`,
-      ).toBe(true);
-    }
   });
 });

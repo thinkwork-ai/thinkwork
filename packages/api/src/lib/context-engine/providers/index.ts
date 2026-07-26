@@ -19,8 +19,6 @@ import { createMemoryContextProvider } from "./memory.js";
 import { createMcpToolContextProvider } from "./mcp-tool.js";
 import { createSupportCaseContextProvider } from "./support-case.js";
 import { createWorkspaceFilesContextProvider } from "./workspace-files.js";
-import { createWikiContextProvider } from "./wiki.js";
-import { createWikiSourceAgentContextProvider } from "./wiki-source-agent.js";
 import { createTenantWebSearchContextProvider } from "./web-search.js";
 
 export function createCoreContextProviders(
@@ -29,8 +27,6 @@ export function createCoreContextProviders(
   const memoryConfig = memoryProviderConfig(settings);
   const providers = [
     createMemoryContextProvider(memoryConfig),
-    createWikiContextProvider(),
-    createWikiSourceAgentContextProvider(),
     createWorkspaceFilesContextProvider(),
     // Legacy external retrieval: available only by explicit provider selection
     // or tenant override. Hindsight Space document memory is the default Brain
@@ -195,5 +191,3 @@ export { createSupportCaseContextProvider } from "./support-case.js";
 export { createSubAgentContextProvider } from "./sub-agent-base.js";
 export { createWebSearchContextProvider } from "./web-search.js";
 export { createWorkspaceFilesContextProvider } from "./workspace-files.js";
-export { createWikiContextProvider } from "./wiki.js";
-export { createWikiSourceAgentContextProvider } from "./wiki-source-agent.js";
