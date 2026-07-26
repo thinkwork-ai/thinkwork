@@ -71,7 +71,7 @@ locals {
     # signed sidecar block authoritative (budgets/policyClaims flow). Flip
     # ONLY after clean shadow parity on live traffic.
     ANALYST_POLICY_SOURCE = var.analyst_policy_source
-    # Neptune endpoint for the wiki-compile soft-layer writer and the
+    # Neptune endpoint for the
     # identity-graph-projector's nudge gate (THINK-339 U15: the twin READ
     # Lambdas retired to the platform service; the write/projection lane
     # stays product-side — the platform identity_sync pipeline invokes it).
@@ -387,36 +387,8 @@ locals {
       CAPABILITY_BROKER_VPCE_DNS      = var.capability_broker_vpce_dns
       CAPABILITY_BROKER_SESSION_TABLE = var.capability_broker_session_table
     }
-    # Compounding Memory compile Lambda. Any Converse-compatible Bedrock
-    # model works; the planner + section-writer cap themselves at ~500
-    # records / 25 new pages per invocation so a 480 s timeout covers
-    # the worst case comfortably. Env vars come from variables so
-    # unrelated deploys don't wipe them back to defaults (the aggregation
-    # flag got reset on every terraform apply before this was pinned).
-    "wiki-compile" = {
-      BEDROCK_MODEL_ID                   = var.wiki_compile_model_id
-      WIKI_AGGREGATION_PASS_ENABLED      = var.wiki_aggregation_pass_enabled
-      WIKI_DETERMINISTIC_LINKING_ENABLED = var.wiki_deterministic_linking_enabled
-      # Wiki pipeline source dispatch (plan 2026-06-09-004 U10):
-      # 'planner' (default, LLM compile) | 'graph' (deterministic
-      # graph→wiki materializer over the knowledge-graph mirror).
-      WIKI_SOURCE = var.wiki_source
-      # Name (not value) of the SecureString SSM parameter that holds the
-      # Google Places API key. wiki-compile fetches + caches on cold start.
-      # The parameter may contain a placeholder value at apply time — the
-      # Lambda logs and degrades gracefully if decryption returns empty.
-      GOOGLE_PLACES_SSM_PARAM_NAME = "/thinkwork/${var.stage}/google-places/api-key"
-      # THINK-200 chain: a successful compile Event-invokes okf-materialize
-      # so the OKF projection (and, chained, the Pi navigator's EFS view)
-      # stays current without manual invocation.
-      OKF_MATERIALIZE_FN_NAME = "thinkwork-${var.stage}-api-okf-materialize"
-    }
     "ontology-scan" = {
       BEDROCK_MODEL_ID = var.wiki_compile_model_id
-    }
-    "wiki-export" = {
-      WIKI_EXPORT_BUCKET     = aws_s3_bucket.wiki_exports.bucket
-      BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
     }
     "okf-materialize" = {
       BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
@@ -571,15 +543,6 @@ locals {
       # invocation (never Lambda self-invoke — AWS recursive-loop
       # detection terminates worker-to-self Event chains).
       KG_OBS_MAX_CANDIDATES_PER_RUN = var.kg_obs_max_candidates_per_run
-      # THINK-193 U4 dead-handoff fix: a successful observations ingest
-      # enqueues the tenant graph wiki-compile job inside its own commit
-      # and Event-invokes wiki-compile post-commit. WIKI_SOURCE must match
-      # the wiki-compile handler's dispatch flag (stage-global); the
-      # per-tenant kill switch stays tenants.wiki_compile_enabled. The
-      # invoke rides the shared lambda role's existing wiki-compile
-      # lambda:InvokeFunction grant (iam-grouped.tf); the function name is
-      # derived from STAGE (common_env) at call time.
-      WIKI_SOURCE = var.wiki_source
     }
     # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
     # id + the per-stage S3 routine-output bucket. The interpreter id is
@@ -883,7 +846,6 @@ resource "aws_lambda_function" "handler" {
     # terminal step event + SendTaskFailure. rate(15 minutes) schedule
     # (dedicated resource below).
     "memory-stage-sweeper",
-    "wiki-compile",
     "knowledge-graph-observations-ingest",
     "ontology-scan",
     "ontology-reprocess",
@@ -896,11 +858,8 @@ resource "aws_lambda_function" "handler" {
     # RequestResponse for the rebuild command. The per-tenant cursor row is
     # the source of truth — missed nudges are harmless.
     "identity-graph-projector",
-    "wiki-lint",
-    "wiki-export",
     "okf-materialize",
     "okf-efs-refresh",
-    "wiki-bootstrap-import",
     "artifact-deliver",
     "recipe-refresh",
     "agent-skills-list",
@@ -1107,9 +1066,6 @@ resource "aws_lambda_function" "handler" {
   # eval-runner walks every test case sequentially, invoking an agent +
   # waiting up to 2 min for spans to propagate per test, so a 10-test run
   # can easily exceed the 30 s default. 900 s covers ~5-15 min sweeps.
-  # wiki-bootstrap-import runs a full Hindsight ingest for ~3,000 records;
-  # the LLM-backed retain path makes it the longest-running Lambda in the
-  # set. 900 s is Lambda's per-invocation max and matches eval-runner's ceiling.
   # routine-task-python wraps a 300s sandbox session and needs headroom
   # for the Start/Invoke/Stop/S3-offload round trip; 360s leaves ~60s
   # for AWS-call setup and offload after the sandbox's own ceiling.
@@ -1119,8 +1075,8 @@ resource "aws_lambda_function" "handler" {
   # headroom for transient slowness.
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "knowledge-base-manager" ? 900 : each.key == "kb-transcribe" ? 900 : each.key == "eval-worker" ? 240 : each.key == "wiki-compile" ? 480 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "wiki-lint" ? 300 : each.key == "wiki-export" ? 600 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "wiki-bootstrap-import" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "wiki-compile" ? 1024 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(4096, var.lambda_max_memory_mb) : each.key == "wiki-export" ? 1024 : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "wiki-bootstrap-import" ? 1024 : each.key == "folder-bundle-import" ? 1024 : each.key == "kb-transcribe" ? 2048 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "knowledge-base-manager" ? 900 : each.key == "kb-transcribe" ? 900 : each.key == "eval-worker" ? 240 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(4096, var.lambda_max_memory_mb) : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "folder-bundle-import" ? 1024 : each.key == "kb-transcribe" ? 2048 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
@@ -1214,30 +1170,8 @@ resource "aws_lambda_function" "handler" {
 }
 
 # ---------------------------------------------------------------------------
-# wiki-compile async retry config + DLQ
+# Async retry configuration
 # ---------------------------------------------------------------------------
-#
-# AWS Lambda's default async invoke retries the function 2 times with a
-# 1-minute delay before sending failures to a DLQ (or dropping). For
-# wiki-compile, retries duplicate Bedrock cost AND can produce duplicate
-# user-visible threads + workspace_runs (the brain-enrichment draft path
-# in particular — see plan 2026-05-01-002 U5/U6 and
-# docs/solutions/architecture-patterns/async-retry-idempotency-lessons).
-#
-# Pin retries to 0 and route failures to a dedicated DLQ. The runner's
-# job-status short-circuit (running/succeeded/failed/skipped) is the
-# in-process protection against duplicate writebacks; this is the
-# infrastructure-level belt-and-suspenders.
-
-resource "aws_sqs_queue" "wiki_compile_dlq" {
-  count                     = local.deploy_lambda_handlers ? 1 : 0
-  name                      = "thinkwork-${var.stage}-wiki-compile-dlq"
-  message_retention_seconds = 1209600 # 14 days
-
-  tags = {
-    Name = "thinkwork-${var.stage}-wiki-compile-dlq"
-  }
-}
 
 # chat-agent-invoke retry-0 (plan 2026-05-22-006 U3). After the
 # direct-callback finalize refactor, chat-agent-invoke is Event-mode-
@@ -1255,19 +1189,6 @@ resource "aws_lambda_function_event_invoke_config" "chat_agent_invoke" {
   function_name                = aws_lambda_function.handler["chat-agent-invoke"].function_name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
-}
-
-resource "aws_lambda_function_event_invoke_config" "wiki_compile" {
-  count                        = local.deploy_lambda_handlers ? 1 : 0
-  function_name                = aws_lambda_function.handler["wiki-compile"].function_name
-  maximum_retry_attempts       = 0
-  maximum_event_age_in_seconds = 3600
-
-  destination_config {
-    on_failure {
-      destination = aws_sqs_queue.wiki_compile_dlq[0].arn
-    }
-  }
 }
 
 # Ontology suggestion scans are durable-job driven. Disable AWS async
@@ -2828,24 +2749,6 @@ resource "aws_scheduler_schedule" "stall_monitor" {
 # Compounding Memory — nightly hygiene + export
 # ---------------------------------------------------------------------------
 
-resource "aws_scheduler_schedule" "wiki_compile_drainer" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-wiki-compile-drainer"
-  group_name          = "default"
-  schedule_expression = "rate(1 minutes)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["wiki-compile"].arn
-    role_arn = aws_iam_role.scheduler.arn
-  }
-}
-
 # Observations → Knowledge Graph sweep (plan 2026-06-09-004 U5). Enumerates
 # tenants and runs an incremental observations ingest per tenant; the stable
 # source_ref's active-run dedupe drops overlap with operator-started runs and
@@ -2943,77 +2846,7 @@ resource "aws_scheduler_schedule" "identity_drift_match" {
   }
 }
 
-resource "aws_scheduler_schedule" "wiki_lint" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-wiki-lint"
-  group_name          = "default"
-  schedule_expression = "cron(0 2 * * ? *)" # daily at 02:00 UTC
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["wiki-lint"].arn
-    role_arn = aws_iam_role.scheduler.arn
-  }
-}
-
-resource "aws_scheduler_schedule" "wiki_export" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-wiki-export"
-  group_name          = "default"
-  schedule_expression = "cron(0 3 * * ? *)" # daily at 03:00 UTC (after lint)
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["wiki-export"].arn
-    role_arn = aws_iam_role.scheduler.arn
-  }
-}
-
-# S3 bucket for markdown vault exports. One bundle per (tenant, owner, date).
-# Retention is handled by the lifecycle rule below (30 days).
-resource "aws_s3_bucket" "wiki_exports" {
-  bucket        = "thinkwork-${var.stage}-wiki-exports"
-  force_destroy = var.stage == "dev"
-
-  tags = {
-    Name = "thinkwork-${var.stage}-wiki-exports"
-  }
-}
-
-resource "aws_s3_bucket_public_access_block" "wiki_exports" {
-  bucket                  = aws_s3_bucket.wiki_exports.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_lifecycle_configuration" "wiki_exports" {
-  bucket = aws_s3_bucket.wiki_exports.id
-
-  rule {
-    id     = "expire-old-bundles"
-    status = "Enabled"
-
-    filter {}
-
-    expiration {
-      days = 30
-    }
-  }
-}
-
-# Canonical ThinkWork Brain artifact store. Unlike wiki_exports, this bucket
+# Canonical ThinkWork Brain artifact store. This bucket
 # is the durable replay/projection substrate for Brain source artifacts,
 # ingestion manifests, migration snapshots, vault projections, and exports.
 resource "aws_s3_bucket" "brain_artifacts" {

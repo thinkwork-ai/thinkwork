@@ -84,7 +84,6 @@ import {
   type RetainAttemptRow,
 } from "../lib/memory/retain-attempts.js";
 import { writeUserContextMdForUser } from "../lib/user-context-md-writer.js";
-import { maybeEnqueuePostTurnCompile } from "../lib/wiki/enqueue.js";
 
 type RetainMessage = {
   role?: string;
@@ -514,28 +513,6 @@ async function processClaimedRetainAttempt(
           retainedAt: new Date().toISOString(),
         }),
       });
-    }
-
-    if (evalTraffic) {
-      // Eval traffic never seeds the wiki pipeline.
-      return { ok: true, engine, attemptId: attempt.id };
-    }
-
-    const compileOutcome = await maybeEnqueuePostTurnCompile({
-      tenantId,
-      ownerId: userId,
-      adapterKind: adapter.kind,
-    });
-    if (
-      compileOutcome.status === "enqueued" ||
-      compileOutcome.status === "enqueued_invoke_failed" ||
-      compileOutcome.status === "error"
-    ) {
-      console.log(
-        `[memory-retain] wiki-compile ${compileOutcome.status}` +
-          (compileOutcome.jobId ? ` jobId=${compileOutcome.jobId}` : "") +
-          (compileOutcome.error ? ` error=${compileOutcome.error}` : ""),
-      );
     }
 
     return { ok: true, engine, attemptId: attempt.id };

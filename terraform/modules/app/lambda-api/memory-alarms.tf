@@ -2,9 +2,7 @@
 #
 # Alarms here fire from metrics that EXIST without any log-group management:
 #   - AWS/Lambda Errors for the memory-stage worker and the retraction drainer
-#     (handler crashes, including ones that never reach a log line);
-#   - the wiki-compile DLQ depth (the only memory-path Lambda with an
-#     on_failure destination).
+#     (handler crashes, including ones that never reach a log line).
 #
 # DELIBERATELY NOT HERE — log-metric filters over the drainer's structured
 # summary line and the worker's "status=failed" line. They require the
@@ -18,8 +16,8 @@
 # packages/api/scripts/external-memory-readiness.ts (which reports due,
 # failed, and dead-lettered attempts directly from the ledger).
 #
-# Also runbook-only (no metric exists): source checkpoint age, graph-to-wiki
-# lag, evidence lag, deferred identity count/age.
+# Also runbook-only (no metric exists): source checkpoint age, evidence lag,
+# deferred identity count/age.
 #
 # alarm_actions are empty: the only SNS topic in this module
 # (aws_sns_topic.cost_alerts) is the cost-alert channel — wiring memory alarms
@@ -67,26 +65,3 @@ resource "aws_cloudwatch_metric_alarm" "memory_retraction_drainer_lambda_errors"
   }
 }
 
-# ---------------------------------------------------------------------------
-# wiki-compile DLQ depth (graph → wiki handoff failures)
-# ---------------------------------------------------------------------------
-
-resource "aws_cloudwatch_metric_alarm" "wiki_compile_dlq_depth" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  alarm_name          = "thinkwork-${var.stage}-wiki-compile-dlq-depth"
-  alarm_description   = "wiki-compile DLQ has messages — a compile invocation crashed before the job ledger recorded an outcome; canonical pages are stale until replayed."
-  namespace           = "AWS/SQS"
-  metric_name         = "ApproximateNumberOfMessagesVisible"
-  statistic           = "Maximum"
-  period              = 60
-  evaluation_periods  = 1
-  threshold           = 1
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  treat_missing_data  = "notBreaching"
-  alarm_actions       = []
-
-  dimensions = {
-    QueueName = aws_sqs_queue.wiki_compile_dlq[0].name
-  }
-}

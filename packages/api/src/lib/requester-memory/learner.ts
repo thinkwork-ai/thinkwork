@@ -333,8 +333,6 @@ export async function runRequesterIdleMemoryLearning(
       memoryWrites: changedFiles.length,
       reportWrites: 1,
       primaryHindsightStatus: primaryHindsightRetain.status,
-      wikiCompileEnqueueStatus:
-        primaryHindsightRetain.compileEnqueue?.status ?? null,
       hindsightStatus: hindsightSync.status,
     },
     metadata: {

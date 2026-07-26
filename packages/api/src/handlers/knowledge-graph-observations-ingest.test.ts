@@ -13,8 +13,6 @@ const {
   createKnowledgeGraphObservationsIngestRunMock,
   reapStaleObservationIngestRunsMock,
   resolveSnapshotCanonicalIdentityMock,
-  enqueueGraphWikiCompileTxMock,
-  invokeWikiCompileMock,
 } = vi.hoisted(() => ({
   extractorMock: vi.fn(),
   loadApprovedOntologyExportMock: vi.fn(),
@@ -28,8 +26,6 @@ const {
   createKnowledgeGraphObservationsIngestRunMock: vi.fn(),
   reapStaleObservationIngestRunsMock: vi.fn(),
   resolveSnapshotCanonicalIdentityMock: vi.fn(),
-  enqueueGraphWikiCompileTxMock: vi.fn(),
-  invokeWikiCompileMock: vi.fn(),
 }));
 
 vi.mock("../lib/knowledge-graph/bedrock-graph-extractor.js", () => ({
@@ -74,11 +70,6 @@ vi.mock("../lib/knowledge-graph/runs.js", async () => {
 
 vi.mock("../lib/entity-identity/snapshot-resolution.js", () => ({
   resolveSnapshotCanonicalIdentity: resolveSnapshotCanonicalIdentityMock,
-}));
-
-vi.mock("../lib/wiki/enqueue.js", () => ({
-  enqueueGraphWikiCompileTx: enqueueGraphWikiCompileTxMock,
-  invokeWikiCompile: invokeWikiCompileMock,
 }));
 
 import { processKnowledgeGraphObservationsIngest } from "./knowledge-graph-observations-ingest.js";
@@ -275,12 +266,6 @@ beforeEach(() => {
         identityOutOfScopeCount: 0,
       },
     }));
-  enqueueGraphWikiCompileTxMock.mockReset().mockResolvedValue({
-    status: "enqueued",
-    jobId: "wiki-job-1",
-    inserted: true,
-  });
-  invokeWikiCompileMock.mockReset().mockResolvedValue(undefined);
   delete process.env.KG_OBS_MAX_CANDIDATES_PER_RUN;
   delete process.env.KG_OBS_DRAIN_BUDGET_MS;
   delete process.env.BRAIN_ARTIFACTS_BUCKET;
@@ -552,90 +537,7 @@ describe("knowledge-graph-observations-ingest handler", () => {
 
 // ─── U4: canonical identity + graph→wiki compile handoff ────────────────────
 
-describe("knowledge-graph-observations-ingest U4 identity + compile handoff", () => {
-  it("REGRESSION (dead trigger): a succeeded ingest always produces an enqueued compile outcome riding the merge tx", async () => {
-    const { db } = makeDb();
-
-    const result = await processKnowledgeGraphObservationsIngest(
-      { tenantId: TENANT_ID },
-      { db },
-    );
-
-    expect(result.status).toBe("succeeded");
-    // Outbox: the enqueue executed INSIDE extraWork with the tx handle and
-    // the run's dirty canonical scope.
-    expect(enqueueGraphWikiCompileTxMock).toHaveBeenCalledTimes(1);
-    const [txArg, enqueueArgs] = enqueueGraphWikiCompileTxMock.mock.calls[0]!;
-    expect(txArg).toEqual(expect.objectContaining({ marker: "tx" }));
-    expect(enqueueArgs).toEqual({
-      tenantId: TENANT_ID,
-      dirtyCanonicalEntityIds: ["canon-1"],
-    });
-    // Post-commit invoke of the freshly inserted job.
-    expect(invokeWikiCompileMock).toHaveBeenCalledWith("wiki-job-1");
-    // The outcome is surfaced — never silently absent.
-    expect(result.metrics?.wikiCompileEnqueue).toEqual({
-      status: "enqueued",
-      jobId: "wiki-job-1",
-    });
-  });
-
-  it("surfaces a missing enqueue outcome as error_not_attempted instead of silence", async () => {
-    const { db } = makeDb();
-    // Simulate a merge path that never ran extraWork (the dead-trigger shape).
-    mergeKnowledgeGraphSnapshotMock.mockImplementationOnce(async () => {});
-
-    const result = await processKnowledgeGraphObservationsIngest(
-      { tenantId: TENANT_ID },
-      { db },
-    );
-
-    expect(result.status).toBe("succeeded");
-    expect(result.metrics?.wikiCompileEnqueue).toEqual(
-      expect.objectContaining({ status: "error_not_attempted" }),
-    );
-  });
-
-  it("dedupes onto an existing compile job without invoking", async () => {
-    const { db } = makeDb();
-    enqueueGraphWikiCompileTxMock.mockResolvedValueOnce({
-      status: "deduped",
-      jobId: "wiki-job-existing",
-      inserted: false,
-    });
-
-    const result = await processKnowledgeGraphObservationsIngest(
-      { tenantId: TENANT_ID },
-      { db },
-    );
-
-    expect(result.status).toBe("succeeded");
-    expect(invokeWikiCompileMock).not.toHaveBeenCalled();
-    expect(result.metrics?.wikiCompileEnqueue).toEqual({
-      status: "deduped",
-      jobId: "wiki-job-existing",
-    });
-  });
-
-  it("marks enqueued_invoke_failed (job row survives for the drainer) without failing the run", async () => {
-    const { db } = makeDb();
-    invokeWikiCompileMock.mockRejectedValueOnce(new Error("lambda down"));
-
-    const result = await processKnowledgeGraphObservationsIngest(
-      { tenantId: TENANT_ID },
-      { db },
-    );
-
-    expect(result.ok).toBe(true);
-    expect(result.metrics?.wikiCompileEnqueue).toEqual(
-      expect.objectContaining({
-        status: "enqueued_invoke_failed",
-        jobId: "wiki-job-1",
-        error: expect.stringContaining("lambda down"),
-      }),
-    );
-  });
-
+describe("knowledge-graph-observations-ingest U4 identity", () => {
   it("threads explicit bankIds through to the source loader (targeted ingest)", async () => {
     const { db } = makeDb();
 
