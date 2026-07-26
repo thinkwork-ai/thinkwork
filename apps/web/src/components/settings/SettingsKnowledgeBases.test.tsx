@@ -12,10 +12,10 @@ const { navigateMock, kbDocs, kbRows } = vi.hoisted(() => ({
     {
       id: "kb-1",
       name: "Company Policies",
-      description: "HR + finance policies",
+      description: "HR + finance policies" as string | null,
       status: "active",
       documentCount: 4,
-      lastSyncAt: null,
+      lastSyncAt: null as string | null,
     },
   ],
 }));
@@ -84,6 +84,28 @@ describe("SettingsKnowledgeBases", () => {
     expect(screen.queryByText("Create source")).toBeNull();
     act(() => controller.current?.openNewSource());
     expect(screen.getByText("Create source")).toBeTruthy();
+  });
+
+  // THINK-345 R1/R2. jsdom computes no layout, so these pin the structure
+  // that produces the flex-and-truncate behavior; the widths themselves are
+  // confirmed in a browser.
+  it("truncates the description and carries the full text in a title", () => {
+    const long =
+      "McPherson customer-experience SOP corpus, connected from the cx-to-s3 bucket (read in place)";
+    kbRows[0].description = long;
+    render(<SettingsKnowledgeBases />);
+
+    const cell = screen.getByTitle(long);
+    expect(cell.className).toContain("truncate");
+    kbRows[0].description = "HR + finance policies";
+  });
+
+  it("renders the em-dash placeholder for a null description", () => {
+    kbRows[0].description = null;
+    render(<SettingsKnowledgeBases />);
+
+    expect(screen.getByText("—")).toBeTruthy();
+    kbRows[0].description = "HR + finance policies";
   });
 
   it("clears the header controller on unmount", () => {

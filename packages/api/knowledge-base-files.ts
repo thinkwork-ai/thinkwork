@@ -464,6 +464,14 @@ export async function handler(
           ingest_status: knowledgeBaseDocuments.ingest_status,
           updated_at: knowledgeBaseDocuments.updated_at,
           source_kind: knowledgeBaseSources.kind,
+          // THINK-345 U1: the detail rail renders one document's indexing
+          // state, so the list query carries those fields rather than adding
+          // a per-row round trip.
+          projection_status: knowledgeBaseDocuments.projection_status,
+          edition: knowledgeBaseDocuments.edition,
+          page_count: knowledgeBaseDocuments.page_count,
+          last_error: knowledgeBaseDocuments.last_error,
+          effective_from: knowledgeBaseDocuments.effective_from,
         })
         .from(knowledgeBaseDocuments)
         .leftJoin(
@@ -484,6 +492,11 @@ export async function handler(
           status: row.ingest_status,
           sourceKind: row.source_kind ?? "managed-upload",
           updatedAt: row.updated_at?.toISOString() ?? null,
+          projectionStatus: row.projection_status ?? null,
+          edition: row.edition ?? null,
+          pageCount: row.page_count ?? null,
+          lastError: row.last_error ?? null,
+          effectiveFrom: row.effective_from?.toISOString() ?? null,
         })),
       });
     }
