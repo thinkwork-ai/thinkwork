@@ -92,7 +92,6 @@ import {
 } from "@/components/work-items/work-item-filters";
 import { useTenant } from "@/context/TenantContext";
 import { useThreadNotifications } from "@/hooks/useThreadNotifications";
-import { useThreadNotificationsEnabled } from "@/lib/thread-notifications-pref";
 import {
   ComputerThreadQuery,
   DeleteThreadMutation,
@@ -222,16 +221,11 @@ export function ChatSidebar() {
   // coalesced thread-list refetch as onThreadUpdated so a freshly-mentioned or
   // muted participant's sidebar updates live without a reload (R9). The ref
   // defers to scheduleThreadListRefresh, which is defined further down.
-  const threadNotificationsEnabled = useThreadNotificationsEnabled();
   const scheduleThreadListRefreshRef = useRef<() => void>(() => {});
   const handleThreadActivity = useCallback(() => {
     scheduleThreadListRefreshRef.current();
   }, []);
-  useThreadNotifications({
-    activeThreadId: routeThreadId ?? null,
-    enabled: threadNotificationsEnabled,
-    onActivity: handleThreadActivity,
-  });
+  useThreadNotifications({ onActivity: handleThreadActivity });
   const isNewThreadRoute = location.pathname === "/new";
   const isWorkItemsRoute = location.pathname.startsWith("/work-items");
   const isAgentLoopsRoute = location.pathname.startsWith("/automations");

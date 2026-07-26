@@ -24,12 +24,6 @@ import {
   EmailProviderInstallStatus,
 } from "@/gql/graphql";
 import { useTenant } from "@/context/TenantContext";
-import { isDesktop } from "@/lib/desktop-detection";
-import { requestDesktopNotificationPermission } from "@/lib/desktop-notifications";
-import {
-  setThreadNotificationsEnabled,
-  useThreadNotificationsEnabled,
-} from "@/lib/thread-notifications-pref";
 import {
   EDITOR_FONT_SIZES,
   setEditorFontSize,
@@ -86,12 +80,6 @@ export function SettingsGeneral() {
         <EditorFontSizeRow />
         <EditorWrapRow />
       </SettingsSection>
-
-      {isDesktop() ? (
-        <SettingsSection label="Notifications">
-          <ThreadNotificationsRow />
-        </SettingsSection>
-      ) : null}
 
       {showOperator ? (
         <>
@@ -1166,37 +1154,6 @@ function EditorFontSizeRow() {
           ))}
         </SelectContent>
       </Select>
-    </SettingsRow>
-  );
-}
-
-function ThreadNotificationsRow() {
-  const enabled = useThreadNotificationsEnabled();
-
-  async function onToggle(next: boolean) {
-    setThreadNotificationsEnabled(next);
-    if (next) {
-      // Ask the OS for permission on enable; warn if the user has blocked it.
-      const result = await requestDesktopNotificationPermission();
-      if (result === "denied") {
-        toast.message("Notifications are blocked", {
-          description:
-            "Enable notifications for ThinkWork in your system settings to receive them.",
-        });
-      }
-    }
-  }
-
-  return (
-    <SettingsRow
-      label="Thread notifications"
-      description="Show a desktop notification when a thread updates."
-    >
-      <Switch
-        checked={enabled}
-        onCheckedChange={(next) => void onToggle(next)}
-        aria-label="Thread notifications"
-      />
     </SettingsRow>
   );
 }

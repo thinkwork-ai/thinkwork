@@ -41,7 +41,6 @@ describe("visibleSettingsNavItems", () => {
     const memberWeb = visibleSettingsNavItems({
       isOperator: false,
       roleResolved: true,
-      isDesktop: false,
     });
 
     expect(memberWeb.map((i) => i.label)).toEqual([
@@ -89,12 +88,10 @@ describe("visibleSettingsNavItems", () => {
     const operatorWeb = visibleSettingsNavItems({
       isOperator: true,
       roleResolved: true,
-      isDesktop: false,
     });
     const memberWeb = visibleSettingsNavItems({
       isOperator: false,
       roleResolved: true,
-      isDesktop: false,
     });
 
     expect(operatorWeb.some((i) => i.to === AGENTS)).toBe(true);
@@ -161,12 +158,10 @@ describe("visibleSettingsNavItems", () => {
     const operatorWeb = visibleSettingsNavItems({
       isOperator: true,
       roleResolved: true,
-      isDesktop: false,
     });
     const memberWeb = visibleSettingsNavItems({
       isOperator: false,
       roleResolved: true,
-      isDesktop: false,
     });
 
     expect(operatorWeb.some((i) => i.to === MODEL_CATALOG)).toBe(true);
@@ -232,27 +227,18 @@ describe("visibleSettingsNavItems", () => {
     const item = SETTINGS_NAV_ITEMS.find((i) => i.to === ACTIVITY);
     expect(item).toBeDefined();
     expect(item?.operatorOnly).toBeFalsy();
-    expect(item?.desktopOnly).toBeFalsy();
 
-    const operatorWeb = visibleSettingsNavItems({
+    const operator = visibleSettingsNavItems({
       isOperator: true,
       roleResolved: true,
-      isDesktop: false,
     });
-    const operatorDesktop = visibleSettingsNavItems({
-      isOperator: true,
-      roleResolved: true,
-      isDesktop: true,
-    });
-    const memberWeb = visibleSettingsNavItems({
+    const member = visibleSettingsNavItems({
       isOperator: false,
       roleResolved: true,
-      isDesktop: false,
     });
 
-    expect(operatorWeb.some((i) => i.to === ACTIVITY)).toBe(true);
-    expect(operatorDesktop.some((i) => i.to === ACTIVITY)).toBe(true);
-    expect(memberWeb.some((i) => i.to === ACTIVITY)).toBe(true);
+    expect(operator.some((i) => i.to === ACTIVITY)).toBe(true);
+    expect(member.some((i) => i.to === ACTIVITY)).toBe(true);
   });
 
   it("no longer lists a standalone Analytics nav entry", () => {

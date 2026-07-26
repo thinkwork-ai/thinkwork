@@ -38,10 +38,8 @@ import {
   SidebarHealthProvider,
   useSidebarHealth,
 } from "@/components/shell/sidebar-health";
-import { DesktopNavigationControls } from "@/components/DesktopApplicationHeader";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
-import { isDesktopBuild } from "@/lib/desktop-runtime";
 import { rememberSettingsReturnTo } from "@/lib/settings-return";
 import {
   SettingsMyPluginActivationsQuery,
@@ -55,7 +53,6 @@ export function SpacesSidebar() {
   const navigate = useNavigate();
   const currentPath = useRouterState({ select: (s) => s.location.pathname });
   const isCollapsed = state === "collapsed";
-  const isDesktop = isDesktopBuild();
   const deploymentProfile = useMemo(
     () => getSpacesDeploymentProfileSnapshot(),
     [],
@@ -92,39 +89,33 @@ export function SpacesSidebar() {
 
   return (
     <SidebarHealthProvider>
-      <Sidebar collapsible={isDesktop ? "offcanvas" : "icon"}>
-        {isDesktop ? (
-          <SidebarHeader className="desktop-app-header h-[var(--desktop-app-header-height)] shrink-0 justify-center bg-sidebar px-4 py-0 pl-20">
-            <DesktopNavigationControls className="w-full" />
-          </SidebarHeader>
-        ) : (
-          <SidebarHeader className="pb-3">
-            <div className="flex items-center gap-2 px-1">
-              <Link
-                to="/new"
-                search={{ spaceId: undefined }}
-                onClick={(event) => {
-                  if (isCollapsed) {
-                    event.preventDefault();
-                    setOpen(true);
-                    return;
-                  }
-                  requestSpacesComposerFocus();
-                }}
-                className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-              >
-                <img
-                  src="/logo.png"
-                  alt="ThinkWork"
-                  className="h-7 w-7 shrink-0 object-contain"
-                />
-                <span className="truncate text-base font-semibold leading-none tracking-tight group-data-[collapsible=icon]:hidden">
-                  ThinkWork
-                </span>
-              </Link>
-            </div>
-          </SidebarHeader>
-        )}
+      <Sidebar collapsible="icon">
+        <SidebarHeader className="pb-3">
+          <div className="flex items-center gap-2 px-1">
+            <Link
+              to="/new"
+              search={{ spaceId: undefined }}
+              onClick={(event) => {
+                if (isCollapsed) {
+                  event.preventDefault();
+                  setOpen(true);
+                  return;
+                }
+                requestSpacesComposerFocus();
+              }}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+            >
+              <img
+                src="/logo.png"
+                alt="ThinkWork"
+                className="h-7 w-7 shrink-0 object-contain"
+              />
+              <span className="truncate text-base font-semibold leading-none tracking-tight group-data-[collapsible=icon]:hidden">
+                ThinkWork
+              </span>
+            </Link>
+          </div>
+        </SidebarHeader>
 
         <SidebarContent className="min-h-0">
           <ChatSidebar />

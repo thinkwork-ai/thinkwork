@@ -25,8 +25,6 @@ export interface SettingsNavItem {
   icon: ComponentType<{ className?: string }>;
   /** When true, only render for operators (owner/admin). */
   operatorOnly?: boolean;
-  /** When true, only render in the desktop build (needs the local bridge). */
-  desktopOnly?: boolean;
 }
 
 // General first (visible to all), then operator-only sections. Appearance is
@@ -136,18 +134,15 @@ export const SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
 
 /**
  * Visible settings sections for the current caller. Operator-only sections need
- * a resolved operator role; desktop-only sections need the desktop bridge
- * build. Pure so it can be unit-tested without rendering the sidebar.
+ * a resolved operator role. Pure so it can be unit-tested without rendering the
+ * sidebar.
  */
 export function visibleSettingsNavItems(opts: {
   isOperator: boolean;
   roleResolved: boolean;
-  isDesktop: boolean;
 }): SettingsNavItem[] {
   return SETTINGS_NAV_ITEMS.filter(
-    (item) =>
-      (!item.operatorOnly || (opts.roleResolved && opts.isOperator)) &&
-      (!item.desktopOnly || opts.isDesktop),
+    (item) => !item.operatorOnly || (opts.roleResolved && opts.isOperator),
   );
 }
 

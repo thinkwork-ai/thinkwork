@@ -40,9 +40,9 @@ interface GitHubRelease {
 /**
  * List the most recent deployable platform releases (newest first).
  *
- * Platform tags look like `v0.1.0-canary.173`; desktop tags
- * (`desktop-v*`) and releases without a published manifest asset are not
- * deployable through the controller and are filtered out.
+ * Platform tags look like `v0.1.0-canary.173`; releases without a published
+ * manifest asset are not deployable through the controller and are filtered
+ * out.
  */
 export async function fetchRecentReleases(
   limit = 5,

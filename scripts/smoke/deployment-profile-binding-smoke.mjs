@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Smoke test a deployment profile across the web, desktop, and mobile binding
+ * Smoke test a deployment profile across the web and mobile binding
  * contract.
  *
  * Dry-run is the default. Set SMOKE_ENABLE_DEPLOYMENT_PROFILE_BINDING=1 to read
@@ -33,7 +33,7 @@ const dryRun = {
   verifies: [
     "Deployed runtime config can be normalized into a v1 deployment profile",
     "Profile validation rejects missing Auth/API/AppSync fields before OAuth",
-    "Web, desktop, and mobile binding snapshots resolve to the same deployment",
+    "Web and mobile binding snapshots resolve to the same deployment",
     "Profile and smoke evidence omit API keys, passwords, AWS keys, tokens, and Secrets Manager payloads",
   ],
 };
@@ -343,26 +343,6 @@ function bindingSnapshots({ profile, profileSha256, runtime }) {
         VITE_COGNITO_DOMAIN: runtime.cognitoDomain,
         VITE_COGNITO_USER_POOL_ID: runtime.cognitoUserPoolId,
         VITE_COGNITO_CLIENT_ID: runtime.cognitoClientId,
-      },
-    },
-    desktop: {
-      configured: true,
-      stage: runtime.stage,
-      deployment: {
-        source: "profile",
-        deploymentId: profile.deploymentId,
-        displayName: profile.displayName,
-        stage: profile.stage,
-        region: profile.region,
-        profileSha256,
-        trustStatus: profile.signature ? "trusted" : "unsigned",
-      },
-      endpoints: {
-        apiUrl: runtime.apiUrl,
-        graphqlHttpUrl: runtime.graphqlHttpUrl,
-        graphqlUrl: runtime.graphqlUrl,
-        graphqlWsUrl: runtime.graphqlWsUrl,
-        cognitoDomain: runtime.cognitoDomain,
       },
     },
     mobile: {

@@ -16,7 +16,6 @@ import { Route as AuthedRouteImport } from "./routes/_authed";
 import { Route as SplatRouteImport } from "./routes/$";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as OnboardingWelcomeRouteImport } from "./routes/onboarding/welcome";
-import { Route as AuthDesktopCallbackRouteImport } from "./routes/auth/desktop-callback";
 import { Route as AuthCallbackRouteImport } from "./routes/auth/callback";
 import { Route as AuthedSettingsRouteImport } from "./routes/_authed/settings";
 import { Route as AuthedShellRouteImport } from "./routes/_authed/_shell";
@@ -149,11 +148,6 @@ const IndexRoute = IndexRouteImport.update({
 const OnboardingWelcomeRoute = OnboardingWelcomeRouteImport.update({
   id: "/onboarding/welcome",
   path: "/onboarding/welcome",
-  getParentRoute: () => rootRouteImport,
-} as any);
-const AuthDesktopCallbackRoute = AuthDesktopCallbackRouteImport.update({
-  id: "/auth/desktop-callback",
-  path: "/auth/desktop-callback",
   getParentRoute: () => rootRouteImport,
 } as any);
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
@@ -737,7 +731,6 @@ export interface FileRoutesByFullPath {
   "/sign-in": typeof SignInRoute;
   "/settings": typeof AuthedSettingsRouteWithChildren;
   "/auth/callback": typeof AuthCallbackRoute;
-  "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/onboarding/welcome": typeof OnboardingWelcomeRoute;
   "/automations": typeof AuthedShellAutomationsRouteWithChildren;
   "/customize": typeof AuthedShellCustomizeRouteWithChildren;
@@ -843,7 +836,6 @@ export interface FileRoutesByTo {
   "/deployment-profile": typeof DeploymentProfileRoute;
   "/sign-in": typeof SignInRoute;
   "/auth/callback": typeof AuthCallbackRoute;
-  "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/onboarding/welcome": typeof OnboardingWelcomeRoute;
   "/new": typeof AuthedShellNewRoute;
   "/profile": typeof AuthedShellProfileRoute;
@@ -950,7 +942,6 @@ export interface FileRoutesById {
   "/_authed/_shell": typeof AuthedShellRouteWithChildren;
   "/_authed/settings": typeof AuthedSettingsRouteWithChildren;
   "/auth/callback": typeof AuthCallbackRoute;
-  "/auth/desktop-callback": typeof AuthDesktopCallbackRoute;
   "/onboarding/welcome": typeof OnboardingWelcomeRoute;
   "/_authed/_shell/automations": typeof AuthedShellAutomationsRouteWithChildren;
   "/_authed/_shell/customize": typeof AuthedShellCustomizeRouteWithChildren;
@@ -1059,7 +1050,6 @@ export interface FileRouteTypes {
     | "/sign-in"
     | "/settings"
     | "/auth/callback"
-    | "/auth/desktop-callback"
     | "/onboarding/welcome"
     | "/automations"
     | "/customize"
@@ -1165,7 +1155,6 @@ export interface FileRouteTypes {
     | "/deployment-profile"
     | "/sign-in"
     | "/auth/callback"
-    | "/auth/desktop-callback"
     | "/onboarding/welcome"
     | "/new"
     | "/profile"
@@ -1271,7 +1260,6 @@ export interface FileRouteTypes {
     | "/_authed/_shell"
     | "/_authed/settings"
     | "/auth/callback"
-    | "/auth/desktop-callback"
     | "/onboarding/welcome"
     | "/_authed/_shell/automations"
     | "/_authed/_shell/customize"
@@ -1379,7 +1367,6 @@ export interface RootRouteChildren {
   DeploymentProfileRoute: typeof DeploymentProfileRoute;
   SignInRoute: typeof SignInRoute;
   AuthCallbackRoute: typeof AuthCallbackRoute;
-  AuthDesktopCallbackRoute: typeof AuthDesktopCallbackRoute;
   OnboardingWelcomeRoute: typeof OnboardingWelcomeRoute;
 }
 
@@ -1432,13 +1419,6 @@ declare module "@tanstack/react-router" {
       path: "/onboarding/welcome";
       fullPath: "/onboarding/welcome";
       preLoaderRoute: typeof OnboardingWelcomeRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/auth/desktop-callback": {
-      id: "/auth/desktop-callback";
-      path: "/auth/desktop-callback";
-      fullPath: "/auth/desktop-callback";
-      preLoaderRoute: typeof AuthDesktopCallbackRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/auth/callback": {
@@ -2502,7 +2482,6 @@ const rootRouteChildren: RootRouteChildren = {
   DeploymentProfileRoute: DeploymentProfileRoute,
   SignInRoute: SignInRoute,
   AuthCallbackRoute: AuthCallbackRoute,
-  AuthDesktopCallbackRoute: AuthDesktopCallbackRoute,
   OnboardingWelcomeRoute: OnboardingWelcomeRoute,
 };
 export const routeTree = rootRouteImport

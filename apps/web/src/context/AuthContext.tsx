@@ -9,7 +9,6 @@ import {
 } from "react";
 import type { AuthUser } from "@/lib/auth";
 import * as auth from "@/lib/auth";
-import { getDesktopBridge } from "@/lib/desktop-runtime";
 import type { TokenStorage } from "@/lib/token-storage";
 import {
   AUTH_DEPLOYMENT_BINDING_STORAGE_KEY,
@@ -23,7 +22,6 @@ import {
   startTokenRefresh,
   stopTokenRefresh,
 } from "@/lib/graphql-client";
-import type { ThinkworkBridge } from "@thinkwork/desktop-ipc";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,12 +54,10 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({
   children,
   tokenStorage = auth.getTokenStorage(),
-  desktopBridge = getDesktopBridge(),
   sessionRestoreTimeoutMs = DEFAULT_SESSION_RESTORE_TIMEOUT_MS,
 }: {
   children: ReactNode;
   tokenStorage?: TokenStorage;
-  desktopBridge?: ThinkworkBridge | null;
   sessionRestoreTimeoutMs?: number;
 }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -139,28 +135,13 @@ export function AuthProvider({
     const unsubscribe = tokenStorage.subscribe(() => {
       void restoreSession(false);
     });
-    const unsubscribeDeepLink = desktopBridge?.onDeepLink((callback) => {
-      if ("type" in callback && callback.type === "deployment-profile") return;
-      void restoreSession(true);
-    });
-    const unsubscribeSignedOut = desktopBridge?.onSignedOut(() => {
-      if (cancelled) return;
-      clearSession();
-      redirectToSignIn();
-    });
-    const unsubscribeOAuthError = desktopBridge?.onOAuthError((event) => {
-      console.error("[auth] desktop OAuth failed", event.message);
-    });
 
     return () => {
       cancelled = true;
       unsubscribe();
-      unsubscribeDeepLink?.();
-      unsubscribeSignedOut?.();
-      unsubscribeOAuthError?.();
       stopTokenRefresh();
     };
-  }, [desktopBridge, sessionRestoreTimeoutMs, tokenStorage]);
+  }, [sessionRestoreTimeoutMs, tokenStorage]);
 
   const handleSignIn = useCallback(
     async (email: string, password: string, newPassword?: string) => {
@@ -201,21 +182,10 @@ export function AuthProvider({
     setUser(null);
     tokenStorage.removeItem(AUTH_DEPLOYMENT_BINDING_STORAGE_KEY);
     tokenStorage.removeItem(AUTH_DEPLOYMENT_PROFILE_SHA_STORAGE_KEY);
-    if (desktopBridge) {
-      void desktopBridge
-        .signOut()
-        .catch((error) => {
-          console.error("[auth] desktop sign-out failed", error);
-        })
-        .finally(() => {
-          signOutInProgressRef.current = false;
-        });
-      return;
-    }
     void auth.signOut().finally(() => {
       signOutInProgressRef.current = false;
     });
-  }, [desktopBridge, tokenStorage]);
+  }, [tokenStorage]);
 
   const getToken = useCallback(() => auth.getIdToken(), []);
 
@@ -267,9 +237,4 @@ export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
-}
-
-function redirectToSignIn(): void {
-  if (window.location.pathname === "/sign-in") return;
-  window.location.href = "/sign-in";
 }

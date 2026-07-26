@@ -340,7 +340,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  delete window.thinkworkBridge;
   resetThreadArtifactPanels();
 });
 
@@ -538,35 +537,6 @@ describe("SpacesThreadDetailRoute", () => {
     renderHeaderTitleTrailing();
 
     expect(screen.getByRole("button", { name: "Thread actions" })).toBeTruthy();
-  });
-
-  it("refreshes generated progress and refetches thread data for a manual desktop refresh event", async () => {
-    render(<SpacesThreadDetailRoute threadId="thread-1" />);
-
-    window.dispatchEvent(new CustomEvent("thinkwork:desktop-refresh"));
-
-    await waitFor(() => {
-      expect(refreshThreadProgressMock).toHaveBeenCalledWith({
-        input: { tenantId: "tenant-1", threadId: "thread-1" },
-      });
-    });
-    await waitFor(() => {
-      expect(reexecuteThreadQuery).toHaveBeenCalledWith({
-        requestPolicy: "network-only",
-      });
-    });
-    expect(reexecuteTasksQuery).toHaveBeenCalledWith({
-      requestPolicy: "network-only",
-    });
-    expect(reexecuteLinkedTasksQuery).toHaveBeenCalledWith({
-      requestPolicy: "network-only",
-    });
-    expect(reexecuteProgressMarkdownQuery).toHaveBeenCalledWith({
-      requestPolicy: "network-only",
-    });
-    expect(reexecuteGoalFilesQuery).toHaveBeenCalledWith({
-      requestPolicy: "network-only",
-    });
   });
 
   it("uses muted desktop chrome styling for thread header icon actions", () => {
@@ -1651,41 +1621,6 @@ describe("SpacesThreadDetailRoute", () => {
     }
   });
 
-  it("routes follow-up sends through managed AgentCore in desktop builds", async () => {
-    vi.stubGlobal("__DESKTOP_BUILD__", true);
-    Object.defineProperty(window, "thinkworkBridge", {
-      configurable: true,
-      value: {},
-    });
-    threadData = {
-      thread: {
-        id: "thread-1",
-        agentId: "agent-1",
-        title: "Agent thread",
-        lifecycleStatus: "COMPLETED",
-        messages: { edges: [] },
-      },
-    };
-    sendMessage.mockResolvedValue({
-      data: { sendMessage: { id: "message-local-1" } },
-    });
-
-    render(<SpacesThreadDetailRoute threadId="thread-1" />);
-
-    setFollowUpText("Run this through AgentCore");
-    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
-
-    await waitFor(() => {
-      expect(sendMessage).toHaveBeenCalledWith({
-        input: {
-          threadId: "thread-1",
-          role: "USER",
-          content: "Run this through AgentCore",
-        },
-      });
-    });
-  });
-
   it("normalizes /skill-creator into message command metadata for follow-up turns", async () => {
     render(<SpacesThreadDetailRoute threadId="thread-1" />);
 
@@ -1852,57 +1787,6 @@ describe("SpacesThreadDetailRoute", () => {
       expect(screen.getByLabelText("Select model").textContent).toContain(
         "Claude Haiku",
       );
-    });
-  });
-
-  it("keeps onboarding task updates on the managed send path", async () => {
-    vi.stubGlobal("__DESKTOP_BUILD__", true);
-    Object.defineProperty(window, "thinkworkBridge", {
-      configurable: true,
-      value: {},
-    });
-    threadData = {
-      thread: {
-        id: "thread-1",
-        agentId: "agent-1",
-        title: "Customer onboarding",
-        lifecycleStatus: "COMPLETED",
-        messages: { edges: [] },
-      },
-    };
-    sendMessage.mockResolvedValue({
-      data: {
-        sendMessage: {
-          id: "message-local-1",
-          metadata: {
-            customerOnboardingChatUpdate: {
-              handled: true,
-              agentDispatchRequired: false,
-            },
-          },
-        },
-      },
-    });
-
-    render(<SpacesThreadDetailRoute threadId="thread-1" />);
-
-    setFollowUpText("DocuSign is complete");
-    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
-
-    await waitFor(() => {
-      expect(sendMessage).toHaveBeenCalledWith({
-        input: {
-          threadId: "thread-1",
-          role: "USER",
-          content: "DocuSign is complete",
-        },
-      });
-    });
-    expect(reexecuteLinkedTasksQuery).toHaveBeenCalledWith({
-      requestPolicy: "network-only",
-    });
-    expect(reexecuteGoalFilesQuery).toHaveBeenCalledWith({
-      requestPolicy: "network-only",
     });
   });
 

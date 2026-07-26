@@ -1,8 +1,6 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import type { DesktopConfig } from "@thinkwork/desktop-ipc";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button, Spinner } from "@thinkwork/ui";
-import { DesktopWindowHeader } from "@/components/DesktopWindowHeader";
 import { EmailPasswordForm } from "@/components/auth/EmailPasswordForm";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -17,11 +15,6 @@ import {
   type PublicOAuthOption,
 } from "@/lib/auth-options";
 import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
-import {
-  getDesktopBridge,
-  isDesktopBuild,
-  normalizeDesktopNext,
-} from "@/lib/desktop-runtime";
 
 interface SignInSearch {
   next?: string;
@@ -30,7 +23,7 @@ interface SignInSearch {
 
 export const Route = createFileRoute("/sign-in")({
   validateSearch: (search: Record<string, unknown>): SignInSearch => ({
-    next: normalizeDesktopNext(search.next),
+    next: normalizeNextPath(search.next),
     legacyMigration:
       search.legacyMigration === "workos" ? ("workos" as const) : undefined,
   }),
@@ -41,31 +34,18 @@ export function SignInPage() {
   const { isAuthenticated, isLoading } = useAuth();
   const { next, legacyMigration } = Route.useSearch();
   const navigate = useNavigate();
-  const isDesktop = isDesktopBuild();
   const canCreateEnvironment = isCentralOnboardingHost();
   const webDeploymentProfile = useMemo(
     () => getSpacesDeploymentProfileSnapshot(),
     [],
   );
   const [error, setError] = useState<string | null>(null);
-  const [desktopConfig, setDesktopConfig] = useState<DesktopConfig | null>(
-    null,
-  );
   const [startingOAuthKey, setStartingOAuthKey] = useState<string | null>(null);
   const isStartingOAuth = startingOAuthKey !== null;
-  const [isProfileBusy, setIsProfileBusy] = useState(false);
   const [authOptions, setAuthOptions] = useState<PublicAuthOptions>({
     password: { enabled: false },
     oauthOptions: [],
   });
-
-  const refreshDesktopConfig = useCallback(async () => {
-    const bridge = getDesktopBridge();
-    if (!bridge || typeof bridge.getDesktopConfig !== "function") return null;
-    const config = await bridge.getDesktopConfig();
-    setDesktopConfig(config);
-    return config;
-  }, []);
 
   // If the user is already signed in, send them to the new-thread workspace.
   useEffect(() => {
@@ -79,120 +59,17 @@ export function SignInPage() {
   }, [isAuthenticated, isLoading, navigate, next]);
 
   useEffect(() => {
-    const bridge = getDesktopBridge();
-    if (!bridge || typeof bridge.onOAuthError !== "function") return;
-
-    return bridge.onOAuthError((event) => {
-      setError(event.message);
-      setStartingOAuthKey(null);
+    let cancelled = false;
+    void fetchPublicAuthOptions(fetch, "web").then((options) => {
+      if (!cancelled) {
+        configurePasswordAuthClient(options.password.clientId);
+        setAuthOptions(options);
+      }
     });
+    return () => {
+      cancelled = true;
+    };
   }, []);
-
-  useEffect(() => {
-    const bridge = getDesktopBridge();
-    if (!bridge || typeof bridge.getDesktopConfig !== "function") return;
-
-    let cancelled = false;
-    void refreshDesktopConfig()
-      .then((config) => {
-        if (!cancelled) setDesktopConfig(config);
-      })
-      .catch((configError) => {
-        if (!cancelled) {
-          setError(
-            configError instanceof Error
-              ? configError.message
-              : "Desktop configuration could not be read.",
-          );
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshDesktopConfig]);
-
-  useEffect(() => {
-    const bridge = getDesktopBridge();
-    if (!bridge || typeof bridge.onDeepLink !== "function") return;
-
-    return bridge.onDeepLink((callback) => {
-      if (!("type" in callback) || callback.type !== "deployment-profile") {
-        return;
-      }
-      void importDesktopProfile(callback.json);
-    });
-  });
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchPublicAuthOptions(fetch, isDesktop ? "desktop" : "web").then(
-      (options) => {
-        if (!cancelled) {
-          configurePasswordAuthClient(options.password.clientId);
-          setAuthOptions(options);
-        }
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [isDesktop]);
-
-  async function importDesktopProfile(json: string) {
-    const bridge = getDesktopBridge();
-    if (!bridge || typeof bridge.importDeploymentProfile !== "function") {
-      setError("Desktop profile import is unavailable.");
-      return;
-    }
-
-    setError(null);
-    setIsProfileBusy(true);
-    try {
-      const config = await bridge.importDeploymentProfile({ json });
-      await bridge.clearTokenStorage();
-      setDesktopConfig(config);
-    } catch (profileError) {
-      setError(
-        profileError instanceof Error
-          ? profileError.message
-          : "Deployment profile import failed.",
-      );
-      await refreshDesktopConfig().catch(() => undefined);
-    } finally {
-      setIsProfileBusy(false);
-    }
-  }
-
-  async function handleDesktopOAuth(option: PublicOAuthOption) {
-    setError(null);
-    const bridge = getDesktopBridge();
-    if (bridge) {
-      if (desktopConfig && !desktopConfig.configured) {
-        setError(
-          `Desktop is missing configuration: ${desktopConfig.missing.join(", ")}`,
-        );
-        return;
-      }
-      setStartingOAuthKey(option.key);
-      try {
-        await bridge.startOAuth({
-          authOptionKey: option.key,
-          ...(next ? { next } : {}),
-        });
-      } catch (oauthError) {
-        setError(
-          oauthError instanceof Error
-            ? oauthError.message
-            : "Desktop sign-in failed",
-        );
-      } finally {
-        setStartingOAuthKey(null);
-      }
-      return;
-    }
-    setError("Desktop bridge is unavailable.");
-  }
 
   async function handlePublicOAuth(option: PublicOAuthOption) {
     setError(null);
@@ -236,18 +113,14 @@ export function SignInPage() {
     }
   }
 
-  const webConfigBlocked = !isDesktop && !webDeploymentProfile.okForOAuth;
+  const webConfigBlocked = !webDeploymentProfile.okForOAuth;
   const publicOAuthOptions = authOptions.oauthOptions;
   const showPasswordForm =
     authOptions.password.enabled && isPasswordSignInConfigured();
   const showPublicOAuthOptions = publicOAuthOptions.length > 0;
   const showLegacyMigration =
-    !isDesktop &&
-    legacyMigration === "workos" &&
-    Boolean(authOptions.legacyMigration);
-  const loginBlocked = isDesktop
-    ? Boolean(desktopConfig && !desktopConfig.configured)
-    : webConfigBlocked;
+    legacyMigration === "workos" && Boolean(authOptions.legacyMigration);
+  const loginBlocked = webConfigBlocked;
 
   const splash = (
     <main className="flex min-h-0 flex-1 items-center justify-center px-6 py-12">
@@ -284,25 +157,6 @@ export function SignInPage() {
           <p role="alert" className="text-center text-sm text-destructive">
             {error}
           </p>
-        )}
-        {isDesktop && desktopConfig && (
-          <div className="flex w-full flex-col items-center gap-3 text-center text-xs text-muted-foreground">
-            <p>
-              {desktopConfig.configured
-                ? `Connected to ${desktopDeploymentLabel(desktopConfig)}`
-                : `Configuration incomplete for ${desktopDeploymentLabel(desktopConfig)}`}
-            </p>
-            {desktopConfig.deployment && (
-              <p className="max-w-full truncate">
-                {desktopConfig.deployment.trustLabel}
-              </p>
-            )}
-            {!desktopConfig.configured && (
-              <p className="mt-1 text-destructive">
-                Missing {desktopConfig.missing.join(", ")}
-              </p>
-            )}
-          </div>
         )}
         <div className="flex w-full flex-col items-center gap-4">
           {showLegacyMigration && (
@@ -343,20 +197,11 @@ export function SignInPage() {
                           ? `Opening ${provider}`
                           : label
                     }
-                    onClick={() =>
-                      void (isDesktop
-                        ? handleDesktopOAuth(option)
-                        : handlePublicOAuth(option))
-                    }
+                    onClick={() => void handlePublicOAuth(option)}
                     size="lg"
                     variant={showPasswordForm ? "outline" : "default"}
                     className="w-full min-w-0"
-                    disabled={
-                      isLoading ||
-                      isStartingOAuth ||
-                      isProfileBusy ||
-                      loginBlocked
-                    }
+                    disabled={isLoading || isStartingOAuth || loginBlocked}
                   >
                     {isOpening ? (
                       <Spinner aria-label={`Opening ${provider}`} />
@@ -393,33 +238,22 @@ export function SignInPage() {
                 Sign-in options are unavailable.
               </p>
             )}
-          {!isDesktop && (
-            <div className="text-center text-xs text-muted-foreground/60">
-              <p>
-                {webDeploymentProfile.okForOAuth
-                  ? `${webDeploymentProfile.releaseVersion || webDeploymentProfile.displayName} · ${webDeploymentProfile.stage} · ${webDeploymentProfile.region}`
-                  : `Configuration incomplete for ${webDeploymentProfile.stage}`}
+          <div className="text-center text-xs text-muted-foreground/60">
+            <p>
+              {webDeploymentProfile.okForOAuth
+                ? `${webDeploymentProfile.releaseVersion || webDeploymentProfile.displayName} · ${webDeploymentProfile.stage} · ${webDeploymentProfile.region}`
+                : `Configuration incomplete for ${webDeploymentProfile.stage}`}
+            </p>
+            {webConfigBlocked && (
+              <p className="mt-1 text-destructive">
+                Missing {webDeploymentProfile.missing.join(", ")}
               </p>
-              {webConfigBlocked && (
-                <p className="mt-1 text-destructive">
-                  Missing {webDeploymentProfile.missing.join(", ")}
-                </p>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </section>
     </main>
   );
-
-  if (isDesktop) {
-    return (
-      <div className="flex min-h-svh flex-col bg-background text-foreground">
-        <DesktopWindowHeader />
-        {splash}
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-svh flex-col bg-background text-foreground">
@@ -433,12 +267,11 @@ function isCentralOnboardingHost(): boolean {
   return window.location.hostname === "app.thinkwork.ai";
 }
 
-function desktopDeploymentLabel(config: DesktopConfig): string {
-  const deployment = config.deployment;
-  if (!deployment) return config.stage;
-  return [deployment.displayName, deployment.stage, deployment.region]
-    .filter(Boolean)
-    .join(" · ");
+/** Only same-origin absolute paths may be used as a post-sign-in redirect. */
+function normalizeNextPath(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  if (!value.startsWith("/") || value.startsWith("//")) return undefined;
+  return value;
 }
 
 function ProviderIcon({ icon }: { icon: PublicOAuthOption["icon"] }) {

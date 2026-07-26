@@ -58,7 +58,9 @@ export default defineConfig(({ mode }) => {
               if (!baseUrl || !apiKey) {
                 res.statusCode = 400;
                 res.setHeader("content-type", "application/json");
-                res.end(JSON.stringify({ error: "baseUrl and API key are required" }));
+                res.end(
+                  JSON.stringify({ error: "baseUrl and API key are required" }),
+                );
                 return;
               }
 
@@ -146,9 +148,6 @@ export default defineConfig(({ mode }) => {
       // amazon-cognito-identity-js uses Node.js globals
       global: "globalThis",
       __THINKWORK_WEB_VERSION__: JSON.stringify(appVersion),
-      // The Electron renderer config overrides this to true. Keeping the web
-      // default false lets Rollup tree-shake desktop-only dynamic imports.
-      __DESKTOP_BUILD__: "false",
       __SANDBOX_IFRAME_SRC__: JSON.stringify(sandboxIframeSrc),
       // Note: __ALLOWED_PARENT_ORIGINS__ is iframe-side trust
       // configuration — defined in vite.iframe-shell.config.ts only.
@@ -165,7 +164,10 @@ export default defineConfig(({ mode }) => {
 });
 
 function hasWorkflowTriggerData(workflow: Record<string, unknown>): boolean {
-  if (Array.isArray(workflow.triggerTypes) && workflow.triggerTypes.length > 0) {
+  if (
+    Array.isArray(workflow.triggerTypes) &&
+    workflow.triggerTypes.length > 0
+  ) {
     return true;
   }
   return Array.isArray(workflow.nodes) && workflow.nodes.length > 0;

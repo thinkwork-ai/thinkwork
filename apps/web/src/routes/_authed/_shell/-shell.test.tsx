@@ -4,10 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const tenantMock = vi.fn();
 const authMock = vi.fn();
 const navigateMock = vi.fn();
-const desktopRuntimeMocks = vi.hoisted(() => ({
-  getDesktopBridge: vi.fn(() => null),
-  isDesktopBuild: vi.fn(() => false),
-}));
 
 vi.mock("@/context/TenantContext", () => ({
   useTenant: () => tenantMock(),
@@ -15,15 +11,8 @@ vi.mock("@/context/TenantContext", () => ({
 vi.mock("@/context/AuthContext", () => ({
   useAuth: () => authMock(),
 }));
-vi.mock("@/lib/desktop-runtime", () => desktopRuntimeMocks);
-
 vi.mock("@/components/AppTopBar", () => ({
   AppTopBar: () => <header data-testid="app-top-bar" />,
-}));
-vi.mock("@/components/DesktopApplicationHeader", () => ({
-  DesktopApplicationHeader: () => (
-    <header data-testid="desktop-application-header" />
-  ),
 }));
 vi.mock("@/components/SpacesSidebar", () => ({
   SpacesSidebar: () => <aside data-testid="computer-sidebar" />,
@@ -91,8 +80,6 @@ afterEach(() => {
   tenantMock.mockReset();
   authMock.mockReset();
   navigateMock.mockReset();
-  desktopRuntimeMocks.getDesktopBridge.mockReturnValue(null);
-  desktopRuntimeMocks.isDesktopBuild.mockReturnValue(false);
 });
 
 describe("_authed/_shell layout", () => {
@@ -143,23 +130,6 @@ describe("_authed/_shell layout", () => {
         .style.getPropertyValue("--sidebar-width"),
     ).toBe("300px");
     expect(resizeHandle.style.left).toBe("300px");
-    expect(screen.getByTestId("outlet")).toBeTruthy();
-  });
-
-  it("adds the desktop application header for Electron builds", () => {
-    desktopRuntimeMocks.isDesktopBuild.mockReturnValue(true);
-    tenantMock.mockReturnValue({ noTenantAssigned: false, isLoading: false });
-
-    render(<ShellLayout />);
-
-    expect(screen.getByTestId("desktop-application-header")).toBeTruthy();
-    expect(screen.getByTestId("computer-sidebar")).toBeTruthy();
-    expect(
-      screen.getByRole("separator", { name: /resize sidebar/i }),
-    ).toBeTruthy();
-    expect(screen.queryByTestId("app-top-bar")).toBeNull();
-    expect(screen.getByTestId("sidebar-inset").className).not.toContain("pt-");
-    expect(screen.getByTestId("sidebar-inset").className).toContain("relative");
     expect(screen.getByTestId("outlet")).toBeTruthy();
   });
 

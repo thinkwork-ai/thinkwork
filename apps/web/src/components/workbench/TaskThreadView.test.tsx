@@ -111,7 +111,6 @@ import { resetThreadArtifactPanels } from "@/components/artifacts/thread-artifac
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  delete window.thinkworkBridge;
   tenantMock.isOperator = false;
   tenantMock.roleResolved = true;
   resetThreadArtifactPanels();
@@ -4865,66 +4864,6 @@ describe("TaskThreadView", () => {
     expect(agentToggle.className).toContain("size-8");
     expect(agentToggle.className).toContain("text-muted-foreground");
     expect(agentToggle.className).not.toContain("bg-white/15");
-  });
-
-  it("does not render a runtime (cloud) toggle in the follow-up composer", () => {
-    vi.stubGlobal("__DESKTOP_BUILD__", true);
-    Object.defineProperty(window, "thinkworkBridge", {
-      configurable: true,
-      value: {},
-    });
-    render(
-      <TaskThreadView
-        thread={{
-          id: "thread-1",
-          title: "Runtime preference thread",
-          lifecycleStatus: "IDLE",
-          messages: [{ id: "message-1", role: "USER", content: "Start" }],
-        }}
-        onSendFollowUp={vi.fn()}
-      />,
-    );
-
-    expect(
-      screen.queryByRole("button", {
-        name: /local pi/i,
-      }),
-    ).toBeNull();
-  });
-
-  it("does not subscribe to desktop-local diagnostics for turn activity", () => {
-    vi.stubGlobal("__DESKTOP_BUILD__", true);
-    Object.defineProperty(window, "thinkworkBridge", {
-      configurable: true,
-      value: {},
-    });
-
-    render(
-      <TaskThreadView
-        thread={{
-          id: "thread-1",
-          title: "Legacy runtime thread",
-          lifecycleStatus: "RUNNING",
-          messages: [{ id: "message-1", role: "USER", content: "Start" }],
-          turns: [
-            {
-              id: "turn-1",
-              status: "running",
-              invocationSource: "desktop-local",
-              startedAt: "2026-05-28T20:52:00.000Z",
-            },
-          ],
-        }}
-        onSendFollowUp={vi.fn()}
-      />,
-    );
-
-    expect(screen.queryByText(/local pi/i)).toBeNull();
-    expect(screen.queryByText(/just-bash/i)).toBeNull();
-    expect(screen.queryByRole("log", { name: /console output/i })).toBeNull();
-
-    openThinkingDisclosure();
-    expect(screen.queryByText(/local pi/i)).toBeNull();
   });
 
   it("renders voice input next to the send button", () => {

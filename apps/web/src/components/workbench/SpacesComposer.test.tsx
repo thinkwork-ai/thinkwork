@@ -16,7 +16,6 @@ import { serializeEditor } from "./SkillTokenInput";
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
-  delete window.thinkworkBridge;
 });
 
 // The composer input is a contenteditable token field, not a <textarea> — drive
@@ -272,18 +271,6 @@ describe("SpacesComposer", () => {
     const startButton = screen.getByRole("button", { name: "Start" });
     expect(voiceInput).toBeTruthy();
     expect(startButton.parentElement?.contains(voiceInput)).toBe(true);
-  });
-
-  it("does not render a runtime (cloud) toggle — runtime is host-derived", () => {
-    vi.stubGlobal("__DESKTOP_BUILD__", true);
-    Object.defineProperty(window, "thinkworkBridge", {
-      configurable: true,
-      value: {},
-    });
-
-    render(<SpacesComposer value="" onChange={() => {}} onSubmit={() => {}} />);
-
-    expect(screen.queryByLabelText(/local pi/i)).toBeNull();
   });
 
   it("submits a non-empty prompt", async () => {

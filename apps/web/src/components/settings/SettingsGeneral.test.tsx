@@ -55,10 +55,6 @@ vi.mock("@/context/TenantContext", () => ({
   useTenant: useTenantMock,
 }));
 
-vi.mock("@/lib/desktop-detection", () => ({
-  isDesktop: () => false,
-}));
-
 vi.mock("@thinkwork/ui", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@thinkwork/ui")>();
   return {

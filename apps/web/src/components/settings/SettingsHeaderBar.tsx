@@ -2,7 +2,6 @@ import { ChevronRight } from "lucide-react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { cn, Tabs, TabsList, TabsTrigger, useIsMobile } from "@thinkwork/ui";
 import { usePageHeader } from "@/context/PageHeaderContext";
-import { isDesktopBuild } from "@/lib/desktop-runtime";
 import {
   settingsCrumbForPath,
   type SettingsCrumb,
@@ -12,12 +11,9 @@ import {
  * Header bar for the settings takeover. Mirrors the main shell's content
  * header: the page title relocates here as a breadcrumb trail (same font as
  * the thread detail header), with the active section's action slot on the
- * right. Back/forward navigation lives in the SettingsSidebar's top strip
- * (next to the traffic lights), mirroring the main nav. On desktop this is the
- * draggable `desktop-app-header` strip; on web it's a plain bordered bar.
+ * right.
  */
 export function SettingsHeaderBar() {
-  const isDesktop = isDesktopBuild();
   const isMobile = useIsMobile();
   const { actions } = usePageHeader();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -124,20 +120,8 @@ export function SettingsHeaderBar() {
   // sharing one grid row.
   if (isMobile && tabStrip) {
     return (
-      <header
-        className={cn(
-          "flex shrink-0 flex-col border-b border-border bg-background text-foreground",
-          isDesktop && "desktop-app-header",
-        )}
-      >
-        <div
-          className={cn(
-            "flex items-center gap-2",
-            isDesktop
-              ? "h-[var(--desktop-app-header-height)] pl-28 pr-3"
-              : "h-12 pl-14 pr-4",
-          )}
-        >
+      <header className="flex shrink-0 flex-col border-b border-border bg-background text-foreground">
+        <div className="flex h-12 items-center gap-2 pl-14 pr-4">
           {breadcrumbNav}
           {actionSlot}
         </div>
@@ -154,13 +138,10 @@ export function SettingsHeaderBar() {
   return (
     <header
       className={cn(
-        "grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-border text-foreground",
-        isDesktop
-          ? "desktop-app-header h-[var(--desktop-app-header-height)] bg-background pr-3"
-          : "h-12 bg-background pr-4",
+        "grid h-12 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-border bg-background pr-4 text-foreground",
         // Clear the floating nav trigger the layout renders at top-left when
         // the docked sidebar is collapsed.
-        isMobile ? (isDesktop ? "pl-28" : "pl-14") : "pl-4",
+        isMobile ? "pl-14" : "pl-4",
       )}
     >
       {breadcrumbNav}
