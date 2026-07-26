@@ -114,6 +114,12 @@ worth its complexity — transcribe every image-bearing page.
 
 ## See also
 
+- [Bedrock KB custom ingestion fails silently on an RDS vector store](./bedrock-kb-custom-ingestion-silent-failures-2026-07-25.md)
+  — the four ingestion failure modes hit while rolling this out (inline
+  metadata, throttle-in-idempotency-record, non-convergent fan-out, stale base
+  documents). Read before changing ingestion.
+- [Rank, not presence, is the retrieval metric on SOP corpora](../architecture-patterns/kb-hybrid-retrieval-for-sop-corpora-2026-07-25.md)
+  — transcription made the content retrievable; it did not make it rank.
 - `docs/solutions/database-issues/` — hand-rolled migrations must be applied to
   dev before merge; the Migration Drift Precheck gate enforces it.
 - Account cap: at most 10 concurrent Ingest/Delete document operations. Page
