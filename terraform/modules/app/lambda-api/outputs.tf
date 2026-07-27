@@ -48,16 +48,6 @@ output "workflow_execution_callback_fn_arn" {
   value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["workflow-execution-callback"].arn : ""
 }
 
-output "okf_efs_refresh_fn_name" {
-  description = "OKF EFS refresh Lambda function name."
-  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["okf-efs-refresh"].function_name : ""
-}
-
-output "okf_efs_refresh_fn_arn" {
-  description = "OKF EFS refresh Lambda ARN."
-  value       = local.deploy_lambda_handlers ? aws_lambda_function.handler["okf-efs-refresh"].arn : ""
-}
-
 output "brain_artifacts_bucket_name" {
   description = "Canonical ThinkWork Brain S3 bucket for source artifacts, ingestion manifests, migration snapshots, vault projections, and exports."
   value       = aws_s3_bucket.brain_artifacts.bucket

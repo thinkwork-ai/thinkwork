@@ -405,22 +405,6 @@ locals {
         }
       },
     ] : [],
-    var.okf_efs_file_system_arn != "" && var.okf_efs_refresh_access_point_arn != "" ? [
-      {
-        Sid    = "OkfEfsHydratorMountWrite"
-        Effect = "Allow"
-        Action = [
-          "elasticfilesystem:ClientMount",
-          "elasticfilesystem:ClientWrite",
-        ]
-        Resource = var.okf_efs_file_system_arn
-        Condition = {
-          StringEquals = {
-            "elasticfilesystem:AccessPointArn" = var.okf_efs_refresh_access_point_arn
-          }
-        }
-      },
-    ] : [],
     # THINK-280 — the headless capability executor (routine-exec-git) mints and
     # advances the broker PoP session by conditional reads/writes on the broker's
     # DynamoDB session table. Empty (→ no grant) when the broker is disabled.
@@ -549,13 +533,6 @@ locals {
           # this after inserting a durable match job row; identity-match also
           # self-invokes for the continuation chain (same shared role).
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-identity-match",
-          # okf-materialize / okf-efs-refresh: the OKF distribution chain
-          # (THINK-200). wiki-compile Event-invokes okf-materialize after a
-          # successful compile; okf-materialize Event-invokes okf-efs-refresh
-          # after publishing bundles, keeping the Pi wiki navigator's EFS
-          # view current without manual invocation.
-          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-okf-materialize",
-          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-okf-efs-refresh",
           # routine-resume: routine-approval-bridge (Phase B U8) invokes
           # this with RequestResponse after a HITL decideInboxItem
           # decision. Calls SendTaskSuccess/SendTaskFailure on the SFN

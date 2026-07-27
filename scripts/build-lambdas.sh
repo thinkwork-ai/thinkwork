@@ -635,12 +635,6 @@ build_handler "ontology-reprocess" \
 build_handler "identity-match" \
   "$REPO_ROOT/packages/api/src/handlers/identity-match.ts"
 
-build_handler "okf-materialize" \
-  "$REPO_ROOT/packages/api/src/handlers/okf-materialize.ts"
-
-build_handler "okf-efs-refresh" \
-  "$REPO_ROOT/packages/api/src/handlers/okf-efs-refresh.ts"
-
 build_handler "artifact-deliver" \
   "$REPO_ROOT/packages/api/src/handlers/artifact-deliver.ts"
 

@@ -19,7 +19,6 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  okf_efs_vpc_enabled = length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
   # Handlers that open direct Postgres connections to registered analyst data
   # sources. VPC-attaching them (analyst_egress_subnet_ids) gives their egress
   # the NAT gateway's stable EIP, which external databases behind an IP
@@ -198,8 +197,15 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
 # aggregate hit IAM's 10,240-byte cap on 2026-06-11 (#2378/#2379). New grants
 # go into the grouped managed policies, never inline.
 
+# Every VPC-attached handler on the shared Lambda role needs the ENI
+# create/describe/delete grant, or its invocations fail before the handler
+# runs. This was gated on the OKF EFS mount alone, which was true by accident:
+# okf-efs-refresh was simply the first VPC-attached handler. The analyst
+# data-path handlers and the Neptune-attached identity-graph-projector share
+# this role and had been riding that gate. Gate on the surviving VPC consumers
+# instead — the OKF mount is gone as of the wiki-removal arc U3.
 resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
-  count = local.okf_efs_vpc_enabled ? 1 : 0
+  count = local.analyst_vpc_enabled || local.neptune_vpc_enabled ? 1 : 0
 
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"

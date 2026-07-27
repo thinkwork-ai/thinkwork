@@ -245,16 +245,6 @@ output "okf_wiki_pi_read_access_point_arn" {
   value       = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_pi_read[0].arn : null
 }
 
-output "okf_efs_refresh_fn_name" {
-  description = "OKF EFS refresh Lambda function name."
-  value       = module.api.okf_efs_refresh_fn_name
-}
-
-output "okf_efs_refresh_fn_arn" {
-  description = "OKF EFS refresh Lambda ARN."
-  value       = module.api.okf_efs_refresh_fn_arn
-}
-
 output "twenty_provisioned" {
   description = "Whether the Twenty CRM retained managed-app substrate is provisioned"
   value       = local.twenty_provisioned
