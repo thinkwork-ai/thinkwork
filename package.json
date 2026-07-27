@@ -48,7 +48,8 @@
     "@aws-sdk/client-service-quotas": "^3.1088.0",
     "@smithy/eventstream-codec": "^4.2.14",
     "esbuild": "^0.28.0",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "yaml": "^2.9.0"
   },
   "pnpm": {
     "neverBuiltDependencies": [

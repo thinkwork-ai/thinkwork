@@ -18,6 +18,13 @@ const deployWorkflow = readFileSync(
   join(HERE, "..", "..", "..", ".github", "workflows", "deploy.yml"),
   "utf8",
 );
+// The Terraform variable set was extracted out of deploy.yml's apply step so
+// the plan_only dispatch mode builds it identically. The deadline guard below
+// still holds — it just lives here now.
+const terraformVars = readFileSync(
+  join(HERE, "..", "..", "..", "scripts", "deploy", "terraform-vars.sh"),
+  "utf8",
+);
 
 describe("migration 0261 — native auth control plane", () => {
   it("exports provider-neutral auth tables independently of plugins", () => {
@@ -124,14 +131,19 @@ describe("migration 0261 — native auth control plane", () => {
   });
 
   it("passes and fail-checks the repository migration deadline on direct deploys", () => {
+    // deploy.yml still maps the repository variable into the environment;
+    // terraform-vars.sh consumes it and enforces the deadline.
     expect(deployWorkflow).toContain("vars.AUTH_MIGRATION_RECOVERY_DEADLINE");
     expect(deployWorkflow).toContain(
+      "source ../../../scripts/deploy/terraform-vars.sh",
+    );
+    expect(terraformVars).toContain(
       '-var "auth_migration_recovery_deadline=$AUTH_MIGRATION_RECOVERY_DEADLINE"',
     );
-    expect(deployWorkflow).toContain(
+    expect(terraformVars).toContain(
       'if [ "$AUTH_RETIREMENT_PHASE" = "coexistence" ]',
     );
-    expect(deployWorkflow).toContain(
+    expect(terraformVars).toContain(
       'date --date="$AUTH_MIGRATION_RECOVERY_DEADLINE"',
     );
   });
