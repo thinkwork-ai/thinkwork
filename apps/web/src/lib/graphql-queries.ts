@@ -2592,7 +2592,6 @@ export const ComputerMemorySystemConfigQuery = gql`
       spaceMemoryEnabled
       legacyHindsightAvailable
       companyDistillationEnabled
-      wikiProjectionEnabled
     }
   }
 `;
@@ -2629,17 +2628,6 @@ export const SearchQuery = gql`
           title
           spaceId
           updatedAt
-        }
-        wikiHits {
-          score
-          matchedAlias
-          page {
-            id
-            type
-            slug
-            title
-            displayType
-          }
         }
         entityHits {
           entityId
