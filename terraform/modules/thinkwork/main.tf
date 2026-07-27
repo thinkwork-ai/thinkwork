@@ -1613,7 +1613,7 @@ module "hindsight" {
 }
 module "twenty" {
   count  = local.twenty_provisioned ? 1 : 0
-  source = "../../../plugins/twenty/terraform/twenty"
+  source = "../app/twenty"
 
   stage                = var.stage
   vpc_id               = module.vpc.vpc_id
@@ -1651,7 +1651,7 @@ module "twenty" {
 
 module "n8n" {
   count  = local.n8n_provisioned ? 1 : 0
-  source = "../../../plugins/n8n/terraform/n8n"
+  source = "../app/n8n"
 
   stage                = var.stage
   vpc_id               = module.vpc.vpc_id

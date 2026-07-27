@@ -89,7 +89,7 @@ packages.
 
 ```hcl
 module "n8n" {
-  source = "../../../plugins/n8n/terraform/n8n"
+  source = "../app/n8n"
 
   stage                = var.stage
   vpc_id               = module.vpc.vpc_id

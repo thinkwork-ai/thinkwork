@@ -292,24 +292,24 @@ resource "terraform_data" "database_lifecycle" {
 
 resource "terraform_data" "configuration_guardrails" {
   input = {
-    runtime_enabled                         = var.runtime_enabled
-    main_desired_count                      = var.main_desired_count
-    worker_desired_count                    = var.worker_desired_count
-    image_uri                               = var.image_uri
-    public_url                              = var.public_url
-    certificate_arn                         = var.certificate_arn
-    database_host                           = var.database_host
-    database_name                           = var.database_name
-    database_username                       = var.database_username
-    database_url_secret_arn                 = local.effective_database_url_secret_arn
-    encryption_key_secret_arn               = local.effective_encryption_key_secret_arn
-    operator_secret_arn                     = local.effective_operator_secret_arn
-    service_credential_secret_arn           = local.effective_service_credential_secret_arn
-    storage_bucket_name                     = var.storage_bucket_name
-    storage_prefix                          = local.storage_prefix
-    queue_mode                              = var.queue_mode
-    cache_engine                            = var.cache_engine
-    cache_subnet_ids                        = local.effective_cache_subnet_ids
+    runtime_enabled               = var.runtime_enabled
+    main_desired_count            = var.main_desired_count
+    worker_desired_count          = var.worker_desired_count
+    image_uri                     = var.image_uri
+    public_url                    = var.public_url
+    certificate_arn               = var.certificate_arn
+    database_host                 = var.database_host
+    database_name                 = var.database_name
+    database_username             = var.database_username
+    database_url_secret_arn       = local.effective_database_url_secret_arn
+    encryption_key_secret_arn     = local.effective_encryption_key_secret_arn
+    operator_secret_arn           = local.effective_operator_secret_arn
+    service_credential_secret_arn = local.effective_service_credential_secret_arn
+    storage_bucket_name           = var.storage_bucket_name
+    storage_prefix                = local.storage_prefix
+    queue_mode                    = var.queue_mode
+    cache_engine                  = var.cache_engine
+    cache_subnet_ids              = local.effective_cache_subnet_ids
   }
 
   lifecycle {
