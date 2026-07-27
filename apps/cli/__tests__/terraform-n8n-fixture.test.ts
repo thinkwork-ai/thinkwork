@@ -15,13 +15,13 @@ import { describe, expect, it } from "vitest";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../../..");
 
-const N8N_MAIN = resolve(REPO_ROOT, "plugins/n8n/terraform/n8n/main.tf");
-const N8N_VARS = resolve(REPO_ROOT, "plugins/n8n/terraform/n8n/variables.tf");
-const N8N_OUTPUTS = resolve(REPO_ROOT, "plugins/n8n/terraform/n8n/outputs.tf");
-const N8N_README = resolve(REPO_ROOT, "plugins/n8n/terraform/n8n/README.md");
+const N8N_MAIN = resolve(REPO_ROOT, "terraform/modules/app/n8n/main.tf");
+const N8N_VARS = resolve(REPO_ROOT, "terraform/modules/app/n8n/variables.tf");
+const N8N_OUTPUTS = resolve(REPO_ROOT, "terraform/modules/app/n8n/outputs.tf");
+const N8N_README = resolve(REPO_ROOT, "terraform/modules/app/n8n/README.md");
 const N8N_DB_SCRIPT = resolve(
   REPO_ROOT,
-  "plugins/n8n/terraform/n8n/scripts/sync-database.py",
+  "terraform/modules/app/n8n/scripts/sync-database.py",
 );
 const THINKWORK_MAIN = resolve(
   REPO_ROOT,
@@ -288,9 +288,7 @@ describe("n8n Terraform app module", () => {
     expect(vars).toMatch(/variable "n8n_storage_bucket_name"/);
     expect(source).toMatch(/n8n_domain.*n8n\.\$\{var\.www_domain\}/);
     expect(n8nModule).toMatch(/count\s*=\s*local\.n8n_provisioned \? 1 : 0/);
-    expect(n8nModule).toMatch(
-      /source\s*=\s*"\.\.\/\.\.\/\.\.\/plugins\/n8n\/terraform\/n8n"/,
-    );
+    expect(n8nModule).toMatch(/source\s*=\s*"\.\.\/app\/n8n"/);
     expect(n8nModule).toMatch(
       /runtime_enabled\s*=\s*local\.n8n_runtime_enabled/,
     );

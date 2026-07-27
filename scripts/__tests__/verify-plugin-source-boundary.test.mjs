@@ -12,7 +12,25 @@ import {
 
 describe("verify-plugin-source-boundary", () => {
   it("keeps the default active migration allowlist closed", () => {
-    assert.deepEqual(pluginSourceBoundaryAllowlist, []);
+    // The ratchet is the exact list, not emptiness: a fourth entry still
+    // fails. These three are the Twenty and n8n infrastructure relocated out
+    // of plugins/ ahead of the plugin-system removal — their deployed stacks
+    // survive it, so their Terraform moved to terraform/modules/app/. The
+    // guard only flags them because "twenty" and "n8n" are still plugin keys;
+    // once plugins/ is gone they stop being keys and these entries, along
+    // with this guard, go away.
+    assert.deepEqual(
+      pluginSourceBoundaryAllowlist.map((entry) => entry.pathPrefix).sort(),
+      [
+        "scripts/smoke/managed-apps/",
+        "terraform/modules/app/n8n/",
+        "terraform/modules/app/twenty/",
+      ],
+    );
+    assert.ok(
+      pluginSourceBoundaryAllowlist.every((entry) => entry.reason?.length > 0),
+      "every migration exception must carry a reason",
+    );
     assert.ok(
       sharedPluginTermAllowlist.length > 0,
       "historical/shared false-positive entries should remain separate from migration debt",

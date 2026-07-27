@@ -359,10 +359,8 @@ describe("twenty plugin manifest", () => {
   });
 
   it("enables Twenty local logic functions for the first-party workflow action", () => {
-    const terraformModule = readRepo("plugins/twenty/terraform/twenty/main.tf");
-    const terraformReadme = readRepo(
-      "plugins/twenty/terraform/twenty/README.md",
-    );
+    const terraformModule = readRepo("terraform/modules/app/twenty/main.tf");
+    const terraformReadme = readRepo("terraform/modules/app/twenty/README.md");
 
     expect(terraformModule).toContain(
       '{ name = "LOGIC_FUNCTION_TYPE", value = "LOCAL" }',

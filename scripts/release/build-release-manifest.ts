@@ -722,14 +722,14 @@ function defaultManagedApps(version: string): ManagedAppDescriptor[] {
       id: "n8n",
       displayName: "n8n",
       terraformModule: {
-        source: `${TERRAFORM_MODULE_SOURCE}//plugins/n8n/terraform/n8n`,
+        source: `${TERRAFORM_MODULE_SOURCE}//modules/app/n8n`,
         version,
       },
       requiredImages: ["n8n-runtime"],
       smokeContracts: [
         {
           id: "n8n-runtime-health",
-          command: "plugins/n8n/smoke/n8n-managed-app-smoke.mjs",
+          command: "scripts/smoke/managed-apps/n8n-managed-app-smoke.mjs",
           required: true,
         },
       ],
@@ -746,7 +746,7 @@ function defaultManagedApps(version: string): ManagedAppDescriptor[] {
       smokeContracts: [
         {
           id: "twenty-health",
-          command: "plugins/twenty/smoke/twenty-managed-app-smoke.mjs",
+          command: "scripts/smoke/managed-apps/twenty-managed-app-smoke.mjs",
           required: true,
         },
       ],

@@ -324,9 +324,10 @@ function managedAppKeys() {
 }
 
 function expectedTerraformModuleSuffix(appKey) {
-  return appKey === "n8n"
-    ? "//plugins/n8n/terraform/n8n"
-    : `//modules/app/${appKey}`;
+  // n8n needed a special case while its module lived under plugins/. It moved
+  // to terraform/modules/app/n8n with the plugin-system removal, so every
+  // managed app now resolves the same way.
+  return `//modules/app/${appKey}`;
 }
 
 function resolveSsmPrefix() {

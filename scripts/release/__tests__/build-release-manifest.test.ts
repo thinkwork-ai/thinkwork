@@ -352,13 +352,13 @@ test("CLI build script includes default managed apps when no overrides are passe
     manifest.managedApps
       .find((app) => app.id === "n8n")
       ?.smokeContracts?.map((contract) => contract.command),
-    ["plugins/n8n/smoke/n8n-managed-app-smoke.mjs"],
+    ["scripts/smoke/managed-apps/n8n-managed-app-smoke.mjs"],
   );
   assert.deepEqual(
     manifest.managedApps
       .find((app) => app.id === "twenty")
       ?.smokeContracts?.map((contract) => contract.command),
-    ["plugins/twenty/smoke/twenty-managed-app-smoke.mjs"],
+    ["scripts/smoke/managed-apps/twenty-managed-app-smoke.mjs"],
   );
   assert.deepEqual(
     manifest.managedApps.find((app) => app.id === "twenty")?.requiredArtifacts,

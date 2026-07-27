@@ -1,4 +1,20 @@
-export const pluginSourceBoundaryAllowlist = [];
+export const pluginSourceBoundaryAllowlist = [
+  {
+    pathPrefix: "terraform/modules/app/twenty/",
+    reason:
+      "Twenty CRM infrastructure, relocated out of plugins/ ahead of the plugin-system removal. The deployed stack (ECS, ALB, ElastiCache, EFS, IAM, secrets) survives that removal, so its Terraform lives with every other app module. This allowlist entry — and this guard — go away with the plugin system.",
+  },
+  {
+    pathPrefix: "terraform/modules/app/n8n/",
+    reason:
+      "n8n infrastructure, relocated out of plugins/ ahead of the plugin-system removal. Same reasoning as terraform/modules/app/twenty/.",
+  },
+  {
+    pathPrefix: "scripts/smoke/managed-apps/",
+    reason:
+      "managed-app smoke contracts for the surviving Twenty and n8n stacks, moved with their Terraform modules.",
+  },
+];
 
 export const sharedPluginTermAllowlist = [
   {
