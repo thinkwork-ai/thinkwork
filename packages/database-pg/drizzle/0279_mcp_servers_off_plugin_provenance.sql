@@ -10,9 +10,10 @@
 -- registration — the same shape lastmile-dispatch and digital-twin already
 -- use.
 --
--- This is data-only. It creates no objects, so it declares no `-- creates:`
--- markers and the db:migrate-manual reporter has nothing to check; the
--- verification queries at the bottom are the check.
+-- data-only-migration
+-- No durable schema objects: this only rewrites provenance columns. The
+-- in-transaction assertions below are the correctness gate, and the
+-- verification queries at the bottom are the post-apply check.
 --
 -- Why this is safe:
 --
