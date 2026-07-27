@@ -615,8 +615,8 @@ variable "job_scheduler_role_arn" {
   default     = ""
 }
 
-variable "wiki_compile_model_id" {
-  description = "Bedrock model id the wiki-compile Lambda uses for the leaf planner, aggregation planner, and section writer. Any Converse-compatible model works. Override per-env if you want to spike a different model without re-deploying code."
+variable "ontology_scan_model_id" {
+  description = "Bedrock model id the ontology-scan Lambda uses for suggestion scans. Any Converse-compatible model works. Override per-env to spike a different model without re-deploying code. (Named wiki_compile_model_id until the wiki backend was removed; ontology-scan was always its other consumer and is now its only one.)"
   type        = string
   default     = "openai.gpt-oss-120b-1:0"
 }
@@ -680,12 +680,6 @@ variable "wiki_source" {
   }
 }
 
-variable "google_places_api_key" {
-  description = "Google Places API (New) key used by wiki-compile for POI → city/state/country hierarchy enrichment. Stored as a SecureString SSM parameter at /thinkwork/<stage>/google-places/api-key. Empty default creates the parameter with a placeholder value; operator populates via `aws ssm put-parameter --overwrite`. The parameter's value has lifecycle.ignore_changes set so CLI rotation sticks across terraform applies. Compile gracefully degrades when the key is absent (metadata-only place rows) — never fails compile."
-  type        = string
-  default     = ""
-  sensitive   = true
-}
 
 # ---------------------------------------------------------------------------
 # Per-user OAuth client credentials

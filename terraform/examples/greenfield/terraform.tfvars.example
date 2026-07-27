@@ -115,7 +115,6 @@ db_password = "CHANGE_ME_strong_password_here"
 #     --name /thinkwork/<stage>/google-places/api-key --value <KEY>
 # (terraform's lifecycle.ignore_changes on the value keeps your manual
 # value from being overwritten on future applies.)
-# google_places_api_key = ""
 
 # Public website (apps/www) custom domain.
 # Leave www_domain empty to skip the custom domain and serve on the raw

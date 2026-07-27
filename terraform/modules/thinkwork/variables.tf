@@ -1393,8 +1393,8 @@ variable "cognito_invite_sms_message" {
   }
 }
 
-variable "wiki_compile_model_id" {
-  description = "Bedrock model id used by the wiki-compile Lambda (leaf planner + aggregation planner + section writer). Any Converse-compatible model works; change without a code deploy."
+variable "ontology_scan_model_id" {
+  description = "Bedrock model id the ontology-scan Lambda uses for suggestion scans. Any Converse-compatible model works. Override per-env to spike a different model without re-deploying code. (Named wiki_compile_model_id until the wiki backend was removed; ontology-scan was always its other consumer and is now its only one.)"
   type        = string
   default     = "openai.gpt-oss-120b-1:0"
 }
@@ -1446,12 +1446,6 @@ variable "wiki_deterministic_linking_enabled" {
   default     = "true"
 }
 
-variable "google_places_api_key" {
-  description = "Google Places API (New) key used by wiki-compile for POI → city/state/country hierarchy enrichment. Stored as SSM SecureString at /thinkwork/<stage>/google-places/api-key. Empty string = parameter created with a placeholder; operator populates via `aws ssm put-parameter --overwrite`. Compile gracefully degrades to metadata-only rows when the key is absent — never fails compile."
-  type        = string
-  default     = ""
-  sensitive   = true
-}
 
 variable "mapbox_public_token" {
   description = "Mapbox public pk.* token consumed by the apps/web MapView primitive (in @thinkwork/computer-stdlib) for inline map tile rendering inside generated applets. Flows from this variable → terraform output → scripts/build-web.sh → apps/web/.env.production as VITE_MAPBOX_PUBLIC_TOKEN. URL-restrict on the Mapbox dashboard to the deployed `computer.<apex>` host (and any dev hosts) — the token ships in the public Vite bundle, so URL allowlist is the security boundary. Empty string is acceptable: MapView falls back to OpenStreetMap tiles when the env var is unset, so dev environments without an operator-provisioned token still render maps."

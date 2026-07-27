@@ -533,16 +533,17 @@ variable "stripe_price_ids_json" {
   default     = "{}"
 }
 
-variable "wiki_compile_model_id" {
+variable "ontology_scan_model_id" {
   description = <<-EOT
-    Bedrock model id the wiki-compile Lambda uses for the leaf planner,
-    aggregation planner, and section writer. Any Converse-compatible
-    model works; change without a code deploy.
+    Bedrock model id the ontology-scan Lambda uses for suggestion scans.
+    Any Converse-compatible model works; change without a code deploy.
 
     Default: openai.gpt-oss-120b-1:0 (strong output quality at a lower
     per-minute throttle risk than Claude Haiku 4.5 on shared dev
-    accounts). Swap to us.anthropic.claude-haiku-4-5-20251001-v1:0 for
-    Claude, or amazon.nova-micro-v1:0 for a low-cost spike.
+    accounts).
+
+    Named wiki_compile_model_id until the wiki backend was removed;
+    ontology-scan was always its other consumer and is now its only one.
   EOT
   type        = string
   default     = "openai.gpt-oss-120b-1:0"
@@ -648,23 +649,6 @@ variable "wiki_aggregation_pass_enabled" {
   default     = "true"
 }
 
-variable "google_places_api_key" {
-  description = <<-EOT
-    Google Places API (New) key used by wiki-compile to enrich POI records
-    with city/state/country hierarchy during compile. When empty, compile
-    gracefully degrades to metadata-only place rows (no hierarchy, no
-    backing pages), so this is opt-in. Stored as a SecureString at
-    /thinkwork/<stage>/google-places/api-key — see
-    terraform/modules/app/lambda-api/handlers.tf for the SSM resource.
-
-    The parameter's value has lifecycle.ignore_changes set, so you can
-    rotate via `aws ssm put-parameter --overwrite` without terraform
-    fighting you on the next apply.
-  EOT
-  type        = string
-  default     = ""
-  sensitive   = true
-}
 
 variable "mapbox_public_token" {
   description = <<-EOT
@@ -1035,7 +1019,7 @@ module "thinkwork" {
   # Wiki compile Lambda config. Pinned so unrelated terraform applies
   # don't wipe the Bedrock model or the aggregation flag back to
   # whatever the Lambda env defaults to.
-  wiki_compile_model_id                         = var.wiki_compile_model_id
+  ontology_scan_model_id                        = var.ontology_scan_model_id
   brain_source_agent_model_id                   = var.brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
@@ -1045,7 +1029,6 @@ module "thinkwork" {
   ontology_scan_sweep_enabled                   = var.ontology_scan_sweep_enabled
   identity_drift_match_enabled                  = var.identity_drift_match_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
-  google_places_api_key                         = var.google_places_api_key
   requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled
   requester_memory_dreaming_enabled             = var.requester_memory_dreaming_enabled
   requester_memory_dreaming_schedule_expression = var.requester_memory_dreaming_schedule_expression

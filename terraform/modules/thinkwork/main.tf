@@ -1260,7 +1260,7 @@ module "api" {
   enable_slack_workspace_app                    = var.enable_slack_workspace_app
   enable_msteams_app                            = var.enable_msteams_app
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
-  wiki_compile_model_id                         = var.wiki_compile_model_id
+  ontology_scan_model_id                        = var.ontology_scan_model_id
   brain_source_agent_model_id                   = var.brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
@@ -1268,7 +1268,6 @@ module "api" {
   ontology_scan_sweep_enabled                   = var.ontology_scan_sweep_enabled
   identity_drift_match_enabled                  = var.identity_drift_match_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
-  google_places_api_key                         = var.google_places_api_key
   enable_workspace_orchestration                = var.enable_workspace_orchestration
   requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled
   requester_memory_dreaming_enabled             = var.requester_memory_dreaming_enabled
