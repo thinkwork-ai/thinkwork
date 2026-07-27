@@ -24,11 +24,11 @@ import { verifyMcpAccessToken } from "./mcp-oauth.js";
 
 const MAX_LIMIT = 50;
 
-const TOOLS = [
+export const TOOLS = [
   {
     name: "query_context",
     description:
-      "Search permissioned Thinkwork context across fast default providers: ontology Brain facets, wiki pages, workspace files, and approved context-safe MCP tools. Use query_memory_context for Hindsight user-carried or current-space long-term memory.",
+      "Search permissioned Thinkwork context across fast default providers: ontology Brain facets, workspace files, and approved context-safe MCP tools. Use query_memory_context for Hindsight user-carried or current-space long-term memory.",
     inputSchema: {
       type: "object",
       properties: {
@@ -58,7 +58,6 @@ const TOOLS = [
                 enum: [
                   "memory",
                   "brain",
-                  "wiki",
                   "workspace",
                   "knowledge-base",
                   "mcp",
@@ -207,23 +206,6 @@ const TOOLS = [
           type: "array",
           items: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
         },
-      },
-      required: ["query"],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: "query_wiki_context",
-    description:
-      "Search compiled wiki pages — tenant-shared pages plus your own. Use this for fast page/entity/topic lookup without waiting on long-term memory recall. These are compiled narrative pages; for traversing raw entities and relationship edges in the knowledge graph, use knowledge_graph_search instead.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string" },
-        mode: { type: "string", enum: ["results", "answer"] },
-        scope: { type: "string", enum: ["personal", "auto"] },
-        depth: { type: "string", enum: ["quick", "deep"] },
-        limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT },
       },
       required: ["query"],
       additionalProperties: false,
@@ -428,11 +410,6 @@ async function handleToolCall(
         callerWithTarget,
         brainProviderOptionsArg(args),
       );
-    }
-    case "query_wiki_context": {
-      return await queryContextTool(request.id, args, callerWithTarget, {
-        families: ["wiki"],
-      });
     }
     case "list_context_providers": {
       const providers = await service.listProviders({ caller });
