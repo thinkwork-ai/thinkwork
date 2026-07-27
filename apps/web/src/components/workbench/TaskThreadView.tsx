@@ -4836,14 +4836,6 @@ export function actionRowsForTurn(
       );
       continue;
     }
-    const wikiRow = wikiContextActionRow(record);
-    if (wikiRow) {
-      const key = `wiki_context:${wikiContextKey(record)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      rows.push(wikiRow);
-      continue;
-    }
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -5238,15 +5230,6 @@ function actionRowForEvent(event: TaskThreadEvent): ActionRowData | null {
       detail,
       kind: toolKind(toolName),
     };
-  }
-  if (eventType === "wiki_context_result") {
-    return (
-      wikiContextActionRow(payload) ?? {
-        title: "Wiki returned 0 pages",
-        detail,
-        kind: "source" as const,
-      }
-    );
   }
   if (eventType === "browser_automation_started") {
     return { title: "Opening browser", detail, kind: "source" as const };
@@ -5808,8 +5791,7 @@ function toolKind(name: string): "tool" | "source" | "code" {
   if (
     normalized.includes("search") ||
     normalized.includes("source") ||
-    normalized.includes("crm") ||
-    normalized.startsWith("wiki_")
+    normalized.includes("crm")
   ) {
     return "source";
   }
@@ -5887,12 +5869,6 @@ function toolActionTitle(name: string) {
   if (normalized === "emit_document") {
     return "Composing document";
   }
-  if (normalized === "query_wiki_context") {
-    return "Checking wiki";
-  }
-  if (normalized.startsWith("wiki_")) {
-    return `Checking OKF wiki ${name.replace(/^wiki_/, "").replace(/_/g, " ")}`;
-  }
   if (normalized.includes("web_search") || normalized.includes("search")) {
     return "Finding sources";
   }
@@ -5919,80 +5895,7 @@ function toolCalledFallbackDetail(name: string) {
   return undefined;
 }
 
-function wikiContextKey(record: Record<string, unknown>) {
-  const wiki = wikiContextFromRecord(record);
-  const query = stringValue(wiki?.query);
-  const id = stringValue(record.id);
-  return [id, query, numberValue(wiki?.result_count) ?? 0]
-    .filter((part) => part !== null && part !== undefined && part !== "")
-    .join(":");
-}
-
-function wikiContextActionRow(
-  record: Record<string, unknown>,
-): ActionRowData | null {
-  const wiki = wikiContextFromRecord(record);
-  if (!wiki) return null;
-  const query = stringValue(wiki.query);
-  const count = numberValue(wiki.result_count) ?? 0;
-  const pages = parseArray(wiki.top_pages)
-    .map((page) => parseRecord(page))
-    .filter((page) => Object.keys(page).length > 0);
-  const pageTitles = pages
-    .map((page) => stringValue(page.title) || stringValue(page.slug))
-    .filter(Boolean)
-    .slice(0, 3);
-  const provider = stringValue(wiki.retrieval_mode) || "wiki";
-  const status = stringValue(wiki.status);
-  const summaryParts = [
-    query ? `Query: ${query}` : null,
-    `Results: ${count}`,
-    pageTitles.length > 0 ? `Top pages: ${pageTitles.join(", ")}` : null,
-    provider ? `Mode: ${provider}` : null,
-    status ? `Status: ${status.replace(/_/g, " ")}` : null,
-  ].filter(Boolean);
-  const detailParts = [
-    summaryParts.join("\n"),
-    JSON.stringify(wiki, null, 2),
-  ].filter(Boolean);
-  return {
-    title: `Wiki returned ${count} page${count === 1 ? "" : "s"}`,
-    detail: detailParts.join("\n\n"),
-    kind: "source",
-  };
-}
-
-function wikiContextFromRecord(
-  record: Record<string, unknown> | null | undefined,
-): Record<string, unknown> | null {
-  if (!record) return null;
-  if (
-    record.result_count !== undefined ||
-    record.top_pages !== undefined ||
-    record.surface === "query_wiki_context"
-  ) {
-    return record;
-  }
-  const direct = parseRecord(record.wiki_context ?? record.wikiContext);
-  if (Object.keys(direct).length > 0) return direct;
-
-  const details = parseRecord(record.details);
-  const detailWiki = parseRecord(details.wiki_context ?? details.wikiContext);
-  if (Object.keys(detailWiki).length > 0) return detailWiki;
-
-  const result = parseRecord(record.result);
-  const resultWiki = parseRecord(
-    result.wiki_context ??
-      result.wikiContext ??
-      parseRecord(result.details).wiki_context,
-  );
-  return Object.keys(resultWiki).length > 0 ? resultWiki : null;
-}
-
 function toolInvocationDetail(record: Record<string, unknown>) {
-  const wikiRow = wikiContextActionRow(record);
-  if (wikiRow?.detail) return wikiRow.detail;
-
   const inputPreview = stringValue(record.input_preview);
   const outputPreview = stringValue(record.output_preview);
   const status = stringValue(record.status);

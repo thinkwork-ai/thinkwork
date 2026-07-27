@@ -495,10 +495,7 @@ function appendToolEvents(
     events.push({
       key,
       parentKey: "turn",
-      eventType:
-        toolName === "query_wiki_context"
-          ? "memory_context_lookup"
-          : "tool_invocation",
+      eventType: "tool_invocation",
       eventStatus: toolStatus(invocation),
       requestId: `${input.threadTurnId}:tool:${toolCallId}`,
       parentRequestId: input.threadTurnId,

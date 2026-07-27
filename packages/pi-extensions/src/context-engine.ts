@@ -35,13 +35,11 @@ const TOOL_NAMES = [
   "query_context",
   "query_memory_context",
   "query_brain_context",
-  "query_wiki_context",
 ] as const;
 
 const TOOL_NAMES_WITHOUT_MEMORY = [
   "query_context",
   "query_brain_context",
-  "query_wiki_context",
 ] as const;
 
 function recordOf(value: unknown): Record<string, unknown> {
@@ -105,111 +103,6 @@ function stringValue(value: unknown): string | undefined {
 function numberValue(value: unknown): number | undefined {
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
-}
-
-function wikiContextDetails(
-  result: Record<string, unknown> | string,
-  request: {
-    query: string;
-    mode: "results" | "answer";
-    scope: "personal" | "team" | "auto";
-    depth: "quick" | "deep";
-    limit: number;
-  },
-) {
-  if (typeof result === "string") {
-    return {
-      provider: "thinkwork-context",
-      surface: "query_wiki_context",
-      retrieval_mode: "db",
-      status: "error",
-      query: request.query,
-      mode: request.mode,
-      scope: request.scope,
-      depth: request.depth,
-      limit: request.limit,
-      result_count: 0,
-      top_pages: [],
-    };
-  }
-
-  const structured = recordOf(result.structuredContent);
-  const hits = arrayOfRecords(structured.hits);
-  const providers = arrayOfRecords(structured.providers);
-  const topPages = hits.slice(0, 5).map((hit) => {
-    const metadata = recordOf(hit.metadata);
-    const page = recordOf(metadata.page);
-    const provenance = recordOf(hit.provenance);
-    const provenanceMetadata = recordOf(provenance.metadata);
-    const rawId = stringValue(page.id) ?? stringValue(provenance.sourceId);
-    const id =
-      rawId ??
-      (stringValue(hit.id)?.startsWith("wiki:")
-        ? stringValue(hit.id)?.slice("wiki:".length)
-        : stringValue(hit.id));
-    return {
-      ...(id ? { id } : {}),
-      ...(stringValue(hit.id) ? { context_id: stringValue(hit.id) } : {}),
-      ...(stringValue(hit.title) ? { title: stringValue(hit.title) } : {}),
-      ...((stringValue(page.slug) ?? stringValue(provenanceMetadata.slug))
-        ? {
-            slug:
-              stringValue(page.slug) ?? stringValue(provenanceMetadata.slug),
-          }
-        : {}),
-      ...((stringValue(page.type) ?? stringValue(provenanceMetadata.type))
-        ? {
-            type:
-              stringValue(page.type) ?? stringValue(provenanceMetadata.type),
-          }
-        : {}),
-      ...(numberValue(hit.score) !== undefined
-        ? { score: numberValue(hit.score) }
-        : {}),
-      ...(stringValue(hit.scope) ? { scope: stringValue(hit.scope) } : {}),
-    };
-  });
-  const providerStates = providers.map((provider) => ({
-    ...(stringValue(provider.providerId)
-      ? { provider_id: stringValue(provider.providerId) }
-      : {}),
-    ...(stringValue(provider.displayName)
-      ? { display_name: stringValue(provider.displayName) }
-      : {}),
-    ...(stringValue(provider.state)
-      ? { state: stringValue(provider.state) }
-      : {}),
-    ...(numberValue(provider.hitCount) !== undefined
-      ? { hit_count: numberValue(provider.hitCount) }
-      : {}),
-    ...(numberValue(provider.durationMs) !== undefined
-      ? { duration_ms: numberValue(provider.durationMs) }
-      : {}),
-    ...(stringValue(provider.error)
-      ? { error: stringValue(provider.error) }
-      : {}),
-    ...(stringValue(provider.reason)
-      ? { reason: stringValue(provider.reason) }
-      : {}),
-  }));
-
-  return {
-    provider: "thinkwork-context",
-    surface: "query_wiki_context",
-    retrieval_mode: "db",
-    status:
-      providerStates.find((provider) => provider.state)?.state ??
-      (hits.length > 0 ? "ok" : "empty"),
-    query: stringValue(structured.query) ?? request.query,
-    mode: stringValue(structured.mode) ?? request.mode,
-    scope: stringValue(structured.scope) ?? request.scope,
-    depth: stringValue(structured.depth) ?? request.depth,
-    limit: request.limit,
-    result_count: hits.length,
-    top_pages: topPages,
-    provider_states: providerStates,
-    answered_from_db: true,
-  };
 }
 
 export function createContextEngineExtension(
@@ -362,7 +255,7 @@ export function createContextEngineExtension(
         label: "ThinkWork Brain",
         description:
           "Search the ThinkWork Context Engine (ThinkWork Brain) across fast default " +
-          "providers: wiki, workspace files, sub-agent providers, " +
+          "providers: workspace files, sub-agent providers, " +
           "and approved search-safe MCP tools. Use this first for ordinary agent " +
           "context lookup." +
           (includeMemoryContext
@@ -463,11 +356,10 @@ export function createContextEngineExtension(
           "Use this for governed customers, opportunities, commitments, risks, " +
           "stakeholders, products, relationships, and cited provenance. " +
           (includeMemoryContext
-            ? "Use query_memory_context for user/space long-term memory and "
-            : "Use direct memory tools for user/space long-term memory and ") +
-          "query_wiki_context for compiled page lookup. Initial results are " +
-          "shortlists; call again with detailIds or detailIndexes to expand " +
-          "selected Brain results.",
+            ? "Use query_memory_context for user/space long-term memory. "
+            : "Use direct memory tools for user/space long-term memory. ") +
+          "Initial results are shortlists; call again with detailIds or " +
+          "detailIndexes to expand selected Brain results.",
         parameters: Type.Object(brainParams),
         executionMode: "sequential",
         async execute(_id, params) {
@@ -528,52 +420,9 @@ export function createContextEngineExtension(
         },
       };
 
-      const queryWikiContext: ToolDefinition = {
-        name: "query_wiki_context",
-        label: "Wiki Search",
-        description:
-          "Search only Thinkwork Compounding Wiki pages (entities, topics, " +
-          "decisions). Fast page lookup without waiting on long-term memory recall.",
-        parameters: Type.Object(sharedParams),
-        executionMode: "sequential",
-        async execute(_id, params) {
-          const typed = recordOf(params);
-          const query = String(typed.query ?? "").trim();
-          if (!query) {
-            return textResult(
-              "query_wiki_context requires a non-empty query.",
-              {
-                ok: false,
-              },
-            );
-          }
-          const result = await jsonRpc("query_wiki_context", {
-            query,
-            mode: normalizeMode(typed.mode),
-            scope: normalizeScope(typed.scope),
-            depth: normalizeDepth(typed.depth),
-            limit: normalizeLimit(typed.limit),
-          });
-          const mode = normalizeMode(typed.mode);
-          const scope = normalizeScope(typed.scope);
-          const depth = normalizeDepth(typed.depth);
-          const limit = normalizeLimit(typed.limit);
-          return textResult(renderResult(result), {
-            wiki_context: wikiContextDetails(result, {
-              query,
-              mode,
-              scope,
-              depth,
-              limit,
-            }),
-          });
-        },
-      };
-
       pi.registerTool(queryContext);
       if (includeMemoryContext) pi.registerTool(queryMemoryContext);
       pi.registerTool(queryBrainContext);
-      pi.registerTool(queryWikiContext);
     },
   });
 }
