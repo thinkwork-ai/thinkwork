@@ -2110,7 +2110,6 @@ export const SpaceThreadCollaborationQuery = gql`
       status
       channel
       archivedAt
-      pinnedAt
       metadata
       attachments {
         id
