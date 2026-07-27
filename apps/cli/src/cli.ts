@@ -52,7 +52,6 @@ import { registerTraceCommand } from "./commands/trace.js";
 import { registerCapabilitiesCommand } from "./commands/capabilities.js";
 import { registerDashboardCommand } from "./commands/dashboard.js";
 import { registerEvalCommand } from "./commands/eval.js";
-import { registerWikiCommand } from "./commands/wiki.js";
 import { registerTwinCommand } from "./commands/twin.js";
 import { registerEnterpriseCommand } from "./commands/enterprise.js";
 import { registerMigrateFolderCanonCommand } from "./commands/migrate-folder-canon.js";
@@ -163,9 +162,6 @@ registerMigrateAgentFoldersCommand(program);
 registerMigrateConnectorsCommand(program);
 registerSidecarRetirementMoverCommand(program);
 registerCleanupSpaceHindsightBanksCommand(program);
-
-// Wiki (Compounding Memory) pipeline controls — admin-only.
-registerWikiCommand(program);
 
 // Company Brain white-glove installation (THINK-334) — engineer-run.
 registerTwinCommand(program);

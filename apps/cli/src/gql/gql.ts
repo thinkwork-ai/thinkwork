@@ -150,11 +150,6 @@ type Documents = {
   "\n  mutation CliTestWebhook($id: ID!) {\n    testWebhook(id: $id) {\n      id\n      webhookId\n      tenantId\n      receivedAt\n      resolutionStatus\n      signatureStatus\n      statusCode\n      bodyPreview\n    }\n  }\n": typeof types.CliTestWebhookDocument;
   "\n  query CliWebhookForTest($id: ID!) {\n    webhook(id: $id) {\n      id\n      token\n    }\n  }\n": typeof types.CliWebhookForTestDocument;
   "\n  query CliWebhookTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliWebhookTenantBySlugDocument;
-  "\n  query CliWikiTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n": typeof types.CliWikiTenantBySlugDocument;
-  "\n  query CliAllTenantAgentsForWiki($tenantId: ID!) {\n    tenantAgent(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n    }\n  }\n": typeof types.CliAllTenantAgentsForWikiDocument;
-  "\n  mutation CliCompileWikiNow(\n    $tenantId: ID!\n    $ownerId: ID\n    $modelId: String\n    $forceNew: Boolean\n    $tenantScope: Boolean\n  ) {\n    compileWikiNow(\n      tenantId: $tenantId\n      ownerId: $ownerId\n      modelId: $modelId\n      forceNew: $forceNew\n      tenantScope: $tenantScope\n    ) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      createdAt\n    }\n  }\n": typeof types.CliCompileWikiNowDocument;
-  "\n  mutation CliResetWikiCursor(\n    $tenantId: ID!\n    $ownerId: ID!\n    $force: Boolean\n    $dryRun: Boolean\n    $includeBrain: Boolean\n  ) {\n    resetWikiCursor(\n      tenantId: $tenantId\n      ownerId: $ownerId\n      force: $force\n      dryRun: $dryRun\n      includeBrain: $includeBrain\n    ) {\n      tenantId\n      ownerId\n      cursorCleared\n      pagesArchived\n      dryRun\n      brainIncluded\n      impact\n    }\n  }\n": typeof types.CliResetWikiCursorDocument;
-  "\n  query CliWikiCompileJobs($tenantId: ID!, $ownerId: ID, $limit: Int) {\n    wikiCompileJobs(tenantId: $tenantId, ownerId: $ownerId, limit: $limit) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      claimedAt\n      startedAt\n      finishedAt\n      error\n      metrics\n      createdAt\n    }\n  }\n": typeof types.CliWikiCompileJobsDocument;
   "\n  query CliCmdTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n": typeof types.CliCmdTenantBySlugDocument;
 };
 const documents: Documents = {
@@ -430,16 +425,6 @@ const documents: Documents = {
     types.CliWebhookForTestDocument,
   "\n  query CliWebhookTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n":
     types.CliWebhookTenantBySlugDocument,
-  "\n  query CliWikiTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n":
-    types.CliWikiTenantBySlugDocument,
-  "\n  query CliAllTenantAgentsForWiki($tenantId: ID!) {\n    tenantAgent(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n    }\n  }\n":
-    types.CliAllTenantAgentsForWikiDocument,
-  "\n  mutation CliCompileWikiNow(\n    $tenantId: ID!\n    $ownerId: ID\n    $modelId: String\n    $forceNew: Boolean\n    $tenantScope: Boolean\n  ) {\n    compileWikiNow(\n      tenantId: $tenantId\n      ownerId: $ownerId\n      modelId: $modelId\n      forceNew: $forceNew\n      tenantScope: $tenantScope\n    ) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      createdAt\n    }\n  }\n":
-    types.CliCompileWikiNowDocument,
-  "\n  mutation CliResetWikiCursor(\n    $tenantId: ID!\n    $ownerId: ID!\n    $force: Boolean\n    $dryRun: Boolean\n    $includeBrain: Boolean\n  ) {\n    resetWikiCursor(\n      tenantId: $tenantId\n      ownerId: $ownerId\n      force: $force\n      dryRun: $dryRun\n      includeBrain: $includeBrain\n    ) {\n      tenantId\n      ownerId\n      cursorCleared\n      pagesArchived\n      dryRun\n      brainIncluded\n      impact\n    }\n  }\n":
-    types.CliResetWikiCursorDocument,
-  "\n  query CliWikiCompileJobs($tenantId: ID!, $ownerId: ID, $limit: Int) {\n    wikiCompileJobs(tenantId: $tenantId, ownerId: $ownerId, limit: $limit) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      claimedAt\n      startedAt\n      finishedAt\n      error\n      metrics\n      createdAt\n    }\n  }\n":
-    types.CliWikiCompileJobsDocument,
   "\n  query CliCmdTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n":
     types.CliCmdTenantBySlugDocument,
 };
@@ -1274,36 +1259,6 @@ export function graphql(
 export function graphql(
   source: "\n  query CliWebhookTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n",
 ): (typeof documents)["\n  query CliWebhookTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  query CliWikiTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n",
-): (typeof documents)["\n  query CliWikiTenantBySlug($slug: String!) {\n    tenantBySlug(slug: $slug) {\n      id\n      slug\n      name\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  query CliAllTenantAgentsForWiki($tenantId: ID!) {\n    tenantAgent(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n    }\n  }\n",
-): (typeof documents)["\n  query CliAllTenantAgentsForWiki($tenantId: ID!) {\n    tenantAgent(tenantId: $tenantId) {\n      id\n      name\n      slug\n      type\n      status\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation CliCompileWikiNow(\n    $tenantId: ID!\n    $ownerId: ID\n    $modelId: String\n    $forceNew: Boolean\n    $tenantScope: Boolean\n  ) {\n    compileWikiNow(\n      tenantId: $tenantId\n      ownerId: $ownerId\n      modelId: $modelId\n      forceNew: $forceNew\n      tenantScope: $tenantScope\n    ) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      createdAt\n    }\n  }\n",
-): (typeof documents)["\n  mutation CliCompileWikiNow(\n    $tenantId: ID!\n    $ownerId: ID\n    $modelId: String\n    $forceNew: Boolean\n    $tenantScope: Boolean\n  ) {\n    compileWikiNow(\n      tenantId: $tenantId\n      ownerId: $ownerId\n      modelId: $modelId\n      forceNew: $forceNew\n      tenantScope: $tenantScope\n    ) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      createdAt\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  mutation CliResetWikiCursor(\n    $tenantId: ID!\n    $ownerId: ID!\n    $force: Boolean\n    $dryRun: Boolean\n    $includeBrain: Boolean\n  ) {\n    resetWikiCursor(\n      tenantId: $tenantId\n      ownerId: $ownerId\n      force: $force\n      dryRun: $dryRun\n      includeBrain: $includeBrain\n    ) {\n      tenantId\n      ownerId\n      cursorCleared\n      pagesArchived\n      dryRun\n      brainIncluded\n      impact\n    }\n  }\n",
-): (typeof documents)["\n  mutation CliResetWikiCursor(\n    $tenantId: ID!\n    $ownerId: ID!\n    $force: Boolean\n    $dryRun: Boolean\n    $includeBrain: Boolean\n  ) {\n    resetWikiCursor(\n      tenantId: $tenantId\n      ownerId: $ownerId\n      force: $force\n      dryRun: $dryRun\n      includeBrain: $includeBrain\n    ) {\n      tenantId\n      ownerId\n      cursorCleared\n      pagesArchived\n      dryRun\n      brainIncluded\n      impact\n    }\n  }\n"];
-/**
- * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
- */
-export function graphql(
-  source: "\n  query CliWikiCompileJobs($tenantId: ID!, $ownerId: ID, $limit: Int) {\n    wikiCompileJobs(tenantId: $tenantId, ownerId: $ownerId, limit: $limit) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      claimedAt\n      startedAt\n      finishedAt\n      error\n      metrics\n      createdAt\n    }\n  }\n",
-): (typeof documents)["\n  query CliWikiCompileJobs($tenantId: ID!, $ownerId: ID, $limit: Int) {\n    wikiCompileJobs(tenantId: $tenantId, ownerId: $ownerId, limit: $limit) {\n      id\n      tenantId\n      ownerId\n      status\n      trigger\n      dedupeKey\n      attempt\n      claimedAt\n      startedAt\n      finishedAt\n      error\n      metrics\n      createdAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
