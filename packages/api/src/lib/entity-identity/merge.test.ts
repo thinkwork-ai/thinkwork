@@ -10,9 +10,6 @@ const impact: MergeImpactPreview = {
   identityClaimCount: 3,
   memoryClaimCount: 4,
   graphEntityCount: 5,
-  loserWikiPageId: "page-l",
-  loserWikiPageSlug: "acme-corp",
-  survivorWikiPageId: "page-s",
 };
 
 describe("impactMatches", () => {
@@ -20,16 +17,29 @@ describe("impactMatches", () => {
     expect(impactMatches(impact, { ...impact })).toBe(true);
   });
 
-  it("rejects any drifted count or page id (stale preview guard)", () => {
+  it("rejects any drifted count (stale preview guard)", () => {
     expect(impactMatches(impact, { ...impact, memoryClaimCount: 5 })).toBe(
       false,
     );
-    expect(impactMatches(impact, { ...impact, loserWikiPageId: null })).toBe(
+    expect(impactMatches(impact, { ...impact, sourceMappingCount: 9 })).toBe(
       false,
     );
-    expect(
-      impactMatches(impact, { ...impact, survivorWikiPageId: "other" }),
-    ).toBe(false);
+    expect(impactMatches(impact, { ...impact, graphEntityCount: 0 })).toBe(
+      false,
+    );
+  });
+
+  it("carries no wiki page fields (wiki removal U5)", () => {
+    // Merge used to archive the loser's compiled Entity page and carry its
+    // slug forward as a survivor alias. The twin re-projects from canonical
+    // entities, so a merged loser simply stops being projected — there is no
+    // page convergence left to preview or confirm.
+    expect(Object.keys(impact).sort()).toEqual([
+      "graphEntityCount",
+      "identityClaimCount",
+      "memoryClaimCount",
+      "sourceMappingCount",
+    ]);
   });
 });
 

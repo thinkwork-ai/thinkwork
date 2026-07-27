@@ -18,7 +18,6 @@ function emptyConfig() {
     spaceMemoryEnabled: false,
     legacyHindsightAvailable: false,
     companyDistillationEnabled: false,
-    wikiProjectionEnabled: false,
   };
 }
 
@@ -41,7 +40,6 @@ export const memorySystemConfig = async () => {
         config.backends.hindsightEndpoint && !hindsightActive,
       ),
       companyDistillationEnabled: false,
-      wikiProjectionEnabled: false,
     };
   } catch {
     return emptyConfig();

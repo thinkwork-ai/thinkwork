@@ -38,7 +38,6 @@ interface SplitImpactInput {
   claimCountRemainingA: number;
   memoryClaimCount: number;
   graphEntityCount: number;
-  wikiPageId?: string | null;
 }
 
 function toSplitImpact(input: SplitImpactInput): SplitImpactPreview {
@@ -49,7 +48,6 @@ function toSplitImpact(input: SplitImpactInput): SplitImpactPreview {
     claimCountRemainingA: input.claimCountRemainingA,
     memoryClaimCount: input.memoryClaimCount,
     graphEntityCount: input.graphEntityCount,
-    wikiPageId: input.wikiPageId ?? null,
   };
 }
 

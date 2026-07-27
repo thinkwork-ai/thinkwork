@@ -1,21 +1,21 @@
 /**
  * entityDossier — THINK-263 U5 server-assembled view of one grounded
- * knowledge-graph entity (wiki page + memories + threads + artifacts).
+ * knowledge-graph entity (memories + threads + artifacts).
  *
  * Thin GraphQL shim over `lib/search/entity-dossier.ts`, mirroring
- * `search.query.ts`: resolve the caller's identity and wiki read scope, then
+ * `search.query.ts`: resolve the caller's identity, then
  * delegate. The assembly fences every thread-derived surface behind the
  * caller's thread visibility, so the resolver only supplies who the caller is.
  */
 
 import { GraphQLError } from "graphql";
 
+import { resolveWikiUnionReadScope } from "../../../lib/wiki/auth.js";
 import type { GraphQLContext } from "../../context.js";
 import {
   resolveCallerTenantId,
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
-import { resolveWikiUnionReadScope } from "../wiki/auth.js";
 import {
   assembleEntityDossier,
   type EntityDossierResult,

@@ -24,14 +24,6 @@ type MemoryRecord {
   proofCount: Int
   context: String
   threadId: String
-  """
-  Compiled wiki pages (Compounding Memory) that cite this memory unit as
-  a source. Populated from wiki_section_sources.source_ref. Returns pages
-  scoped to the same user as this memory (there is no cross-user
-  citation in v1). Returned pages have empty `sections`/`aliases` — fetch
-  `wikiPage(tenantId, userId, type, slug)` for full detail.
-  """
-  wikiPages: [WikiPage!]!
 }
 
 type MemoryContent {
@@ -193,11 +185,6 @@ type MemorySystemConfig {
   provider pivot.
   """
   companyDistillationEnabled: Boolean!
-  """
-  Wiki projection from ThinkWork Brain memory is intentionally deferred from
-  this pass.
-  """
-  wikiProjectionEnabled: Boolean!
 }
 
 input IngestSpaceMemoryDocumentInput {
@@ -465,58 +452,6 @@ extend type Query {
     query: String!
     limit: Int = 20
   ): [MobileMemoryCapture!]!
-
-  """
-  Ranked wiki-page search for mobile. Runs a Postgres full-text query
-  (`plainto_tsquery('english', …)` + `ts_rank`) against the GIN-indexed
-  `search_tsv` generated column on `wiki_pages` (title || summary ||
-  body_md), scoped to tenant-shared pages (null owner) plus the
-  requesting user's own pages. Returns results in `ts_rank` DESC order,
-  tie-broken by `last_compiled_at` DESC.
-
-  Previously routed through Hindsight semantic recall; on the compiled
-  wiki corpus FTS is near-instant and matches the query shape mobile
-  users actually type (page titles, keywords). `matchingMemoryIds` is
-  retained for wire-format compatibility and is always [] on this path —
-  pages match their own compiled text, not source memory units.
-  """
-  mobileWikiSearch(
-    tenantId: ID
-    userId: ID
-    agentId: ID
-    query: String!
-    limit: Int = 20
-  ): [MobileWikiSearchResult!]!
-
-  """
-  Newest compiled wiki pages readable by the given user — tenant-shared
-  pages (null owner) plus their own — ordered by last_compiled_at DESC
-  (falling back to updated_at when the page hasn't been recompiled yet).
-  Intended as the default Memories-tab feed so the user sees fresh pages
-  before they type a search query.
-  """
-  recentWikiPages(
-    tenantId: ID
-    userId: ID
-    agentId: ID
-    limit: Int = 50
-  ): [WikiPage!]!
-}
-
-type MobileWikiSearchResult {
-  page: WikiPage!
-  """
-  Postgres `ts_rank(search_tsv, plainto_tsquery('english', query))` on
-  the page's compiled text. Higher is better. Not comparable across
-  queries.
-  """
-  score: Float!
-  """
-  Retained for wire-format compatibility with older mobile clients.
-  Always [] on the FTS path; pages match their own compiled text, not
-  source memory units.
-  """
-  matchingMemoryIds: [ID!]!
 }
 
 extend type Mutation {

@@ -24,13 +24,11 @@ import { randomUUID } from "node:crypto";
 
 import { getMemoryServices } from "../memory/index.js";
 import { searchKnowledgeGraph } from "../knowledge-graph/graph-search.js";
-import { searchWikiForReadScope } from "../wiki/search.js";
-import type { WikiReadScope } from "../wiki/repository.js";
 import { threadSearchPredicate } from "../../graphql/resolvers/threads/search.js";
 import { callerVisibleThreadPredicate } from "../../graphql/resolvers/threads/access.js";
 import { visibleThreadListPredicate } from "../../graphql/resolvers/threads/system-hidden.js";
 
-export type SearchSource = "THREADS" | "WIKI" | "ENTITIES" | "MEMORY";
+export type SearchSource = "THREADS" | "ENTITIES" | "MEMORY";
 export type SearchLegStatus = "OK" | "TIMEOUT" | "ERROR";
 
 export type SearchBrokerArgs = {
@@ -44,8 +42,6 @@ export type SearchBrokerArgs = {
   query: string;
   sources: SearchSource[];
   limit: number;
-  /** Wiki union read scope, resolved by the caller (resolver or tool host). */
-  wikiScope: WikiReadScope;
   /** Shared id across the parallel per-rail calls of one palette query. */
   queryId?: string | null;
   /** Set by ask/research callers so telemetry records the escalation. */
@@ -65,7 +61,6 @@ export type SearchLegResult = {
     spaceId: string | null;
     updatedAt: string | null;
   }>;
-  wikiHits?: Awaited<ReturnType<typeof searchWikiForReadScope>>;
   entityHits?: Array<{
     entityId: string;
     label: string;
@@ -95,7 +90,6 @@ export type SearchBrokerResult = {
 // keystroke-bound.
 const DEFAULT_TIMEOUT_MS: Record<SearchSource, number> = {
   THREADS: 2_000,
-  WIKI: 2_000,
   ENTITIES: 2_000,
   MEMORY: 12_000,
 };
@@ -134,7 +128,7 @@ export async function searchBroker(
   const sources =
     args.sources.length > 0
       ? args.sources
-      : (["THREADS", "WIKI", "ENTITIES"] as SearchSource[]);
+      : (["THREADS", "ENTITIES"] as SearchSource[]);
 
   if (query.length === 0) {
     return { queryId, legs: [] };
@@ -200,15 +194,6 @@ async function runLeg(
   switch (source) {
     case "THREADS":
       return runThreadsLeg(args, query, limit);
-    case "WIKI": {
-      const wikiHits = await searchWikiForReadScope({
-        tenantId: args.tenantId,
-        scope: args.wikiScope,
-        query,
-        limit,
-      });
-      return { source, status: "OK", wikiHits };
-    }
     case "ENTITIES": {
       const kg = await searchKnowledgeGraph({
         db: getDb(),
@@ -348,7 +333,6 @@ async function recordSearchQuery(input: {
 }): Promise<void> {
   const hitCount = (leg: SearchLegResult) =>
     leg.threadHits?.length ??
-    leg.wikiHits?.length ??
     leg.entityHits?.length ??
     leg.memoryHits?.length ??
     0;

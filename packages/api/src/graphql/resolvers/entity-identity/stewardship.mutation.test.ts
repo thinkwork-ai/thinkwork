@@ -216,7 +216,7 @@ describe("revokeEntitySourceMapping", () => {
 });
 
 describe("splitCanonicalEntity", () => {
-  it("passes the echoed impact through with wikiPageId defaulted to null", async () => {
+  it("passes the echoed impact through, wiki-free (U5)", async () => {
     libMocks.split.mockResolvedValue({
       entityAId: "c-1",
       entityBId: "c-new",
@@ -252,7 +252,17 @@ describe("splitCanonicalEntity", () => {
           { mappingId: "m-1", half: "a" },
           { mappingId: "m-2", half: "b" },
         ],
-        confirmImpact: expect.objectContaining({ wikiPageId: null }),
+        // The preview used to carry a `wikiPageId` the resolver defaulted to
+        // null; that field is gone with the wiki surface (U5). What survives
+        // is the count set, echoed through verbatim.
+        confirmImpact: {
+          mappingCountA: 1,
+          mappingCountB: 1,
+          claimCountFollowingB: 2,
+          claimCountRemainingA: 3,
+          memoryClaimCount: 4,
+          graphEntityCount: 5,
+        },
       }),
     );
   });

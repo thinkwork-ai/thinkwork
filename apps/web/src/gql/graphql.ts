@@ -1196,21 +1196,15 @@ export type CanonicalEntityMergeImpact = {
   __typename?: "CanonicalEntityMergeImpact";
   graphEntityCount: Scalars["Int"]["output"];
   identityClaimCount: Scalars["Int"]["output"];
-  loserWikiPageId?: Maybe<Scalars["ID"]["output"]>;
-  loserWikiPageSlug?: Maybe<Scalars["String"]["output"]>;
   memoryClaimCount: Scalars["Int"]["output"];
   sourceMappingCount: Scalars["Int"]["output"];
-  survivorWikiPageId?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export type CanonicalEntityMergeImpactInput = {
   graphEntityCount: Scalars["Int"]["input"];
   identityClaimCount: Scalars["Int"]["input"];
-  loserWikiPageId?: InputMaybe<Scalars["ID"]["input"]>;
-  loserWikiPageSlug?: InputMaybe<Scalars["String"]["input"]>;
   memoryClaimCount: Scalars["Int"]["input"];
   sourceMappingCount: Scalars["Int"]["input"];
-  survivorWikiPageId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type CanonicalEntityMergeResult = {
@@ -1223,8 +1217,8 @@ export type CanonicalEntityMergeResult = {
 /**
  * Split impact preview — computed before the split and echoed back as the
  * confirmation input; a stale preview aborts the split (mirrors merge).
- * Memory claims, graph entities, and the wiki page stay on half A and
- * re-derive on the next compile.
+ * Memory claims and graph entities stay on half A and re-derive on the
+ * next compile.
  */
 export type CanonicalEntitySplitImpact = {
   __typename?: "CanonicalEntitySplitImpact";
@@ -1234,7 +1228,6 @@ export type CanonicalEntitySplitImpact = {
   mappingCountA: Scalars["Int"]["output"];
   mappingCountB: Scalars["Int"]["output"];
   memoryClaimCount: Scalars["Int"]["output"];
-  wikiPageId?: Maybe<Scalars["ID"]["output"]>;
 };
 
 export type CanonicalEntitySplitImpactInput = {
@@ -1244,7 +1237,6 @@ export type CanonicalEntitySplitImpactInput = {
   mappingCountA: Scalars["Int"]["input"];
   mappingCountB: Scalars["Int"]["input"];
   memoryClaimCount: Scalars["Int"]["input"];
-  wikiPageId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type CanvasRefreshBindingResult = {
@@ -2774,8 +2766,8 @@ export type EntityDossier = {
   artifacts: Array<DossierArtifact>;
   /**
    * Canonical identity for twin routing (THINK-327 U7): consumers link to the
-   * Explorer entity detail with these instead of the wiki page. Null when the
-   * matched entity has no canonical identity yet.
+   * Explorer entity detail with these. Null when the matched entity has no
+   * canonical identity yet.
    */
   canonicalEntityId?: Maybe<Scalars["ID"]["output"]>;
   entityId: Scalars["ID"]["output"];
@@ -2789,12 +2781,9 @@ export type EntityDossier = {
   /**
    * Dual-read gate verdict (Company Brain U9 / AE8): true when this entity's
    * tenant/type has flipped to the projected twin page, so search consumers
-   * can route to the living render; the compiled `wikiPage` stays the
-   * fallback either way.
+   * can route to the living render.
    */
   twinProjected: Scalars["Boolean"]["output"];
-  /** Compiled Entity page; null when the entity has no page (degrade path). */
-  wikiPage?: Maybe<WikiPage>;
 };
 
 /**
@@ -4199,14 +4188,6 @@ export type MemoryRecord = {
   threadId?: Maybe<Scalars["String"]["output"]>;
   updatedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
   userSlug?: Maybe<Scalars["String"]["output"]>;
-  /**
-   * Compiled wiki pages (Compounding Memory) that cite this memory unit as
-   * a source. Populated from wiki_section_sources.source_ref. Returns pages
-   * scoped to the same user as this memory (there is no cross-user
-   * citation in v1). Returned pages have empty `sections`/`aliases` — fetch
-   * `wikiPage(tenantId, userId, type, slug)` for full detail.
-   */
-  wikiPages: Array<WikiPage>;
 };
 
 export enum MemoryRecordScope {
@@ -4391,11 +4372,6 @@ export type MemorySystemConfig = {
   spaceMemoryEnabled: Scalars["Boolean"]["output"];
   /** True when the active engine supports user-carried memory capture and recall. */
   userMemoryEnabled: Scalars["Boolean"]["output"];
-  /**
-   * Wiki projection from ThinkWork Brain memory is intentionally deferred from
-   * this pass.
-   */
-  wikiProjectionEnabled: Scalars["Boolean"]["output"];
 };
 
 export type Message = {
@@ -4525,23 +4501,6 @@ export type MobileMemoryCapture = {
   userId: Scalars["ID"]["output"];
 };
 
-export type MobileWikiSearchResult = {
-  __typename?: "MobileWikiSearchResult";
-  /**
-   * Retained for wire-format compatibility with older mobile clients.
-   * Always [] on the FTS path; pages match their own compiled text, not
-   * source memory units.
-   */
-  matchingMemoryIds: Array<Scalars["ID"]["output"]>;
-  page: WikiPage;
-  /**
-   * Postgres `ts_rank(search_tsv, plainto_tsquery('english', query))` on
-   * the page's compiled text. Higher is better. Not comparable across
-   * queries.
-   */
-  score: Scalars["Float"]["output"];
-};
-
 export type ModelCatalogEntry = {
   __typename?: "ModelCatalogEntry";
   contextWindow?: Maybe<Scalars["Int"]["output"]>;
@@ -4631,14 +4590,6 @@ export type Mutation = {
    * that is already linked returns a typed already_linked result.
    */
   authorEntitySourceMapping: AuthorEntitySourceMappingResult;
-  /**
-   * Admin-only fire-and-forget dispatch of a journal-schema bulk ingest onto
-   * a dedicated worker Lambda. Returns immediately with a dispatch
-   * acknowledgement — the actual ingest + terminal compile happen
-   * asynchronously. Track progress via the wiki-bootstrap-import Lambda's
-   * CloudWatch logs and the resulting compile job in wiki_compile_jobs.
-   */
-  bootstrapJournalImport: WikiJournalImportDispatch;
   bootstrapUser: BootstrapResult;
   cancelAgentWorkspaceReview: AgentWorkspaceRun;
   cancelEvalRun: EvalRun;
@@ -4650,23 +4601,6 @@ export type Mutation = {
   checkoutCanvas: Artifact;
   checkoutThread: Thread;
   claimNextOpenEngineWorkItem?: Maybe<WorkItem>;
-  /**
-   * Admin-only: enqueue an ad-hoc compile job for a specific (tenant, user).
-   * Returns the job row (newly inserted or the in-flight dedupe hit).
-   *
-   * When `modelId` is supplied, it is forwarded to the compile Lambda event
-   * payload so a single run can override `BEDROCK_MODEL_ID` without a
-   * redeploy. The override takes effect only on the direct Event-invoke
-   * path; if the invoke fails and a polling worker claims the job later, the
-   * compile falls back to the env-default model.
-   *
-   * Graph mode (plan 2026-06-09-004 U14): when `tenantScope` is true — or
-   * the server's wiki source is `graph` — the per-user owner key is ignored
-   * and ONE tenant-keyed compile job (null `userId`) is enqueued for the
-   * graph→wiki materializer. `modelId` is meaningless on that path (the
-   * materializer is deterministic/LLM-free) and is not forwarded.
-   */
-  compileWikiNow: WikiCompileJob;
   configureEmailProvider: EmailProviderInstall;
   confirmAutomationDraft: AgentLoop;
   /**
@@ -4829,7 +4763,7 @@ export type Mutation = {
   markThreadsRead: MarkThreadsReadResult;
   /**
    * Guarded merge repair: the loser becomes a redirect (status merged) and its
-   * mappings/claims/graph rows/wiki page repoint or archive onto the survivor.
+   * mappings/claims/graph rows repoint or archive onto the survivor.
    * `confirmImpact` must echo the preview exactly or the merge aborts.
    */
   mergeCanonicalEntities: CanonicalEntityMergeResult;
@@ -4956,12 +4890,6 @@ export type Mutation = {
   reorderQuickActions: Array<UserQuickAction>;
   requestRevision: InboxItem;
   resendMemberInvite: ResendMemberInviteResult;
-  /**
-   * Admin-only replay: clear the compile cursor for (tenant, user). If
-   * `force` is true, also archives every active page in the scope so the
-   * next compile rebuilds from scratch. Destructive when force=true.
-   */
-  resetWikiCursor: WikiResetCursorResult;
   /**
    * Apply Link / Create / Defer / Reject to an open resolution case.
    * `canonicalEntityId` is required for link; `displayName` optionally names a
@@ -5360,14 +5288,6 @@ export type MutationAuthorEntitySourceMappingArgs = {
   tenantId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
-export type MutationBootstrapJournalImportArgs = {
-  accountId: Scalars["ID"]["input"];
-  agentId?: InputMaybe<Scalars["ID"]["input"]>;
-  limit?: InputMaybe<Scalars["Int"]["input"]>;
-  tenantId: Scalars["ID"]["input"];
-  userId?: InputMaybe<Scalars["ID"]["input"]>;
-};
-
 export type MutationCancelAgentWorkspaceReviewArgs = {
   input?: InputMaybe<AgentWorkspaceReviewDecisionInput>;
   runId: Scalars["ID"]["input"];
@@ -5419,15 +5339,6 @@ export type MutationCheckoutThreadArgs = {
 
 export type MutationClaimNextOpenEngineWorkItemArgs = {
   input: ClaimNextOpenEngineWorkItemInput;
-};
-
-export type MutationCompileWikiNowArgs = {
-  forceNew?: InputMaybe<Scalars["Boolean"]["input"]>;
-  modelId?: InputMaybe<Scalars["String"]["input"]>;
-  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
-  tenantId: Scalars["ID"]["input"];
-  tenantScope?: InputMaybe<Scalars["Boolean"]["input"]>;
-  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type MutationConfigureEmailProviderArgs = {
@@ -6157,15 +6068,6 @@ export type MutationRequestRevisionArgs = {
 export type MutationResendMemberInviteArgs = {
   input: ResendMemberInviteInput;
   tenantId: Scalars["ID"]["input"];
-};
-
-export type MutationResetWikiCursorArgs = {
-  dryRun?: InputMaybe<Scalars["Boolean"]["input"]>;
-  force?: InputMaybe<Scalars["Boolean"]["input"]>;
-  includeBrain?: InputMaybe<Scalars["Boolean"]["input"]>;
-  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
-  tenantId: Scalars["ID"]["input"];
-  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type MutationResolveEntityResolutionCaseArgs = {
@@ -7834,8 +7736,7 @@ export type Query = {
   emailSpaceEmailPolicy?: Maybe<EmailSpacePolicy>;
   /**
    * THINK-263 U5 — server-assembled dossier for one grounded knowledge-graph
-   * entity: its compiled wiki page (null when none — a degrade, never a
-   * fabricated fallback), contributing memories, linked threads, and artifacts.
+   * entity: contributing memories, linked threads, and artifacts.
    * Every thread-derived surface is fenced behind the caller's thread
    * visibility; content from threads the caller cannot open is dropped entirely
    * (the thread, its artifacts, and any memory hit stamped with it). Multiple
@@ -7903,21 +7804,6 @@ export type Query = {
    * derived observations.
    */
   mobileMemorySearch: Array<MobileMemoryCapture>;
-  /**
-   * Ranked wiki-page search for mobile. Runs a Postgres full-text query
-   * (`plainto_tsquery('english', …)` + `ts_rank`) against the GIN-indexed
-   * `search_tsv` generated column on `wiki_pages` (title || summary ||
-   * body_md), scoped to tenant-shared pages (null owner) plus the
-   * requesting user's own pages. Returns results in `ts_rank` DESC order,
-   * tie-broken by `last_compiled_at` DESC.
-   *
-   * Previously routed through Hindsight semantic recall; on the compiled
-   * wiki corpus FTS is near-instant and matches the query shape mobile
-   * users actually type (page titles, keywords). `matchingMemoryIds` is
-   * retained for wire-format compatibility and is always [] on this path —
-   * pages match their own compiled text, not source memory units.
-   */
-  mobileWikiSearch: Array<MobileWikiSearchResult>;
   modelCatalog: Array<ModelCatalogEntry>;
   myApprovedModelCatalog: Array<ModelCatalogEntry>;
   /** The caller's plugin activations across the tenant's installs. */
@@ -7962,14 +7848,6 @@ export type Query = {
   /** The caller tenant's plugin installs (admin status surface). */
   pluginInstalls: Array<PluginInstall>;
   queuedWakeups: Array<AgentWakeupRequest>;
-  /**
-   * Newest compiled wiki pages readable by the given user — tenant-shared
-   * pages (null owner) plus their own — ordered by last_compiled_at DESC
-   * (falling back to updated_at when the page hasn't been recompiled yet).
-   * Intended as the default Memories-tab feed so the user sees fresh pages
-   * before they type a search query.
-   */
-  recentWikiPages: Array<WikiPage>;
   recipe?: Maybe<Recipe>;
   recipes: Array<Recipe>;
   releaseUpdateJob?: Maybe<ReleaseUpdateJob>;
@@ -8075,48 +7953,6 @@ export type Query = {
    */
   webhookDeliveries: Array<WebhookDelivery>;
   webhooks: Array<Webhook>;
-  /**
-   * Pages that link to the given page. Visibility is derived from the target
-   * page's owner scope; caller must be that owner or an admin.
-   */
-  wikiBacklinks: Array<WikiPage>;
-  /**
-   * Admin-only: list recent compile jobs for a tenant. When `userId` is
-   * provided, restricts to that user's jobs; when null/absent, returns
-   * jobs across every user in the tenant — including tenant-keyed
-   * graph-mode jobs (null `userId`). Ordered newest-first.
-   *
-   * Powers the `thinkwork wiki status` CLI command.
-   */
-  wikiCompileJobs: Array<WikiCompileJob>;
-  /**
-   * Pages this page links OUT to — the "Connected Pages" surface. Mirrors
-   * wikiBacklinks in the opposite direction; reads wiki_page_links where
-   * from_page_id = pageId. Deduplicated by target so a parent/child pair
-   * with both a `reference` link and a `parent_of` link returns once.
-   */
-  wikiConnectedPages: Array<WikiPage>;
-  /**
-   * Force-graph over the readable scope: tenant-scoped pages plus the
-   * requesting user's own pages, with every page-to-page link whose
-   * endpoints are both active and readable. Links that reference archived
-   * pages are excluded. One round-trip. `userId` is optional and defaults
-   * to the caller.
-   */
-  wikiGraph: WikiGraph;
-  /**
-   * Read one compiled page by slug. Serves tenant-scoped pages (null owner)
-   * plus the requesting user's own pages; `userId` is optional and defaults
-   * to the caller. When a user page and a tenant page share a slug during
-   * the transition window, the user's own page wins.
-   */
-  wikiPage?: Maybe<WikiPage>;
-  /**
-   * Postgres full-text search over compiled pages — tenant-scoped pages plus
-   * the requesting user's own pages. Also matches exact aliases. Ranked by
-   * ts_rank + alias-hit boost.
-   */
-  wikiSearch: Array<WikiSearchResult>;
   workItem?: Maybe<WorkItem>;
   workItemComments: Array<WorkItemComment>;
   workItemDocument?: Maybe<WorkItemDocument>;
@@ -8718,14 +8554,6 @@ export type QueryMobileMemorySearchArgs = {
   userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
-export type QueryMobileWikiSearchArgs = {
-  agentId?: InputMaybe<Scalars["ID"]["input"]>;
-  limit?: InputMaybe<Scalars["Int"]["input"]>;
-  query: Scalars["String"]["input"];
-  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
-  userId?: InputMaybe<Scalars["ID"]["input"]>;
-};
-
 export type QueryMySlackLinksArgs = {
   tenantId: Scalars["ID"]["input"];
 };
@@ -8806,13 +8634,6 @@ export type QueryPluginInstallArgs = {
 
 export type QueryQueuedWakeupsArgs = {
   tenantId: Scalars["ID"]["input"];
-};
-
-export type QueryRecentWikiPagesArgs = {
-  agentId?: InputMaybe<Scalars["ID"]["input"]>;
-  limit?: InputMaybe<Scalars["Int"]["input"]>;
-  tenantId?: InputMaybe<Scalars["ID"]["input"]>;
-  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type QueryRecipeArgs = {
@@ -9204,43 +9025,6 @@ export type QueryWebhooksArgs = {
   spaceId?: InputMaybe<Scalars["ID"]["input"]>;
   targetType?: InputMaybe<Scalars["String"]["input"]>;
   tenantId: Scalars["ID"]["input"];
-};
-
-export type QueryWikiBacklinksArgs = {
-  pageId: Scalars["ID"]["input"];
-};
-
-export type QueryWikiCompileJobsArgs = {
-  limit?: InputMaybe<Scalars["Int"]["input"]>;
-  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
-  tenantId: Scalars["ID"]["input"];
-  userId?: InputMaybe<Scalars["ID"]["input"]>;
-};
-
-export type QueryWikiConnectedPagesArgs = {
-  pageId: Scalars["ID"]["input"];
-};
-
-export type QueryWikiGraphArgs = {
-  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
-  tenantId: Scalars["ID"]["input"];
-  userId?: InputMaybe<Scalars["ID"]["input"]>;
-};
-
-export type QueryWikiPageArgs = {
-  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
-  slug: Scalars["String"]["input"];
-  tenantId: Scalars["ID"]["input"];
-  type: WikiPageType;
-  userId?: InputMaybe<Scalars["ID"]["input"]>;
-};
-
-export type QueryWikiSearchArgs = {
-  limit?: InputMaybe<Scalars["Int"]["input"]>;
-  ownerId?: InputMaybe<Scalars["ID"]["input"]>;
-  query: Scalars["String"]["input"];
-  tenantId: Scalars["ID"]["input"];
-  userId?: InputMaybe<Scalars["ID"]["input"]>;
 };
 
 export type QueryWorkItemArgs = {
@@ -10238,7 +10022,6 @@ export type SearchLeg = {
   source: SearchSource;
   status: SearchLegStatus;
   threadHits?: Maybe<Array<SearchThreadHit>>;
-  wikiHits?: Maybe<Array<SearchWikiHit>>;
 };
 
 export enum SearchLegStatus {
@@ -10278,7 +10061,6 @@ export enum SearchSource {
   Entities = "ENTITIES",
   Memory = "MEMORY",
   Threads = "THREADS",
-  Wiki = "WIKI",
 }
 
 export type SearchThreadHit = {
@@ -10288,13 +10070,6 @@ export type SearchThreadHit = {
   spaceId?: Maybe<Scalars["ID"]["output"]>;
   title?: Maybe<Scalars["String"]["output"]>;
   updatedAt?: Maybe<Scalars["String"]["output"]>;
-};
-
-export type SearchWikiHit = {
-  __typename?: "SearchWikiHit";
-  matchedAlias?: Maybe<Scalars["String"]["output"]>;
-  page: WikiPage;
-  score: Scalars["Float"]["output"];
 };
 
 export type SendMessageInput = {
@@ -12501,235 +12276,6 @@ export type WebhookDelivery = {
   threadCreated?: Maybe<Scalars["Boolean"]["output"]>;
   threadId?: Maybe<Scalars["ID"]["output"]>;
   webhookId?: Maybe<Scalars["ID"]["output"]>;
-};
-
-export type WikiCompileJob = {
-  __typename?: "WikiCompileJob";
-  attempt: Scalars["Int"]["output"];
-  claimedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
-  createdAt: Scalars["AWSDateTime"]["output"];
-  dedupeKey: Scalars["String"]["output"];
-  error?: Maybe<Scalars["String"]["output"]>;
-  finishedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
-  id: Scalars["ID"]["output"];
-  metrics?: Maybe<Scalars["AWSJSON"]["output"]>;
-  /** @deprecated Use userId */
-  ownerId?: Maybe<Scalars["ID"]["output"]>;
-  startedAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
-  status: Scalars["String"]["output"];
-  tenantId: Scalars["ID"]["output"];
-  trigger: Scalars["String"]["output"];
-  /**
-   * Owning user. Null for tenant-keyed graph-mode compile jobs (the graph
-   * materializer runs one compile per tenant, not per user).
-   */
-  userId?: Maybe<Scalars["ID"]["output"]>;
-};
-
-export type WikiGraph = {
-  __typename?: "WikiGraph";
-  edges: Array<WikiGraphEdge>;
-  nodes: Array<WikiGraphNode>;
-};
-
-export type WikiGraphEdge = {
-  __typename?: "WikiGraphEdge";
-  kind: Scalars["String"]["output"];
-  label: Scalars["String"]["output"];
-  source: Scalars["ID"]["output"];
-  target: Scalars["ID"]["output"];
-  weight: Scalars["Float"]["output"];
-};
-
-/**
- * User-scoped force-graph payload: all active pages and their [[...]] links
- *   for one `(tenant, user)` scope. Shaped to match the legacy `memoryGraph`
- * wire contract so the admin force-graph component can swap data sources
- * with minimal client changes. `type` is always `"page"` on nodes; the
- * Wiki page type (`ENTITY`/`TOPIC`/`DECISION`) lives in `entityType`.
- */
-export type WikiGraphNode = {
-  __typename?: "WikiGraphNode";
-  displayType: Scalars["String"]["output"];
-  edgeCount: Scalars["Int"]["output"];
-  entitySubtype?: Maybe<Scalars["String"]["output"]>;
-  entityType: WikiPageType;
-  id: Scalars["ID"]["output"];
-  label: Scalars["String"]["output"];
-  latestThreadId?: Maybe<Scalars["String"]["output"]>;
-  slug: Scalars["String"]["output"];
-  strategy?: Maybe<Scalars["String"]["output"]>;
-  type: Scalars["String"]["output"];
-};
-
-/**
- * Dispatch acknowledgement for `bootstrapJournalImport`. The actual ingest
- * runs on a dedicated worker Lambda (`wiki-bootstrap-import`) because
- * Hindsight's LLM-backed retain is too slow to complete within API Gateway's
- * 30-second HTTP ceiling. Operator watches CloudWatch + wiki_compile_jobs
- * for the terminal compile the ingest enqueues.
- */
-export type WikiJournalImportDispatch = {
-  __typename?: "WikiJournalImportDispatch";
-  accountId: Scalars["ID"]["output"];
-  /** @deprecated Use userId */
-  agentId?: Maybe<Scalars["ID"]["output"]>;
-  dispatched: Scalars["Boolean"]["output"];
-  dispatchedAt: Scalars["AWSDateTime"]["output"];
-  error?: Maybe<Scalars["String"]["output"]>;
-  tenantId: Scalars["ID"]["output"];
-  userId: Scalars["ID"]["output"];
-};
-
-export type WikiPage = {
-  __typename?: "WikiPage";
-  aliases: Array<Scalars["String"]["output"]>;
-  bodyMd?: Maybe<Scalars["String"]["output"]>;
-  /**
-   * Canonical entity id backing an ENTITY page (Company Brain U9). Lets the
-   * reader ask `twinEntityPage` for the projected per-section render; the
-   * server-side dual-read gate still decides whether that projection exists,
-   * so this id alone never flips a page. Null for topic/decision/legacy pages.
-   */
-  canonicalEntityId?: Maybe<Scalars["ID"]["output"]>;
-  /**
-   * Pages that were promoted out of this page's sections — the reverse of
-   * `parent`. Empty for pages that have never had a child promoted.
-   */
-  children: Array<WikiPage>;
-  createdAt: Scalars["AWSDateTime"]["output"];
-  /**
-   * Human-readable type label for list/detail surfaces. Uses the approved
-   * ontology entity type when present; falls back to the legacy page type.
-   */
-  displayType: Scalars["String"]["output"];
-  /**
-   * Approved ontology entity type slug materialized for this page, for example
-   * `customer`, `person`, `place`, or `support_case`. Null only for legacy or
-   * non-ontology pages.
-   */
-  entitySubtype?: Maybe<Scalars["String"]["output"]>;
-  id: Scalars["ID"]["output"];
-  lastCompiledAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
-  /** @deprecated Use userId */
-  ownerId?: Maybe<Scalars["ID"]["output"]>;
-  /**
-   * Parent hub when this page was promoted from a section on another page.
-   * Null for top-level pages. Reads `wiki_pages.parent_page_id`.
-   */
-  parent?: Maybe<WikiPage>;
-  /**
-   * If this page was promoted out of a section on a parent page, the section
-   * it came from. Null when this page is top-level or the parent section has
-   * since been archived.
-   */
-  promotedFromSection?: Maybe<WikiPromotedFromSection>;
-  /**
-   * Self-contained, sanitized, scriptless HTML plate render compiled from the
-   * page's sections (THINK-273). Null when no render is stored — compile
-   * failure or a page that predates render persistence; readers fall back to
-   * the canonical markdown. Populated on the wikiPage detail query only; list,
-   * search, graph, and dossier surfaces never carry it.
-   */
-  renderHtml?: Maybe<Scalars["String"]["output"]>;
-  /**
-   * Active pages rolled up into this page's named section — the denormalized
-   * aggregation view (`aggregation.linked_page_ids` on the section jsonb).
-   * Empty when the section doesn't exist or carries no aggregation metadata.
-   */
-  sectionChildren: Array<WikiPage>;
-  sections: Array<WikiPageSection>;
-  slug: Scalars["String"]["output"];
-  /**
-   * Distinct memory_units (Hindsight records) that source at least one section
-   * on this page. Counts through `wiki_section_sources`. Hit on detail screens
-   * only — list screens must NOT request this (N+1 risk).
-   */
-  sourceMemoryCount: Scalars["Int"]["output"];
-  /**
-   * Up to `limit` memory_unit ids that source sections on this page, ordered
-   * by most recently-cited. Server-side capped at 50. Pairs with
-   * `MemoryRecord` drill-in so a page's "Based on N memories" badge can
-   * resolve to the actual records.
-   */
-  sourceMemoryIds: Array<Scalars["ID"]["output"]>;
-  status: Scalars["String"]["output"];
-  summary?: Maybe<Scalars["String"]["output"]>;
-  tenantId: Scalars["ID"]["output"];
-  title: Scalars["String"]["output"];
-  type: WikiPageType;
-  updatedAt: Scalars["AWSDateTime"]["output"];
-  /**
-   * Owning user. Null for tenant-scoped pages produced by the graph
-   * materializer — those are readable by any member of the tenant.
-   */
-  userId?: Maybe<Scalars["ID"]["output"]>;
-};
-
-export type WikiPageSectionChildrenArgs = {
-  sectionSlug: Scalars["String"]["input"];
-};
-
-export type WikiPageSourceMemoryIdsArgs = {
-  limit?: InputMaybe<Scalars["Int"]["input"]>;
-};
-
-export type WikiPageSection = {
-  __typename?: "WikiPageSection";
-  bodyMd: Scalars["String"]["output"];
-  heading: Scalars["String"]["output"];
-  id: Scalars["ID"]["output"];
-  lastSourceAt?: Maybe<Scalars["AWSDateTime"]["output"]>;
-  position: Scalars["Int"]["output"];
-  sectionSlug: Scalars["String"]["output"];
-};
-
-/**
- * Compounding Memory (wiki) read path.
- *
- * Scope rule (plan 2026-06-09-004 U9/U14): pages are either USER-scoped
- * (`userId`/`ownerId` set — the v1 planner output) or TENANT-scoped
- * (`userId`/`ownerId` null — the graph materializer output, readable by any
- * member of the tenant). Reads serve the transitional union: tenant pages
- * plus the requesting user's own pages, until the U11 archive pass retires
- * the user-scoped corpus.
- */
-export enum WikiPageType {
-  Decision = "DECISION",
-  Entity = "ENTITY",
-  Topic = "TOPIC",
-}
-
-/**
- * Provenance linkage between a promoted page and the section it was derived
- * from. Populated only for pages whose `parent_page_id` is set AND whose
- * parent has a section in which `aggregation.promoted_page_id` points back.
- */
-export type WikiPromotedFromSection = {
-  __typename?: "WikiPromotedFromSection";
-  parentPage: WikiPage;
-  sectionHeading: Scalars["String"]["output"];
-  sectionSlug: Scalars["String"]["output"];
-};
-
-export type WikiResetCursorResult = {
-  __typename?: "WikiResetCursorResult";
-  brainIncluded: Scalars["Boolean"]["output"];
-  cursorCleared: Scalars["Boolean"]["output"];
-  dryRun: Scalars["Boolean"]["output"];
-  impact?: Maybe<Scalars["AWSJSON"]["output"]>;
-  /** @deprecated Use userId */
-  ownerId: Scalars["ID"]["output"];
-  pagesArchived: Scalars["Int"]["output"];
-  tenantId: Scalars["ID"]["output"];
-  userId: Scalars["ID"]["output"];
-};
-
-export type WikiSearchResult = {
-  __typename?: "WikiSearchResult";
-  matchedAlias?: Maybe<Scalars["String"]["output"]>;
-  page: WikiPage;
-  score: Scalars["Float"]["output"];
 };
 
 export type WorkItem = {
@@ -18383,9 +17929,6 @@ export type SettingsCanonicalEntityMergePreviewQuery = {
     identityClaimCount: number;
     memoryClaimCount: number;
     graphEntityCount: number;
-    loserWikiPageId?: string | null;
-    loserWikiPageSlug?: string | null;
-    survivorWikiPageId?: string | null;
   };
 };
 
@@ -18475,7 +18018,6 @@ export type SettingsCanonicalEntitySplitPreviewQuery = {
     claimCountRemainingA: number;
     memoryClaimCount: number;
     graphEntityCount: number;
-    wikiPageId?: string | null;
   };
 };
 
@@ -38341,18 +37883,6 @@ export const SettingsCanonicalEntityMergePreviewDocument = {
                   kind: "Field",
                   name: { kind: "Name", value: "graphEntityCount" },
                 },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "loserWikiPageId" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "loserWikiPageSlug" },
-                },
-                {
-                  kind: "Field",
-                  name: { kind: "Name", value: "survivorWikiPageId" },
-                },
               ],
             },
           },
@@ -38865,7 +38395,6 @@ export const SettingsCanonicalEntitySplitPreviewDocument = {
                   kind: "Field",
                   name: { kind: "Name", value: "graphEntityCount" },
                 },
-                { kind: "Field", name: { kind: "Name", value: "wikiPageId" } },
               ],
             },
           },

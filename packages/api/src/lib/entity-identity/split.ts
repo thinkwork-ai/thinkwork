@@ -22,16 +22,10 @@
  *
  * Downstream surfaces keyed on canonical_entity_id (what merge repoints,
  * split deliberately does NOT):
- *   - wiki `pages` (partial-unique per (tenant, canonical) — see
- *     packages/database-pg/src/schema/wiki.ts): the tenant Entity page
- *     stays on half A; half B has no page until the next wiki compile
- *     derives one from B's partitioned evidence. Merge could repoint
- *     deterministically (N→1); split cannot (1→2 needs per-row provenance
- *     the rows don't carry), so B's surfaces re-derive on next compile.
  *   - kg.entities.canonical_entity_id and memory_claims.canonical_subject_id:
  *     graph/memory rows carry no mapping linkage, so their half is not
- *     derivable — they stay on A and re-derive on the next kg/wiki compile
- *     of the partitioned identity evidence.
+ *     derivable — they stay on A and re-derive on the next kg compile of
+ *     the partitioned identity evidence.
  *
  * Negative evidence (AE5): the split writes `mapping_rejections` rows in
  * BOTH directions — each half-A source identity is rejected against half B
@@ -47,7 +41,6 @@ import {
   kgEntities,
   mappingRejections,
   memoryClaims,
-  wikiPages,
 } from "@thinkwork/database-pg/schema";
 import type { Database } from "../db.js";
 import type { IdentityDbClient } from "./matcher.js";
@@ -71,7 +64,6 @@ export interface SplitImpactPreview {
   /** Rows that stay on A and re-derive on the next compile (see header). */
   memoryClaimCount: number;
   graphEntityCount: number;
-  wikiPageId: string | null;
 }
 
 /** Pure comparison guarding against stale previews (mirrors merge). */
@@ -85,8 +77,7 @@ export function splitImpactMatches(
     a.claimCountFollowingB === b.claimCountFollowingB &&
     a.claimCountRemainingA === b.claimCountRemainingA &&
     a.memoryClaimCount === b.memoryClaimCount &&
-    a.graphEntityCount === b.graphEntityCount &&
-    a.wikiPageId === b.wikiPageId
+    a.graphEntityCount === b.graphEntityCount
   );
 }
 
@@ -295,19 +286,6 @@ export async function previewCanonicalEntitySplit(
       .from(kgEntities)
       .where(eq(kgEntities.canonical_entity_id, args.canonicalEntityId)),
   );
-  const [wikiPage] = await db
-    .select({ id: wikiPages.id })
-    .from(wikiPages)
-    .where(
-      and(
-        eq(wikiPages.tenant_id, args.tenantId),
-        eq(wikiPages.type, "entity"),
-        eq(wikiPages.canonical_entity_id, args.canonicalEntityId),
-        sql`${wikiPages.owner_id} IS NULL`,
-      ),
-    )
-    .limit(1);
-
   const halfCounts = { a: 0, b: 0 };
   for (const assignment of args.assignments) {
     halfCounts[assignment.half] += 1;
@@ -319,7 +297,6 @@ export async function previewCanonicalEntitySplit(
     claimCountRemainingA: claims.length - claimFollowSet.size,
     memoryClaimCount,
     graphEntityCount,
-    wikiPageId: wikiPage?.id ?? null,
   };
 }
 

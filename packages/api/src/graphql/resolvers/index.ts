@@ -76,7 +76,6 @@ import {
   evalReplayAllowlistQueries,
   evalReplayAllowlistMutations,
 } from "./evaluations/replay-allowlist.js";
-import { wikiQueries, wikiMutations } from "./wiki/index.js";
 import { searchQueries, searchMutations } from "./search/index.js";
 import { skillRunsQueries, skillRunsMutations } from "./skill-runs/index.js";
 import {
@@ -187,7 +186,6 @@ export const queryResolvers: Record<string, any> = {
   ...evalProfileQueries,
   ...flagThreadQueries,
   ...evalReplayAllowlistQueries,
-  ...wikiQueries,
   ...searchQueries,
   ...skillRunsQueries,
   ...skillCatalogQueries,
@@ -244,7 +242,6 @@ export const mutationResolvers: Record<string, any> = {
   ...evalProfileMutations,
   ...evalReplayAllowlistMutations,
   ...flagThreadMutations,
-  ...wikiMutations,
   ...searchMutations,
   ...skillRunsMutations,
   ...skillCatalogMutations,
@@ -276,8 +273,6 @@ import {
   threadParticipantTypeResolvers,
   threadTypeResolvers,
 } from "./threads/types.js";
-import { memoryRecordTypeResolvers } from "./memory/types.js";
-import { wikiPageTypeResolvers } from "./wiki/index.js";
 import { routineExecutionTypeResolvers } from "./routines/types.js";
 import { tenantTypeResolvers } from "./core/types.js";
 import { knowledgeBaseTypeResolvers } from "./knowledge/types.js";
@@ -293,11 +288,9 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   ThreadParticipant: threadParticipantTypeResolvers,
   Message: messageTypeResolvers,
   MessageMention: messageMentionTypeResolvers,
-  MemoryRecord: memoryRecordTypeResolvers,
   EvalResult: evalResultTypeResolvers,
   EvalRun: evalRunTypeResolvers,
   SkillEvalScore: skillEvalScoreTypeResolvers,
-  WikiPage: wikiPageTypeResolvers,
   KnowledgeBase: knowledgeBaseTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,
   Workflow: workflowTypeResolvers,

@@ -24,7 +24,6 @@ const impact: SplitImpactPreview = {
   claimCountRemainingA: 1,
   memoryClaimCount: 2,
   graphEntityCount: 1,
-  wikiPageId: "page-1",
 };
 
 describe("splitImpactMatches", () => {
@@ -36,9 +35,9 @@ describe("splitImpactMatches", () => {
     expect(
       splitImpactMatches(impact, { ...impact, claimCountFollowingB: 0 }),
     ).toBe(false);
-    expect(splitImpactMatches(impact, { ...impact, wikiPageId: null })).toBe(
-      false,
-    );
+    expect(
+      splitImpactMatches(impact, { ...impact, graphEntityCount: 99 }),
+    ).toBe(false);
   });
 });
 

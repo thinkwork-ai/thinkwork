@@ -2516,9 +2516,6 @@ export const SettingsCanonicalEntityMergePreviewQuery = graphql(`
       identityClaimCount
       memoryClaimCount
       graphEntityCount
-      loserWikiPageId
-      loserWikiPageSlug
-      survivorWikiPageId
     }
   }
 `);
@@ -2619,7 +2616,6 @@ export const SettingsCanonicalEntitySplitPreviewQuery = graphql(`
       claimCountRemainingA
       memoryClaimCount
       graphEntityCount
-      wikiPageId
     }
   }
 `);

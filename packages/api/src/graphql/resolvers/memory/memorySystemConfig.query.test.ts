@@ -29,7 +29,6 @@ describe("memorySystemConfig", () => {
       spaceMemoryEnabled: false,
       legacyHindsightAvailable: false,
       companyDistillationEnabled: false,
-      wikiProjectionEnabled: false,
     });
   });
 
