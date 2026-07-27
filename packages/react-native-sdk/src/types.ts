@@ -161,22 +161,3 @@ export interface CaptureMobileMemoryInput {
   metadata?: Record<string, unknown>;
   clientCaptureId?: string;
 }
-
-export type WikiPageType = "ENTITY" | "TOPIC" | "DECISION";
-
-export interface WikiSearchHit {
-  id: string;
-  type: WikiPageType;
-  slug: string;
-  title: string;
-  summary?: string | null;
-  lastCompiledAt?: string | null;
-  updatedAt?: string | null;
-  score: number;
-  matchedAlias?: string | null;
-  /**
-   * Source memory unit ids whose Hindsight recall hits caused this page
-   * to rank. Present for mobileWikiSearch; empty elsewhere.
-   */
-  matchingMemoryIds?: string[];
-}

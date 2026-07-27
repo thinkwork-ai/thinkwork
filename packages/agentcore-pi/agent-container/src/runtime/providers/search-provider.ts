@@ -49,12 +49,6 @@ const SEARCH_QUERY = /* GraphQL */ `
           title
           identifier
         }
-        wikiHits {
-          page {
-            title
-          }
-          matchedAlias
-        }
         entityHits {
           label
           ontologyTypeSlug
@@ -144,12 +138,6 @@ function legToResult(raw: unknown): SearchLegResult | null {
     const title = str(hit.title) ?? str(hit.identifier) ?? "(untitled thread)";
     const id = str(hit.identifier);
     lines.push(id ? `${title} [${id}]` : title);
-  }
-  for (const hit of arr(leg.wikiHits)) {
-    const page = (hit.page ?? {}) as Record<string, unknown>;
-    const title = str(page.title) ?? "(untitled page)";
-    const alias = str(hit.matchedAlias);
-    lines.push(alias ? `${title} (matched alias: ${alias})` : title);
   }
   for (const hit of arr(leg.entityHits)) {
     const label = str(hit.label) ?? "(entity)";

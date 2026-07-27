@@ -6,7 +6,6 @@ export type ContextEngineDepth = "quick" | "deep";
 export type ContextProviderFamily =
   | "memory"
   | "brain"
-  | "wiki"
   | "workspace"
   | "knowledge-base"
   | "mcp"
