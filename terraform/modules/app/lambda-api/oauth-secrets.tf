@@ -36,8 +36,7 @@ resource "aws_secretsmanager_secret_version" "oauth_google_productivity" {
   })
 
   # If the operator rotates the secret via AWS console / CLI without touching
-  # tfvars, terraform shouldn't clobber it on next apply. Matches the pattern
-  # used for google_places_api_key in the wiki-compile handler.
+  # tfvars, terraform shouldn't clobber it on next apply.
   lifecycle {
     ignore_changes = [secret_string]
   }
