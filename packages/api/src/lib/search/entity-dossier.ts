@@ -35,10 +35,7 @@ import {
   findReadablePageByCanonicalEntity,
   type WikiReadScope,
 } from "../wiki/repository.js";
-import {
-  toGraphQLPage,
-  type GraphQLWikiPage,
-} from "../../graphql/resolvers/wiki/mappers.js";
+import { toGraphQLPage, type GraphQLWikiPage } from "../wiki/mappers.js";
 import { callerVisibleThreadPredicate } from "../../graphql/resolvers/threads/access.js";
 import { visibleThreadListPredicate } from "../../graphql/resolvers/threads/system-hidden.js";
 

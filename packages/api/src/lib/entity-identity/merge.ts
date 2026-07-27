@@ -7,9 +7,6 @@
  *   - entity_source_mappings + entity_identity_claims repoint to the survivor;
  *   - memory_claims.canonical_subject_id repoints;
  *   - kg.entities.canonical_entity_id repoints;
- *   - the loser's tenant Entity wiki page archives; its slug + title become
- *     survivor-page aliases (the partial unique on (tenant, canonical) means
- *     the survivor keeps at most one live page);
  *   - the loser keeps its UUID as a redirect: status='merged',
  *     merged_into_id=survivor (CHECK-enforced pairing);
  *   - an entity_resolution_events 'merge' audit row appends.
@@ -26,11 +23,8 @@ import {
   entitySourceMappings,
   kgEntities,
   memoryClaims,
-  wikiPageAliases,
-  wikiPages,
 } from "@thinkwork/database-pg/schema";
 import type { Database } from "../db.js";
-import { normalizeAlias } from "../wiki/repository.js";
 import type { IdentityDbClient } from "./matcher.js";
 import { appendResolutionEvent } from "./resolution.js";
 
@@ -39,9 +33,6 @@ export interface MergeImpactPreview {
   identityClaimCount: number;
   memoryClaimCount: number;
   graphEntityCount: number;
-  loserWikiPageId: string | null;
-  loserWikiPageSlug: string | null;
-  survivorWikiPageId: string | null;
 }
 
 export interface MergeCanonicalEntitiesArgs {
@@ -69,8 +60,7 @@ export function impactMatches(
     a.identityClaimCount === b.identityClaimCount &&
     a.memoryClaimCount === b.memoryClaimCount &&
     a.graphEntityCount === b.graphEntityCount &&
-    a.loserWikiPageId === b.loserWikiPageId &&
-    a.survivorWikiPageId === b.survivorWikiPageId
+    a.graphEntityCount === b.graphEntityCount
   );
 }
 
@@ -127,30 +117,6 @@ async function loadEntity(
   return row ?? null;
 }
 
-async function findTenantEntityPage(
-  db: IdentityDbClient,
-  tenantId: string,
-  canonicalEntityId: string,
-): Promise<{ id: string; slug: string; title: string } | null> {
-  const [row] = await db
-    .select({
-      id: wikiPages.id,
-      slug: wikiPages.slug,
-      title: wikiPages.title,
-    })
-    .from(wikiPages)
-    .where(
-      and(
-        eq(wikiPages.tenant_id, tenantId),
-        eq(wikiPages.type, "entity"),
-        eq(wikiPages.canonical_entity_id, canonicalEntityId),
-        sql`${wikiPages.owner_id} IS NULL`,
-      ),
-    )
-    .limit(1);
-  return row ?? null;
-}
-
 export async function computeMergeImpact(
   db: IdentityDbClient,
   args: { tenantId: string; survivorId: string; loserId: string },
@@ -191,21 +157,11 @@ export async function computeMergeImpact(
       .from(kgEntities)
       .where(eq(kgEntities.canonical_entity_id, args.loserId)),
   );
-  const loserPage = await findTenantEntityPage(db, args.tenantId, args.loserId);
-  const survivorPage = await findTenantEntityPage(
-    db,
-    args.tenantId,
-    args.survivorId,
-  );
-
   return {
     sourceMappingCount,
     identityClaimCount,
     memoryClaimCount,
     graphEntityCount,
-    loserWikiPageId: loserPage?.id ?? null,
-    loserWikiPageSlug: loserPage?.slug ?? null,
-    survivorWikiPageId: survivorPage?.id ?? null,
   };
 }
 
@@ -257,37 +213,6 @@ export async function mergeCanonicalEntities(
       .update(kgEntities)
       .set({ canonical_entity_id: args.survivorId, updated_at: now })
       .where(eq(kgEntities.canonical_entity_id, args.loserId));
-
-    // Wiki convergence: archive the loser's tenant Entity page; its slug and
-    // title live on as survivor aliases so links keep resolving. The loser
-    // page keeps canonical_entity_id = loser (a merged registry row persists
-    // as the redirect), so the survivor's partial-unique slot stays single.
-    if (impact.loserWikiPageId) {
-      const loserPage = await findTenantEntityPage(
-        tx,
-        args.tenantId,
-        args.loserId,
-      );
-      await tx
-        .update(wikiPages)
-        .set({ status: "archived", updated_at: now })
-        .where(eq(wikiPages.id, impact.loserWikiPageId));
-      if (impact.survivorWikiPageId && loserPage) {
-        const aliases = new Set(
-          [loserPage.slug, normalizeAlias(loserPage.title)].filter(Boolean),
-        );
-        for (const alias of aliases) {
-          await tx
-            .insert(wikiPageAliases)
-            .values({
-              page_id: impact.survivorWikiPageId,
-              alias,
-              source: "compiler",
-            })
-            .onConflictDoNothing();
-        }
-      }
-    }
 
     await tx
       .update(canonicalEntities)

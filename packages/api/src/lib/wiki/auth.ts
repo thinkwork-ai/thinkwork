@@ -1,11 +1,11 @@
-import type { GraphQLContext } from "../../context.js";
-import type { WikiReadScope } from "../../../lib/wiki/repository.js";
-import { hasServiceSecret } from "../core/authz.js";
+import type { GraphQLContext } from "../../graphql/context.js";
+import type { WikiReadScope } from "./repository.js";
+import { hasServiceSecret } from "../../graphql/resolvers/core/authz.js";
 import {
   requireMemoryTenantScope,
   requireMemoryUserScope,
   UserScopeAuthError,
-} from "../core/require-user-scope.js";
+} from "../../graphql/resolvers/core/require-user-scope.js";
 
 export class WikiAuthError extends Error {
   constructor(message: string) {

@@ -1,10 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { db } from "../../graphql/utils.js";
-import {
-  toGraphQLPage,
-  type GraphQLWikiPage,
-} from "../../graphql/resolvers/wiki/mappers.js";
+import { toGraphQLPage, type GraphQLWikiPage } from "./mappers.js";
 import type { WikiReadScope } from "./repository.js";
 
 export interface UserWikiSearchResult {

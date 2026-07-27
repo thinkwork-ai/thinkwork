@@ -65,7 +65,7 @@ function renderCard(
 }
 
 // Loosely typed (like SearchPalette.test.tsx's leg builders) so partial fixture
-// objects — e.g. a wikiPage with only the fields the card reads — don't have to
+// objects — partial shapes with only the fields the card reads — don't have to
 // satisfy every generated schema field.
 function matchResult(match: Record<string, unknown>): EntityDossierResult {
   return {
@@ -76,7 +76,6 @@ function matchResult(match: Record<string, unknown>): EntityDossierResult {
       ontologyTypeSlug: "customer",
       summary: null,
       aliases: ["Acme"],
-      wikiPage: null,
       canonicalEntityId: null,
       entityType: null,
       twinProjected: false,

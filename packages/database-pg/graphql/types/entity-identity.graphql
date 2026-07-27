@@ -83,9 +83,6 @@ type CanonicalEntityMergeImpact {
   identityClaimCount: Int!
   memoryClaimCount: Int!
   graphEntityCount: Int!
-  loserWikiPageId: ID
-  loserWikiPageSlug: String
-  survivorWikiPageId: ID
 }
 
 input CanonicalEntityMergeImpactInput {
@@ -93,9 +90,6 @@ input CanonicalEntityMergeImpactInput {
   identityClaimCount: Int!
   memoryClaimCount: Int!
   graphEntityCount: Int!
-  loserWikiPageId: ID
-  loserWikiPageSlug: String
-  survivorWikiPageId: ID
 }
 
 type CanonicalEntityMergeResult {
@@ -122,8 +116,8 @@ input SplitMappingAssignmentInput {
 """
 Split impact preview — computed before the split and echoed back as the
 confirmation input; a stale preview aborts the split (mirrors merge).
-Memory claims, graph entities, and the wiki page stay on half A and
-re-derive on the next compile.
+Memory claims and graph entities stay on half A and re-derive on the
+next compile.
 """
 type CanonicalEntitySplitImpact {
   mappingCountA: Int!
@@ -132,7 +126,6 @@ type CanonicalEntitySplitImpact {
   claimCountRemainingA: Int!
   memoryClaimCount: Int!
   graphEntityCount: Int!
-  wikiPageId: ID
 }
 
 input CanonicalEntitySplitImpactInput {
@@ -142,7 +135,6 @@ input CanonicalEntitySplitImpactInput {
   claimCountRemainingA: Int!
   memoryClaimCount: Int!
   graphEntityCount: Int!
-  wikiPageId: ID
 }
 
 type SplitCanonicalEntityResult {
@@ -427,7 +419,7 @@ extend type Mutation {
   ): EntityResolutionCase!
   """
   Guarded merge repair: the loser becomes a redirect (status merged) and its
-  mappings/claims/graph rows/wiki page repoint or archive onto the survivor.
+  mappings/claims/graph rows repoint or archive onto the survivor.
   `confirmImpact` must echo the preview exactly or the merge aborts.
   """
   mergeCanonicalEntities(

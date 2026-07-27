@@ -47,9 +47,6 @@ export async function mergeCanonicalEntities(
     identityClaimCount: args.confirmImpact.identityClaimCount,
     memoryClaimCount: args.confirmImpact.memoryClaimCount,
     graphEntityCount: args.confirmImpact.graphEntityCount,
-    loserWikiPageId: args.confirmImpact.loserWikiPageId ?? null,
-    loserWikiPageSlug: args.confirmImpact.loserWikiPageSlug ?? null,
-    survivorWikiPageId: args.confirmImpact.survivorWikiPageId ?? null,
   };
   const result = await mergeCanonicalEntitiesLib(db, {
     tenantId,

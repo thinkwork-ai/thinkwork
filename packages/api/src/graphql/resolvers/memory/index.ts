@@ -10,8 +10,6 @@ import { captureSpaceMemory } from "./captureSpaceMemory.mutation.js";
 import { ingestSpaceMemoryDocument } from "./ingestSpaceMemoryDocument.mutation.js";
 import { mobileMemoryCaptures } from "./mobileMemoryCaptures.query.js";
 import { mobileMemorySearch } from "./mobileMemorySearch.query.js";
-import { mobileWikiSearch } from "./mobileWikiSearch.query.js";
-import { recentWikiPages } from "./recentWikiPages.query.js";
 import { deleteMobileMemoryCapture } from "./deleteMobileMemoryCapture.mutation.js";
 import {
   threadIdleLearningRunQuery,
@@ -36,8 +34,6 @@ export const memoryQueries = {
   tenantBankMemories,
   mobileMemoryCaptures,
   mobileMemorySearch,
-  mobileWikiSearch,
-  recentWikiPages,
   threadIdleLearningRuns: threadIdleLearningRunsQuery,
   threadIdleLearningRun: threadIdleLearningRunQuery,
 };

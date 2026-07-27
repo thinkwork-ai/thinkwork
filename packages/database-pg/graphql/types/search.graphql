@@ -7,7 +7,6 @@
 
 enum SearchSource {
   THREADS
-  WIKI
   ENTITIES
   MEMORY
 }
@@ -24,12 +23,6 @@ type SearchThreadHit {
   identifier: String
   spaceId: ID
   updatedAt: String
-}
-
-type SearchWikiHit {
-  page: WikiPage!
-  score: Float!
-  matchedAlias: String
 }
 
 type SearchEntityHit {
@@ -55,7 +48,6 @@ type SearchLeg {
   status: SearchLegStatus!
   error: String
   threadHits: [SearchThreadHit!]
-  wikiHits: [SearchWikiHit!]
   entityHits: [SearchEntityHit!]
   memoryHits: [SearchMemoryHit!]
 }
@@ -83,8 +75,7 @@ extend type Query {
 
   """
   THINK-263 U5 — server-assembled dossier for one grounded knowledge-graph
-  entity: its compiled wiki page (null when none — a degrade, never a
-  fabricated fallback), contributing memories, linked threads, and artifacts.
+  entity: contributing memories, linked threads, and artifacts.
   Every thread-derived surface is fenced behind the caller's thread
   visibility; content from threads the caller cannot open is dropped entirely
   (the thread, its artifacts, and any memory hit stamped with it). Multiple
@@ -161,12 +152,10 @@ type EntityDossier {
   ontologyTypeSlug: String
   summary: String
   aliases: [String!]
-  "Compiled Entity page; null when the entity has no page (degrade path)."
-  wikiPage: WikiPage
   """
   Canonical identity for twin routing (THINK-327 U7): consumers link to the
-  Explorer entity detail with these instead of the wiki page. Null when the
-  matched entity has no canonical identity yet.
+  Explorer entity detail with these. Null when the matched entity has no
+  canonical identity yet.
   """
   canonicalEntityId: ID
   "Ontology entity-type slug of the canonical identity (pairs with canonicalEntityId)."
@@ -174,8 +163,7 @@ type EntityDossier {
   """
   Dual-read gate verdict (Company Brain U9 / AE8): true when this entity's
   tenant/type has flipped to the projected twin page, so search consumers
-  can route to the living render; the compiled `wikiPage` stays the
-  fallback either way.
+  can route to the living render.
   """
   twinProjected: Boolean!
   memories: [SearchMemoryHit!]!

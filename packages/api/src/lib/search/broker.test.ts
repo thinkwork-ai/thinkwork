@@ -4,7 +4,6 @@ const selectMock = vi.hoisted(() => vi.fn());
 const insertMock = vi.hoisted(() => vi.fn());
 const executeMock = vi.hoisted(() => vi.fn());
 const recallMock = vi.hoisted(() => vi.fn());
-const searchWikiMock = vi.hoisted(() => vi.fn());
 const searchKgMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@thinkwork/database-pg", async (importOriginal) => {
@@ -24,10 +23,6 @@ vi.mock("../memory/index.js", () => ({
   getMemoryServices: () => ({ recall: { recall: recallMock } }),
 }));
 
-vi.mock("../wiki/search.js", () => ({
-  searchWikiForReadScope: searchWikiMock,
-}));
-
 vi.mock("../knowledge-graph/graph-search.js", () => ({
   searchKnowledgeGraph: searchKgMock,
 }));
@@ -36,7 +31,6 @@ import { searchBroker, type SearchSource } from "./broker.js";
 
 const TENANT = "11111111-1111-1111-1111-111111111111";
 const USER = "22222222-2222-2222-2222-222222222222";
-const WIKI_SCOPE = { kind: "tenantUnion", userId: USER } as never;
 
 function threadSelectChain(rows: unknown[]) {
   const limit = vi.fn().mockResolvedValue(rows);
@@ -62,7 +56,6 @@ function baseArgs(
     query: "acme",
     sources,
     limit: 10,
-    wikiScope: WIKI_SCOPE,
     ...extra,
   };
 }
@@ -73,7 +66,6 @@ describe("searchBroker", () => {
     insertMock.mockReset();
     executeMock.mockReset();
     recallMock.mockReset();
-    searchWikiMock.mockReset();
     searchKgMock.mockReset();
     insertChain();
   });
@@ -89,9 +81,6 @@ describe("searchBroker", () => {
       },
     ]);
     selectMock.mockReturnValue({ from: chain.from });
-    searchWikiMock.mockResolvedValue([
-      { page: { id: "w1" }, score: 2, matchedAlias: null },
-    ]);
     searchKgMock.mockResolvedValue({
       entities: [
         {
@@ -108,21 +97,17 @@ describe("searchBroker", () => {
       relationships: [],
     });
 
-    const result = await searchBroker(
-      baseArgs(["THREADS", "WIKI", "ENTITIES"]),
-    );
+    const result = await searchBroker(baseArgs(["THREADS", "ENTITIES"]));
 
     expect(result.legs.map((l) => [l.source, l.status])).toEqual([
       ["THREADS", "OK"],
-      ["WIKI", "OK"],
       ["ENTITIES", "OK"],
     ]);
     expect(result.legs[0].threadHits?.[0]).toMatchObject({
       id: "t1",
       title: "Acme SOW",
     });
-    expect(result.legs[1].wikiHits?.[0]).toMatchObject({ score: 2 });
-    expect(result.legs[2].entityHits?.[0]).toMatchObject({
+    expect(result.legs[1].entityHits?.[0]).toMatchObject({
       entityId: "e1",
       label: "Acme",
       ontologyTypeSlug: "organization",
@@ -133,39 +118,37 @@ describe("searchBroker", () => {
   it("a timing-out leg yields TIMEOUT for its rail while others return OK", async () => {
     const chain = threadSelectChain([]);
     selectMock.mockReturnValue({ from: chain.from });
-    searchWikiMock.mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve([]), 250)),
+    searchKgMock.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ entities: [], relationships: [] }), 250),
+        ),
     );
-    searchKgMock.mockResolvedValue({ entities: [], relationships: [] });
 
     const result = await searchBroker(
-      baseArgs(["THREADS", "WIKI", "ENTITIES"], {
-        timeoutMs: { WIKI: 20 },
+      baseArgs(["THREADS", "ENTITIES"], {
+        timeoutMs: { ENTITIES: 20 },
       }),
     );
 
     const bySource = Object.fromEntries(
       result.legs.map((l) => [l.source, l.status]),
     );
-    expect(bySource.WIKI).toBe("TIMEOUT");
+    expect(bySource.ENTITIES).toBe("TIMEOUT");
     expect(bySource.THREADS).toBe("OK");
-    expect(bySource.ENTITIES).toBe("OK");
   });
 
   it("a throwing leg yields per-leg ERROR, not a query-level failure", async () => {
     const chain = threadSelectChain([]);
     selectMock.mockReturnValue({ from: chain.from });
-    searchWikiMock.mockRejectedValue(new Error("wiki exploded"));
-    searchKgMock.mockResolvedValue({ entities: [], relationships: [] });
+    searchKgMock.mockRejectedValue(new Error("entities exploded"));
 
-    const result = await searchBroker(
-      baseArgs(["THREADS", "WIKI", "ENTITIES"]),
-    );
+    const result = await searchBroker(baseArgs(["THREADS", "ENTITIES"]));
 
-    const wiki = result.legs.find((l) => l.source === "WIKI");
-    expect(wiki?.status).toBe("ERROR");
-    expect(wiki?.error).toContain("wiki exploded");
-    expect(result.legs.filter((l) => l.status === "OK")).toHaveLength(2);
+    const entities = result.legs.find((l) => l.source === "ENTITIES");
+    expect(entities?.status).toBe("ERROR");
+    expect(entities?.error).toContain("entities exploded");
+    expect(result.legs.filter((l) => l.status === "OK")).toHaveLength(1);
   });
 
   it("excludes memory hits whose stamped thread the caller cannot access; keeps unstamped hits", async () => {
@@ -215,10 +198,9 @@ describe("searchBroker", () => {
   it("never invokes the memory adapter when MEMORY is not requested", async () => {
     const chain = threadSelectChain([]);
     selectMock.mockReturnValue({ from: chain.from });
-    searchWikiMock.mockResolvedValue([]);
     searchKgMock.mockResolvedValue({ entities: [], relationships: [] });
 
-    await searchBroker(baseArgs(["THREADS", "WIKI", "ENTITIES"]));
+    await searchBroker(baseArgs(["THREADS", "ENTITIES"]));
     expect(recallMock).not.toHaveBeenCalled();
   });
 
@@ -245,11 +227,10 @@ describe("searchBroker", () => {
       },
     ]);
     selectMock.mockReturnValue({ from: chain.from });
-    searchWikiMock.mockResolvedValue([]);
     searchKgMock.mockResolvedValue({ entities: [], relationships: [] });
     const values = insertChain();
 
-    await searchBroker(baseArgs(["THREADS", "WIKI", "ENTITIES"]));
+    await searchBroker(baseArgs(["THREADS", "ENTITIES"]));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(values).toHaveBeenCalledTimes(1);
@@ -259,8 +240,8 @@ describe("searchBroker", () => {
       query_text: "acme",
       total_hits: 1,
       escalated: false,
-      leg_hit_counts: { THREADS: 1, WIKI: 0, ENTITIES: 0 },
-      leg_statuses: { THREADS: "OK", WIKI: "OK", ENTITIES: "OK" },
+      leg_hit_counts: { THREADS: 1, ENTITIES: 0 },
+      leg_statuses: { THREADS: "OK", ENTITIES: "OK" },
     });
   });
 
