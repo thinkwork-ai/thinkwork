@@ -44,11 +44,6 @@ function makeFakeSearch(
             status: "OK",
             lines: ["Acme SOW [TH-1]"],
           },
-          {
-            source: "WIKI",
-            status: "OK",
-            lines: ["Acme Corp (matched alias: Acme)"],
-          },
           { source: "ENTITIES", status: "TIMEOUT", lines: [] },
         ],
       };
@@ -119,19 +114,18 @@ describe("createSearchExtension", () => {
 
     const result = await getTool(tools, "search").execute(
       "call-1",
-      { query: "Acme", sources: ["THREADS", "WIKI", "ENTITIES"], limit: 5 },
+      { query: "Acme", sources: ["THREADS", "ENTITIES"], limit: 5 },
       NO_SIGNAL,
       NO_UPDATE,
       NO_CTX,
     );
 
     expect(calls).toEqual([
-      { query: "Acme", sources: ["THREADS", "WIKI", "ENTITIES"], limit: 5 },
+      { query: "Acme", sources: ["THREADS", "ENTITIES"], limit: 5 },
     ]);
     const text = (result.content?.[0] as { text: string }).text;
     expect(text).toContain("THREADS:");
     expect(text).toContain("Acme SOW [TH-1]");
-    expect(text).toContain("WIKI:");
     // A degraded leg renders as unavailable, not as an empty/OK rail.
     expect(text).toContain("ENTITIES (timeout): unavailable for this query");
   });

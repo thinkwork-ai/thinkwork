@@ -49,7 +49,6 @@ export {
   useMobileMemoryCaptures,
   useDeleteMobileMemoryCapture,
 } from "./hooks/use-mobile-memory-captures";
-export { useMobileMemorySearch } from "./hooks/use-mobile-memory-search";
 export {
   queryContext,
   type ContextEngineResponse,
@@ -62,21 +61,6 @@ export {
   useContextQuery,
   type UseContextQueryArgs,
 } from "./hooks/use-context-query";
-export { useRecentWikiPages } from "./hooks/use-recent-wiki-pages";
-export {
-  useWikiPage,
-  useWikiBacklinks,
-  useWikiConnectedPages,
-  type WikiPageDetail,
-  type WikiPageSection,
-  type WikiBacklink,
-} from "./hooks/use-wiki-page";
-export {
-  useWikiGraph,
-  type WikiGraphPayload,
-  type WikiGraphNodeFromServer,
-  type WikiGraphEdgeFromServer,
-} from "./hooks/use-wiki-graph";
 
 export type {
   ThinkworkConfig,
@@ -96,6 +80,4 @@ export type {
   MobileCaptureFactType,
   MobileMemoryCapture,
   CaptureMobileMemoryInput,
-  WikiPageType,
-  WikiSearchHit,
 } from "./types";

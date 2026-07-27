@@ -18,7 +18,7 @@
 
 /** One source-tagged group of hits from a single retrieval leg. */
 export interface SearchLegResult {
-  /** Retrieval source: "THREADS" | "WIKI" | "ENTITIES" | "MEMORY". */
+  /** Retrieval source: "THREADS" | "ENTITIES" | "MEMORY". */
   source: string;
   /** Per-leg status: "OK" | "TIMEOUT" | "ERROR". */
   status: string;
@@ -31,7 +31,7 @@ export interface SearchProviderRequest {
   query: string;
   /**
    * Which legs to run. Omitted → the broker's default find set
-   * (threads/wiki/entities; memory is opt-in). The agent tool defaults to
+   * (threads/entities; memory is opt-in). The agent tool defaults to
    * the find set and does not run the memory leg unless asked.
    */
   sources?: string[];

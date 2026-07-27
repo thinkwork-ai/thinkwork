@@ -28,7 +28,6 @@ const searchPayload = {
           source: "THREADS",
           status: "OK",
           threadHits: [{ title: "Acme SOW", identifier: "TH-1" }],
-          wikiHits: [],
           entityHits: [],
           memoryHits: [],
         },
@@ -36,7 +35,6 @@ const searchPayload = {
           source: "ENTITIES",
           status: "OK",
           threadHits: [],
-          wikiHits: [],
           entityHits: [
             {
               label: "Acme",
@@ -50,7 +48,6 @@ const searchPayload = {
           source: "MEMORY",
           status: "TIMEOUT",
           threadHits: [],
-          wikiHits: [],
           entityHits: [],
           memoryHits: [],
         },
