@@ -7,6 +7,11 @@ import type { KnowledgeGraphIngestRunRow } from "../../graphql/resolvers/knowled
 import type { KnowledgeGraphOntologyExport } from "./ontology-export.js";
 import type { KnowledgeGraphSourceBundle } from "./source-adapters.js";
 
+// `okf_bundle` / `okf_current_manifest` (and the "wiki" / "okf" source kinds)
+// no longer have a writer — the OKF materialization chain that produced them
+// was removed in the wiki-backend arc (plan 2026-07-24-002 U3). They stay in
+// the union, and in the matching `artifact_manifests` CHECK constraint, so
+// historic rows still parse on read. Do not add new producers.
 export type BrainArtifactManifestKind =
   | "source_artifact"
   | "ingestion_manifest"

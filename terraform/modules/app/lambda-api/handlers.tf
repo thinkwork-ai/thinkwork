@@ -390,15 +390,6 @@ locals {
     "ontology-scan" = {
       BEDROCK_MODEL_ID = var.wiki_compile_model_id
     }
-    "okf-materialize" = {
-      BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
-      # THINK-200 chain: fresh bundles fan out to the EFS current view.
-      OKF_EFS_REFRESH_FN_NAME = "thinkwork-${var.stage}-api-okf-efs-refresh"
-    }
-    "okf-efs-refresh" = {
-      BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
-      OKF_EFS_ROOT           = var.okf_efs_mount_path
-    }
     # THINK-193 U1 (Codex F6): normalized evidence snapshots live in the
     # encrypted brain-artifacts bucket under evidence-snapshots/ — Postgres
     # keeps only the s3:// ref + hash. 30-day lifecycle expiration below.
@@ -851,8 +842,6 @@ resource "aws_lambda_function" "handler" {
     # RequestResponse for the rebuild command. The per-tenant cursor row is
     # the source of truth — missed nudges are harmless.
     "identity-graph-projector",
-    "okf-materialize",
-    "okf-efs-refresh",
     "artifact-deliver",
     "recipe-refresh",
     "agent-skills-list",
@@ -1068,8 +1057,8 @@ resource "aws_lambda_function" "handler" {
   # headroom for transient slowness.
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "knowledge-base-manager" ? 900 : each.key == "kb-transcribe" ? 900 : each.key == "eval-worker" ? 240 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "okf-materialize" ? 600 : each.key == "okf-efs-refresh" ? 600 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(4096, var.lambda_max_memory_mb) : each.key == "okf-materialize" ? 1024 : each.key == "okf-efs-refresh" ? 1024 : each.key == "folder-bundle-import" ? 1024 : each.key == "kb-transcribe" ? 2048 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "knowledge-base-manager" ? 900 : each.key == "kb-transcribe" ? 900 : each.key == "eval-worker" ? 240 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(4096, var.lambda_max_memory_mb) : each.key == "folder-bundle-import" ? 1024 : each.key == "kb-transcribe" ? 2048 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
@@ -1104,19 +1093,10 @@ resource "aws_lambda_function" "handler" {
     )
   }
 
-  dynamic "vpc_config" {
-    for_each = each.key == "okf-efs-refresh" && local.okf_efs_vpc_enabled ? [1] : []
-
-    content {
-      subnet_ids         = var.okf_efs_subnet_ids
-      security_group_ids = var.okf_efs_security_group_ids
-    }
-  }
-
   # Analyst data-path handlers get a stable NAT egress IP when
   # analyst_egress_subnet_ids is set — external Postgres sources behind an IP
-  # allowlist admit that one EIP. Disjoint from the okf-efs-refresh block
-  # above (a function takes at most one vpc_config).
+  # allowlist admit that one EIP. Disjoint from the Neptune block below (a
+  # function takes at most one vpc_config).
   dynamic "vpc_config" {
     for_each = contains(local.analyst_vpc_handlers, each.key) && local.analyst_vpc_enabled ? [1] : []
 
@@ -1134,25 +1114,6 @@ resource "aws_lambda_function" "handler" {
     content {
       subnet_ids         = var.neptune_subnet_ids
       security_group_ids = var.neptune_security_group_ids
-    }
-  }
-
-  dynamic "file_system_config" {
-    for_each = each.key == "okf-efs-refresh" && local.okf_efs_vpc_enabled ? [1] : []
-
-    content {
-      arn              = var.okf_efs_refresh_access_point_arn
-      local_mount_path = var.okf_efs_mount_path
-    }
-  }
-
-  lifecycle {
-    precondition {
-      condition = each.key != "okf-efs-refresh" || var.okf_efs_refresh_access_point_arn == "" || (
-        length(var.okf_efs_mount_target_ids) == length(var.okf_efs_subnet_ids) &&
-        alltrue([for id in var.okf_efs_mount_target_ids : id != ""])
-      )
-      error_message = "okf-efs-refresh requires an available EFS mount target dependency for every configured subnet."
     }
   }
 
