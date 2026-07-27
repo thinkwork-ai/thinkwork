@@ -43,6 +43,9 @@ const THINKWORK_VARS = resolve(
 );
 const BUILD_COMPUTER = resolve(REPO_ROOT, "scripts/build-web.sh");
 const DEPLOY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/deploy.yml");
+// deploy.yml's apply step sources this for its Terraform variable set, so the
+// plan_only dispatch mode builds an identical one.
+const DEPLOY_TF_VARS = resolve(REPO_ROOT, "scripts/deploy/terraform-vars.sh");
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -393,8 +396,13 @@ describe("Computer Mapbox production wiring", () => {
   it("deploy passes the Mapbox public token into Terraform; the release web build passes it to Vite", () => {
     // deploy.yml still threads the token into terraform-apply, but does so
     // through TF_VAR_* so it does not appear in Terraform command argv.
+    // The secret is mapped in the step's env block; the export itself moved
+    // to the shared variable script that plan_only and apply both source.
     expect(read(DEPLOY_WORKFLOW)).toMatch(
-      /TF_VAR_mapbox_public_token="\$\{\{ secrets\.MAPBOX_PUBLIC_TOKEN/,
+      /MAPBOX_PUBLIC_TOKEN:\s*\$\{\{ secrets\.MAPBOX_PUBLIC_TOKEN/,
+    );
+    expect(read(DEPLOY_TF_VARS)).toMatch(
+      /export TF_VAR_mapbox_public_token="\$\{MAPBOX_PUBLIC_TOKEN/,
     );
     // The build-web job in deploy.yml feeds MAPBOX_PUBLIC_TOKEN into
     // build-web.sh → VITE_MAPBOX_PUBLIC_TOKEN.

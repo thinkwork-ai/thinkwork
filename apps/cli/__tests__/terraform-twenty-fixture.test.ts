@@ -70,6 +70,11 @@ const ENTERPRISE_TEMPLATE_MAIN = resolve(
 );
 const DEPLOY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/deploy.yml");
 const VERIFY_WORKFLOW = resolve(REPO_ROOT, ".github/workflows/verify.yml");
+// deploy.yml resolves the Twenty inputs, then builds its Terraform variables
+// in this shared script so the plan_only dispatch mode gets an identical set.
+// verify.yml still builds its own inline. Assert each against the file that
+// actually owns the flags.
+const DEPLOY_TF_VARS = resolve(REPO_ROOT, "scripts/deploy/terraform-vars.sh");
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -594,14 +599,22 @@ describe("U1 - Twenty Terraform app module", () => {
       expect(workflow).toMatch(
         /thinkwork\/\$\{STAGE\}\/twenty\/encryption-key/,
       );
-      expect(workflow).toMatch(/-var "twenty_provisioned=\$/);
-      expect(workflow).toMatch(/-var "twenty_runtime_enabled=\$/);
-      expect(workflow).toMatch(/-var "twenty_image_uri=\$/);
-      expect(workflow).toMatch(/-var "twenty_db_username=\$/);
-      expect(workflow).toMatch(/-var "twenty_db_name=\$/);
-      expect(workflow).toMatch(/-var "twenty_db_url_secret_arn=\$/);
-      expect(workflow).toMatch(/-var "twenty_encryption_key_secret_arn=\$/);
     }
+
+    // The resolved inputs must still reach Terraform. deploy.yml delegates
+    // that to the shared script; verify.yml keeps its own inline block.
+    for (const varsSource of [read(DEPLOY_TF_VARS), read(VERIFY_WORKFLOW)]) {
+      expect(varsSource).toMatch(/-var "twenty_provisioned=\$/);
+      expect(varsSource).toMatch(/-var "twenty_runtime_enabled=\$/);
+      expect(varsSource).toMatch(/-var "twenty_image_uri=\$/);
+      expect(varsSource).toMatch(/-var "twenty_db_username=\$/);
+      expect(varsSource).toMatch(/-var "twenty_db_name=\$/);
+      expect(varsSource).toMatch(/-var "twenty_db_url_secret_arn=\$/);
+      expect(varsSource).toMatch(/-var "twenty_encryption_key_secret_arn=\$/);
+    }
+    expect(read(DEPLOY_WORKFLOW)).toContain(
+      "source ../../../scripts/deploy/terraform-vars.sh",
+    );
   });
 
   it("prepares Twenty runtime secrets and database before Terraform apply when provisioned", () => {
