@@ -63,11 +63,6 @@ export const sharedPluginTermAllowlist = [
       "shared platform provider adapter service for the Email Channel plugin runtime path.",
   },
   {
-    pathPrefix: "apps/web/src/components/settings/plugins/email-channel/",
-    reason:
-      "shared plugin settings shell renders the Email Channel plugin control plane.",
-  },
-  {
     path: "packages/database-pg/__tests__/migration-0170-email-channel-plugin.test.ts",
     reason: "Email Channel plugin database contract coverage.",
   },
@@ -158,26 +153,6 @@ export const sharedPluginTermAllowlist = [
     path: "packages/api/src/handlers/twenty-client-engagement.ts",
     reason:
       "shared platform REST app data API for the Twenty Client Engagement plugin app; plugin runtime and manifest source remain package-owned under plugins/twenty.",
-  },
-  {
-    pathPrefix: "apps/web/src/components/plugin-apps/twenty-client-engagement/",
-    reason:
-      "shared platform React app surface for the Twenty Client Engagement plugin app; plugin runtime and manifest source remain package-owned under plugins/twenty.",
-  },
-  {
-    pathPrefix: "apps/web/src/components/plugin-apps/n8n-workflows/",
-    reason:
-      "shared platform React host adapter for the n8n plugin app; reusable app runtime and manifest source remain package-owned under plugins/n8n.",
-  },
-  {
-    pathPrefix: "apps/web/src/components/settings/plugins/n8n/",
-    reason:
-      "shared Plugin Detail UI shell for n8n package settings; package-specific validation is imported from plugins/n8n.",
-  },
-  {
-    pathPrefix: "apps/web/src/routes/_authed/settings.plugins.n8n",
-    reason:
-      "shared route-backed Plugin Detail UI shell for the n8n plugin settings route and legacy redirects; plugin runtime source remains package-owned under plugins/n8n.",
   },
   {
     pathPrefix: "packages/api/src/graphql/resolvers/workflows/",
