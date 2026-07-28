@@ -75,6 +75,49 @@ function forEachKnowledgeInvocation(
 }
 
 /**
+ * Structured hit rows from an MCP knowledge-server invocation.
+ *
+ * When retrieval runs as a plain MCP tool (an attached knowledge server like
+ * the brain's `brain_knowledge_search`, not a bound KB), the container records
+ * the full MCP response under `result.details.raw`; knowledge servers return
+ * `structuredContent.results` rows `{id, title, text, score, documentUrl?}`
+ * where `id` may carry a `#p=<n>` page suffix. Recognition is by the server's
+ * REAL tool name in `details.mcp_tool_name` — the exposed AgentTool name may
+ * be hash-truncated.
+ */
+function mcpKnowledgeRows(
+  record: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const result = record.result as Record<string, unknown> | undefined;
+  const details = result?.details as Record<string, unknown> | undefined;
+  const mcpTool =
+    typeof details?.mcp_tool_name === "string" ? details.mcp_tool_name : "";
+  if (!/knowledge_search|search_knowledge/i.test(mcpTool)) return [];
+  const raw = details?.raw as Record<string, unknown> | undefined;
+  const structured = raw?.structuredContent as
+    | Record<string, unknown>
+    | undefined;
+  const rows = structured?.results ?? structured?.hits;
+  if (!Array.isArray(rows)) return [];
+  return rows.filter(
+    (row): row is Record<string, unknown> =>
+      Boolean(row) && typeof row === "object",
+  );
+}
+
+/** Iterate the MCP knowledge-server invocations of one turn. */
+function forEachMcpKnowledgeInvocation(
+  invocations: unknown[],
+  visit: (rows: Record<string, unknown>[]) => void,
+): void {
+  for (const value of invocations) {
+    if (!value || typeof value !== "object") continue;
+    const rows = mcpKnowledgeRows(value as Record<string, unknown>);
+    if (rows.length > 0) visit(rows);
+  }
+}
+
+/**
  * Numbered citations for a turn, newest-wins-never: the FIRST occurrence of a
  * marker is authoritative, because that is the one the model was looking at
  * when it wrote the marker into its answer.
@@ -137,6 +180,30 @@ export function knowledgeCitationsFromInvocations(
         });
       }
     }
+  });
+
+  // MCP knowledge servers number their rendered passages 1..k per call (the
+  // model reads "[n] …" lines), so the marker for a row is its 1-based index.
+  // First-occurrence-wins (the map's add) keeps the first search's numbering
+  // authoritative when a turn searches more than once.
+  forEachMcpKnowledgeInvocation(invocations, (rows) => {
+    rows.forEach((row, index) => {
+      const split = splitPageDocumentKey(
+        typeof row.id === "string" ? row.id : "",
+      );
+      add({
+        n: index + 1,
+        key: split.key,
+        page:
+          typeof row.pageNumber === "number" ? row.pageNumber : split.page,
+        quote:
+          typeof row.text === "string" ? row.text.slice(0, 280) : undefined,
+        documentUrl:
+          typeof row.documentUrl === "string" && row.documentUrl
+            ? row.documentUrl
+            : undefined,
+      });
+    });
   });
 
   return citations;
@@ -217,6 +284,25 @@ export function knowledgeSourcesFromInvocations(
       collect(record.output_preview);
     }
   }
+  // MCP knowledge-server hits: same dedupe, first citation wins the page.
+  forEachMcpKnowledgeInvocation(invocations, (rows) => {
+    for (const row of rows) {
+      const split = splitPageDocumentKey(
+        typeof row.id === "string" ? row.id : "",
+      );
+      if (!split.key || seen.has(split.key)) continue;
+      seen.add(split.key);
+      sources.push({
+        key: split.key,
+        page:
+          typeof row.pageNumber === "number" ? row.pageNumber : split.page,
+        documentUrl:
+          typeof row.documentUrl === "string" && row.documentUrl
+            ? row.documentUrl
+            : undefined,
+      });
+    }
+  });
   return sources;
 }
 

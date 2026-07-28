@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  knowledgeCitationsFromInvocations,
   knowledgeSourceKeysFromInvocations,
   knowledgeSourcesFromInvocations,
 } from "./sources";
@@ -123,5 +124,81 @@ describe("knowledgeSourcesFromInvocations — page citations", () => {
         },
       ]),
     ).toEqual([{ key: "cx/files/CX-0144.xlsx", page: undefined }]);
+  });
+});
+
+describe("MCP knowledge-server invocations", () => {
+  const mcpInvocation = (rows: unknown[], toolName = "brain_knowledge_search") => ({
+    tool_name: "mcp_brain_kb_brain_knowledge_search",
+    result: {
+      content: [{ type: "text", text: "[1] rendered…" }],
+      details: {
+        server_name: "brain-kb",
+        mcp_tool_name: toolName,
+        raw: { structuredContent: { results: rows } },
+      },
+    },
+  });
+
+  it("extracts sources with pages and documentUrl from structured rows", () => {
+    const sources = knowledgeSourcesFromInvocations([
+      mcpInvocation([
+        {
+          id: "CX-0215 Setting Up New Reason Code.pdf#p=1",
+          text: "UDC in navigator…",
+          score: 0.4,
+          documentUrl: "https://signed.example/doc1",
+        },
+        {
+          id: "CX-0144 Codes.xlsx",
+          text: "code table",
+          score: 0.3,
+        },
+        // Same document, later page: first citation wins.
+        {
+          id: "CX-0215 Setting Up New Reason Code.pdf#p=3",
+          text: "another page",
+          score: 0.2,
+        },
+      ]),
+    ]);
+    expect(sources).toEqual([
+      {
+        key: "CX-0215 Setting Up New Reason Code.pdf",
+        page: 1,
+        documentUrl: "https://signed.example/doc1",
+      },
+      { key: "CX-0144 Codes.xlsx", page: undefined, documentUrl: undefined },
+    ]);
+  });
+
+  it("numbers inline citations by row order with quotes and documentUrl", () => {
+    const citations = knowledgeCitationsFromInvocations([
+      mcpInvocation([
+        {
+          id: "CX-0215 Setting Up New Reason Code.pdf#p=1",
+          text: "UDC in navigator…",
+          documentUrl: "https://signed.example/doc1",
+        },
+        { id: "CX-0144 Codes.xlsx", text: "code table" },
+      ]),
+    ]);
+    expect(citations.get(1)).toEqual({
+      n: 1,
+      key: "CX-0215 Setting Up New Reason Code.pdf",
+      page: 1,
+      quote: "UDC in navigator…",
+      documentUrl: "https://signed.example/doc1",
+    });
+    expect(citations.get(2)?.key).toBe("CX-0144 Codes.xlsx");
+    expect(citations.get(2)?.documentUrl).toBeUndefined();
+  });
+
+  it("ignores MCP tools that are not knowledge searches", () => {
+    expect(
+      knowledgeSourcesFromInvocations([
+        mcpInvocation([{ id: "row.pdf", text: "x" }], "brain_cypher"),
+      ]),
+    ).toEqual([]);
   });
 });
