@@ -1703,3 +1703,76 @@ export function loadFile(name: CanonicalFileName): string {
   }
   return content;
 }
+
+// ---------------------------------------------------------------------------
+// Catalog-only skills
+//
+// These ship to every tenant's S3 skill catalog via the deploy-time seeder
+// (`packages/api/src/lib/skill-trust/seed-default-skills.ts`) but are
+// deliberately kept OUT of `CANONICAL_FILE_NAMES` / `loadDefaults()`.
+//
+// That separation is the whole point. Everything in `loadDefaults()` is copied
+// into each tenant's `_catalog/defaults/workspace/` template, which every new
+// agent then copies from — so a skill placed there is materialized into every
+// agent's workspace whether or not anyone asked for it. `autoGrant: false`
+// alone does NOT prevent that; it only skips the platform-agent install.
+//
+// A catalog-only skill is available for an operator to install and invisible
+// until they do.
+// ---------------------------------------------------------------------------
+
+/**
+ * Mirror of `packages/workspace-defaults/files/catalog-skills/n8n-workflow-operator/SKILL.md`.
+ */
+const N8N_WORKFLOW_OPERATOR_SKILL_MD =
+  '---\nname: n8n-workflow-operator\ndescription: Create, update, validate, test, and debug n8n workflows through the tenant\u0027s registered n8n MCP server. Use when a request names n8n, workflows, executions, Code node packages, workflow migration, automation drafts, or asks to create an automation from a thread.\nlicense: Apache-2.0\ncompatibility: A registered n8n MCP server backed by a tenant n8n instance with instance-level MCP enabled.\nmetadata:\n  skill-format: agentskills\n---\n\n# n8n Workflow Operator\n\nUse n8n as a shared tenant automation runtime. Read live workflow and node\nstate, make draft-safe changes, validate the result, and leave production\nactivation to the shared native n8n operator unless the human explicitly says\notherwise.\n\n## First Move\n\n1. Use this skill before any n8n workflow create, update, validation, test, or\n   debug action.\n2. Use the n8n MCP tools exposed by the tenant\u0027s registered n8n MCP server. It\n   authenticates with a tenant service credential, not per-user n8n activation.\n3. If n8n tools are missing, report that an operator must register the n8n MCP\n   server in Connectors, enable instance-level MCP in n8n, and enable MCP\n   access on the workflow, project, or folder.\n4. Trust live MCP tool descriptions and node schemas over memory. n8n changes\n   quickly; if a live tool or schema disagrees with this skill, follow the live\n   tool and report the drift in the handoff.\n\n## Authoring Loop\n\nFor requests such as "create a workflow", "edit this workflow", or "make a\nsmoke test":\n\n1. Classify the pattern: manual trigger, webhook, schedule, HTTP API\n   integration, database sync, AI agent, or batch processing.\n2. Read [MCP tooling](references/mcp-tooling.md), then discover live node\n   schemas before configuring nodes.\n3. Read [workflow authoring](references/workflow-authoring.md), then create or\n   update an inactive draft. Use UUID-shaped node ids, current `typeVersion`\n   values, and no placeholder credentials or secrets.\n4. Validate iteratively. Treat validation errors as normal feedback: fix the\n   specific field, then validate again.\n5. Fetch the workflow after every create or update and inspect `connections` so\n   silently dropped or wrong wires are caught before handoff.\n6. Test only when safe. n8n test runs execute real HTTP calls, writes, sends,\n   and other side effects.\n7. Finish with [validation and handoff](references/validation-and-handoff.md).\n\n## ThinkWork Agent-Step Bridge\n\n1. For n8n-to-ThinkWork agent work, use the v1 agent-step bridge with stock\n   HTTP Request and Wait nodes. Do not suggest a custom ThinkWork n8n node in\n   v1.\n2. The HTTP Request node calls ThinkWork\u0027s\n   `/api/integrations/n8n/agent-steps` endpoint with the separate inbound\n   bridge credential. Do not reuse the native n8n MCP service credential.\n3. The workflow must pass target Space, target agent, instructions, structured\n   input, workflow id/name, execution id, step id, correlation id, optional\n   request id, optional timeout, and the current Wait-node resume URL from\n   `$execution.resumeUrl`.\n4. The Wait node should use On webhook call. Downstream nodes should branch on\n   the resumed payload\u0027s `status` and read `output`, `error`, `summary`,\n   and `links`; they should not scrape ThinkWork thread pages.\n5. Explain idempotency as workflow id + execution id + correlation id + step\n   id. Retrying the same bridge step should recover or replay the existing\n   ThinkWork thread rather than creating a duplicate.\n\n## Stop Conditions\n\nStop before writing when multiple workflows match, the workflow/project/folder\ndoes not have MCP access enabled, credentials are unknown, a test would touch\nproduction side effects, the user asks for production activation without using\nthe native n8n operator account, or the live MCP tool surface conflicts with\nthe requested action.\n';
+
+/**
+ * Mirror of `packages/workspace-defaults/files/catalog-skills/n8n-workflow-operator/references/mcp-tooling.md`.
+ */
+const N8N_WORKFLOW_OPERATOR_MCP_TOOLING_MD =
+  "# MCP Tooling\n\nUse live n8n MCP tools as the source of truth for tool names, argument shapes,\nnode schemas, and current `typeVersion` values.\n\n## Tool Selection\n\n1. Search for nodes before configuring them.\n2. Read the node schema before setting parameters. Standard detail is enough for\n   most nodes; use deeper docs only when the required field is unclear.\n3. Validate nodes or workflows as soon as the tool surface supports it.\n4. Prefer partial workflow updates for edits to existing workflows. Include a\n   short intent when the tool accepts one.\n5. Fetch the workflow after create/update and inspect `connections`.\n\n## Node Type Formats\n\nUse the form expected by the tool being called:\n\n1. Node discovery and node validation tools use short forms, for example\n   `nodes-base.httpRequest`.\n2. Workflow JSON uses full forms, for example\n   `n8n-nodes-base.httpRequest`.\n3. If a tool returns both forms, carry both forward instead of reconstructing\n   from memory.\n\n## Credentials And Secrets\n\n1. Never emit fake credential ids such as `REPLACE_ME`.\n2. If the real credential id is unknown, omit the `credentials` block so the\n   native UI can show a usable selector.\n3. Never put tokens, API keys, or passwords in Set nodes, Code nodes,\n   expressions, or plain text fields. Use the n8n credential system.\n4. The ThinkWork agent-step bridge credential is separate from the n8n MCP\n   service credential.\n\n## Shortened Tool Names\n\nThe ThinkWork runtime may expose long MCP tool names in shortened form. Choose\ntools by descriptions and parameter schemas, not memorized exact names.\n";
+
+/**
+ * Mirror of `packages/workspace-defaults/files/catalog-skills/n8n-workflow-operator/references/workflow-authoring.md`.
+ */
+const N8N_WORKFLOW_OPERATOR_WORKFLOW_AUTHORING_MD =
+  "# Workflow Authoring\n\nBuild the smallest inactive draft that proves the requested automation shape,\nthen validate and verify it before handoff.\n\n## Pattern Choice\n\n1. Manual trigger: use for user-triggered smoke tests and safe demos.\n2. Webhook: use when an external system pushes an event.\n3. Schedule: use for recurring fetch, report, and maintenance workflows.\n4. HTTP API integration: use for read/write calls to external REST APIs.\n5. Database sync: use for ETL and record reconciliation.\n6. AI agent: use when the workflow needs model reasoning or n8n agent tools.\n7. Batch processing: use when item count, pagination, or rate limits matter.\n\n## Construction Rules\n\n1. Prefer HTTP Request nodes over Code nodes for ordinary GET/POST calls.\n2. Prefer expressions in the consuming field for simple data mapping.\n3. Use `{{ ... }}` expressions in n8n fields. Use direct JavaScript only inside\n   Code nodes.\n4. Avoid Set/Edit Fields nodes that feed a single consumer; inline the\n   expression at the consuming field.\n5. For webhook workflows, user payload fields are under `$json.body`, not at\n   the root.\n6. For branchy workflows, reference upstream nodes by name instead of relying on\n   ambiguous `$json` at branch convergence.\n7. Search for existing workflows or templates before creating a larger reusable\n   workflow from scratch.\n\n## Draft Safety\n\n1. Keep created workflows inactive unless the human explicitly completes\n   production activation in the native n8n UI.\n2. Prefer disabled copies or disposable draft workflows for edits.\n3. Run only read-only or low-risk test executions without additional\n   confirmation.\n4. Do not trigger a production webhook, schedule, message send, database write,\n   or destructive external side effect as a smoke test.\n\n## Code Nodes\n\nUse Code nodes only for multi-item aggregation, allowlisted package use, or\nlogic that cannot be expressed in fields. For Code nodes, use only packages\nalready available to the tenant\u0027s n8n deployment. Ask an operator to add a\npackage rather than assuming one is present.\n";
+
+/**
+ * Mirror of `packages/workspace-defaults/files/catalog-skills/n8n-workflow-operator/references/validation-and-handoff.md`.
+ */
+const N8N_WORKFLOW_OPERATOR_VALIDATION_AND_HANDOFF_MD =
+  "# Validation And Handoff\n\nValidation passing is necessary, not sufficient. A workflow can validate and\nstill have wrong wires, missing branches, or unsafe runtime behavior.\n\n## Validation Loop\n\n1. Validate configured nodes when available.\n2. Create or update the inactive workflow.\n3. Validate the complete workflow.\n4. Fix one concrete error at a time, then validate again.\n5. Treat warnings as context-sensitive. Production workflows should address\n   missing error handling, retry, rate-limit, and credential warnings unless\n   there is a clear reason to accept them.\n\n## Verify After Write\n\nAfter every create or update:\n\n1. Fetch the workflow by id.\n2. Confirm workflow id, name, active state, tags, project or folder, trigger\n   nodes, credential references, and MCP access state.\n3. Inspect `connections` directly. Confirm each expected branch, error output,\n   and merge input is wired to the intended node.\n4. If multiple workflows match, stop and ask for the exact workflow id or URL.\n\n## Test Evidence\n\n1. Ask before any test that can create records, call external APIs, send\n   messages, or mutate production systems.\n2. Prefer disposable inputs and read-only endpoints.\n3. Record execution ids, failure messages, validation errors, and evidence\n   links in the handoff.\n\n## Handoff Checklist\n\nInclude workflow id, workflow name, draft/test status, package requirements,\ncredential assumptions, MCP access state, validation result, connection\nverification result, test evidence, and the native n8n UI action required from\nthe shared operator.\n";
+
+/**
+ * Catalog-only skill files, keyed by path relative to `files/catalog-skills/`.
+ */
+export const CATALOG_SKILL_FILE_NAMES = [
+  "n8n-workflow-operator/SKILL.md",
+  "n8n-workflow-operator/references/mcp-tooling.md",
+  "n8n-workflow-operator/references/workflow-authoring.md",
+  "n8n-workflow-operator/references/validation-and-handoff.md",
+] as const;
+
+export type CatalogSkillFileName = (typeof CATALOG_SKILL_FILE_NAMES)[number];
+
+const CATALOG_SKILL_CONTENT: Record<CatalogSkillFileName, string> = {
+  "n8n-workflow-operator/SKILL.md": N8N_WORKFLOW_OPERATOR_SKILL_MD,
+  "n8n-workflow-operator/references/mcp-tooling.md":
+    N8N_WORKFLOW_OPERATOR_MCP_TOOLING_MD,
+  "n8n-workflow-operator/references/workflow-authoring.md":
+    N8N_WORKFLOW_OPERATOR_WORKFLOW_AUTHORING_MD,
+  "n8n-workflow-operator/references/validation-and-handoff.md":
+    N8N_WORKFLOW_OPERATOR_VALIDATION_AND_HANDOFF_MD,
+};
+
+/**
+ * Return the catalog-only skill files as a Record keyed by path relative to
+ * `files/catalog-skills/` (e.g. `n8n-workflow-operator/SKILL.md`).
+ *
+ * Returns a fresh object each call so callers may mutate it freely.
+ */
+export function loadCatalogSkills(): Record<CatalogSkillFileName, string> {
+  return { ...CATALOG_SKILL_CONTENT };
+}
