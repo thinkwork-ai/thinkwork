@@ -216,11 +216,6 @@ import {
   type RetainPayloadInput,
 } from "./runtime/tools/memory-retain-client.js";
 import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
-import { buildCapabilitySearchTool } from "./runtime/tools/capability-search.js";
-import { buildConnectionResearchTool } from "./runtime/tools/connection-research.js";
-import { buildRoutineProposeTool } from "./runtime/tools/routine-propose.js";
-import { buildSelfAdmitCapabilityTool } from "./runtime/tools/self-admit-capability.js";
-import { buildSelfPromoteRoutineTool } from "./runtime/tools/self-promote-routine.js";
 import { runAgentCoreBrowserAutomation } from "./runtime/browser-automation-runner.js";
 import {
   discoverWorkspaceSkills,
@@ -1534,61 +1529,6 @@ export async function buildInvocationResources(
 
   if (args.payload.thread_json_render_ui_enabled === true) {
     tools.push(buildEmitJsonRenderUiTool());
-  }
-
-  // THINK-280 U2 — capability control-plane tools. Registered only when the
-  // dispatch carried a signed capability caller context (the container holds
-  // only the capability PUBLIC key and can never mint one) AND the control
-  // Lambda name is wired. Both tools ride ONE narrow service Lambda via
-  // direct RequestResponse invoke; the custom-tool names enter the
-  // createAgentSession allowlist through buildToolAllowlist's customTools
-  // leg. Suppressed under eval_mode: connection_research writes proposal
-  // rows and replayed threads must not create research evidence.
-  const capabilityCallerContext = asString(
-    args.payload.capability_caller_context,
-  );
-  if (
-    args.payload.eval_mode !== true &&
-    args.env.capabilityControlFnName &&
-    capabilityCallerContext
-  ) {
-    const capabilityLambdaClient = new LambdaClient({
-      region: args.env.awsRegion,
-    });
-    tools.push(
-      buildCapabilitySearchTool({
-        env: args.env,
-        lambdaClient: capabilityLambdaClient,
-        callerContext: capabilityCallerContext,
-      }),
-      buildConnectionResearchTool({
-        env: args.env,
-        lambdaClient: capabilityLambdaClient,
-        callerContext: capabilityCallerContext,
-      }),
-      // THINK-280 U6 — propose a Routine for promotion (create-only; the
-      // backing Lambda cannot approve, commit, validate, or activate).
-      buildRoutineProposeTool({
-        env: args.env,
-        lambdaClient: capabilityLambdaClient,
-        callerContext: capabilityCallerContext,
-      }),
-      // Governed autonomy U4 — self-extension: autonomously admit a public
-      // capability and promote a composed Routine with NO human. The backing
-      // Lambda gates both fail-closed on the per-tenant opt-in and the
-      // auto-tier classifier; anything credentialed/writing is held for
-      // operator review. Default OFF — inert until a tenant is opted in.
-      buildSelfAdmitCapabilityTool({
-        env: args.env,
-        lambdaClient: capabilityLambdaClient,
-        callerContext: capabilityCallerContext,
-      }),
-      buildSelfPromoteRoutineTool({
-        env: args.env,
-        lambdaClient: capabilityLambdaClient,
-        callerContext: capabilityCallerContext,
-      }),
-    );
   }
 
   if (hasPiGoalMode(args.payload)) {
