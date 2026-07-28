@@ -9,8 +9,6 @@ import {
 const ACTIVITY = "/settings/activity";
 const KNOWLEDGE_GRAPH = "/settings/knowledge-graph";
 const KNOWLEDGE_BASES = "/settings/knowledge-bases";
-const CRM = "/settings/crm";
-const MANAGED_APPLICATIONS = "/settings/managed-applications";
 const BILLING = "/settings/billing";
 const AGENTS = "/settings/agents";
 const MODEL_CATALOG = "/settings/model-catalog";
@@ -37,7 +35,7 @@ describe("visibleSettingsNavItems", () => {
     expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Workspace")).toBe(false);
   });
 
-  it("shows personal Connections alongside General, Activity, and Plugins for members", () => {
+  it("shows personal Connections alongside General and Activity for members", () => {
     const memberWeb = visibleSettingsNavItems({
       isOperator: false,
       roleResolved: true,
@@ -47,7 +45,6 @@ describe("visibleSettingsNavItems", () => {
       "Activity",
       "Connectors",
       "General",
-      "Plugins",
     ]);
     expect(memberWeb.some((i) => i.to === "/settings/users")).toBe(false);
   });
@@ -187,10 +184,8 @@ describe("visibleSettingsNavItems", () => {
     }
   });
 
-  it("no longer lists standalone CRM or Knowledge Bases nav entries", () => {
-    // CRM is reached by drilling in from Applications; Knowledge Bases is a tab
-    // of the Memory page using the legacy knowledge-base route.
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === CRM)).toBe(false);
+  it("no longer lists a standalone Knowledge Bases nav entry", () => {
+    // Knowledge Bases is a tab of the Memory page using the legacy route.
     expect(SETTINGS_NAV_ITEMS.some((i) => i.to === KNOWLEDGE_BASES)).toBe(
       false,
     );
@@ -208,19 +203,15 @@ describe("visibleSettingsNavItems", () => {
     );
   });
 
-  it("retires the Applications nav item (superseded by Plugins)", () => {
-    // The managed-applications surface left the nav — Plugins supersedes it.
-    // The route still resolves by URL, so the breadcrumb falls back to the
-    // generic settings label.
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === MANAGED_APPLICATIONS)).toBe(
-      false,
-    );
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Applications")).toBe(
-      false,
-    );
-    expect(settingsCrumbForPath(MANAGED_APPLICATIONS)).toEqual([
-      { label: "Settings" },
-    ]);
+  it("carries no Plugins or Applications nav entry", () => {
+    // The plugin system and its Applications projection are gone: third-party
+    // applications are white-glove installed, not self-serve managed.
+    for (const label of ["Plugins", "Applications"]) {
+      expect(SETTINGS_NAV_ITEMS.some((i) => i.label === label)).toBe(false);
+    }
+    expect(
+      SETTINGS_NAV_ITEMS.some((i) => i.to.startsWith("/settings/plugins")),
+    ).toBe(false);
   });
 
   it("places Activity in Spaces settings for operators and members", () => {

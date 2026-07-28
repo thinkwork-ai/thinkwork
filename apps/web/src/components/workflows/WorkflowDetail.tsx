@@ -484,7 +484,6 @@ export function WorkflowDetail({
                   },
                 ]}
               />
-              <SourceLinks binding={binding} />
             </InfoCard>
             <InfoCard title="Triggers">
               {workflow.triggers.length ? (
@@ -574,27 +573,7 @@ export function WorkflowDetail({
   );
 }
 
-function SourceLinks({ binding }: { binding: WorkflowBinding | null }) {
-  if (!binding) return null;
-  if (
-    binding.bindingType === "n8n_bridge" ||
-    binding.bindingType === "n8n_import"
-  ) {
-    return (
-      <Link
-        to="/settings/plugins/n8n/workflows"
-        className="text-sm text-primary hover:underline"
-      >
-        Open n8n discovery
-      </Link>
-    );
-  }
-  if (binding.bindingType === "twenty_crm") {
-    return (
-      <Link to="/settings/crm" className="text-sm text-primary hover:underline">
-        Open CRM readiness
-      </Link>
-    );
-  }
-  return null;
-}
+// SourceLinks pointed n8n and Twenty bindings at the plugin settings pages.
+// Those pages are gone — both systems are now white-glove operated — and a
+// binding's source has no in-app destination, so the affordance is removed
+// rather than pointed somewhere that only looks related.

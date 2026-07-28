@@ -55,7 +55,6 @@ beforeEach(() => {
         action: "CREATED",
         threadId: "thread-1",
         goalId: "goal-1",
-        pluginActivationRequired: false,
         statusWritebackState: "BLOCKED",
         missingFields: [],
         thread: {

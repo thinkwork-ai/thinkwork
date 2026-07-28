@@ -33,13 +33,8 @@ import {
   WorkItemsQuery,
 } from "./graphql-queries";
 import {
-  SettingsApproveManagedApplicationDeploymentMutation,
   SettingsDeploymentEvidenceQuery,
   SettingsDeploymentStatusQuery,
-  SettingsManagedApplicationDeploymentQuery,
-  SettingsManagedApplicationsQuery,
-  SettingsRejectManagedApplicationDeploymentMutation,
-  SettingsStartManagedApplicationPlanMutation,
 } from "./settings-queries";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../../../..");
@@ -83,24 +78,7 @@ describe("spaces settings deployment queries vs canonical schema", () => {
 
   it.each([
     ["SettingsDeploymentStatusQuery", SettingsDeploymentStatusQuery],
-    ["SettingsManagedApplicationsQuery", SettingsManagedApplicationsQuery],
-    [
-      "SettingsManagedApplicationDeploymentQuery",
-      SettingsManagedApplicationDeploymentQuery,
-    ],
     ["SettingsDeploymentEvidenceQuery", SettingsDeploymentEvidenceQuery],
-    [
-      "SettingsStartManagedApplicationPlanMutation",
-      SettingsStartManagedApplicationPlanMutation,
-    ],
-    [
-      "SettingsApproveManagedApplicationDeploymentMutation",
-      SettingsApproveManagedApplicationDeploymentMutation,
-    ],
-    [
-      "SettingsRejectManagedApplicationDeploymentMutation",
-      SettingsRejectManagedApplicationDeploymentMutation,
-    ],
   ] as const)("%s validates against the schema", (_name, doc) => {
     const errors = validate(schema, doc as DocumentNode);
     expect(errors.map((e) => e.message)).toEqual([]);

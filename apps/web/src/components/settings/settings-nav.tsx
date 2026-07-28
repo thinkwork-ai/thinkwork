@@ -14,7 +14,6 @@ import {
   IconBrandStackshare,
   IconFlask,
   IconPlanet,
-  IconPlug,
 } from "@tabler/icons-react";
 import { ModelContextProtocol } from "../icons/ModelContextProtocol";
 
@@ -69,16 +68,6 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     to: "/settings/model-catalog",
     icon: Cpu,
     operatorOnly: true,
-  },
-  // "Applications" (managed-applications) is retired from the nav — Plugins
-  // supersedes it. The route still resolves by URL for plugin infrastructure.
-  // Plugins is deliberately NOT operatorOnly (plan 2026-06-12-001 U8): all
-  // members can browse and connect; install/update/uninstall gate at render
-  // time inside the pages.
-  {
-    label: "Plugins",
-    to: "/settings/plugins",
-    icon: IconPlug,
   },
   {
     label: "Activity",

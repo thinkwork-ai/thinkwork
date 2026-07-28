@@ -8,7 +8,6 @@ import {
   Settings,
   TriangleAlert,
 } from "lucide-react";
-import { IconPlug } from "@tabler/icons-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,10 +40,7 @@ import {
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
 import { rememberSettingsReturnTo } from "@/lib/settings-return";
-import {
-  SettingsMyPluginActivationsQuery,
-  SidebarDeployedReleaseQuery,
-} from "@/lib/settings-queries";
+import { SidebarDeployedReleaseQuery } from "@/lib/settings-queries";
 import { useTenant } from "@/context/TenantContext";
 
 export function SpacesSidebar() {
@@ -70,23 +66,6 @@ export function SpacesSidebar() {
   const deployedReleaseVersion =
     deployedReleaseResult.data?.deploymentStatus?.releaseVersion?.trim() ||
     deploymentProfile.releaseVersion;
-  // Plugin activations that need re-auth surface on the footer health
-  // affordance (plan 2026-06-12-001 U8) — an amber dot on the gear plus a
-  // "Reconnect" entry in the menu, mirroring the sidebar-sync warning.
-  const [pluginActivationsResult] = useQuery({
-    query: SettingsMyPluginActivationsQuery,
-  });
-  // Name the plugin(s) needing reconnect so the warning isn't a generic
-  // "a plugin" (which read as a contradiction when the user was on a
-  // different, healthy plugin's page). Dedupe by pluginKey.
-  const reauthPluginNames = Array.from(
-    new Set(
-      (pluginActivationsResult.data?.myPluginActivations ?? [])
-        .filter((activation) => activation.status === "needs_reauth")
-        .map((activation) => activation.pluginKey),
-    ),
-  );
-
   return (
     <SidebarHealthProvider>
       <Sidebar collapsible="icon">
@@ -126,11 +105,6 @@ export function SpacesSidebar() {
             name={user?.name}
             email={user?.email}
             deployedReleaseVersion={deployedReleaseVersion}
-            reauthPluginNames={reauthPluginNames}
-            onOpenPlugins={() => {
-              rememberSettingsReturnTo(currentPath);
-              navigate({ to: "/settings/plugins" });
-            }}
             onOpenSettings={() => {
               rememberSettingsReturnTo(currentPath);
               navigate({ to: "/settings" });
@@ -152,8 +126,6 @@ function AccountMenu({
   name,
   email,
   deployedReleaseVersion,
-  reauthPluginNames = [],
-  onOpenPlugins,
   onOpenSettings,
   onOpenProfile,
   onSignOut,
@@ -161,9 +133,6 @@ function AccountMenu({
   name?: string | null;
   email?: string | null;
   deployedReleaseVersion?: string | null;
-  /** Plugin keys/names of the caller's activations in `needs_reauth`. */
-  reauthPluginNames?: string[];
-  onOpenPlugins?: () => void;
   onOpenSettings: () => void;
   onOpenProfile: () => void;
   onSignOut: () => void;
@@ -171,11 +140,6 @@ function AccountMenu({
   const displayName = name ?? email ?? "Account";
   const initials = getInitials(name, email);
   const releaseLabel = deployedReleaseVersion?.trim() || "unknown";
-  const pluginReauthCount = reauthPluginNames.length;
-  const reauthMessage =
-    pluginReauthCount === 1
-      ? `${reauthPluginNames[0]} needs to be reconnected.`
-      : `${pluginReauthCount} plugins need to be reconnected: ${reauthPluginNames.join(", ")}.`;
   // Transient sidebar query failures surface here as a subtle amber dot on the
   // gear + a Retry action, rather than a dramatic red error in the thread list.
   const sidebarHealth = useSidebarHealth();
@@ -193,14 +157,12 @@ function AccountMenu({
           aria-label={
             sidebarHealth.hasError
               ? "Open settings menu (sync issue)"
-              : pluginReauthCount > 0
-                ? "Open settings menu (plugin reconnect needed)"
-                : "Open settings menu"
+              : "Open settings menu"
           }
         >
           <span className="relative shrink-0">
             <Settings className="size-4" />
-            {sidebarHealth.hasError || pluginReauthCount > 0 ? (
+            {sidebarHealth.hasError ? (
               <span
                 className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-amber-500 ring-2 ring-sidebar"
                 aria-hidden
@@ -251,19 +213,6 @@ function AccountMenu({
             >
               <RefreshCw className="mr-2 h-4 w-4" />
               Retry
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-          </>
-        ) : null}
-        {pluginReauthCount > 0 ? (
-          <>
-            <div className="flex items-start gap-2 px-2 py-1.5 text-xs text-amber-500">
-              <TriangleAlert className="mt-px size-3.5 shrink-0" />
-              <span>{reauthMessage}</span>
-            </div>
-            <DropdownMenuItem onSelect={() => onOpenPlugins?.()}>
-              <IconPlug className="mr-2 h-4 w-4" />
-              Reconnect plugins
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>

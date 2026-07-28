@@ -10,9 +10,6 @@ const activityDetailRoute = read(
   "src/routes/_authed/settings.activity_.$threadId.tsx",
 );
 const analyticsRoute = read("src/routes/_authed/settings.analytics.tsx");
-const managedApplicationsRoute = read(
-  "src/routes/_authed/settings.managed-applications.tsx",
-);
 
 describe("SettingsActivityHome", () => {
   it("owns a single stable Activity breadcrumb", () => {
@@ -51,11 +48,6 @@ describe("SettingsActivityHome", () => {
     expect(activityRoute).not.toContain("OperatorGuard");
     expect(threadsRoute).not.toContain("OperatorGuard");
     expect(activityDetailRoute).not.toContain("OperatorGuard");
-  });
-
-  it("keeps managed applications behind an operator route guard", () => {
-    expect(managedApplicationsRoute).toContain("OperatorGuard");
-    expect(managedApplicationsRoute).toContain("ManagedApplicationsPage");
   });
 
   it("redirects the retired Analytics route into the Activity page", () => {

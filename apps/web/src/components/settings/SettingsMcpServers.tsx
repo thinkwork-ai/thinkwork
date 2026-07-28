@@ -40,7 +40,6 @@ import {
 import { AnalystDataSourceTls } from "@/gql/graphql";
 import {
   createMcpServer,
-  isPluginInstalledMcpServer,
   listMcpServers,
   listUserMcpServers,
   setMcpServerEnabled,
@@ -65,7 +64,6 @@ function tabForPath(pathname: string): ConnectionsTab {
   // The merged MCP list lives at /servers; analyst data sources live at
   // /data-sources (checked first for explicit ordering — the paths don't
   // overlap). Self-acquired capabilities (governed autonomy) live at
-  // /self-acquired. The retired /plugins path redirects at the route level.
   // The section index is the Connections tab (per-user integrations).
   if (pathname.startsWith(SELF_ACQUIRED_ROUTE)) return "self-acquired";
   if (pathname.startsWith(DATA_SOURCES_ROUTE)) return "data-sources";
@@ -97,37 +95,21 @@ export function SettingsMcpServers() {
   const [dataSourceSearch, setDataSourceSearch] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
-  const pluginServers = useMemo(
-    () => sortMcpServers((servers ?? []).filter(isPluginInstalledMcpServer)),
-    [servers],
-  );
-  const pluginServerUrls = useMemo(
-    () => new Set(pluginServers.map((server) => normalizeMcpServerUrl(server))),
-    [pluginServers],
-  );
   // THINK-239/THINK-285: analyst connector rows (builtin + registered
   // sources) live on their own Data Sources tab.
   const dataSourceServers = useMemo(
     () => sortMcpServers((servers ?? []).filter(isAnalystDataSourceServer)),
     [servers],
   );
-  const individualServers = useMemo(
+  // Every server is tenant-registered now: the plugin system is gone and
+  // migration 0279 moved its servers to `manual` provenance. Analyst data
+  // sources still split onto their own tab (THINK-285).
+  const mergedServers = useMemo(
     () =>
       sortMcpServers(
-        (servers ?? []).filter(
-          (server) =>
-            !isPluginInstalledMcpServer(server) &&
-            !isAnalystDataSourceServer(server) &&
-            !pluginServerUrls.has(normalizeMcpServerUrl(server)),
-        ),
+        (servers ?? []).filter((server) => !isAnalystDataSourceServer(server)),
       ),
-    [pluginServerUrls, servers],
-  );
-  // THINK-284: tenant-registered and plugin-managed servers render as one
-  // merged table; the Type column carries the classification per row.
-  const mergedServers = useMemo(
-    () => sortMcpServers([...individualServers, ...pluginServers]),
-    [individualServers, pluginServers],
+    [servers],
   );
   // THINK-239: the built-in `postgres-dev` connector, if already provisioned,
   // flips the built-in path's primary action to "Refresh data source".
@@ -250,18 +232,6 @@ export function SettingsMcpServers() {
             // The servers table's fixed layout sizes columns from explicit
             // sizes; the w-px content-fit meta only works under table-auto.
             {
-              id: "type",
-              header: "Type",
-              size: 90,
-              cell: ({ row }) => (
-                <Badge variant="outline">
-                  {isPluginInstalledMcpServer(row.original)
-                    ? "Plugin"
-                    : "Tenant"}
-                </Badge>
-              ),
-            } satisfies ColumnDef<McpServer>,
-            {
               accessorKey: "url",
               header: "URL",
               cell: ({ row }) => (
@@ -320,9 +290,7 @@ export function SettingsMcpServers() {
             >
               <Switch
                 checked={server.enabled}
-                disabled={
-                  pending[server.id] || isPluginInstalledMcpServer(server)
-                }
+                disabled={pending[server.id]}
                 onCheckedChange={(v) => toggle(server.id, v)}
                 aria-label={`Toggle ${server.name}`}
               />
@@ -442,7 +410,7 @@ export function SettingsMcpServers() {
         <SettingsTablePane
           embedded
           title="MCP Servers"
-          description="The tenant MCP server registry — registered servers and plugin-installed servers. Register servers, configure credentials and OAuth, and manage the tools they expose. Assign a server to the agent in the Composer."
+          description="The tenant MCP server registry. Register servers, configure credentials and OAuth, and manage the tools they expose. Assign a server to the agent in the Composer."
           loading={!servers && !error}
           toolbar={
             error ? (
@@ -457,9 +425,7 @@ export function SettingsMcpServers() {
             )
           }
         >
-          {/* One merged table: tenant-registered and plugin-managed servers
-              together, typed per row (THINK-284). Analyst data sources live
-              on the Data Sources tab (THINK-285). */}
+          {/* Analyst data sources live on the Data Sources tab (THINK-285). */}
           <McpServerSection
             columns={serverColumns}
             servers={mergedServers}

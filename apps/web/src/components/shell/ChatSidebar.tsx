@@ -33,7 +33,6 @@ import {
   GitBranch,
   Globe,
   Keyboard,
-  LayoutGrid,
   List,
   ListChecks,
   ListFilter,
@@ -118,7 +117,6 @@ import {
   setSectionUnreadFilter,
   useSectionUnreadFilter,
 } from "@/lib/sidebar-section-prefs";
-import { InstalledPluginAppsQuery } from "@/lib/plugin-app-queries";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
 import {
@@ -183,21 +181,6 @@ interface WorkItemsResult {
   workItems?: SidebarWorkItemSummary[] | null;
 }
 
-interface InstalledPluginAppsResult {
-  installedPluginApps?: Array<{
-    id: string;
-    pluginKey: string;
-    pluginDisplayName: string;
-    displayName: string;
-    routeSegment: string;
-    icon?: string | null;
-    readiness: {
-      state: string;
-      message: string;
-    };
-  }> | null;
-}
-
 const RECENT_LIMIT = 60;
 const SEARCH_LIMIT = 30;
 const PINNED_LIMIT = 100;
@@ -229,7 +212,6 @@ export function ChatSidebar() {
   const isNewThreadRoute = location.pathname === "/new";
   const isWorkItemsRoute = location.pathname.startsWith("/work-items");
   const isAgentLoopsRoute = location.pathname.startsWith("/automations");
-  const isAppsRoute = location.pathname.startsWith("/apps");
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
     routeThreadId,
@@ -568,13 +550,6 @@ export function ChatSidebar() {
       (item) => item.ownerUserId === userId && isOpenSidebarWorkItem(item),
     ).length;
   }, [userId, workItemsData?.workItems]);
-
-  const [{ data: installedAppsData }] = useQuery<InstalledPluginAppsResult>({
-    query: InstalledPluginAppsQuery,
-    pause: !tenantId || !userId,
-    requestPolicy: "cache-and-network",
-  });
-  const installedApps = installedAppsData?.installedPluginApps ?? [];
 
   const [
     { data: recentData, fetching: recentFetching, error: recentError },
@@ -1335,11 +1310,6 @@ export function ChatSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            {installedApps.length > 0 ? (
-              <SidebarMenuItem>
-                <PluginAppsNavItem isActive={isAppsRoute} />
-              </SidebarMenuItem>
-            ) : null}
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
@@ -1479,17 +1449,6 @@ function searchAskErrorMessage(error: {
   return stripped && stripped.length > 0
     ? stripped
     : "Something went wrong — please try again.";
-}
-
-function PluginAppsNavItem({ isActive }: { isActive: boolean }) {
-  return (
-    <SidebarMenuButton asChild isActive={isActive} tooltip="Applications">
-      <Link to="/apps">
-        <LayoutGrid />
-        <span className="min-w-0 truncate">Applications</span>
-      </Link>
-    </SidebarMenuButton>
-  );
 }
 
 function selectChatsComposeSpaceId(spaces: SpaceNavSummary[]) {
@@ -2704,16 +2663,6 @@ function threadIdFromThreadPath(pathname: string) {
 function spaceIdFromThreadPath(pathname: string) {
   const match = /^\/spaces\/([^/]+)\/threads\/[^/]+/.exec(pathname);
   return match ? decodeURIComponent(match[1]) : undefined;
-}
-
-function appRouteFromPath(pathname: string) {
-  const match = /^\/apps\/([^/]+)\/([^/]+)(?:\/|$)/.exec(pathname);
-  return match
-    ? {
-        pluginKey: decodeURIComponent(match[1]),
-        appRouteSegment: decodeURIComponent(match[2]),
-      }
-    : undefined;
 }
 
 function isOpenSidebarWorkItem(item: SidebarWorkItemSummary) {

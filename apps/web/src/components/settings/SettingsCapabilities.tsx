@@ -135,7 +135,6 @@ const CLASS_LABELS: Record<string, string> = {
   connection: "Connections",
   tool: "Tools",
   pi_extension: "Pi extensions",
-  plugin: "Plugins",
   agent_profile: "Agent profiles",
   context: "Context",
 };
@@ -147,7 +146,6 @@ const CLASS_ORDER = [
   "connection",
   "tool",
   "pi_extension",
-  "plugin",
   "agent_profile",
   "context",
 ];
@@ -1464,8 +1462,8 @@ export function SettingsCapabilities({
             {result?.noUserBaseline ? (
               <p data-testid="baseline-note">
                 No perspective user means the no-user baseline — exactly what a
-                scheduled or wakeup turn gets: plugin per-user servers excluded,
-                direct OAuth via the agent&apos;s human pair.
+                scheduled or wakeup turn gets: per-user servers excluded, direct
+                OAuth via the agent&apos;s human pair.
               </p>
             ) : null}
             <p>

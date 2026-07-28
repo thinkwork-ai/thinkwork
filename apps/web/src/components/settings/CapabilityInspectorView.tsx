@@ -5,7 +5,14 @@
 // deliberately self-contained rather than a refactor of the capability list,
 // which retires separately (U9).
 import { useMemo, useState } from "react";
-import { Badge, Skeleton, Tabs, TabsList, TabsTrigger, cn } from "@thinkwork/ui";
+import {
+  Badge,
+  Skeleton,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  cn,
+} from "@thinkwork/ui";
 
 export type InspectorViewItem = {
   capabilityClass: string;
@@ -29,7 +36,6 @@ const CLASS_LABELS: Record<string, string> = {
   builtin_tool: "Built-in tools",
   mcp_server: "MCP servers",
   pi_extension: "Pi extensions",
-  plugin: "Plugins",
   agent_profile: "Agent profiles",
   context: "Context",
 };
@@ -39,7 +45,6 @@ const CLASS_ORDER = [
   "builtin_tool",
   "mcp_server",
   "pi_extension",
-  "plugin",
   "agent_profile",
   "context",
 ];
