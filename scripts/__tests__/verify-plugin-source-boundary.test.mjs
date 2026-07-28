@@ -12,16 +12,19 @@ import {
 
 describe("verify-plugin-source-boundary", () => {
   it("keeps the default active migration allowlist closed", () => {
-    // The ratchet is the exact list, not emptiness: a fourth entry still
-    // fails. These three are the Twenty and n8n infrastructure relocated out
-    // of plugins/ ahead of the plugin-system removal — their deployed stacks
-    // survive it, so their Terraform moved to terraform/modules/app/. The
-    // guard only flags them because "twenty" and "n8n" are still plugin keys;
-    // once plugins/ is gone they stop being keys and these entries, along
-    // with this guard, go away.
+    // The ratchet is the exact list, not emptiness: a fifth entry still
+    // fails. Every entry is Twenty or n8n material relocated out of plugins/
+    // ahead of the plugin-system removal, because the thing it describes
+    // survives that removal — the deployed Terraform stacks and their smoke
+    // contracts, and the n8n workflow-operator skill, which now targets a
+    // registered n8n MCP server (a connector) rather than a plugin install.
+    // The guard only flags them because "twenty" and "n8n" are still plugin
+    // keys; once plugins/ is gone they stop being keys and these entries,
+    // along with this guard, go away.
     assert.deepEqual(
       pluginSourceBoundaryAllowlist.map((entry) => entry.pathPrefix).sort(),
       [
+        "packages/workspace-defaults/files/catalog-skills/n8n-workflow-operator/",
         "scripts/smoke/managed-apps/",
         "terraform/modules/app/n8n/",
         "terraform/modules/app/twenty/",
