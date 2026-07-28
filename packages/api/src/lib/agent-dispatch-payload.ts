@@ -48,7 +48,6 @@ export const REQUIRED_DISPATCH_FIELDS = [
   "withheld_connections",
   "member_spaces",
   "capability_private_session",
-  "capability_caller_context",
   "turn_assertion",
 ] as const;
 
@@ -218,17 +217,6 @@ export interface AgentDispatchControlFieldArgs {
    */
   capabilityPrivateSession?: DispatchCapabilityPrivateSession;
   /**
-   * THINK-280 U2 dispatch wiring — the Ed25519-signed capability caller
-   * context (`mintCapabilityCallerContext`) the runtime requires before it
-   * registers ANY capability Pi tools (connection_research, routine_propose,
-   * self_admit_capability, …). Undefined disables capability tools for the
-   * dispatch (the control Lambda rejects absent contexts fail-closed; there
-   * is no unsigned fallback). Builders mint it only for
-   * `capability_folder_dispatch` agents, mirroring the manifest-fingerprint
-   * folder-mode signal above.
-   */
-  capabilityCallerContext?: string;
-  /**
    * THINK-324 C18 — KMS-signed turn identity (`lib/turn-assertion.ts`). The
    * runtime echoes it on callbacks so verifiers can bind evidence writes to
    * the minted {tenant, thread, turn}. Undefined when the assertion plane is
@@ -320,10 +308,6 @@ export function buildAgentDispatchControlFields(
     // treats its absence as "no capability-private" and keeps single-
     // interpreter behavior. Assembled by U7 once a broker session is opened.
     capability_private_session: args.capabilityPrivateSession ?? undefined,
-    // THINK-280 U2 dispatch wiring — the runtime's capability-tool gate.
-    // Absent on non-capability agents and when platform signing is
-    // unavailable; the runtime then registers no capability tools.
-    capability_caller_context: args.capabilityCallerContext || undefined,
     // THINK-324 C18 — signed turn identity, echoed by the runtime on its
     // callbacks. Absent when minting is unavailable (fail-open).
     turn_assertion: args.turnAssertion || undefined,

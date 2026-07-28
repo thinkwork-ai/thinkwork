@@ -1143,7 +1143,6 @@ module "api" {
   analyst_policy_source          = var.analyst_policy_source
 
   # Governed autonomy — per-tenant self-extension opt-in allowlist (default off).
-  capability_self_extension_tenants = var.capability_self_extension_tenants
 
   # THINK-316 U2 — request path receives only Harness invocation. Terraform
   # owns provisioning/version/endpoint control, avoiding a module cycle and

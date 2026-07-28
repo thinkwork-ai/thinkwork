@@ -45,12 +45,6 @@ import {
   operationContractHash,
   type CapabilityDescriptor,
 } from "@thinkwork/capability-contracts";
-import { classifyDescriptor } from "./self-extension-policy.js";
-import {
-  autoProvisionServiceBinding,
-  type AutoProvisionBindingDeps,
-  type AutoProvisionServiceBindingResult,
-} from "./self-extension-binding.js";
 import type { FolderWriteResult } from "./folder-write.js";
 import type {
   CapabilitySignedBy,
@@ -119,21 +113,12 @@ interface RunAdmissionParams {
   actor: AdmissionActor;
   signer: CapabilitySigner;
   folderWriter?: AdmissionFolderWriter;
-  /**
-   * Autonomous only: every operation must classify `auto` (public, read-only,
-   * no-credential, reversible, fully classified) or the whole admission is
-   * rejected with `held_for_review` — never a silent partial admit.
-   */
-  enforceAutoTier: boolean;
 }
 
 /**
  * Admit a reviewed connection proposal: exact-fingerprint approval, signed
- * immutable version row, folder projection after commit. Shared by the
- * operator path ({@link admitConnectionProposal}) and the autonomous
- * self-extension path ({@link autonomouslyAdmitProposal}) — the version-insert
- * logic and immutability invariants are identical; only the admitter identity,
- * fingerprint semantics, and the auto-tier gate differ.
+ * immutable version row, folder projection after commit. Operator-only —
+ * the autonomous self-extension path that also called this is gone.
  */
 async function runAdmission(
   db: Db,
@@ -228,16 +213,6 @@ async function runAdmission(
               ? err.violations.join("; ")
               : "descriptor: invalid",
         };
-      }
-
-      // (c.5) Autonomous self-extension ceiling. An agent may self-admit ONLY
-      // an auto-tier descriptor (public, read-only, no-credential, reversible,
-      // fully classified). Anything else is held for one-click operator review.
-      if (
-        input.enforceAutoTier &&
-        classifyDescriptor(descriptor).tier !== "auto"
-      ) {
-        return { kind: "rejected", reason: "held_for_review" };
       }
 
       // (d) Upsert the logical definition by (namespace, class, slug).
@@ -457,93 +432,7 @@ export async function admitConnectionProposal(
     actor: { mode: "operator", userId: input.adminUserId },
     signer: input.signer,
     folderWriter: input.folderWriter,
-    enforceAutoTier: false,
   });
-}
-
-export interface AutonomouslyAdmitProposalInput {
-  tenantId: string;
-  proposalId: string;
-  /** The agent self-extending — recorded as `autonomous:<agentId>` provenance. */
-  agentId: string;
-  signer: CapabilitySigner;
-  folderWriter?: AdmissionFolderWriter;
-  /**
-   * When present, a successful auto-tier admission also auto-provisions the
-   * agent's service principal + an empty-credential binding and drives it to
-   * `ready` via the read-only reachability probe (U2b) — making the
-   * self-admitted public capability actually runnable with no human. Omit it
-   * to admit only (e.g. in tests that don't exercise runnability). The real
-   * probe/secret-resolver deps are injected by the Pi Lambda action (U4).
-   */
-  provisioner?: AutoProvisionBindingDeps;
-}
-
-export interface AutonomouslyAdmitProposalResult {
-  /** `held_for_review`: the descriptor is not auto-tier — the proposal is left
-   *  for a human operator to admit through the normal review flow. */
-  outcome: "applied" | "rejected" | "held_for_review";
-  reason?: string;
-  definition?: CapabilityDefinitionRow;
-  version?: CapabilityDefinitionVersionRow;
-  proposal?: CapabilityConnectionProposalRow;
-  /**
-   * Result of the auto-provisioning step (U2b), present only when a
-   * `provisioner` was supplied and admission `applied`. A `degraded` binding
-   * still means admission succeeded — the auto-run will correctly block until
-   * the binding reaches `ready`.
-   */
-  binding?: AutoProvisionServiceBindingResult;
-}
-
-/**
- * Autonomous self-extension admission: an agent admits a proposal it composed,
- * with NO human — but ONLY when every operation is auto-tier (public, read-only,
- * no-credential, reversible, fully classified). A non-auto descriptor returns
- * `held_for_review` and the proposal is left untouched for the operator.
- * The admitted version stays fully attributable (`admission_mode: autonomous`,
- * `admitted_by_agent_id`) and every downstream call remains brokered, evidenced,
- * and revocable.
- */
-export async function autonomouslyAdmitProposal(
-  db: Db,
-  input: AutonomouslyAdmitProposalInput,
-): Promise<AutonomouslyAdmitProposalResult> {
-  const result = await runAdmission(db, {
-    tenantId: input.tenantId,
-    proposalId: input.proposalId,
-    reviewedFingerprint: "", // no separate reviewer — ignored for autonomous
-    actor: { mode: "autonomous", agentId: input.agentId },
-    signer: input.signer,
-    folderWriter: input.folderWriter,
-    enforceAutoTier: true,
-  });
-  if (result.outcome === "rejected" && result.reason === "held_for_review") {
-    return { outcome: "held_for_review", reason: "held_for_review" };
-  }
-
-  // U2b: make the self-admitted public capability actually runnable — provision
-  // the agent's service principal + empty-credential binding and drive it to
-  // `ready`. Only on a clean applied admission with a version to bind, and only
-  // when the caller supplied the real probe/secret-resolver deps.
-  if (
-    result.outcome === "applied" &&
-    result.version &&
-    input.provisioner !== undefined
-  ) {
-    const binding = await autoProvisionServiceBinding(
-      db,
-      {
-        tenantId: input.tenantId,
-        definitionVersionId: result.version.id,
-        agentId: input.agentId,
-      },
-      input.provisioner,
-    );
-    return { ...result, binding };
-  }
-
-  return result;
 }
 
 export interface CreateCandidateVersionInput {
