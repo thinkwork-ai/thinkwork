@@ -79,23 +79,16 @@ function surfaceReferences(
     operationId,
   )!;
 
-  // 2. Internal working search (capability-control-service capability_search):
-  //    twcap = formatTwcapRef, contractHash = contract_hashes_json[op].
-  const internalSearch = { twcap, contractHash };
-
-  // 3. Broker evidence (capability_broker_calls.{operation_ref,contract_hash}).
+  // 2. Broker evidence (capability_broker_calls.{operation_ref,contract_hash}).
   const brokerRow = { operation_ref: twcap, contract_hash: contractHash };
 
-  // 4. Routine dependency ({twcap, contractHash} in the proposal bundle).
-  const routineDep = { twcap, contractHash };
-
-  // 5. Execution detail (headless executor evidence dependency).
+  // 3. Execution detail (headless executor evidence dependency).
   const execEvidence = { operationRef: twcap, contractHash };
 
-  // 6. Artifact lineage capability reference.
+  // 4. Artifact lineage capability reference.
   const artifactLineage = { twcap, contractHash };
 
-  // 7. External MCP search — projects through the same composer.
+  // 5. External MCP search — projects through the same composer.
   const externalItem = projectOperationIdentity(
     IDENTITY,
     version,
@@ -107,12 +100,10 @@ function surfaceReferences(
       twcap: inspectorItem.twcap,
       contractHash: inspectorItem.contractHash,
     },
-    internalSearch,
     brokerEvidence: {
       twcap: brokerRow.operation_ref,
       contractHash: brokerRow.contract_hash,
     },
-    routineDependency: routineDep,
     executionDetail: {
       twcap: execEvidence.operationRef,
       contractHash: execEvidence.contractHash,

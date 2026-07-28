@@ -50,8 +50,6 @@ type CapabilityItem {
   readiness: String
   # Redacted operator remediation hint; never credential detail.
   remediation: String
-  # Number of Routine proposals depending on this operation identity.
-  routineDependentCount: Int
   # Latest broker call evidence for this contract hash.
   latestBrokerCallStatus: String
   latestBrokerCallAt: AWSDateTime

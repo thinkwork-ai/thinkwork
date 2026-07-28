@@ -20,7 +20,6 @@ const { rowsByTable, TABLES } = vi.hoisted(() => ({
     capabilityDefinitionVersions: "capabilityDefinitionVersions",
     capabilityCredentialBindings: "capabilityCredentialBindings",
     capabilityBrokerCalls: "capabilityBrokerCalls",
-    capabilityRoutineProposals: "capabilityRoutineProposals",
   } as const,
 }));
 
@@ -113,19 +112,6 @@ function seed(readiness: string | null) {
       created_at: new Date(),
     },
   ]);
-  rowsByTable.set(TABLES.capabilityRoutineProposals, [
-    {
-      tenant_id: TENANT,
-      payload_json: {
-        dependencies: [
-          {
-            twcap: twcapFor("issues.list"),
-            contractHash: contractHashes["issues.list"],
-          },
-        ],
-      },
-    },
-  ]);
 }
 
 describe("projectCapabilityOperationItems", () => {
@@ -142,7 +128,6 @@ describe("projectCapabilityOperationItems", () => {
     expect(list.effect).toBe("read");
     expect(list.readiness).toBe("ready");
     expect(list.active).toBe(true);
-    expect(list.routineDependentCount).toBe(1);
     expect(list.latestBrokerCallStatus).toBe("completed");
   });
 

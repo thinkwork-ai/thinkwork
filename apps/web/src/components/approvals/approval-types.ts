@@ -12,23 +12,6 @@ export interface ComputerApproval {
   expiresAt?: string | null;
 }
 
-/** Inbox entity_type stamped on capability Routine promotion proposals. */
-export const ROUTINE_PROPOSAL_ENTITY_TYPE = "capability_routine_proposal";
-
-/**
- * The Routine-proposal id an inbox item points at, or null when the item is
- * not a Routine promotion approval (THINK-280 U6). Branching on entityType
- * covers every proposal-linked inbox row regardless of its `type` string.
- */
-export function routineProposalIdOf(
-  item: Pick<ComputerApproval, "entityType" | "entityId"> | null | undefined,
-): string | null {
-  if (!item) return null;
-  return item.entityType === ROUTINE_PROPOSAL_ENTITY_TYPE && item.entityId
-    ? item.entityId
-    : null;
-}
-
 export interface EmailDraft {
   to?: string | null;
   subject?: string | null;
