@@ -4675,6 +4675,14 @@ def write_runner_files(payload, runner_secrets):
             "neptuneLoaderRoleArn",
             default=safe_get(reviewed_payload, "neptuneLoaderRoleArn", default=""),
         ),
+        # Platform Brain MCP endpoint (consolidation U14). Without this
+        # mapping, customer stages never set BRAIN_MCP_URL and twin-connector
+        # provisioning falls back to the retired product /mcp/twin route.
+        "brain_mcp_url": safe_get(
+            runner_secrets,
+            "brainMcpUrl",
+            default=safe_get(reviewed_payload, "brainMcpUrl", default=""),
+        ),
     }
     enforce_customer_domain_preservation(
         current_outputs,
