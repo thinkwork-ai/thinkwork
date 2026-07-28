@@ -298,7 +298,7 @@ export function WorkflowInventory({
   return (
     <SettingsTablePane
       title="Workflows"
-      description="Monitor workflows imported from routines, plugins, connected apps, and native ThinkWork sources."
+      description="Monitor workflows imported from routines, connected apps, and native ThinkWork sources."
       loading={loading}
       embedded={embedded}
     >

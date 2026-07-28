@@ -24,7 +24,6 @@ interface StartTwentyCustomerOnboardingResult {
     action: "CREATED" | "RESUMED";
     threadId: string;
     goalId?: string | null;
-    pluginActivationRequired: boolean;
     statusWritebackState: string;
     missingFields: string[];
     thread: {
@@ -178,14 +177,9 @@ export function TwentyCustomerOnboardingLaunch({
               )}
               Start or resume
             </Button>
-            <Button asChild type="button" variant="outline">
-              <Link
-                to="/settings/plugins/$pluginKey"
-                params={{ pluginKey: "twenty" }}
-              >
-                Connect Twenty
-              </Link>
-            </Button>
+            {/* "Connect Twenty" linked to the plugin detail page. Twenty is
+                white-glove installed now, so there is no self-serve connect
+                flow to send anyone to. */}
           </div>
         )}
       </div>

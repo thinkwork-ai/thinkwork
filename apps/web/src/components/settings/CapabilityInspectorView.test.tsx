@@ -59,7 +59,7 @@ afterEach(() => {
 });
 
 describe("CapabilityInspectorView", () => {
-  it("renders a tab for all seven capability classes with active/total counts", () => {
+  it("renders a tab for each capability class with active/total counts", () => {
     render(
       <CapabilityInspectorView items={ITEMS} deltas={[]} loading={false} />,
     );
@@ -68,7 +68,6 @@ describe("CapabilityInspectorView", () => {
       "builtin_tool",
       "mcp_server",
       "pi_extension",
-      "plugin",
       "agent_profile",
       "context",
     ]) {
@@ -92,11 +91,7 @@ describe("CapabilityInspectorView", () => {
 
   it("shows the divergence badge for a missing_in_observed item", () => {
     render(
-      <CapabilityInspectorView
-        items={ITEMS}
-        deltas={DELTAS}
-        loading={false}
-      />,
+      <CapabilityInspectorView items={ITEMS} deltas={DELTAS} loading={false} />,
     );
     expect(
       screen.getByTestId("inspector-divergent-skill:approve-receipt")
@@ -140,7 +135,10 @@ describe("CapabilityInspectorView", () => {
 
   it("imports no mutations — read-only by contract (R14)", () => {
     const source = readFileSync(
-      join(process.cwd(), "src/components/settings/CapabilityInspectorView.tsx"),
+      join(
+        process.cwd(),
+        "src/components/settings/CapabilityInspectorView.tsx",
+      ),
       "utf8",
     );
     expect(source).not.toContain("useMutation");

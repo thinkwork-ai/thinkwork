@@ -26,7 +26,6 @@ import {
   clearUserMcpToken,
   deleteMcpServer,
   getMcpServiceCredentialStatus,
-  isPluginInstalledMcpServer,
   listMcpServers,
   listRuntimeMcpTools,
   listUserMcpServers,
@@ -488,7 +487,6 @@ export function SettingsMcpServerDetail() {
   });
   const visibleTools = filteredTools.slice(0, toolLimit);
   const hasMoreTools = filteredTools.length > visibleTools.length;
-  const managed = isPluginInstalledMcpServer(server);
   const isAnalystConnector = isAnalystServer(server);
   // THINK-283: refresh applies ONLY to sourced connectors — the built-in
   // connector keeps its own provisioning action below.
@@ -499,11 +497,6 @@ export function SettingsMcpServerDetail() {
     : !oauthUserId
       ? "User identity is still loading."
       : null;
-  const managedDescription =
-    server.managementSource === "plugin"
-      ? "Lifecycle changes are controlled from the plugin settings page."
-      : "Lifecycle changes are controlled from the managed application settings page.";
-
   const statusBadge =
     server.status && server.status !== "approved" ? (
       <Badge variant="outline">{server.status}</Badge>
@@ -556,33 +549,13 @@ export function SettingsMcpServerDetail() {
               </SettingsRow>
             </>
           ) : null}
-          {managed ? (
-            <SettingsRow
-              label={
-                server.managementSource === "plugin"
-                  ? "Plugin"
-                  : "Managed application"
-              }
-              description={managedDescription}
-            >
-              <Badge variant="outline">
-                {server.managementSource === "plugin"
-                  ? "Plugin-managed"
-                  : "System-managed"}
-              </Badge>
-            </SettingsRow>
-          ) : null}
           <SettingsRow
             label="Enabled"
-            description={
-              managed
-                ? "Managed application lifecycle controls whether this connector is available."
-                : "Enable this server in the tenant registry. Assign it to the agent in the Composer."
-            }
+            description="Enable this server in the tenant registry. Assign it to the agent in the Composer."
           >
             <Switch
               checked={server.enabled}
-              disabled={pending || managed}
+              disabled={pending}
               onCheckedChange={toggle}
             />
           </SettingsRow>
@@ -952,19 +925,11 @@ export function SettingsMcpServerDetail() {
           )}
         </SettingsSection>
 
-        {managed ? (
-          <p className="text-right text-sm text-muted-foreground">
-            {server.managementSource === "plugin"
-              ? "Use the plugin settings to uninstall this connector."
-              : "Use the managed application settings to park or destroy this connector."}
-          </p>
-        ) : (
-          <div className="flex justify-end">
-            <Button variant="destructive" disabled={pending} onClick={remove}>
-              Remove server
-            </Button>
-          </div>
-        )}
+        <div className="flex justify-end">
+          <Button variant="destructive" disabled={pending} onClick={remove}>
+            Remove server
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -24,10 +24,8 @@ import { Route as AuthedSettingsToolsRouteImport } from "./routes/_authed/settin
 import { Route as AuthedSettingsRoutineRepoRouteImport } from "./routes/_authed/settings.routine-repo";
 import { Route as AuthedSettingsModelCatalogRouteImport } from "./routes/_authed/settings.model-catalog";
 import { Route as AuthedSettingsMemoryRouteImport } from "./routes/_authed/settings.memory";
-import { Route as AuthedSettingsManagedApplicationsRouteImport } from "./routes/_authed/settings.managed-applications";
 import { Route as AuthedSettingsKnowledgeGraphRouteImport } from "./routes/_authed/settings.knowledge-graph";
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
-import { Route as AuthedSettingsCrmRouteImport } from "./routes/_authed/settings.crm";
 import { Route as AuthedSettingsCapabilitiesRouteImport } from "./routes/_authed/settings.capabilities";
 import { Route as AuthedSettingsBillingRouteImport } from "./routes/_authed/settings.billing";
 import { Route as AuthedSettingsArtifactsRouteImport } from "./routes/_authed/settings.artifacts";
@@ -43,7 +41,6 @@ import { Route as AuthedSettingsUsersIndexRouteImport } from "./routes/_authed/s
 import { Route as AuthedSettingsSpacesIndexRouteImport } from "./routes/_authed/settings.spaces.index";
 import { Route as AuthedSettingsSkillsIndexRouteImport } from "./routes/_authed/settings.skills.index";
 import { Route as AuthedSettingsRoutinesIndexRouteImport } from "./routes/_authed/settings.routines.index";
-import { Route as AuthedSettingsPluginsIndexRouteImport } from "./routes/_authed/settings.plugins.index";
 import { Route as AuthedSettingsMcpServersIndexRouteImport } from "./routes/_authed/settings.mcp-servers.index";
 import { Route as AuthedSettingsKnowledgeBasesIndexRouteImport } from "./routes/_authed/settings.knowledge-bases.index";
 import { Route as AuthedSettingsEvaluationsIndexRouteImport } from "./routes/_authed/settings.evaluations.index";
@@ -57,7 +54,6 @@ import { Route as AuthedShellSpacesIndexRouteImport } from "./routes/_authed/_sh
 import { Route as AuthedShellCustomizeIndexRouteImport } from "./routes/_authed/_shell/customize.index";
 import { Route as AuthedShellAutomationsIndexRouteImport } from "./routes/_authed/_shell/automations.index";
 import { Route as AuthedShellArtifactsIndexRouteImport } from "./routes/_authed/_shell/artifacts.index";
-import { Route as AuthedShellAppsIndexRouteImport } from "./routes/_authed/_shell/apps.index";
 import { Route as AuthedShellApprovalsIndexRouteImport } from "./routes/_authed/_shell/approvals.index";
 import { Route as AuthedSettingsWorkflowsWorkflowIdRouteImport } from "./routes/_authed/settings.workflows.$workflowId";
 import { Route as AuthedSettingsWebhooksWebhookIdRouteImport } from "./routes/_authed/settings.webhooks.$webhookId";
@@ -66,14 +62,11 @@ import { Route as AuthedSettingsSpacesSpaceIdRouteImport } from "./routes/_authe
 import { Route as AuthedSettingsSkillsDraftsRouteImport } from "./routes/_authed/settings.skills.drafts";
 import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_authed/settings.skills.$skillSlug";
 import { Route as AuthedSettingsRoutinesRoutineIdRouteImport } from "./routes/_authed/settings.routines.$routineId";
-import { Route as AuthedSettingsPluginsN8nRouteImport } from "./routes/_authed/settings.plugins.n8n";
-import { Route as AuthedSettingsPluginsPluginKeyRouteImport } from "./routes/_authed/settings.plugins.$pluginKey";
 import { Route as AuthedSettingsMemoryRecordsRouteImport } from "./routes/_authed/settings.memory.records";
 import { Route as AuthedSettingsMemoryKnowledgeGraphRouteImport } from "./routes/_authed/settings.memory.knowledge-graph";
 import { Route as AuthedSettingsMemoryKnowledgeBasesRouteImport } from "./routes/_authed/settings.memory.knowledge-bases";
 import { Route as AuthedSettingsMcpServersServersRouteImport } from "./routes/_authed/settings.mcp-servers.servers";
 import { Route as AuthedSettingsMcpServersSelfAcquiredRouteImport } from "./routes/_authed/settings.mcp-servers.self-acquired";
-import { Route as AuthedSettingsMcpServersPluginsRouteImport } from "./routes/_authed/settings.mcp-servers.plugins";
 import { Route as AuthedSettingsMcpServersDataSourcesRouteImport } from "./routes/_authed/settings.mcp-servers.data-sources";
 import { Route as AuthedSettingsMcpServersServerIdRouteImport } from "./routes/_authed/settings.mcp-servers.$serverId";
 import { Route as AuthedSettingsKnowledgeBasesKbIdRouteImport } from "./routes/_authed/settings.knowledge-bases.$kbId";
@@ -101,12 +94,9 @@ import { Route as AuthedSettingsEvaluationsStudioIndexRouteImport } from "./rout
 import { Route as AuthedSettingsEvaluationsReplayToolsIndexRouteImport } from "./routes/_authed/settings.evaluations.replay-tools.index";
 import { Route as AuthedSettingsEvaluationsDatasetsIndexRouteImport } from "./routes/_authed/settings.evaluations.datasets.index";
 import { Route as AuthedSettingsSkillsDraftsDraftIdRouteImport } from "./routes/_authed/settings.skills.drafts.$draftId";
-import { Route as AuthedSettingsPluginsN8nWorkflowsRouteImport } from "./routes/_authed/settings.plugins.n8n.workflows";
-import { Route as AuthedSettingsPluginsN8nSettingsRouteImport } from "./routes/_authed/settings.plugins.n8n.settings";
 import { Route as AuthedSettingsEvaluationsStudioNewRouteImport } from "./routes/_authed/settings.evaluations.studio.new";
 import { Route as AuthedSettingsEvaluationsStudioTestCaseIdRouteImport } from "./routes/_authed/settings.evaluations.studio.$testCaseId";
 import { Route as AuthedSettingsEvaluationsDatasetsSlugRouteImport } from "./routes/_authed/settings.evaluations.datasets.$slug";
-import { Route as AuthedShellAppsPluginKeyAppRouteSegmentRouteImport } from "./routes/_authed/_shell/apps.$pluginKey.$appRouteSegment";
 import { Route as AuthedSettingsRoutinesRoutineIdExecutionsIndexRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.index";
 import { Route as AuthedSettingsWorkflowsWorkflowIdRunsRunIdRouteImport } from "./routes/_authed/settings.workflows.$workflowId_.runs.$runId";
 import { Route as AuthedSettingsRoutinesRoutineIdExecutionsExecutionIdRouteImport } from "./routes/_authed/settings.routines.$routineId_.executions.$executionId";
@@ -191,12 +181,6 @@ const AuthedSettingsMemoryRoute = AuthedSettingsMemoryRouteImport.update({
   path: "/memory",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
-const AuthedSettingsManagedApplicationsRoute =
-  AuthedSettingsManagedApplicationsRouteImport.update({
-    id: "/managed-applications",
-    path: "/managed-applications",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
 const AuthedSettingsKnowledgeGraphRoute =
   AuthedSettingsKnowledgeGraphRouteImport.update({
     id: "/knowledge-graph",
@@ -206,11 +190,6 @@ const AuthedSettingsKnowledgeGraphRoute =
 const AuthedSettingsGeneralRoute = AuthedSettingsGeneralRouteImport.update({
   id: "/general",
   path: "/general",
-  getParentRoute: () => AuthedSettingsRoute,
-} as any);
-const AuthedSettingsCrmRoute = AuthedSettingsCrmRouteImport.update({
-  id: "/crm",
-  path: "/crm",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
 const AuthedSettingsCapabilitiesRoute =
@@ -295,12 +274,6 @@ const AuthedSettingsRoutinesIndexRoute =
     path: "/routines/",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
-const AuthedSettingsPluginsIndexRoute =
-  AuthedSettingsPluginsIndexRouteImport.update({
-    id: "/plugins/",
-    path: "/plugins/",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
 const AuthedSettingsMcpServersIndexRoute =
   AuthedSettingsMcpServersIndexRouteImport.update({
     id: "/mcp-servers/",
@@ -377,11 +350,6 @@ const AuthedShellArtifactsIndexRoute =
     path: "/artifacts/",
     getParentRoute: () => AuthedShellRoute,
   } as any);
-const AuthedShellAppsIndexRoute = AuthedShellAppsIndexRouteImport.update({
-  id: "/apps/",
-  path: "/apps/",
-  getParentRoute: () => AuthedShellRoute,
-} as any);
 const AuthedShellApprovalsIndexRoute =
   AuthedShellApprovalsIndexRouteImport.update({
     id: "/approvals/",
@@ -430,18 +398,6 @@ const AuthedSettingsRoutinesRoutineIdRoute =
     path: "/routines/$routineId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
-const AuthedSettingsPluginsN8nRoute =
-  AuthedSettingsPluginsN8nRouteImport.update({
-    id: "/plugins/n8n",
-    path: "/plugins/n8n",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
-const AuthedSettingsPluginsPluginKeyRoute =
-  AuthedSettingsPluginsPluginKeyRouteImport.update({
-    id: "/plugins/$pluginKey",
-    path: "/plugins/$pluginKey",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
 const AuthedSettingsMemoryRecordsRoute =
   AuthedSettingsMemoryRecordsRouteImport.update({
     id: "/records",
@@ -470,12 +426,6 @@ const AuthedSettingsMcpServersSelfAcquiredRoute =
   AuthedSettingsMcpServersSelfAcquiredRouteImport.update({
     id: "/mcp-servers/self-acquired",
     path: "/mcp-servers/self-acquired",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
-const AuthedSettingsMcpServersPluginsRoute =
-  AuthedSettingsMcpServersPluginsRouteImport.update({
-    id: "/mcp-servers/plugins",
-    path: "/mcp-servers/plugins",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
 const AuthedSettingsMcpServersDataSourcesRoute =
@@ -638,18 +588,6 @@ const AuthedSettingsSkillsDraftsDraftIdRoute =
     path: "/$draftId",
     getParentRoute: () => AuthedSettingsSkillsDraftsRoute,
   } as any);
-const AuthedSettingsPluginsN8nWorkflowsRoute =
-  AuthedSettingsPluginsN8nWorkflowsRouteImport.update({
-    id: "/workflows",
-    path: "/workflows",
-    getParentRoute: () => AuthedSettingsPluginsN8nRoute,
-  } as any);
-const AuthedSettingsPluginsN8nSettingsRoute =
-  AuthedSettingsPluginsN8nSettingsRouteImport.update({
-    id: "/settings",
-    path: "/settings",
-    getParentRoute: () => AuthedSettingsPluginsN8nRoute,
-  } as any);
 const AuthedSettingsEvaluationsStudioNewRoute =
   AuthedSettingsEvaluationsStudioNewRouteImport.update({
     id: "/evaluations/studio/new",
@@ -667,12 +605,6 @@ const AuthedSettingsEvaluationsDatasetsSlugRoute =
     id: "/evaluations/datasets/$slug",
     path: "/evaluations/datasets/$slug",
     getParentRoute: () => AuthedSettingsRoute,
-  } as any);
-const AuthedShellAppsPluginKeyAppRouteSegmentRoute =
-  AuthedShellAppsPluginKeyAppRouteSegmentRouteImport.update({
-    id: "/apps/$pluginKey/$appRouteSegment",
-    path: "/apps/$pluginKey/$appRouteSegment",
-    getParentRoute: () => AuthedShellRoute,
   } as any);
 const AuthedSettingsRoutinesRoutineIdExecutionsIndexRoute =
   AuthedSettingsRoutinesRoutineIdExecutionsIndexRouteImport.update({
@@ -741,10 +673,8 @@ export interface FileRoutesByFullPath {
   "/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
-  "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
-  "/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
   "/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
@@ -773,14 +703,11 @@ export interface FileRoutesByFullPath {
   "/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/mcp-servers/data-sources": typeof AuthedSettingsMcpServersDataSourcesRoute;
-  "/settings/mcp-servers/plugins": typeof AuthedSettingsMcpServersPluginsRoute;
   "/settings/mcp-servers/self-acquired": typeof AuthedSettingsMcpServersSelfAcquiredRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
-  "/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
-  "/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRouteWithChildren;
@@ -789,7 +716,6 @@ export interface FileRoutesByFullPath {
   "/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
   "/settings/workflows/$workflowId": typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   "/approvals/": typeof AuthedShellApprovalsIndexRoute;
-  "/apps/": typeof AuthedShellAppsIndexRoute;
   "/artifacts/": typeof AuthedShellArtifactsIndexRoute;
   "/automations/": typeof AuthedShellAutomationsIndexRoute;
   "/customize/": typeof AuthedShellCustomizeIndexRoute;
@@ -803,19 +729,15 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/": typeof AuthedSettingsEvaluationsIndexRoute;
   "/settings/knowledge-bases/": typeof AuthedSettingsKnowledgeBasesIndexRoute;
   "/settings/mcp-servers/": typeof AuthedSettingsMcpServersIndexRoute;
-  "/settings/plugins/": typeof AuthedSettingsPluginsIndexRoute;
   "/settings/routines/": typeof AuthedSettingsRoutinesIndexRoute;
   "/settings/skills/": typeof AuthedSettingsSkillsIndexRoute;
   "/settings/spaces/": typeof AuthedSettingsSpacesIndexRoute;
   "/settings/users/": typeof AuthedSettingsUsersIndexRoute;
   "/settings/webhooks/": typeof AuthedSettingsWebhooksIndexRoute;
   "/settings/workflows/": typeof AuthedSettingsWorkflowsIndexRoute;
-  "/apps/$pluginKey/$appRouteSegment": typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
   "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
-  "/settings/plugins/n8n/settings": typeof AuthedSettingsPluginsN8nSettingsRoute;
-  "/settings/plugins/n8n/workflows": typeof AuthedSettingsPluginsN8nWorkflowsRoute;
   "/settings/skills/drafts/$draftId": typeof AuthedSettingsSkillsDraftsDraftIdRoute;
   "/settings/evaluations/datasets/": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   "/settings/evaluations/replay-tools/": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
@@ -843,10 +765,8 @@ export interface FileRoutesByTo {
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
-  "/settings/crm": typeof AuthedSettingsCrmRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
   "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
-  "/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
   "/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
@@ -875,14 +795,11 @@ export interface FileRoutesByTo {
   "/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/mcp-servers/data-sources": typeof AuthedSettingsMcpServersDataSourcesRoute;
-  "/settings/mcp-servers/plugins": typeof AuthedSettingsMcpServersPluginsRoute;
   "/settings/mcp-servers/self-acquired": typeof AuthedSettingsMcpServersSelfAcquiredRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
   "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
-  "/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
-  "/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRouteWithChildren;
@@ -891,7 +808,6 @@ export interface FileRoutesByTo {
   "/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
   "/settings/workflows/$workflowId": typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   "/approvals": typeof AuthedShellApprovalsIndexRoute;
-  "/apps": typeof AuthedShellAppsIndexRoute;
   "/artifacts": typeof AuthedShellArtifactsIndexRoute;
   "/automations": typeof AuthedShellAutomationsIndexRoute;
   "/customize": typeof AuthedShellCustomizeIndexRoute;
@@ -905,19 +821,15 @@ export interface FileRoutesByTo {
   "/settings/evaluations": typeof AuthedSettingsEvaluationsIndexRoute;
   "/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesIndexRoute;
   "/settings/mcp-servers": typeof AuthedSettingsMcpServersIndexRoute;
-  "/settings/plugins": typeof AuthedSettingsPluginsIndexRoute;
   "/settings/routines": typeof AuthedSettingsRoutinesIndexRoute;
   "/settings/skills": typeof AuthedSettingsSkillsIndexRoute;
   "/settings/spaces": typeof AuthedSettingsSpacesIndexRoute;
   "/settings/users": typeof AuthedSettingsUsersIndexRoute;
   "/settings/webhooks": typeof AuthedSettingsWebhooksIndexRoute;
   "/settings/workflows": typeof AuthedSettingsWorkflowsIndexRoute;
-  "/apps/$pluginKey/$appRouteSegment": typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
   "/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
-  "/settings/plugins/n8n/settings": typeof AuthedSettingsPluginsN8nSettingsRoute;
-  "/settings/plugins/n8n/workflows": typeof AuthedSettingsPluginsN8nWorkflowsRoute;
   "/settings/skills/drafts/$draftId": typeof AuthedSettingsSkillsDraftsDraftIdRoute;
   "/settings/evaluations/datasets": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   "/settings/evaluations/replay-tools": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
@@ -952,10 +864,8 @@ export interface FileRoutesById {
   "/_authed/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
   "/_authed/settings/billing": typeof AuthedSettingsBillingRoute;
   "/_authed/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
-  "/_authed/settings/crm": typeof AuthedSettingsCrmRoute;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
   "/_authed/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
-  "/_authed/settings/managed-applications": typeof AuthedSettingsManagedApplicationsRoute;
   "/_authed/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/_authed/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
   "/_authed/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
@@ -984,14 +894,11 @@ export interface FileRoutesById {
   "/_authed/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/_authed/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/_authed/settings/mcp-servers/data-sources": typeof AuthedSettingsMcpServersDataSourcesRoute;
-  "/_authed/settings/mcp-servers/plugins": typeof AuthedSettingsMcpServersPluginsRoute;
   "/_authed/settings/mcp-servers/self-acquired": typeof AuthedSettingsMcpServersSelfAcquiredRoute;
   "/_authed/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
   "/_authed/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/_authed/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/_authed/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
-  "/_authed/settings/plugins/$pluginKey": typeof AuthedSettingsPluginsPluginKeyRoute;
-  "/_authed/settings/plugins/n8n": typeof AuthedSettingsPluginsN8nRouteWithChildren;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/_authed/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/_authed/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRouteWithChildren;
@@ -1000,7 +907,6 @@ export interface FileRoutesById {
   "/_authed/settings/webhooks/$webhookId": typeof AuthedSettingsWebhooksWebhookIdRoute;
   "/_authed/settings/workflows/$workflowId": typeof AuthedSettingsWorkflowsWorkflowIdRoute;
   "/_authed/_shell/approvals/": typeof AuthedShellApprovalsIndexRoute;
-  "/_authed/_shell/apps/": typeof AuthedShellAppsIndexRoute;
   "/_authed/_shell/artifacts/": typeof AuthedShellArtifactsIndexRoute;
   "/_authed/_shell/automations/": typeof AuthedShellAutomationsIndexRoute;
   "/_authed/_shell/customize/": typeof AuthedShellCustomizeIndexRoute;
@@ -1014,19 +920,15 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/": typeof AuthedSettingsEvaluationsIndexRoute;
   "/_authed/settings/knowledge-bases/": typeof AuthedSettingsKnowledgeBasesIndexRoute;
   "/_authed/settings/mcp-servers/": typeof AuthedSettingsMcpServersIndexRoute;
-  "/_authed/settings/plugins/": typeof AuthedSettingsPluginsIndexRoute;
   "/_authed/settings/routines/": typeof AuthedSettingsRoutinesIndexRoute;
   "/_authed/settings/skills/": typeof AuthedSettingsSkillsIndexRoute;
   "/_authed/settings/spaces/": typeof AuthedSettingsSpacesIndexRoute;
   "/_authed/settings/users/": typeof AuthedSettingsUsersIndexRoute;
   "/_authed/settings/webhooks/": typeof AuthedSettingsWebhooksIndexRoute;
   "/_authed/settings/workflows/": typeof AuthedSettingsWorkflowsIndexRoute;
-  "/_authed/_shell/apps/$pluginKey/$appRouteSegment": typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
   "/_authed/settings/evaluations/datasets/$slug": typeof AuthedSettingsEvaluationsDatasetsSlugRoute;
   "/_authed/settings/evaluations/studio/$testCaseId": typeof AuthedSettingsEvaluationsStudioTestCaseIdRoute;
   "/_authed/settings/evaluations/studio/new": typeof AuthedSettingsEvaluationsStudioNewRoute;
-  "/_authed/settings/plugins/n8n/settings": typeof AuthedSettingsPluginsN8nSettingsRoute;
-  "/_authed/settings/plugins/n8n/workflows": typeof AuthedSettingsPluginsN8nWorkflowsRoute;
   "/_authed/settings/skills/drafts/$draftId": typeof AuthedSettingsSkillsDraftsDraftIdRoute;
   "/_authed/settings/evaluations/datasets/": typeof AuthedSettingsEvaluationsDatasetsIndexRoute;
   "/_authed/settings/evaluations/replay-tools/": typeof AuthedSettingsEvaluationsReplayToolsIndexRoute;
@@ -1060,10 +962,8 @@ export interface FileRouteTypes {
     | "/settings/artifacts"
     | "/settings/billing"
     | "/settings/capabilities"
-    | "/settings/crm"
     | "/settings/general"
     | "/settings/knowledge-graph"
-    | "/settings/managed-applications"
     | "/settings/memory"
     | "/settings/model-catalog"
     | "/settings/routine-repo"
@@ -1092,14 +992,11 @@ export interface FileRouteTypes {
     | "/settings/knowledge-bases/$kbId"
     | "/settings/mcp-servers/$serverId"
     | "/settings/mcp-servers/data-sources"
-    | "/settings/mcp-servers/plugins"
     | "/settings/mcp-servers/self-acquired"
     | "/settings/mcp-servers/servers"
     | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/records"
-    | "/settings/plugins/$pluginKey"
-    | "/settings/plugins/n8n"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
     | "/settings/skills/drafts"
@@ -1108,7 +1005,6 @@ export interface FileRouteTypes {
     | "/settings/webhooks/$webhookId"
     | "/settings/workflows/$workflowId"
     | "/approvals/"
-    | "/apps/"
     | "/artifacts/"
     | "/automations/"
     | "/customize/"
@@ -1122,19 +1018,15 @@ export interface FileRouteTypes {
     | "/settings/evaluations/"
     | "/settings/knowledge-bases/"
     | "/settings/mcp-servers/"
-    | "/settings/plugins/"
     | "/settings/routines/"
     | "/settings/skills/"
     | "/settings/spaces/"
     | "/settings/users/"
     | "/settings/webhooks/"
     | "/settings/workflows/"
-    | "/apps/$pluginKey/$appRouteSegment"
     | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
     | "/settings/evaluations/studio/new"
-    | "/settings/plugins/n8n/settings"
-    | "/settings/plugins/n8n/workflows"
     | "/settings/skills/drafts/$draftId"
     | "/settings/evaluations/datasets/"
     | "/settings/evaluations/replay-tools/"
@@ -1162,10 +1054,8 @@ export interface FileRouteTypes {
     | "/settings/analytics"
     | "/settings/billing"
     | "/settings/capabilities"
-    | "/settings/crm"
     | "/settings/general"
     | "/settings/knowledge-graph"
-    | "/settings/managed-applications"
     | "/settings/memory"
     | "/settings/model-catalog"
     | "/settings/routine-repo"
@@ -1194,14 +1084,11 @@ export interface FileRouteTypes {
     | "/settings/knowledge-bases/$kbId"
     | "/settings/mcp-servers/$serverId"
     | "/settings/mcp-servers/data-sources"
-    | "/settings/mcp-servers/plugins"
     | "/settings/mcp-servers/self-acquired"
     | "/settings/mcp-servers/servers"
     | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/records"
-    | "/settings/plugins/$pluginKey"
-    | "/settings/plugins/n8n"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
     | "/settings/skills/drafts"
@@ -1210,7 +1097,6 @@ export interface FileRouteTypes {
     | "/settings/webhooks/$webhookId"
     | "/settings/workflows/$workflowId"
     | "/approvals"
-    | "/apps"
     | "/artifacts"
     | "/automations"
     | "/customize"
@@ -1224,19 +1110,15 @@ export interface FileRouteTypes {
     | "/settings/evaluations"
     | "/settings/knowledge-bases"
     | "/settings/mcp-servers"
-    | "/settings/plugins"
     | "/settings/routines"
     | "/settings/skills"
     | "/settings/spaces"
     | "/settings/users"
     | "/settings/webhooks"
     | "/settings/workflows"
-    | "/apps/$pluginKey/$appRouteSegment"
     | "/settings/evaluations/datasets/$slug"
     | "/settings/evaluations/studio/$testCaseId"
     | "/settings/evaluations/studio/new"
-    | "/settings/plugins/n8n/settings"
-    | "/settings/plugins/n8n/workflows"
     | "/settings/skills/drafts/$draftId"
     | "/settings/evaluations/datasets"
     | "/settings/evaluations/replay-tools"
@@ -1270,10 +1152,8 @@ export interface FileRouteTypes {
     | "/_authed/settings/artifacts"
     | "/_authed/settings/billing"
     | "/_authed/settings/capabilities"
-    | "/_authed/settings/crm"
     | "/_authed/settings/general"
     | "/_authed/settings/knowledge-graph"
-    | "/_authed/settings/managed-applications"
     | "/_authed/settings/memory"
     | "/_authed/settings/model-catalog"
     | "/_authed/settings/routine-repo"
@@ -1302,14 +1182,11 @@ export interface FileRouteTypes {
     | "/_authed/settings/knowledge-bases/$kbId"
     | "/_authed/settings/mcp-servers/$serverId"
     | "/_authed/settings/mcp-servers/data-sources"
-    | "/_authed/settings/mcp-servers/plugins"
     | "/_authed/settings/mcp-servers/self-acquired"
     | "/_authed/settings/mcp-servers/servers"
     | "/_authed/settings/memory/knowledge-bases"
     | "/_authed/settings/memory/knowledge-graph"
     | "/_authed/settings/memory/records"
-    | "/_authed/settings/plugins/$pluginKey"
-    | "/_authed/settings/plugins/n8n"
     | "/_authed/settings/routines/$routineId"
     | "/_authed/settings/skills/$skillSlug"
     | "/_authed/settings/skills/drafts"
@@ -1318,7 +1195,6 @@ export interface FileRouteTypes {
     | "/_authed/settings/webhooks/$webhookId"
     | "/_authed/settings/workflows/$workflowId"
     | "/_authed/_shell/approvals/"
-    | "/_authed/_shell/apps/"
     | "/_authed/_shell/artifacts/"
     | "/_authed/_shell/automations/"
     | "/_authed/_shell/customize/"
@@ -1332,19 +1208,15 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/"
     | "/_authed/settings/knowledge-bases/"
     | "/_authed/settings/mcp-servers/"
-    | "/_authed/settings/plugins/"
     | "/_authed/settings/routines/"
     | "/_authed/settings/skills/"
     | "/_authed/settings/spaces/"
     | "/_authed/settings/users/"
     | "/_authed/settings/webhooks/"
     | "/_authed/settings/workflows/"
-    | "/_authed/_shell/apps/$pluginKey/$appRouteSegment"
     | "/_authed/settings/evaluations/datasets/$slug"
     | "/_authed/settings/evaluations/studio/$testCaseId"
     | "/_authed/settings/evaluations/studio/new"
-    | "/_authed/settings/plugins/n8n/settings"
-    | "/_authed/settings/plugins/n8n/workflows"
     | "/_authed/settings/skills/drafts/$draftId"
     | "/_authed/settings/evaluations/datasets/"
     | "/_authed/settings/evaluations/replay-tools/"
@@ -1477,13 +1349,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsMemoryRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
-    "/_authed/settings/managed-applications": {
-      id: "/_authed/settings/managed-applications";
-      path: "/managed-applications";
-      fullPath: "/settings/managed-applications";
-      preLoaderRoute: typeof AuthedSettingsManagedApplicationsRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
     "/_authed/settings/knowledge-graph": {
       id: "/_authed/settings/knowledge-graph";
       path: "/knowledge-graph";
@@ -1496,13 +1361,6 @@ declare module "@tanstack/react-router" {
       path: "/general";
       fullPath: "/settings/general";
       preLoaderRoute: typeof AuthedSettingsGeneralRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
-    "/_authed/settings/crm": {
-      id: "/_authed/settings/crm";
-      path: "/crm";
-      fullPath: "/settings/crm";
-      preLoaderRoute: typeof AuthedSettingsCrmRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/capabilities": {
@@ -1610,13 +1468,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsRoutinesIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
-    "/_authed/settings/plugins/": {
-      id: "/_authed/settings/plugins/";
-      path: "/plugins";
-      fullPath: "/settings/plugins/";
-      preLoaderRoute: typeof AuthedSettingsPluginsIndexRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
     "/_authed/settings/mcp-servers/": {
       id: "/_authed/settings/mcp-servers/";
       path: "/mcp-servers";
@@ -1708,13 +1559,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedShellArtifactsIndexRouteImport;
       parentRoute: typeof AuthedShellRoute;
     };
-    "/_authed/_shell/apps/": {
-      id: "/_authed/_shell/apps/";
-      path: "/apps";
-      fullPath: "/apps/";
-      preLoaderRoute: typeof AuthedShellAppsIndexRouteImport;
-      parentRoute: typeof AuthedShellRoute;
-    };
     "/_authed/_shell/approvals/": {
       id: "/_authed/_shell/approvals/";
       path: "/approvals";
@@ -1771,20 +1615,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsRoutinesRoutineIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
-    "/_authed/settings/plugins/n8n": {
-      id: "/_authed/settings/plugins/n8n";
-      path: "/plugins/n8n";
-      fullPath: "/settings/plugins/n8n";
-      preLoaderRoute: typeof AuthedSettingsPluginsN8nRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
-    "/_authed/settings/plugins/$pluginKey": {
-      id: "/_authed/settings/plugins/$pluginKey";
-      path: "/plugins/$pluginKey";
-      fullPath: "/settings/plugins/$pluginKey";
-      preLoaderRoute: typeof AuthedSettingsPluginsPluginKeyRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
     "/_authed/settings/memory/records": {
       id: "/_authed/settings/memory/records";
       path: "/records";
@@ -1818,13 +1648,6 @@ declare module "@tanstack/react-router" {
       path: "/mcp-servers/self-acquired";
       fullPath: "/settings/mcp-servers/self-acquired";
       preLoaderRoute: typeof AuthedSettingsMcpServersSelfAcquiredRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
-    "/_authed/settings/mcp-servers/plugins": {
-      id: "/_authed/settings/mcp-servers/plugins";
-      path: "/mcp-servers/plugins";
-      fullPath: "/settings/mcp-servers/plugins";
-      preLoaderRoute: typeof AuthedSettingsMcpServersPluginsRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/mcp-servers/data-sources": {
@@ -2016,20 +1839,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsSkillsDraftsDraftIdRouteImport;
       parentRoute: typeof AuthedSettingsSkillsDraftsRoute;
     };
-    "/_authed/settings/plugins/n8n/workflows": {
-      id: "/_authed/settings/plugins/n8n/workflows";
-      path: "/workflows";
-      fullPath: "/settings/plugins/n8n/workflows";
-      preLoaderRoute: typeof AuthedSettingsPluginsN8nWorkflowsRouteImport;
-      parentRoute: typeof AuthedSettingsPluginsN8nRoute;
-    };
-    "/_authed/settings/plugins/n8n/settings": {
-      id: "/_authed/settings/plugins/n8n/settings";
-      path: "/settings";
-      fullPath: "/settings/plugins/n8n/settings";
-      preLoaderRoute: typeof AuthedSettingsPluginsN8nSettingsRouteImport;
-      parentRoute: typeof AuthedSettingsPluginsN8nRoute;
-    };
     "/_authed/settings/evaluations/studio/new": {
       id: "/_authed/settings/evaluations/studio/new";
       path: "/evaluations/studio/new";
@@ -2050,13 +1859,6 @@ declare module "@tanstack/react-router" {
       fullPath: "/settings/evaluations/datasets/$slug";
       preLoaderRoute: typeof AuthedSettingsEvaluationsDatasetsSlugRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
-    };
-    "/_authed/_shell/apps/$pluginKey/$appRouteSegment": {
-      id: "/_authed/_shell/apps/$pluginKey/$appRouteSegment";
-      path: "/apps/$pluginKey/$appRouteSegment";
-      fullPath: "/apps/$pluginKey/$appRouteSegment";
-      preLoaderRoute: typeof AuthedShellAppsPluginKeyAppRouteSegmentRouteImport;
-      parentRoute: typeof AuthedShellRoute;
     };
     "/_authed/settings/routines/$routineId_/executions/": {
       id: "/_authed/settings/routines/$routineId_/executions/";
@@ -2191,12 +1993,10 @@ interface AuthedShellRouteChildren {
   AuthedShellThreadsIdRoute: typeof AuthedShellThreadsIdRoute;
   AuthedShellWorkItemsWorkItemIdRoute: typeof AuthedShellWorkItemsWorkItemIdRouteWithChildren;
   AuthedShellApprovalsIndexRoute: typeof AuthedShellApprovalsIndexRoute;
-  AuthedShellAppsIndexRoute: typeof AuthedShellAppsIndexRoute;
   AuthedShellArtifactsIndexRoute: typeof AuthedShellArtifactsIndexRoute;
   AuthedShellSpacesIndexRoute: typeof AuthedShellSpacesIndexRoute;
   AuthedShellThreadsIndexRoute: typeof AuthedShellThreadsIndexRoute;
   AuthedShellWorkItemsIndexRoute: typeof AuthedShellWorkItemsIndexRoute;
-  AuthedShellAppsPluginKeyAppRouteSegmentRoute: typeof AuthedShellAppsPluginKeyAppRouteSegmentRoute;
 }
 
 const AuthedShellRouteChildren: AuthedShellRouteChildren = {
@@ -2212,13 +2012,10 @@ const AuthedShellRouteChildren: AuthedShellRouteChildren = {
   AuthedShellWorkItemsWorkItemIdRoute:
     AuthedShellWorkItemsWorkItemIdRouteWithChildren,
   AuthedShellApprovalsIndexRoute: AuthedShellApprovalsIndexRoute,
-  AuthedShellAppsIndexRoute: AuthedShellAppsIndexRoute,
   AuthedShellArtifactsIndexRoute: AuthedShellArtifactsIndexRoute,
   AuthedShellSpacesIndexRoute: AuthedShellSpacesIndexRoute,
   AuthedShellThreadsIndexRoute: AuthedShellThreadsIndexRoute,
   AuthedShellWorkItemsIndexRoute: AuthedShellWorkItemsIndexRoute,
-  AuthedShellAppsPluginKeyAppRouteSegmentRoute:
-    AuthedShellAppsPluginKeyAppRouteSegmentRoute,
 };
 
 const AuthedShellRouteWithChildren = AuthedShellRoute._addFileChildren(
@@ -2276,24 +2073,6 @@ const AuthedSettingsMemoryRouteChildren: AuthedSettingsMemoryRouteChildren = {
 const AuthedSettingsMemoryRouteWithChildren =
   AuthedSettingsMemoryRoute._addFileChildren(AuthedSettingsMemoryRouteChildren);
 
-interface AuthedSettingsPluginsN8nRouteChildren {
-  AuthedSettingsPluginsN8nSettingsRoute: typeof AuthedSettingsPluginsN8nSettingsRoute;
-  AuthedSettingsPluginsN8nWorkflowsRoute: typeof AuthedSettingsPluginsN8nWorkflowsRoute;
-}
-
-const AuthedSettingsPluginsN8nRouteChildren: AuthedSettingsPluginsN8nRouteChildren =
-  {
-    AuthedSettingsPluginsN8nSettingsRoute:
-      AuthedSettingsPluginsN8nSettingsRoute,
-    AuthedSettingsPluginsN8nWorkflowsRoute:
-      AuthedSettingsPluginsN8nWorkflowsRoute,
-  };
-
-const AuthedSettingsPluginsN8nRouteWithChildren =
-  AuthedSettingsPluginsN8nRoute._addFileChildren(
-    AuthedSettingsPluginsN8nRouteChildren,
-  );
-
 interface AuthedSettingsSkillsDraftsRouteChildren {
   AuthedSettingsSkillsDraftsDraftIdRoute: typeof AuthedSettingsSkillsDraftsDraftIdRoute;
 }
@@ -2315,10 +2094,8 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsArtifactsRoute: typeof AuthedSettingsArtifactsRouteWithChildren;
   AuthedSettingsBillingRoute: typeof AuthedSettingsBillingRoute;
   AuthedSettingsCapabilitiesRoute: typeof AuthedSettingsCapabilitiesRoute;
-  AuthedSettingsCrmRoute: typeof AuthedSettingsCrmRoute;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
   AuthedSettingsKnowledgeGraphRoute: typeof AuthedSettingsKnowledgeGraphRoute;
-  AuthedSettingsManagedApplicationsRoute: typeof AuthedSettingsManagedApplicationsRoute;
   AuthedSettingsMemoryRoute: typeof AuthedSettingsMemoryRouteWithChildren;
   AuthedSettingsModelCatalogRoute: typeof AuthedSettingsModelCatalogRoute;
   AuthedSettingsRoutineRepoRoute: typeof AuthedSettingsRoutineRepoRoute;
@@ -2334,11 +2111,8 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsKnowledgeBasesKbIdRoute: typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   AuthedSettingsMcpServersServerIdRoute: typeof AuthedSettingsMcpServersServerIdRoute;
   AuthedSettingsMcpServersDataSourcesRoute: typeof AuthedSettingsMcpServersDataSourcesRoute;
-  AuthedSettingsMcpServersPluginsRoute: typeof AuthedSettingsMcpServersPluginsRoute;
   AuthedSettingsMcpServersSelfAcquiredRoute: typeof AuthedSettingsMcpServersSelfAcquiredRoute;
   AuthedSettingsMcpServersServersRoute: typeof AuthedSettingsMcpServersServersRoute;
-  AuthedSettingsPluginsPluginKeyRoute: typeof AuthedSettingsPluginsPluginKeyRoute;
-  AuthedSettingsPluginsN8nRoute: typeof AuthedSettingsPluginsN8nRouteWithChildren;
   AuthedSettingsRoutinesRoutineIdRoute: typeof AuthedSettingsRoutinesRoutineIdRoute;
   AuthedSettingsSkillsSkillSlugRoute: typeof AuthedSettingsSkillsSkillSlugRoute;
   AuthedSettingsSkillsDraftsRoute: typeof AuthedSettingsSkillsDraftsRouteWithChildren;
@@ -2352,7 +2126,6 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsEvaluationsIndexRoute: typeof AuthedSettingsEvaluationsIndexRoute;
   AuthedSettingsKnowledgeBasesIndexRoute: typeof AuthedSettingsKnowledgeBasesIndexRoute;
   AuthedSettingsMcpServersIndexRoute: typeof AuthedSettingsMcpServersIndexRoute;
-  AuthedSettingsPluginsIndexRoute: typeof AuthedSettingsPluginsIndexRoute;
   AuthedSettingsRoutinesIndexRoute: typeof AuthedSettingsRoutinesIndexRoute;
   AuthedSettingsSkillsIndexRoute: typeof AuthedSettingsSkillsIndexRoute;
   AuthedSettingsSpacesIndexRoute: typeof AuthedSettingsSpacesIndexRoute;
@@ -2378,11 +2151,8 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsArtifactsRoute: AuthedSettingsArtifactsRouteWithChildren,
   AuthedSettingsBillingRoute: AuthedSettingsBillingRoute,
   AuthedSettingsCapabilitiesRoute: AuthedSettingsCapabilitiesRoute,
-  AuthedSettingsCrmRoute: AuthedSettingsCrmRoute,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
   AuthedSettingsKnowledgeGraphRoute: AuthedSettingsKnowledgeGraphRoute,
-  AuthedSettingsManagedApplicationsRoute:
-    AuthedSettingsManagedApplicationsRoute,
   AuthedSettingsMemoryRoute: AuthedSettingsMemoryRouteWithChildren,
   AuthedSettingsModelCatalogRoute: AuthedSettingsModelCatalogRoute,
   AuthedSettingsRoutineRepoRoute: AuthedSettingsRoutineRepoRoute,
@@ -2402,12 +2172,9 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsMcpServersServerIdRoute: AuthedSettingsMcpServersServerIdRoute,
   AuthedSettingsMcpServersDataSourcesRoute:
     AuthedSettingsMcpServersDataSourcesRoute,
-  AuthedSettingsMcpServersPluginsRoute: AuthedSettingsMcpServersPluginsRoute,
   AuthedSettingsMcpServersSelfAcquiredRoute:
     AuthedSettingsMcpServersSelfAcquiredRoute,
   AuthedSettingsMcpServersServersRoute: AuthedSettingsMcpServersServersRoute,
-  AuthedSettingsPluginsPluginKeyRoute: AuthedSettingsPluginsPluginKeyRoute,
-  AuthedSettingsPluginsN8nRoute: AuthedSettingsPluginsN8nRouteWithChildren,
   AuthedSettingsRoutinesRoutineIdRoute: AuthedSettingsRoutinesRoutineIdRoute,
   AuthedSettingsSkillsSkillSlugRoute: AuthedSettingsSkillsSkillSlugRoute,
   AuthedSettingsSkillsDraftsRoute: AuthedSettingsSkillsDraftsRouteWithChildren,
@@ -2423,7 +2190,6 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsKnowledgeBasesIndexRoute:
     AuthedSettingsKnowledgeBasesIndexRoute,
   AuthedSettingsMcpServersIndexRoute: AuthedSettingsMcpServersIndexRoute,
-  AuthedSettingsPluginsIndexRoute: AuthedSettingsPluginsIndexRoute,
   AuthedSettingsRoutinesIndexRoute: AuthedSettingsRoutinesIndexRoute,
   AuthedSettingsSkillsIndexRoute: AuthedSettingsSkillsIndexRoute,
   AuthedSettingsSpacesIndexRoute: AuthedSettingsSpacesIndexRoute,

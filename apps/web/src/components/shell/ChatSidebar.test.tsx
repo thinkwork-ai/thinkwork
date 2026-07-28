@@ -33,7 +33,6 @@ const {
   searchThreadItemsMock,
   pinnedThreadItemsMock,
   spacesMock,
-  pluginAppsMock,
   pinnedQueryPauseValuesMock,
   recentReexecuteMock,
   searchReexecuteMock,
@@ -85,17 +84,6 @@ const {
     unreadThreadCount: number;
     lastActivityAt: string;
   }>,
-  pluginAppsMock: [] as Array<{
-    id: string;
-    pluginKey: string;
-    pluginDisplayName: string;
-    displayName: string;
-    routeSegment: string;
-    readiness: {
-      state: string;
-      message: string;
-    };
-  }>,
   pinnedQueryPauseValuesMock: [] as boolean[],
   recentReexecuteMock: vi.fn(),
   searchReexecuteMock: vi.fn(),
@@ -127,7 +115,6 @@ const {
     UnpinThreadMutation: Symbol("UnpinThreadMutation"),
     UpdateThreadMutation: Symbol("UpdateThreadMutation"),
     WorkItemsQuery: Symbol("WorkItemsQuery"),
-    InstalledPluginAppsQuery: Symbol("InstalledPluginAppsQuery"),
   },
 }));
 
@@ -136,10 +123,6 @@ vi.mock("@/context/TenantContext", () => ({
 }));
 
 vi.mock("@/lib/graphql-queries", () => queryDocs);
-vi.mock("@/lib/plugin-app-queries", () => ({
-  InstalledPluginAppsQuery: queryDocs.InstalledPluginAppsQuery,
-}));
-
 vi.mock("sonner", () => ({
   toast: {
     error: vi.fn(),
@@ -165,12 +148,7 @@ vi.mock("@tanstack/react-router", () => ({
     const href = to
       .replace("$spaceId", params?.spaceId ?? "$spaceId")
       .replace("$threadId", params?.threadId ?? "$threadId")
-      .replace("$id", params?.id ?? "$id")
-      .replace("$pluginKey", params?.pluginKey ?? "$pluginKey")
-      .replace(
-        "$appRouteSegment",
-        params?.appRouteSegment ?? "$appRouteSegment",
-      );
+      .replace("$id", params?.id ?? "$id");
     const query = search
       ? new URLSearchParams(
           Object.entries(search).filter((entry): entry is [string, string] =>
@@ -235,15 +213,6 @@ vi.mock("urql", () => ({
         {
           fetching: false,
           data: { workItems: [] },
-        },
-        vi.fn(),
-      ];
-    }
-    if (query === queryDocs.InstalledPluginAppsQuery) {
-      return [
-        {
-          fetching: false,
-          data: { installedPluginApps: pluginAppsMock },
         },
         vi.fn(),
       ];
@@ -613,7 +582,6 @@ afterEach(() => {
   searchThreadItemsMock.length = 0;
   pinnedThreadItemsMock.length = 0;
   spacesMock.length = 0;
-  pluginAppsMock.length = 0;
   pinnedQueryPauseValuesMock.length = 0;
   window.localStorage.clear();
   if (ORIGINAL_LOCAL_STORAGE) {
@@ -810,51 +778,6 @@ describe("ChatSidebar", () => {
     );
     expect(spaceThreadLink.className).not.toContain("ml-5");
     expect(screen.getByText("Recent Space thread")).toBeTruthy();
-  });
-
-  it("renders Applications navigation when launchable plugin apps are installed", () => {
-    pluginAppsMock.push({
-      id: "install-1:client-engagement",
-      pluginKey: "twenty",
-      pluginDisplayName: "Twenty CRM",
-      displayName: "Client Engagement",
-      routeSegment: "client-engagement",
-      readiness: {
-        state: "ready",
-        message: "Ready to launch.",
-      },
-    });
-    tenantMock.mockReturnValue({ tenantId: "tenant-1", userId: "user-1" });
-    locationMock.mockReturnValue({
-      pathname: "/apps/twenty/client-engagement",
-      search: {},
-    });
-
-    render(<ChatSidebar />);
-
-    const appsLink = screen.getByRole("link", { name: /^applications/i });
-    expect(appsLink.getAttribute("href")).toBe("/apps");
-    expect(document.querySelector(".lucide-layout-grid")).toBeTruthy();
-    expect(screen.queryByText("Client Engagement")).toBeNull();
-    expect(screen.queryByText("Twenty CRM")).toBeNull();
-    expect(screen.getAllByText("Applications")).toHaveLength(1);
-    expect(
-      screen
-        .getByRole("link", { name: /automations/i })
-        .compareDocumentPosition(
-          screen.getByRole("link", { name: /work items/i }),
-        ) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      screen
-        .getByRole("link", { name: /work items/i })
-        .compareDocumentPosition(appsLink) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      screen
-        .getByRole("link", { name: /automations/i })
-        .compareDocumentPosition(appsLink) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
   });
 
   it("omits the Spaces section when no Spaces have loaded", () => {

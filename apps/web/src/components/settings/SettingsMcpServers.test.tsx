@@ -258,7 +258,10 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SettingsMcpServers", () => {
-  it("renders one merged table of tenant and plugin servers with Type cells", async () => {
+  it("renders every registered server in one table, sorted by name", async () => {
+    // Provenance is gone: the plugin system is removed and migration 0279
+    // moved its servers to `manual`, so there is no Type column and no
+    // plugin-vs-manual URL dedup — two rows sharing a URL are two rows.
     mocks.listMcpServers.mockResolvedValue({
       servers: [
         {
@@ -269,30 +272,7 @@ describe("SettingsMcpServers", () => {
           enabled: true,
           authType: "oauth",
           status: "approved",
-          managementSource: "managed_application",
-          managedApplicationKey: "twenty-crm",
-        },
-        {
-          id: "lastmile-tasks",
-          name: "LastMile Tasks",
-          slug: "lastmile-tasks",
-          url: "https://api.thinkwork.test/mcp/tasks",
-          enabled: true,
-          authType: "tenant_api_key",
-          status: "approved",
-          managementSource: "plugin",
-          managedApplicationKey: null,
-        },
-        {
-          id: "lastmile-crm-plugin",
-          name: "LastMile CRM",
-          slug: "lastmile-crm-plugin",
-          url: "https://api.thinkwork.test/mcp/lastmile",
-          enabled: true,
-          authType: "tenant_api_key",
-          status: "approved",
-          managementSource: "plugin",
-          managedApplicationKey: null,
+          managementSource: "manual",
         },
         {
           id: "n8n",
@@ -303,19 +283,7 @@ describe("SettingsMcpServers", () => {
           authType: "service_credential",
           authStatus: "active",
           status: "approved",
-          managementSource: "plugin",
-          managedApplicationKey: null,
-        },
-        {
-          id: "manual-duplicate",
-          name: "LastMile CRM",
-          slug: "manual-lastmile-crm",
-          url: "https://api.thinkwork.test/mcp/lastmile/",
-          enabled: true,
-          authType: "oauth",
-          status: "approved",
           managementSource: "manual",
-          managedApplicationKey: null,
         },
         {
           id: "aardvark",
@@ -326,18 +294,6 @@ describe("SettingsMcpServers", () => {
           authType: "none",
           status: "approved",
           managementSource: "manual",
-          managedApplicationKey: null,
-        },
-        {
-          id: "manual",
-          name: "Manual CRM",
-          slug: "manual-crm",
-          url: "https://manual.example/mcp",
-          enabled: true,
-          authType: "none",
-          status: "approved",
-          managementSource: "manual",
-          managedApplicationKey: null,
         },
         {
           id: "zeta",
@@ -348,7 +304,6 @@ describe("SettingsMcpServers", () => {
           authType: "none",
           status: "approved",
           managementSource: "manual",
-          managedApplicationKey: null,
         },
       ],
     });
@@ -358,37 +313,21 @@ describe("SettingsMcpServers", () => {
 
     render(<SettingsMcpServers />);
 
-    // AE1: one merged table shows the 3 tenant rows AND the 4 plugin rows;
-    // the titled sections are gone.
-    expect(await screen.findByText("Manual CRM")).toBeTruthy();
+    expect(await screen.findByText("Aardvark Tools")).toBeTruthy();
+    expect(screen.getByText("Twenty CRM")).toBeTruthy();
+    expect(screen.getByText("n8n workflow management")).toBeTruthy();
+    expect(screen.getByText("Zeta Ops")).toBeTruthy();
+
+    // Twenty and n8n remain reachable as ordinary MCP servers — that was the
+    // explicit requirement when the plugin system was retired.
     expect(screen.queryByText("Tenant servers")).toBeNull();
     expect(screen.queryByText("Plugin MCPs")).toBeNull();
-    expect(screen.getByText("Aardvark Tools")).toBeTruthy();
-    expect(screen.getByText("Zeta Ops")).toBeTruthy();
-    expect(screen.getByText("Twenty CRM")).toBeTruthy();
-    expect(screen.getByText("LastMile Tasks")).toBeTruthy();
-    expect(screen.getByText("n8n workflow management")).toBeTruthy();
-    // The manual duplicate of a plugin URL stays deduped, so LastMile CRM
-    // appears exactly once (as the plugin row).
-    expect(screen.getAllByText("LastMile CRM")).toHaveLength(1);
-    // Type column: 3 tenant rows, 4 plugin rows (managed-application counts
-    // as Plugin). The inline lowercase "plugin" name badge is retired.
-    expect(screen.getAllByText("Tenant")).toHaveLength(3);
-    expect(screen.getAllByText("Plugin")).toHaveLength(4);
-    expect(screen.queryByText("plugin")).toBeNull();
-    expect(screen.queryByText("Rows per page")).toBeNull();
-    expect(screen.queryByText(/Page\s+1\s+of/i)).toBeNull();
-    // The inline Remove/System column is gone — removal lives in the detail view.
-    expect(screen.queryByText("System")).toBeNull();
+    for (const label of ["Plugin", "Tenant", "plugin", "System"]) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
     expect(screen.queryByRole("button", { name: /remove/i })).toBeNull();
 
-    // Rows sort by name in one interleaved order across the tenant/plugin
-    // boundary: Aardvark(T) < LastMile CRM(P) < LastMile Tasks(P) <
-    // Manual CRM(T) < n8n(P) < Twenty CRM(P) < Zeta(T).
-    expect(textAppearsBefore("Aardvark Tools", "LastMile CRM")).toBe(true);
-    expect(textAppearsBefore("LastMile CRM", "LastMile Tasks")).toBe(true);
-    expect(textAppearsBefore("LastMile Tasks", "Manual CRM")).toBe(true);
-    expect(textAppearsBefore("Manual CRM", "n8n workflow management")).toBe(
+    expect(textAppearsBefore("Aardvark Tools", "n8n workflow management")).toBe(
       true,
     );
     expect(textAppearsBefore("n8n workflow management", "Twenty CRM")).toBe(
@@ -398,25 +337,13 @@ describe("SettingsMcpServers", () => {
     expect(screen.getByText("not connected")).toBeTruthy();
     expect(screen.getByText("connected")).toBeTruthy();
 
-    // Enabled toggle stays disabled for plugin rows, active for tenant rows.
-    expect(
-      (
-        screen.getByRole("switch", {
-          name: "Toggle Twenty CRM",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(true);
-    expect(
-      (
-        screen.getByRole("switch", {
-          name: "Toggle Manual CRM",
-        }) as HTMLButtonElement
-      ).disabled,
-    ).toBe(false);
+    // No row is lifecycle-locked now that nothing is externally managed.
+    for (const name of ["Toggle Twenty CRM", "Toggle Zeta Ops"]) {
+      expect(
+        (screen.getByRole("switch", { name }) as HTMLButtonElement).disabled,
+      ).toBe(false);
+    }
 
-    // Header carries the Connectors title and the tab strip (Connections +
-    // merged MCP Servers + Data Sources, THINK-285; + Self-Acquired for
-    // governed autonomy U5).
     const headerConfig = mocks.setHeader.mock.calls.at(-1)?.[0];
     expect(headerConfig?.title).toBe("Connectors");
     expect(headerConfig?.breadcrumbs).toEqual([{ label: "Connectors" }]);

@@ -340,7 +340,6 @@ export const SettingsWorkflowQuery = gql`
         bindingStatus
         routineId
         routineAslVersionId
-        pluginInstallId
         managedApplicationId
         externalWorkflowId
         externalWorkflowName
@@ -1842,7 +1841,6 @@ export const StartTwentyCustomerOnboardingMutation = gql`
       threadId
       goalId
       idempotent
-      pluginActivationRequired
       statusWritebackState
       missingFields
       thread {
@@ -3033,7 +3031,7 @@ export const CanvasBindingFreshnessQuery = gql`
 `;
 
 // THINK-145/THINK-147: tenant-wide artifact rows for the Artifacts list — EVERY
-// kind (living canvases, HTML document artifacts, and any plugin-minted type),
+// kind (living canvases, HTML document artifacts, and any externally minted type),
 // not just DATA_VIEW canvases. Applet rows are excluded client-side (they come
 // from the applets query). Draft canvases stay hidden (`includeDrafts`
 // defaults false server-side). `type` drives the Type badge; `userName` is the

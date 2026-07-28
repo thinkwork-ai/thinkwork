@@ -240,23 +240,23 @@ describe("SettingsMcpServerDetail", () => {
     ).toBeTruthy();
   });
 
-  it("keeps managed MCP servers authenticatable but not manually removable", async () => {
-    mockServerState("active", {
-      managementSource: "managed_application",
-      managedApplicationKey: "twenty-crm",
-    });
+  it("treats every server as removable now that nothing is externally managed", async () => {
+    // Managed-application provenance is gone with the plugin system, so the
+    // detail page no longer withholds removal or shows a "System-managed"
+    // badge pointing at settings pages that do not exist.
+    mockServerState("active");
 
     render(<SettingsMcpServerDetail />);
 
     expect(await screen.findByText("Twenty CRM")).toBeTruthy();
-    expect(screen.getByText("System-managed")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /reconnect/i })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /remove server/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /remove server/i })).toBeTruthy();
+    for (const gone of [/System-managed/i, /Plugin-managed/i]) {
+      expect(screen.queryByText(gone)).toBeNull();
+    }
     expect(
-      screen.getByText(
-        /Use the managed application settings to park or destroy/i,
-      ),
-    ).toBeTruthy();
+      screen.queryByText(/Use the managed application settings/i),
+    ).toBeNull();
+    expect(screen.queryByText(/Use the plugin settings/i)).toBeNull();
   });
 
   it("handles desktop OAuth callback success by refreshing state", async () => {
@@ -347,20 +347,18 @@ describe("SettingsMcpServerDetail", () => {
     expect(screen.queryByText("find_many_companies")).toBeNull();
   });
 
-  it("lets admins save a plugin service credential access token", async () => {
+  it("lets admins save a service credential access token", async () => {
     mockServerState("not_connected", {
       name: "n8n workflow management",
       slug: "n8n--workflow-management",
       url: "https://n8n.thinkwork.ai/mcp-server/http",
       authType: "service_credential",
-      managementSource: "plugin",
-      managedApplicationKey: null,
+      managementSource: "manual",
     });
 
     render(<SettingsMcpServerDetail />);
 
     expect(await screen.findByText("n8n workflow management")).toBeTruthy();
-    expect(screen.getByText("Plugin-managed")).toBeTruthy();
     expect(await screen.findByText("N8N_MCP_SERVICE_CREDENTIAL")).toBeTruthy();
     expect(screen.getByText("Not configured")).toBeTruthy();
 

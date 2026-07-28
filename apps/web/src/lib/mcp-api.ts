@@ -309,19 +309,3 @@ export async function resolveMcpOAuthAuthorizeUrl(input: {
 
   return (body as { authorizeUrl: string }).authorizeUrl;
 }
-
-
-export function isManagedMcpServer(server: McpServer): boolean {
-  return (
-    server.managementSource === "managed_application" ||
-    Boolean(server.managedApplicationKey)
-  );
-}
-
-export function isPluginInstalledMcpServer(server: McpServer): boolean {
-  return (
-    server.managementSource === "plugin" ||
-    server.managementSource === "managed_application" ||
-    Boolean(server.managedApplicationKey)
-  );
-}
