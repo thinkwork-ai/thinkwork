@@ -351,7 +351,6 @@ describe("SettingsMcpServers", () => {
       { to: "/settings/mcp-servers", label: "Connections" },
       { to: "/settings/mcp-servers/servers", label: "MCP Servers" },
       { to: "/settings/mcp-servers/data-sources", label: "Data Sources" },
-      { to: "/settings/mcp-servers/self-acquired", label: "Self-Acquired" },
     ]);
   });
 

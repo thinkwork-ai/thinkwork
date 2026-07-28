@@ -47,25 +47,18 @@ import {
 } from "@/lib/mcp-api";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
 import { SettingsConnections } from "@/components/settings/SettingsConnections";
-import { SelfAcquiredView } from "@/components/settings/SelfAcquiredView";
 
 const CONNECTIONS_ROUTE = "/settings/mcp-servers";
 const MCP_SERVERS_ROUTE = "/settings/mcp-servers/servers";
 const DATA_SOURCES_ROUTE = "/settings/mcp-servers/data-sources";
-const SELF_ACQUIRED_ROUTE = "/settings/mcp-servers/self-acquired";
 
-type ConnectionsTab =
-  | "connections"
-  | "servers"
-  | "data-sources"
-  | "self-acquired";
+type ConnectionsTab = "connections" | "servers" | "data-sources";
 
 function tabForPath(pathname: string): ConnectionsTab {
   // The merged MCP list lives at /servers; analyst data sources live at
   // /data-sources (checked first for explicit ordering — the paths don't
-  // overlap). Self-acquired capabilities (governed autonomy) live at
-  // The section index is the Connections tab (per-user integrations).
-  if (pathname.startsWith(SELF_ACQUIRED_ROUTE)) return "self-acquired";
+  // overlap). The section index is the Connections tab (per-user
+  // integrations).
   if (pathname.startsWith(DATA_SOURCES_ROUTE)) return "data-sources";
   if (pathname.startsWith(MCP_SERVERS_ROUTE)) return "servers";
   return "connections";
@@ -315,7 +308,6 @@ export function SettingsMcpServers() {
           { to: CONNECTIONS_ROUTE, label: "Connections" },
           { to: MCP_SERVERS_ROUTE, label: "MCP Servers" },
           { to: DATA_SOURCES_ROUTE, label: "Data Sources" },
-          { to: SELF_ACQUIRED_ROUTE, label: "Self-Acquired" },
         ]
       : [{ to: CONNECTIONS_ROUTE, label: "Connections" }],
     // THINK-285: each tab shows only the action that creates the thing it
@@ -351,21 +343,6 @@ export function SettingsMcpServers() {
         loading={false}
       >
         <SettingsConnections />
-      </SettingsTablePane>
-    );
-  }
-
-  if (activeTab === "self-acquired") {
-    return (
-      <SettingsTablePane
-        embedded
-        title="Self-Acquired"
-        description="Capabilities your agents taught themselves — public, read-only connections they self-admitted and routines they self-promoted, with no human. Full provenance and one-click revoke. Anything credentialed or writing waits for your approval instead."
-        loading={false}
-      >
-        {tenantId ? (
-          <SelfAcquiredView tenantId={tenantId} canManage={isOperator} />
-        ) : null}
       </SettingsTablePane>
     );
   }
