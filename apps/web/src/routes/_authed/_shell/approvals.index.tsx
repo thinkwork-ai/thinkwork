@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo } from "react";
 import { useQuery } from "urql";
 import { ApprovalQueue } from "@/components/approvals/ApprovalQueue";
-import { RoutineProposalQueue } from "@/components/approvals/RoutineProposalQueue";
 import type { ComputerApproval } from "@/components/approvals/approval-types";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import { useTenant } from "@/context/TenantContext";
@@ -40,9 +39,6 @@ function ApprovalsPage() {
           isLoading={fetching && !data}
           error={error?.message ?? null}
         />
-        {/* THINK-280 U6: submitted Routine promotions have no inbox row yet,
-            so they are listed from routineProposals directly. */}
-        <RoutineProposalQueue tenantId={tenantId} />
       </div>
     </main>
   );

@@ -5,8 +5,8 @@
  * for every ADMITTED capability definition version in the tenant it emits one
  * `capability_operation` item carrying the full identity (twcap + signed
  * contract hash), the safe effect/principal/data/budget annotations, the
- * binding readiness + a redacted remediation, the Routine dependents, and the
- * latest broker/run evidence.
+ * binding readiness + a redacted remediation, and the latest broker/run
+ * evidence.
  *
  * Everything is projected through the SAME canonical composer the external
  * search and internal search route through (`projectOperationIdentities`) — the
@@ -24,7 +24,6 @@ import {
   capabilityDefinitionVersions,
   capabilityCredentialBindings,
   capabilityBrokerCalls,
-  capabilityRoutineProposals,
 } from "@thinkwork/database-pg/schema";
 import {
   projectOperationIdentities,
@@ -60,8 +59,6 @@ export interface CapabilityOperationItem {
   // ── Binding readiness + remediation ──
   readiness: string;
   remediation: string | null;
-  // ── Cross-surface evidence ──
-  routineDependentCount: number;
   latestBrokerCallStatus: string | null;
   latestBrokerCallAt: string | null;
 }
@@ -145,13 +142,8 @@ export async function projectCapabilityOperationItems(
 
       for (const op of identities) {
         const evidence = await latestBrokerEvidence(tenantId, op.contractHash);
-        const routineDependentCount = await countRoutineDependents(
-          tenantId,
-          op.twcap,
-        );
         items.push(
           toItem(def, op, readiness, remediation, {
-            routineDependentCount,
             latestBrokerCallStatus: evidence?.status ?? null,
             latestBrokerCallAt: evidence?.at ?? null,
           }),
@@ -176,7 +168,6 @@ function toItem(
   readiness: string,
   remediation: string | null,
   evidence: {
-    routineDependentCount: number;
     latestBrokerCallStatus: string | null;
     latestBrokerCallAt: string | null;
   },
@@ -214,7 +205,6 @@ function toItem(
     withheldReasons: op.withheldReasons,
     readiness,
     remediation,
-    routineDependentCount: evidence.routineDependentCount,
     latestBrokerCallStatus: evidence.latestBrokerCallStatus,
     latestBrokerCallAt: evidence.latestBrokerCallAt,
   };
@@ -243,30 +233,5 @@ async function latestBrokerEvidence(
     };
   } catch {
     return null;
-  }
-}
-
-async function countRoutineDependents(
-  tenantId: string,
-  twcap: string,
-): Promise<number> {
-  try {
-    const rows = (await db
-      .select()
-      .from(capabilityRoutineProposals)
-      .where(eq(capabilityRoutineProposals.tenant_id, tenantId))) as Array<
-      typeof capabilityRoutineProposals.$inferSelect
-    >;
-    let count = 0;
-    for (const row of rows) {
-      const payload = row.payload_json as { dependencies?: unknown } | null;
-      const deps = Array.isArray(payload?.dependencies)
-        ? (payload!.dependencies as Array<{ twcap?: unknown }>)
-        : [];
-      if (deps.some((d) => d?.twcap === twcap)) count += 1;
-    }
-    return count;
-  } catch {
-    return 0;
   }
 }

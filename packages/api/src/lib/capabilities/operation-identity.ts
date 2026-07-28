@@ -190,22 +190,22 @@ export function projectOperationIdentity(
 // ---------------------------------------------------------------------------
 
 /**
- * The seven surfaces that must agree on an operation's identity (R2/R16):
+ * The five surfaces that must agree on an operation's identity (R2/R16):
  *   1. inspector            — capabilityInspector projected operation item
- *   2. internalSearch       — capability-control-service capability_search
- *   3. brokerEvidence       — capability_broker_calls.{operation_ref,contract_hash}
- *   4. routineDependency    — Routine proposal dependency reference
- *   5. executionDetail      — headless executor evidence
- *   6. artifactLineage      — Artifact lineage capability reference
- *   7. externalSearch       — /mcp/capabilities search result
+ *   2. brokerEvidence       — capability_broker_calls.{operation_ref,contract_hash}
+ *   3. executionDetail      — headless executor evidence
+ *   4. artifactLineage      — Artifact lineage capability reference
+ *   5. externalSearch       — /mcp/capabilities search result
+ *
+ * `internalSearch` (capability_search) and `routineDependency` (Routine
+ * proposal dependencies) were surfaces six and seven until self-extension
+ * was removed.
  *
  * Each surface contributes just its `{ twcap, contractHash }`.
  */
 export const PARITY_SURFACES = [
   "inspector",
-  "internalSearch",
   "brokerEvidence",
-  "routineDependency",
   "executionDetail",
   "artifactLineage",
   "externalSearch",
