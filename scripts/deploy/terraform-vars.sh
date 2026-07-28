@@ -140,7 +140,6 @@ TF_VAR_ARGS=(
   # stay inert and fail-closed. Set via the repo variable so the
   # runtime-config SSM document carries the value durably (a transient
   # `aws ssm put-parameter` override is wiped by the next apply).
-  -var "capability_self_extension_tenants=${CAPABILITY_SELF_EXTENSION_TENANTS:-}"
   # THINK-280 — capability governed runtime dogfood. deploy.yml is
   # dev-only (STAGE: dev, line ~83); prod/customers deploy via
   # deploy-harness.yml / release.yml where this var is absent (→ false).

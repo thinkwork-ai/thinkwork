@@ -88,12 +88,6 @@ locals {
     # Document-served so every api handler resolves it via getConfig; the
     # handlers that already carry it as env keep winning.
     BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
-    # Governed autonomy — per-tenant opt-in allowlist for autonomous capability
-    # self-extension (the two self_admit_connection / self_approve_routine
-    # actions on capability-control-service). Comma/space-separated tenant ids;
-    # empty (default) = NO tenant enabled, so self-extension ships inert and
-    # fail-closed. Read via getConfig() (env-wins) in isSelfExtensionEnabled.
-    CAPABILITY_SELF_EXTENSION_TENANTS = var.capability_self_extension_tenants
     # THINK-230 — the operator-facing provisionAnalystConnector mutation runs
     # the analyst connector provisioning ceremony inside graphql-http, so the
     # shared api handlers read the same broker-secret ARN + rds_iam connect
@@ -983,14 +977,6 @@ resource "aws_lambda_function" "handler" {
     # POSTs paired started/terminal evidence rows per tool call. Shared
     # API_AUTH_SECRET bearer (runtime→API; no tenant OAuth).
     "tool-executions",
-    # Governed capability runtime control-plane service (THINK-280 U2).
-    # NO HTTP route: the Pi container invokes it directly (RequestResponse)
-    # via lambda:InvokeFunction over the approved in-account path — public
-    # execute-api is not reliable from Pi's private VPC. Identity comes
-    # exclusively from the Ed25519-signed capability caller context (the
-    # CAPABILITY_SIGNING_PUBLIC_KEY in the shared runtime-config document
-    # verifies it); plaintext payload fields are never trusted.
-    "capability-control-service",
     # SI-7 catalog-list read endpoint (plan §U15 pt 3/3). The runtime
     # fetches the allowed builtin-tool slug set once per
     # session-start + feature-flag-gated enforcement filter drops

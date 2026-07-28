@@ -964,12 +964,6 @@ variable "analyst_policy_source" {
   }
 }
 
-variable "capability_self_extension_tenants" {
-  description = "Governed autonomy opt-in: comma/space-separated tenant ids allowed to autonomously self-extend capabilities (self_admit_connection / self_approve_routine). Empty (default) = NO tenant enabled; self-extension ships inert and fail-closed. Read via getConfig() in capability-control-service."
-  type        = string
-  default     = ""
-}
-
 variable "analyst_db_cluster_resource_id" {
   description = "Immutable RDS cluster resource ID (cluster-XXXX / db-XXXX) for the stage database (THINK-229 U1). Wired from `module.database.cluster_resource_id`. Keys the broker's `rds-db:connect` IAM grant — the rds-db ARN format requires the resource ID, not the cluster ARN — and gates the IAM connect env on the broker Lambda: when empty, the broker stays on the password path."
   type        = string
