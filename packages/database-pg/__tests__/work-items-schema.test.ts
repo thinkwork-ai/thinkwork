@@ -33,6 +33,15 @@ const migration0187 = readFileSync(
   join(HERE, "..", "drizzle", "0187_native_work_items.sql"),
   "utf-8",
 );
+const migration0280 = readFileSync(
+  join(
+    HERE,
+    "..",
+    "drizzle",
+    "0280_work_item_external_refs_drop_plane_provider.sql",
+  ),
+  "utf-8",
+);
 const migration0191 = readFileSync(
   join(HERE, "..", "drizzle", "0191_open_engine_work_item_queue.sql"),
   "utf-8",
@@ -174,7 +183,13 @@ describe("Work Items schema", () => {
     expect(WORK_ITEM_EVENT_TYPES).toContain("comment_added");
     expect(WORK_ITEM_VIEW_TYPES).toEqual(["list", "board"]);
     expect(WORK_ITEM_THREAD_RELATIONSHIPS).toContain("evidence");
-    expect(WORK_ITEM_EXTERNAL_REF_PROVIDERS).toContain("plane");
+    // Plane is retired; migration 0280 narrows the matching CHECK constraint.
+    expect(WORK_ITEM_EXTERNAL_REF_PROVIDERS).toEqual([
+      "thinkwork",
+      "lastmile",
+      "linear",
+      "twenty",
+    ]);
     expect(WORK_ITEM_OPEN_ENGINE_DEPENDENCY_STATES).toEqual([
       "ready",
       "waiting",
@@ -233,10 +248,16 @@ describe("Work Items schema", () => {
       "'todo', 'active', 'blocked', 'done', 'skipped'",
       "'low', 'normal', 'high', 'urgent'",
       "'list', 'board'",
+      // 0187 is history and did allow 'plane'; 0280 narrows it.
       "'thinkwork', 'lastmile', 'linear', 'plane', 'twenty'",
     ]) {
       expect(migration0187).toContain(literal);
     }
+    expect(migration0280).toContain(
+      "CHECK (provider IN ('thinkwork', 'lastmile', 'linear', 'twenty'))",
+    );
+    // The narrowing must refuse to run rather than silently drop rows.
+    expect(migration0280).toContain("RAISE EXCEPTION");
     expect(migration0191).toContain(
       "CHECK (open_engine_dependency_state IN ('ready', 'waiting'))",
     );

@@ -4698,7 +4698,7 @@ Join hints:
 
 Enum values:
 
-- `provider`: `thinkwork`, `lastmile`, `linear`, `plane`, `twenty`
+- `provider`: `thinkwork`, `lastmile`, `linear`, `twenty`
 
 Join hints:
 
