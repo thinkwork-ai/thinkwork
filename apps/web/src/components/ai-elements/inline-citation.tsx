@@ -93,7 +93,11 @@ export function InlineCitation({
     // Open synchronously — popup blockers kill window.open after an await.
     const tab = window.open("about:blank", "_blank");
     try {
-      const url = await getDocumentViewUrlByKey(citation.key);
+      // A retrieval-supplied URL wins: MCP knowledge servers presign access
+      // to their own documents, which this deployment's KB Files API cannot
+      // resolve (the key is not in its document store).
+      const url =
+        citation.documentUrl ?? (await getDocumentViewUrlByKey(citation.key));
       const target = citation.page ? `${url}#page=${citation.page}` : url;
       if (tab) tab.location.href = target;
       else window.location.href = target;

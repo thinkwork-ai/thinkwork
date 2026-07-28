@@ -36,6 +36,8 @@ export interface KnowledgeSource {
   key: string;
   /** 1-based page of the source document, used to deep-link the viewer. */
   page?: number;
+  /** Retrieval-supplied view URL (see KnowledgeCitation.documentUrl). */
+  documentUrl?: string;
 }
 
 /**
@@ -48,6 +50,10 @@ export interface KnowledgeCitation {
   page?: number;
   /** Excerpt shown in the citation hover card. */
   quote?: string;
+  /** Retrieval-supplied view URL (MCP knowledge servers own their documents
+   * and presign access per hit). Preferred over the KB Files API — the key
+   * may not exist in this deployment's own document store. */
+  documentUrl?: string;
 }
 
 /** Iterate the search_knowledge invocations of one turn. */
@@ -102,6 +108,10 @@ export function knowledgeCitationsFromInvocations(
         key: split.key,
         page: typeof hit.pageNumber === "number" ? hit.pageNumber : split.page,
         quote: typeof hit.quote === "string" ? hit.quote : undefined,
+        documentUrl:
+          typeof hit.documentUrl === "string" && hit.documentUrl
+            ? hit.documentUrl
+            : undefined,
       });
     }
 
@@ -173,6 +183,31 @@ export function knowledgeSourcesFromInvocations(
       "";
     if (name !== "search_knowledge") continue;
     const result = record.result as Record<string, unknown> | undefined;
+    // Structured hits first: they carry the retrieval-supplied view URL the
+    // text rendering cannot.
+    const details = result?.details as Record<string, unknown> | undefined;
+    const hits = Array.isArray(details?.hits) ? details.hits : [];
+    let sawStructured = false;
+    for (const raw of hits) {
+      if (!raw || typeof raw !== "object") continue;
+      const hit = raw as Record<string, unknown>;
+      if (typeof hit.documentKey !== "string" || !hit.documentKey) continue;
+      sawStructured = true;
+      const split = splitPageDocumentKey(hit.documentKey);
+      if (split.key && !seen.has(split.key)) {
+        seen.add(split.key);
+        sources.push({
+          key: split.key,
+          page:
+            typeof hit.pageNumber === "number" ? hit.pageNumber : split.page,
+          documentUrl:
+            typeof hit.documentUrl === "string" && hit.documentUrl
+              ? hit.documentUrl
+              : undefined,
+        });
+      }
+    }
+    if (sawStructured) continue;
     const content = Array.isArray(result?.content) ? result.content : [];
     for (const block of content) {
       const text = (block as Record<string, unknown>)?.text;
@@ -215,19 +250,22 @@ export function KnowledgeSourcesCard({
       sources.map((source) => ({
         key: source.key,
         page: source.page,
+        documentUrl: source.documentUrl,
         name: displayName(source.key),
       })),
     [sources],
   );
 
-  const openSource = useCallback(async (documentKey: string, page?: number) => {
-    setError(null);
-    setOpening(documentKey);
-    // Open the tab synchronously — popup blockers kill window.open calls
-    // issued after an await.
-    const tab = window.open("about:blank", "_blank");
-    try {
-      const url = await getDocumentViewUrlByKey(documentKey);
+  const openSource = useCallback(
+    async (documentKey: string, page?: number, documentUrl?: string) => {
+      setError(null);
+      setOpening(documentKey);
+      // Open the tab synchronously — popup blockers kill window.open calls
+      // issued after an await.
+      const tab = window.open("about:blank", "_blank");
+      try {
+        const url =
+          documentUrl ?? (await getDocumentViewUrlByKey(documentKey));
       // PDF viewers honour the #page= fragment, so a citation lands on the
       // page the passage was actually read from.
       const target = page ? `${url}#page=${page}` : url;
@@ -263,13 +301,13 @@ export function KnowledgeSourcesCard({
       </button>
       {open ? (
         <ul className="mt-1.5 grid gap-1">
-          {names.map(({ key, name, page }) => (
+          {names.map(({ key, name, page, documentUrl }) => (
             <li key={key} className="min-w-0">
               <button
                 type="button"
                 className="flex min-w-0 max-w-full items-center gap-1.5 text-left text-xs text-primary hover:underline"
                 title={page ? `${key} (page ${page})` : key}
-                onClick={() => void openSource(key, page)}
+                onClick={() => void openSource(key, page, documentUrl)}
               >
                 {opening === key ? (
                   <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />

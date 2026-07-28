@@ -77,6 +77,10 @@ interface KnowledgeHit {
   /** The passage came from a page transcribed out of a scan or screenshot,
    * not from a text layer — the agent should attribute it as such. */
   transcribed?: boolean;
+  /** Retrieval-supplied short-lived view URL for the source document (MCP
+   * knowledge servers own their documents; the citation carries its own
+   * access). Preferred over the KB Files API when present. */
+  documentUrl?: string;
 }
 
 function requireScope(context: KnowledgeToolsContext): void {
@@ -239,6 +243,9 @@ async function mcpKnowledgeSearch(
           documentKey,
           sourceUri: documentKey,
           ...(page ? { pageNumber: Number(page[1]) } : {}),
+          ...(typeof row.documentUrl === "string" && row.documentUrl
+            ? { documentUrl: row.documentUrl }
+            : {}),
         },
       ];
     });
