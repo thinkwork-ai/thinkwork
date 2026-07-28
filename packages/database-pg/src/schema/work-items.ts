@@ -67,7 +67,6 @@ export const WORK_ITEM_EXTERNAL_REF_PROVIDERS = [
   "thinkwork",
   "lastmile",
   "linear",
-  "plane",
   "twenty",
 ] as const;
 
@@ -655,7 +654,7 @@ export const workItemExternalRefs = pgTable(
     ),
     check(
       "work_item_external_refs_provider_allowed",
-      sql`${table.provider} IN ('thinkwork','lastmile','linear','plane','twenty')`,
+      sql`${table.provider} IN ('thinkwork','lastmile','linear','twenty')`,
     ),
   ],
 );
