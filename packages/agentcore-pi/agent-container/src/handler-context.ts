@@ -198,13 +198,6 @@ export interface RuntimeEnvSnapshot {
    */
   manifestLogFnName?: string;
   toolExecutionsFnName?: string;
-  /**
-   * Name of the API's `capability-control-service` Lambda (THINK-280 U2,
-   * `thinkwork-${stage}-api-capability-control-service`). Backs the
-   * capability_search / connection_research tools via direct
-   * RequestResponse invoke; empty string leaves both tools unregistered.
-   */
-  capabilityControlFnName?: string;
   dbClusterArn: string;
   dbSecretArn: string;
   dbName: string;
@@ -243,7 +236,6 @@ export function snapshotRuntimeEnv(
     chatAgentActivityFnName: env.CHAT_AGENT_ACTIVITY_FN_NAME || "",
     manifestLogFnName: env.MANIFEST_LOG_FUNCTION_NAME || "",
     toolExecutionsFnName: env.TOOL_EXECUTIONS_FUNCTION_NAME || "",
-    capabilityControlFnName: env.CAPABILITY_CONTROL_FN_NAME || "",
     dbClusterArn: env.DB_CLUSTER_ARN || "",
     dbSecretArn: env.DB_SECRET_ARN || "",
     dbName: env.DB_NAME || "thinkwork",
