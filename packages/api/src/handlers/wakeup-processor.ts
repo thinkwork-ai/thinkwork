@@ -32,7 +32,6 @@ import {
   agentTemplates,
   agentKnowledgeBases,
   knowledgeBases,
-  spaceKnowledgeBases,
   guardrails,
   messages,
   spaces,
@@ -57,6 +56,8 @@ import { revalidateRunAsAtDispatch } from "../lib/scheduled-jobs/run-as-authz.js
 import { resolveRunAsTargetMembership } from "../lib/scheduled-jobs/run-as-facts.js";
 import { createRunAsReaders } from "../lib/scheduled-jobs/run-as-readers.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
+import { resolveBoundKnowledgeBases } from "../lib/bound-knowledge-bases.js";
+import type { ResolvedBoundKnowledgeBase } from "../lib/bound-knowledge-bases.js";
 import {
   fingerprintInputsFromCapabilitiesManifest,
   parseCapabilitiesManifest,
@@ -1195,7 +1196,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
   // Look up legacy native Bedrock KBs for explicitly opted-in compatibility
   // only. Hindsight Space document memory is the default retained Brain path.
-  const kbRows = await db
+  const kbRowsRaw = await db
     .select({
       aws_kb_id: knowledgeBases.aws_kb_id,
       name: knowledgeBases.name,
@@ -1212,8 +1213,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         eq(agentKnowledgeBases.agent_id, wakeup.agent_id),
         eq(agentKnowledgeBases.enabled, true),
       ),
-    )
-    .then((rows) => rows.filter((r) => r.aws_kb_id));
+    );
+  const kbRows = kbRowsRaw.filter((r) => r.aws_kb_id);
 
   const legacyAgentKnowledgeBasesEnabled =
     process.env.ENABLE_LEGACY_AGENT_KNOWLEDGE_BASES === "true";
@@ -1891,47 +1892,17 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     }
   }
   // External S3 KB source U7: agent ∪ Space bound KBs for Pi's
-  // search_knowledge tool. Direct binding queries only — no tenant-wide
-  // fallback (AE3). Parity trap: chat-agent-invoke builds the same field.
-  let boundKnowledgeBasesPayload:
-    | { awsKbId: string; name: string | null; description: string | null }[]
-    | undefined;
+  // search_knowledge tool. Shared resolver with chat-agent-invoke's
+  // runtime-config path (the old parity trap) — a binding's
+  // `search_config.retrieval` may delegate retrieval to an MCP server.
+  let boundKnowledgeBasesPayload: ResolvedBoundKnowledgeBase[] | undefined;
   try {
-    const spaceKbRows = runSpaceId
-      ? await db
-          .select({
-            aws_kb_id: knowledgeBases.aws_kb_id,
-            name: knowledgeBases.name,
-            description: knowledgeBases.description,
-          })
-          .from(spaceKnowledgeBases)
-          .innerJoin(
-            knowledgeBases,
-            eq(spaceKnowledgeBases.knowledge_base_id, knowledgeBases.id),
-          )
-          .where(
-            and(
-              eq(spaceKnowledgeBases.space_id, runSpaceId),
-              eq(spaceKnowledgeBases.tenant_id, wakeup.tenant_id),
-              eq(spaceKnowledgeBases.enabled, true),
-            ),
-          )
-      : [];
-    const boundById = new Map<
-      string,
-      { awsKbId: string; name: string | null; description: string | null }
-    >();
-    for (const kb of [...kbRows, ...spaceKbRows]) {
-      if (kb.aws_kb_id) {
-        boundById.set(kb.aws_kb_id, {
-          awsKbId: kb.aws_kb_id,
-          name: kb.name,
-          description: kb.description,
-        });
-      }
-    }
-    boundKnowledgeBasesPayload =
-      boundById.size > 0 ? [...boundById.values()] : undefined;
+    boundKnowledgeBasesPayload = await resolveBoundKnowledgeBases({
+      tenantId: wakeup.tenant_id,
+      agentRows: kbRowsRaw,
+      spaceId: runSpaceId,
+      logPrefix: "[wakeup-processor]",
+    });
   } catch (err) {
     console.warn(
       `[wakeup-processor] Failed to resolve bound knowledge bases:`,
