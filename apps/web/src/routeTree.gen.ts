@@ -68,7 +68,6 @@ import { Route as AuthedSettingsMemoryKnowledgeBasesRouteImport } from "./routes
 import { Route as AuthedSettingsMcpServersServersRouteImport } from "./routes/_authed/settings.mcp-servers.servers";
 import { Route as AuthedSettingsMcpServersSelfAcquiredRouteImport } from "./routes/_authed/settings.mcp-servers.self-acquired";
 import { Route as AuthedSettingsMcpServersDataSourcesRouteImport } from "./routes/_authed/settings.mcp-servers.data-sources";
-import { Route as AuthedSettingsMcpServersBrainKeysRouteImport } from "./routes/_authed/settings.mcp-servers.brain-keys";
 import { Route as AuthedSettingsMcpServersServerIdRouteImport } from "./routes/_authed/settings.mcp-servers.$serverId";
 import { Route as AuthedSettingsKnowledgeBasesKbIdRouteImport } from "./routes/_authed/settings.knowledge-bases.$kbId";
 import { Route as AuthedSettingsEvaluationsProfilesRouteImport } from "./routes/_authed/settings.evaluations.profiles";
@@ -435,12 +434,6 @@ const AuthedSettingsMcpServersDataSourcesRoute =
     path: "/mcp-servers/data-sources",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
-const AuthedSettingsMcpServersBrainKeysRoute =
-  AuthedSettingsMcpServersBrainKeysRouteImport.update({
-    id: "/mcp-servers/brain-keys",
-    path: "/mcp-servers/brain-keys",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
 const AuthedSettingsMcpServersServerIdRoute =
   AuthedSettingsMcpServersServerIdRouteImport.update({
     id: "/mcp-servers/$serverId",
@@ -709,7 +702,6 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
-  "/settings/mcp-servers/brain-keys": typeof AuthedSettingsMcpServersBrainKeysRoute;
   "/settings/mcp-servers/data-sources": typeof AuthedSettingsMcpServersDataSourcesRoute;
   "/settings/mcp-servers/self-acquired": typeof AuthedSettingsMcpServersSelfAcquiredRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
@@ -802,7 +794,6 @@ export interface FileRoutesByTo {
   "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
-  "/settings/mcp-servers/brain-keys": typeof AuthedSettingsMcpServersBrainKeysRoute;
   "/settings/mcp-servers/data-sources": typeof AuthedSettingsMcpServersDataSourcesRoute;
   "/settings/mcp-servers/self-acquired": typeof AuthedSettingsMcpServersSelfAcquiredRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
@@ -902,7 +893,6 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/_authed/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/_authed/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
-  "/_authed/settings/mcp-servers/brain-keys": typeof AuthedSettingsMcpServersBrainKeysRoute;
   "/_authed/settings/mcp-servers/data-sources": typeof AuthedSettingsMcpServersDataSourcesRoute;
   "/_authed/settings/mcp-servers/self-acquired": typeof AuthedSettingsMcpServersSelfAcquiredRoute;
   "/_authed/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
@@ -1001,7 +991,6 @@ export interface FileRouteTypes {
     | "/settings/evaluations/profiles"
     | "/settings/knowledge-bases/$kbId"
     | "/settings/mcp-servers/$serverId"
-    | "/settings/mcp-servers/brain-keys"
     | "/settings/mcp-servers/data-sources"
     | "/settings/mcp-servers/self-acquired"
     | "/settings/mcp-servers/servers"
@@ -1094,7 +1083,6 @@ export interface FileRouteTypes {
     | "/settings/evaluations/profiles"
     | "/settings/knowledge-bases/$kbId"
     | "/settings/mcp-servers/$serverId"
-    | "/settings/mcp-servers/brain-keys"
     | "/settings/mcp-servers/data-sources"
     | "/settings/mcp-servers/self-acquired"
     | "/settings/mcp-servers/servers"
@@ -1193,7 +1181,6 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/profiles"
     | "/_authed/settings/knowledge-bases/$kbId"
     | "/_authed/settings/mcp-servers/$serverId"
-    | "/_authed/settings/mcp-servers/brain-keys"
     | "/_authed/settings/mcp-servers/data-sources"
     | "/_authed/settings/mcp-servers/self-acquired"
     | "/_authed/settings/mcp-servers/servers"
@@ -1670,13 +1657,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsMcpServersDataSourcesRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
-    "/_authed/settings/mcp-servers/brain-keys": {
-      id: "/_authed/settings/mcp-servers/brain-keys";
-      path: "/mcp-servers/brain-keys";
-      fullPath: "/settings/mcp-servers/brain-keys";
-      preLoaderRoute: typeof AuthedSettingsMcpServersBrainKeysRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
     "/_authed/settings/mcp-servers/$serverId": {
       id: "/_authed/settings/mcp-servers/$serverId";
       path: "/mcp-servers/$serverId";
@@ -2130,7 +2110,6 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsEvaluationsProfilesRoute: typeof AuthedSettingsEvaluationsProfilesRoute;
   AuthedSettingsKnowledgeBasesKbIdRoute: typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   AuthedSettingsMcpServersServerIdRoute: typeof AuthedSettingsMcpServersServerIdRoute;
-  AuthedSettingsMcpServersBrainKeysRoute: typeof AuthedSettingsMcpServersBrainKeysRoute;
   AuthedSettingsMcpServersDataSourcesRoute: typeof AuthedSettingsMcpServersDataSourcesRoute;
   AuthedSettingsMcpServersSelfAcquiredRoute: typeof AuthedSettingsMcpServersSelfAcquiredRoute;
   AuthedSettingsMcpServersServersRoute: typeof AuthedSettingsMcpServersServersRoute;
@@ -2191,8 +2170,6 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
     AuthedSettingsEvaluationsProfilesRoute,
   AuthedSettingsKnowledgeBasesKbIdRoute: AuthedSettingsKnowledgeBasesKbIdRoute,
   AuthedSettingsMcpServersServerIdRoute: AuthedSettingsMcpServersServerIdRoute,
-  AuthedSettingsMcpServersBrainKeysRoute:
-    AuthedSettingsMcpServersBrainKeysRoute,
   AuthedSettingsMcpServersDataSourcesRoute:
     AuthedSettingsMcpServersDataSourcesRoute,
   AuthedSettingsMcpServersSelfAcquiredRoute:
