@@ -36,6 +36,17 @@ export const tenantMcpTwinKeys = pgTable(
     key_hash: text("key_hash").notNull(),
     /** Human label; "default" for the provisioned connector key. */
     name: text("name").notNull(),
+    /**
+     * Last 8 chars of the raw key, stored for display ("…a1b2c3d4") —
+     * the only fragment of the raw value ever persisted. Nullable for
+     * rows minted before the Brain API keys surface.
+     */
+    key_suffix: text("key_suffix"),
+    /**
+     * NULL = never expires. Enforced by the platform Brain MCP verifier
+     * via the published manifest's expiresAt, not by this database.
+     */
+    expires_at: timestamp("expires_at", { withTimezone: true }),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

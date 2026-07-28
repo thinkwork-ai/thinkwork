@@ -938,6 +938,10 @@ resource "aws_lambda_function" "handler" {
     # Admin-ops-mcp authenticates incoming tokens by sha256-hash lookup
     # against tenant_mcp_admin_keys, populated by this handler's routes.
     "mcp-admin-keys",
+    # Brain API key management — user-minted `tkt_` Bearer tokens for the
+    # platform Company Brain MCP. Create/revoke republish the hashed-key
+    # manifest the platform verifier reads (twin-mcp-keys/<tenantId>/).
+    "brain-api-keys",
     # One-shot tenant provisioning: mints a tkm_ key + stores in Secrets
     # Manager at thinkwork/<stage>/mcp/<tenantId>/admin-ops + upserts
     # tenant_mcp_servers. SM IAM is already granted on thinkwork/* by
@@ -1850,6 +1854,11 @@ locals {
       "POST /api/tenants/{tenantId}/mcp-admin-keys"           = "mcp-admin-keys"
       "GET /api/tenants/{tenantId}/mcp-admin-keys"            = "mcp-admin-keys"
       "DELETE /api/tenants/{tenantId}/mcp-admin-keys/{keyId}" = "mcp-admin-keys"
+
+      "POST /api/tenants/{tenantId}/brain-api-keys"           = "brain-api-keys"
+      "GET /api/tenants/{tenantId}/brain-api-keys"            = "brain-api-keys"
+      "OPTIONS /api/tenants/{tenantId}/brain-api-keys"        = "brain-api-keys"
+      "DELETE /api/tenants/{tenantId}/brain-api-keys/{keyId}" = "brain-api-keys"
 
       # One-shot tenant provisioning for the admin-ops MCP. Mints a fresh
       # tkm_ key + stores it in Secrets Manager at

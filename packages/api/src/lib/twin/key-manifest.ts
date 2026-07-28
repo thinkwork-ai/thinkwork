@@ -39,6 +39,11 @@ export interface TwinKeyManifestEntry {
   /** SHA-256 hex digest of the raw `tkt_` key. */
   keyHash: string;
   createdAt: string | null;
+  /**
+   * NULL/absent = never expires. Additive to twin-mcp-keys/v1; the
+   * platform verifier skips entries whose expiresAt is in the past.
+   */
+  expiresAt?: string | null;
 }
 
 export interface TwinKeyManifestDoc {
@@ -105,6 +110,7 @@ export async function publishTwinKeyManifest(
       .select({
         key_hash: tenantMcpTwinKeys.key_hash,
         created_at: tenantMcpTwinKeys.created_at,
+        expires_at: tenantMcpTwinKeys.expires_at,
       })
       .from(tenantMcpTwinKeys)
       .where(
@@ -122,6 +128,7 @@ export async function publishTwinKeyManifest(
       byHash.set(row.key_hash, {
         keyHash: row.key_hash,
         createdAt: row.created_at ? row.created_at.toISOString() : null,
+        expiresAt: row.expires_at ? row.expires_at.toISOString() : null,
       });
     }
 
