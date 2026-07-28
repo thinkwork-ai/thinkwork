@@ -352,6 +352,7 @@ describe("SettingsMcpServers", () => {
       { to: "/settings/mcp-servers/servers", label: "MCP Servers" },
       { to: "/settings/mcp-servers/data-sources", label: "Data Sources" },
       { to: "/settings/mcp-servers/self-acquired", label: "Self-Acquired" },
+      { to: "/settings/mcp-servers/brain-keys", label: "Brain API Keys" },
     ]);
   });
 

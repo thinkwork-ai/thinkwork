@@ -117,8 +117,12 @@ describe("publishTwinKeyManifest", () => {
     expect(doc.tenantId).toBe(TENANT_ID);
     expect(doc.generatedAt).toBe(now.toISOString());
     expect(doc.keys).toEqual([
-      { keyHash: "a".repeat(64), createdAt: created.toISOString() },
-      { keyHash: "b".repeat(64), createdAt: null },
+      {
+        keyHash: "a".repeat(64),
+        createdAt: created.toISOString(),
+        expiresAt: null,
+      },
+      { keyHash: "b".repeat(64), createdAt: null, expiresAt: null },
     ]);
   });
 

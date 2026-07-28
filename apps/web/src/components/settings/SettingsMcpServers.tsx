@@ -46,6 +46,7 @@ import {
   type McpServer,
 } from "@/lib/mcp-api";
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
+import { SettingsBrainApiKeys } from "@/components/settings/SettingsBrainApiKeys";
 import { SettingsConnections } from "@/components/settings/SettingsConnections";
 import { SelfAcquiredView } from "@/components/settings/SelfAcquiredView";
 
@@ -53,18 +54,21 @@ const CONNECTIONS_ROUTE = "/settings/mcp-servers";
 const MCP_SERVERS_ROUTE = "/settings/mcp-servers/servers";
 const DATA_SOURCES_ROUTE = "/settings/mcp-servers/data-sources";
 const SELF_ACQUIRED_ROUTE = "/settings/mcp-servers/self-acquired";
+const BRAIN_KEYS_ROUTE = "/settings/mcp-servers/brain-keys";
 
 type ConnectionsTab =
   | "connections"
   | "servers"
   | "data-sources"
-  | "self-acquired";
+  | "self-acquired"
+  | "brain-keys";
 
 function tabForPath(pathname: string): ConnectionsTab {
   // The merged MCP list lives at /servers; analyst data sources live at
   // /data-sources (checked first for explicit ordering — the paths don't
   // overlap). Self-acquired capabilities (governed autonomy) live at
   // The section index is the Connections tab (per-user integrations).
+  if (pathname.startsWith(BRAIN_KEYS_ROUTE)) return "brain-keys";
   if (pathname.startsWith(SELF_ACQUIRED_ROUTE)) return "self-acquired";
   if (pathname.startsWith(DATA_SOURCES_ROUTE)) return "data-sources";
   if (pathname.startsWith(MCP_SERVERS_ROUTE)) return "servers";
@@ -316,6 +320,7 @@ export function SettingsMcpServers() {
           { to: MCP_SERVERS_ROUTE, label: "MCP Servers" },
           { to: DATA_SOURCES_ROUTE, label: "Data Sources" },
           { to: SELF_ACQUIRED_ROUTE, label: "Self-Acquired" },
+          { to: BRAIN_KEYS_ROUTE, label: "Brain API Keys" },
         ]
       : [{ to: CONNECTIONS_ROUTE, label: "Connections" }],
     // THINK-285: each tab shows only the action that creates the thing it
@@ -368,6 +373,10 @@ export function SettingsMcpServers() {
         ) : null}
       </SettingsTablePane>
     );
+  }
+
+  if (activeTab === "brain-keys") {
+    return <SettingsBrainApiKeys />;
   }
 
   const openServer = (serverId: string) =>
