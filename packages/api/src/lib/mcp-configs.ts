@@ -1300,7 +1300,16 @@ function probeMcpServerConfig(
   return config;
 }
 
-async function resolveUserMcpBearerToken(args: {
+/**
+ * Resolve a caller's bearer token for a tenant MCP server from
+ * `user_mcp_tokens`, refreshing it when expired.
+ *
+ * Exported because it is the only per-user MCP credential path that exists.
+ * Twenty's REST client used to reach its token through plugin activation
+ * instead; migration 0279 nulled every `plugin_install_id`, which left that
+ * route resolving nothing. Both surfaces read the same token here now.
+ */
+export async function resolveUserMcpBearerToken(args: {
   userId: string;
   mcp: {
     mcp_server_id: string;
