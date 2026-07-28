@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { loadDefaults } from "@thinkwork/workspace-defaults";
 import type { CatalogSkillArchiveFile } from "../catalog-skill-archive.js";
 import { computeCatalogSkillSha } from "../catalog-skill-sha.js";
 import { isCurrentPassedSkillTrustReport } from "./runtime-gate.js";
@@ -39,6 +40,31 @@ describe("loadDefaultSkillSourceFiles", () => {
 
   it("returns null for a slug that ships no default source", () => {
     expect(loadDefaultSkillSourceFiles("no-such-default-skill")).toBeNull();
+  });
+
+  it("falls back to the catalog-only source for n8n-workflow-operator", () => {
+    const files = loadDefaultSkillSourceFiles("n8n-workflow-operator");
+    expect(files).not.toBeNull();
+    expect(files!.map((f) => f.path).sort()).toEqual([
+      "SKILL.md",
+      "references/mcp-tooling.md",
+      "references/validation-and-handoff.md",
+      "references/workflow-authoring.md",
+    ]);
+  });
+
+  it("keeps n8n-workflow-operator out of the workspace-defaults template", () => {
+    // The whole point of `files/catalog-skills/`: a skill in `loadDefaults()`
+    // is copied into every tenant's `_catalog/defaults/workspace/` template and
+    // from there into every new agent's workspace. `autoGrant: false` does NOT
+    // prevent that. n8n must reach the catalog and stop there.
+    expect(loadDefaults()).not.toHaveProperty(
+      "skills/n8n-workflow-operator/SKILL.md",
+    );
+    const n8n = DEFAULT_CATALOG_SKILLS.find(
+      (s) => s.slug === "n8n-workflow-operator",
+    );
+    expect(n8n?.autoGrant).toBe(false);
   });
 
   it("lists artifact-builder as the auto-grant default", () => {

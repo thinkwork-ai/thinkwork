@@ -14,6 +14,12 @@ export const pluginSourceBoundaryAllowlist = [
     reason:
       "managed-app smoke contracts for the surviving Twenty and n8n stacks, moved with their Terraform modules.",
   },
+  {
+    pathPrefix:
+      "packages/workspace-defaults/files/catalog-skills/n8n-workflow-operator/",
+    reason:
+      "n8n workflow-operator skill, relocated out of plugins/n8n ahead of the plugin-system removal. The skill now targets a registered n8n MCP server (a connector), not a plugin install — its plugin framing was rewritten on the way over. It ships as a catalog-only workspace default so every stage gets it through the deploy-time seeder. This allowlist entry — and this guard — go away with the plugin system.",
+  },
 ];
 
 export const sharedPluginTermAllowlist = [

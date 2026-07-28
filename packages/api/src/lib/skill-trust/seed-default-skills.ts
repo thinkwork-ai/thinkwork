@@ -31,7 +31,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { agents, skillCatalog, tenants } from "@thinkwork/database-pg/schema";
-import { loadDefaults } from "@thinkwork/workspace-defaults";
+import { loadCatalogSkills, loadDefaults } from "@thinkwork/workspace-defaults";
 import {
   validateCatalogSkillFiles,
   type CatalogSkillArchiveFile,
@@ -99,6 +99,11 @@ export const DEFAULT_CATALOG_SKILLS: DefaultCatalogSkill[] = [
   // the platform agent must compose documents out of the box.
   { slug: "document-composer", autoGrant: true },
   { slug: "automation-loop-designer", autoGrant: false },
+  // Catalog-only, and genuinely so: its source lives in
+  // `files/catalog-skills/`, outside `loadDefaults()`, so it never reaches the
+  // workspace-defaults template. A tenant without an n8n MCP server sees it in
+  // the catalog and nowhere else. Operators install it per agent.
+  { slug: "n8n-workflow-operator", autoGrant: false },
 ];
 
 export type DefaultSkillSeedOutcome =
@@ -133,22 +138,32 @@ export interface SeedDefaultCatalogSkillsInput {
 
 /**
  * Load one default skill's source files from the inlined workspace-defaults
- * canon (`loadDefaults()` keys `skills/<slug>/...`), stripped to catalog
- * relative paths. Returns null when the slug ships no source (so the caller
- * can skip rather than fail — a stale slug in the list is not a deploy break).
+ * canon, stripped to catalog relative paths. Returns null when the slug ships
+ * no source (so the caller can skip rather than fail — a stale slug in the
+ * list is not a deploy break).
+ *
+ * Two sources, checked in order:
+ *
+ *   1. `loadDefaults()` keys `skills/<slug>/...` — skills that are ALSO part of
+ *      the workspace-defaults template, so every new agent gets them installed.
+ *   2. `loadCatalogSkills()` keys `<slug>/...` — catalog-only skills, which
+ *      reach the tenant catalog but are never copied into an agent workspace
+ *      until an operator installs them.
  */
 export function loadDefaultSkillSourceFiles(
   slug: string,
 ): CatalogSkillArchiveFile[] | null {
-  const defaults = loadDefaults();
-  const prefix = `skills/${slug}/`;
   const files: CatalogSkillArchiveFile[] = [];
-  for (const [key, content] of Object.entries(defaults)) {
-    if (!key.startsWith(prefix)) continue;
-    const relativePath = key.slice(prefix.length);
-    if (!relativePath) continue;
-    files.push({ path: relativePath, content: Buffer.from(content, "utf8") });
-  }
+  const collect = (entries: Record<string, string>, prefix: string) => {
+    for (const [key, content] of Object.entries(entries)) {
+      if (!key.startsWith(prefix)) continue;
+      const relativePath = key.slice(prefix.length);
+      if (!relativePath) continue;
+      files.push({ path: relativePath, content: Buffer.from(content, "utf8") });
+    }
+  };
+  collect(loadDefaults(), `skills/${slug}/`);
+  if (files.length === 0) collect(loadCatalogSkills(), `${slug}/`);
   return files.length > 0 ? files : null;
 }
 
