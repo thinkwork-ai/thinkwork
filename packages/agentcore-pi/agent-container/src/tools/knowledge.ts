@@ -4,12 +4,19 @@ import { Type } from "typebox";
 /**
  * External S3 KB source U7 — `search_knowledge` as a Pi ToolDef.
  *
- * Retrieves verbatim passages from the Bedrock Knowledge Bases bound to
- * this agent or its Space. Bound-KB resolution happens API-side at
- * wakeup-payload build (KTD6); the container receives IDs and never
- * queries Postgres. The tool is assembled ONLY when the payload carries a
- * non-empty `bound_knowledge_bases` (AE3: agents without bindings are
- * byte-identical to before this feature).
+ * Retrieves verbatim passages from the knowledge bases bound to this agent
+ * or its Space. Bound-KB resolution happens API-side at wakeup-payload
+ * build (KTD6); the container receives ready-to-call backends and never
+ * queries Postgres. Two backends per entry, chosen API-side:
+ *   - Bedrock (`awsKbId`): direct RetrieveCommand, the original path.
+ *   - MCP (`retrieval`): a resolved url/auth/tool for an external MCP
+ *     knowledge server (e.g. a company-brain KB). The container is a
+ *     GENERIC JSON-RPC client here — it knows nothing about which product
+ *     is behind the URL, keeping the agent image decoupled from any
+ *     specific knowledge platform.
+ * The tool is assembled ONLY when the payload carries a non-empty
+ * `bound_knowledge_bases` (AE3: agents without bindings are byte-identical
+ * to before this feature).
  *
  * R17/R18 invariants: nothing here writes to memory (Hindsight or
  * managed), and nothing imports the context engine — this is a
@@ -18,11 +25,21 @@ import { Type } from "typebox";
 
 const MAX_RESULTS_PER_KB = 8;
 const MAX_TOTAL_RESULTS = 12;
+const MCP_CALL_TIMEOUT_MS = 10_000;
+
+export interface BoundKbMcpRetrieval {
+  mode: "mcp";
+  url: string;
+  toolName: string;
+  token?: string;
+  headers?: Record<string, string>;
+}
 
 export interface BoundKnowledgeBase {
-  awsKbId: string;
+  awsKbId?: string;
   name?: string | null;
   description?: string | null;
+  retrieval?: BoundKbMcpRetrieval;
 }
 
 export interface KnowledgeToolsContext {
@@ -138,6 +155,110 @@ function hitMetadata(result: any): {
 }
 
 /**
+ * Query an MCP knowledge server (API-resolved url/auth) and normalize its
+ * hits. Generic JSON-RPC `tools/call` — the request/response contract is
+ * plain MCP plus a conventional result shape ({results|hits: [{text, score,
+ * id/documentKey, …}]}), so ANY conforming knowledge server works; nothing
+ * here names a specific platform. A non-2xx response, JSON-RPC error, or
+ * isError result throws, which the caller records as a per-KB failure —
+ * identical stance to a failed Bedrock Retrieve.
+ */
+async function mcpKnowledgeSearch(
+  kb: BoundKnowledgeBase,
+  query: string,
+  limit: number,
+): Promise<KnowledgeHit[]> {
+  const retrieval = kb.retrieval;
+  if (!retrieval) return [];
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(retrieval.headers ?? {}),
+  };
+  if (retrieval.token && !headers.Authorization) {
+    headers.Authorization = `Bearer ${retrieval.token}`;
+  }
+  const response = await fetch(retrieval.url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "search_knowledge",
+      method: "tools/call",
+      params: {
+        name: retrieval.toolName,
+        arguments: { query, top_k: limit },
+      },
+    }),
+    signal: AbortSignal.timeout(MCP_CALL_TIMEOUT_MS),
+  });
+  if (!response.ok) {
+    throw new KnowledgeToolError(
+      `MCP knowledge server returned HTTP ${response.status}`,
+    );
+  }
+  const payload = (await response.json().catch(() => ({}))) as {
+    result?: {
+      content?: Array<{ type?: string; text?: string }>;
+      structuredContent?: Record<string, unknown>;
+      isError?: boolean;
+    };
+    error?: { message?: string };
+  };
+  if (payload.error) {
+    throw new KnowledgeToolError(
+      payload.error.message ?? "MCP knowledge server returned an error",
+    );
+  }
+  if (payload.result?.isError) {
+    const text = payload.result.content?.find(
+      (item) => typeof item?.text === "string",
+    )?.text;
+    throw new KnowledgeToolError(text ?? "MCP knowledge tool call failed");
+  }
+
+  const structured = payload.result?.structuredContent ?? {};
+  const rows = [structured.results, structured.hits].find(Array.isArray) as
+    | Array<Record<string, unknown>>
+    | undefined;
+  if (rows?.length) {
+    return rows.flatMap((row): KnowledgeHit[] => {
+      const passage = typeof row.text === "string" ? row.text : "";
+      if (!passage.trim()) return [];
+      const rawKey = [row.documentKey, row.id, row.title].find(
+        (value): value is string => typeof value === "string" && !!value,
+      );
+      // Same '#p=<n>' convention as Bedrock custom ids: strip the page
+      // marker into pageNumber so citation rendering keys on the document.
+      const page = rawKey ? /#p=(\d+)$/.exec(rawKey) : null;
+      const documentKey = rawKey?.replace(/#p=\d+$/, "");
+      return [
+        {
+          passage,
+          score: typeof row.score === "number" ? row.score : undefined,
+          knowledgeBase: kb.name ?? undefined,
+          documentKey,
+          sourceUri: documentKey,
+          ...(page ? { pageNumber: Number(page[1]) } : {}),
+        },
+      ];
+    });
+  }
+
+  // Text-only fallback: a conforming-but-unstructured server still yields
+  // one citable passage rather than a silent empty result.
+  const text = payload.result?.content?.find(
+    (item) => typeof item?.text === "string",
+  )?.text;
+  if (!text?.trim()) return [];
+  return [
+    {
+      passage: text,
+      knowledgeBase: kb.name ?? undefined,
+    },
+  ];
+}
+
+/**
  * Render hits with a citation marker the agent can reproduce inline.
  *
  * `startAt` continues the numbering across every search_knowledge call in a
@@ -234,6 +355,17 @@ export function buildKnowledgeTools(
         const failures: string[] = [];
         for (const kb of context.knowledgeBases) {
           try {
+            if (kb.retrieval?.mode === "mcp") {
+              hits.push(
+                ...(await mcpKnowledgeSearch(
+                  kb,
+                  trimmed,
+                  Math.min(limit, MAX_RESULTS_PER_KB),
+                )),
+              );
+              continue;
+            }
+            if (!kb.awsKbId) continue;
             const resp = await client.send(
               new RetrieveCommand({
                 knowledgeBaseId: kb.awsKbId,
@@ -271,7 +403,7 @@ export function buildKnowledgeTools(
             }
           } catch (err) {
             failures.push(
-              `${kb.name ?? kb.awsKbId}: ${err instanceof Error ? err.message : String(err)}`,
+              `${kb.name ?? kb.awsKbId ?? kb.retrieval?.url ?? "knowledge base"}: ${err instanceof Error ? err.message : String(err)}`,
             );
           }
         }

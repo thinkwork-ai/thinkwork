@@ -53,7 +53,6 @@ import {
   users,
   agentKnowledgeBases,
   knowledgeBases,
-  spaceKnowledgeBases,
   guardrails,
   spaces,
   tenantMcpServers,
@@ -68,6 +67,8 @@ import {
   resolveAgentWorkspacePrefix,
 } from "./skills/assignment-state.js";
 import { buildMcpConfigs } from "./mcp-configs.js";
+import { resolveBoundKnowledgeBases } from "./bound-knowledge-bases.js";
+import type { ResolvedBoundKnowledgeBase } from "./bound-knowledge-bases.js";
 import type { McpRuntimeRecordLinkHints } from "./mcp-configs.js";
 import {
   normalizeAgentRuntimeType,
@@ -129,12 +130,11 @@ export interface KnowledgeBaseConfig {
   searchConfig: unknown;
 }
 
-/** One KB the Pi `search_knowledge` tool may Retrieve against (U7). */
-export interface BoundKnowledgeBaseConfig {
-  awsKbId: string;
-  name: string | null;
-  description: string | null;
-}
+/**
+ * One KB the Pi `search_knowledge` tool may query (U7): Bedrock via
+ * `awsKbId`, or an MCP knowledge server via `retrieval` (KB-MCP retrieval).
+ */
+export type BoundKnowledgeBaseConfig = ResolvedBoundKnowledgeBase;
 
 export interface McpConfig {
   name: string;
@@ -835,42 +835,15 @@ export async function resolveAgentRuntimeConfig(
   // External S3 KB source U7: agent ∪ Space bound KBs for the Pi
   // `search_knowledge` tool. Direct binding queries ONLY — the tenant-wide
   // catalog fallback in listKnowledgeBases would grant the tool to every
-  // agent and break AE3 isolation.
-  const spaceKbRows = opts.spaceId
-    ? await db
-        .select({
-          aws_kb_id: knowledgeBases.aws_kb_id,
-          name: knowledgeBases.name,
-          description: knowledgeBases.description,
-        })
-        .from(spaceKnowledgeBases)
-        .innerJoin(
-          knowledgeBases,
-          eq(spaceKnowledgeBases.knowledge_base_id, knowledgeBases.id),
-        )
-        .where(
-          and(
-            eq(spaceKnowledgeBases.space_id, opts.spaceId),
-            eq(spaceKnowledgeBases.tenant_id, opts.tenantId),
-            eq(spaceKnowledgeBases.enabled, true),
-          ),
-        )
-    : [];
-  const boundById = new Map<
-    string,
-    { awsKbId: string; name: string | null; description: string | null }
-  >();
-  for (const kb of [...kbRows, ...spaceKbRows]) {
-    if (kb.aws_kb_id) {
-      boundById.set(kb.aws_kb_id, {
-        awsKbId: kb.aws_kb_id,
-        name: kb.name,
-        description: kb.description,
-      });
-    }
-  }
-  const boundKnowledgeBases =
-    boundById.size > 0 ? [...boundById.values()] : undefined;
+  // agent and break AE3 isolation. Shared resolver (also the
+  // wakeup-processor's) so a binding's `search_config.retrieval` can
+  // delegate retrieval to an MCP knowledge server.
+  const boundKnowledgeBases = await resolveBoundKnowledgeBases({
+    tenantId: opts.tenantId,
+    agentRows: kbRowsRaw,
+    spaceId: opts.spaceId,
+    logPrefix: "[resolve-agent-runtime-config]",
+  });
 
   const runtimeType = normalizeAgentRuntimeType(agent.runtime);
 

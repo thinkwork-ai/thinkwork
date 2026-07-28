@@ -267,3 +267,166 @@ describe("buildKnowledgeTools", () => {
     expect(result.details.hits[0].documentKey).toBe("tenants/acme/kb/doc.pdf");
   });
 });
+
+/**
+ * MCP retrieval backend (KB-MCP retrieval): a bound KB whose entry carries an
+ * API-resolved `retrieval` config queries an external MCP knowledge server
+ * over plain JSON-RPC instead of Bedrock. The container stays a generic
+ * client — these tests pin the wire shape, auth header assembly, structured
+ * and text-only normalization, and error-as-result parity with Bedrock.
+ */
+describe("search_knowledge MCP backend", () => {
+  const MCP_KB = {
+    name: "CX SOPs (brain)",
+    description: null,
+    retrieval: {
+      mode: "mcp" as const,
+      url: "https://mcp.example.test/kb",
+      toolName: "brain_knowledge_search",
+      token: "tkt_secret",
+    },
+  };
+
+  function mcpResponse(structuredContent: unknown, text = "rendered") {
+    return {
+      ok: true,
+      json: async () => ({
+        jsonrpc: "2.0",
+        id: "search_knowledge",
+        result: { content: [{ type: "text", text }], structuredContent },
+      }),
+    };
+  }
+
+  it("queries the MCP server, not Bedrock, and normalizes structured hits", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      mcpResponse({
+        ok: true,
+        results: [
+          {
+            id: "cx/CX-0215.pdf#p=3",
+            title: "cx/CX-0215.pdf#p=3",
+            text: "Add the new reason code at the bottom",
+            score: 0.71,
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const [tool] = buildKnowledgeTools({
+        knowledgeBases: [MCP_KB],
+        tenantId: "t1",
+      });
+      const result = await tool.execute("call-1", { query: "reason code" });
+
+      expect(h.retrieveCalls).toHaveLength(0);
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe("https://mcp.example.test/kb");
+      expect(init.headers.Authorization).toBe("Bearer tkt_secret");
+      const body = JSON.parse(init.body);
+      expect(body.method).toBe("tools/call");
+      expect(body.params.name).toBe("brain_knowledge_search");
+      expect(body.params.arguments.query).toBe("reason code");
+
+      expect(result.details.hits[0]).toMatchObject({
+        documentKey: "cx/CX-0215.pdf",
+        pageNumber: 3,
+        score: 0.71,
+      });
+      expect(firstText(result)).toContain("[CX SOPs (brain)]");
+      expect(firstText(result)).toContain("Add the new reason code");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("merges MCP and Bedrock hits by score in one result", async () => {
+    h.responsesByKbId.set("KBBBBB", {
+      retrievalResults: [hit("bedrock passage", "runbook.pdf", 0.9)],
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        mcpResponse({
+          results: [{ id: "brain.pdf", text: "brain passage", score: 0.4 }],
+        }),
+      ),
+    );
+    try {
+      const [tool] = buildKnowledgeTools({
+        knowledgeBases: [MCP_KB, KB_B],
+        tenantId: "t1",
+      });
+      const result = await tool.execute("call-1", { query: "q" });
+      expect(
+        result.details.hits.map((x: { documentKey: string }) => x.documentKey),
+      ).toEqual(["runbook.pdf", "brain.pdf"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("an MCP failure is a tool-level failure, not a crash", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 503 }),
+    );
+    try {
+      const [tool] = buildKnowledgeTools({
+        knowledgeBases: [MCP_KB],
+        tenantId: "t1",
+      });
+      const result = await tool.execute("call-1", { query: "q" });
+      expect(firstText(result)).toContain("Knowledge search failed");
+      expect(result.details.failures[0]).toContain("503");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("an isError tool result surfaces the server's message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          jsonrpc: "2.0",
+          id: "search_knowledge",
+          result: {
+            isError: true,
+            content: [{ type: "text", text: "No collections configured" }],
+          },
+        }),
+      }),
+    );
+    try {
+      const [tool] = buildKnowledgeTools({
+        knowledgeBases: [MCP_KB],
+        tenantId: "t1",
+      });
+      const result = await tool.execute("call-1", { query: "q" });
+      expect(result.details.failures[0]).toContain("No collections configured");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("falls back to the rendered text when no structured rows exist", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(mcpResponse({}, "one flat passage")),
+    );
+    try {
+      const [tool] = buildKnowledgeTools({
+        knowledgeBases: [MCP_KB],
+        tenantId: "t1",
+      });
+      const result = await tool.execute("call-1", { query: "q" });
+      expect(result.details.hitCount).toBe(1);
+      expect(firstText(result)).toContain("one flat passage");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

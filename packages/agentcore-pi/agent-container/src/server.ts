@@ -1999,15 +1999,36 @@ export async function buildInvocationResources(
           awsKbId?: unknown;
           name?: unknown;
           description?: unknown;
+          retrieval?: unknown;
         }>
       )
-        .filter((kb) => typeof kb?.awsKbId === "string" && kb.awsKbId)
-        .map((kb) => ({
-          awsKbId: kb.awsKbId as string,
-          name: typeof kb.name === "string" ? kb.name : null,
-          description:
-            typeof kb.description === "string" ? kb.description : null,
-        }))
+        .map((kb) => {
+          const retrieval = kb?.retrieval as
+            | { mode?: unknown; url?: unknown; toolName?: unknown }
+            | undefined;
+          const mcpRetrieval =
+            retrieval &&
+            retrieval.mode === "mcp" &&
+            typeof retrieval.url === "string" &&
+            retrieval.url &&
+            typeof retrieval.toolName === "string" &&
+            retrieval.toolName
+              ? (kb.retrieval as import("./tools/knowledge.js").BoundKbMcpRetrieval)
+              : undefined;
+          const awsKbId =
+            typeof kb?.awsKbId === "string" && kb.awsKbId
+              ? kb.awsKbId
+              : undefined;
+          if (!awsKbId && !mcpRetrieval) return null;
+          return {
+            ...(awsKbId ? { awsKbId } : {}),
+            ...(mcpRetrieval ? { retrieval: mcpRetrieval } : {}),
+            name: typeof kb.name === "string" ? kb.name : null,
+            description:
+              typeof kb.description === "string" ? kb.description : null,
+          };
+        })
+        .filter((kb): kb is NonNullable<typeof kb> => kb !== null)
     : [];
   if (boundKnowledgeBases.length > 0) {
     tools.push(
