@@ -70,9 +70,12 @@ export const TWIN_KEY_NAME = "default";
  * with zero tools — burned on dev, 2026-07-22).
  */
 export const TWIN_CONNECTOR_OPERATIONS = [
-  "twin_describe_ontology",
-  "twin_cypher",
-  "twin_entity",
+  "brain_describe_ontology",
+  "brain_cypher",
+  "brain_describe_entity",
+  "brain_describe_property",
+  "brain_search_meaning",
+  "brain_provenance_of",
 ] as const;
 
 /** `tkt_` distinguishes twin keys from admin-ops' `tkm_` at a glance. */
@@ -132,13 +135,16 @@ export function twinConnectorRowValues(input: {
 export const TWIN_CONNECTION_GUIDANCE = `
 ## Querying the company brain
 
-Call \`twin_describe_ontology\` FIRST — it returns this company's entity
+Call \`brain_describe_ontology\` FIRST — it returns this company's entity
 types, facet properties (\`f_<facet>__<attribute>\`), relationship types,
 and worked openCypher examples. Then answer cross-system questions with
-\`twin_cypher\` (read-only openCypher; the server scopes every query to
-this tenant and clamps rows). \`twin_entity\` fetches one entity by
-canonical id with its source-system identities. Cite source systems when
-the facets carry them; never guess entity ids.
+\`brain_cypher\` (read-only openCypher; the server scopes every query to
+this tenant and clamps rows). \`brain_describe_entity\` explains ONE
+entity type's properties with source, authority, and freshness;
+\`brain_describe_property\` drills into one property;
+\`brain_search_meaning\` finds entities/properties/datasets by keyword;
+\`brain_provenance_of\` traces a catalog object upstream and downstream.
+Cite source systems when the facets carry them; never guess entity ids.
 `;
 
 export interface TwinProvisionResult {
