@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../plugins/activation.js", () => ({
-  createPluginDispatchAuthResolver: vi.fn(),
+vi.mock("../mcp-configs.js", () => ({
+  resolveUserMcpBearerToken: vi.fn(),
 }));
 
-import { createPluginDispatchAuthResolver } from "../plugins/activation.js";
+import { resolveUserMcpBearerToken } from "../mcp-configs.js";
 import {
   HttpError,
   TWENTY_MCP_SLUG,
@@ -99,11 +99,25 @@ describe("matchesTwentyBinding", () => {
 
 describe("resolveTwentyContext binding key", () => {
   type ServerRow = {
+    id: string;
     url: string;
-    plugin_install_id: string;
+    name: string;
+    auth_config: unknown;
     slug: string | null;
     managed_application_key: string | null;
   };
+
+  function server(overrides: Partial<ServerRow> = {}): ServerRow {
+    return {
+      id: "srv-1",
+      url: "https://crm.example.com/mcp",
+      name: "Twenty CRM",
+      auth_config: {},
+      slug: TWENTY_MCP_SLUG,
+      managed_application_key: "twenty",
+      ...overrides,
+    };
+  }
 
   function fakeDb(servers: ServerRow[], apps: unknown[] = []) {
     let call = 0;
@@ -123,19 +137,17 @@ describe("resolveTwentyContext binding key", () => {
   }
 
   beforeEach(() => {
-    vi.mocked(createPluginDispatchAuthResolver).mockReturnValue({
-      resolveToken: vi.fn().mockResolvedValue("user-token"),
-    } as never);
+    vi.mocked(resolveUserMcpBearerToken).mockResolvedValue("user-token");
   });
 
   it("resolves the server whose managed_application_key equals the binding key", async () => {
     const db = fakeDb([
-      {
+      server({
+        id: "srv-eu",
         url: "https://crm-eu.example.com/mcp",
-        plugin_install_id: "pi-eu",
         slug: "twenty--crm-eu",
         managed_application_key: "twenty-eu",
-      },
+      }),
     ]);
     const context = await resolveTwentyContext(db, {
       tenantId: "t-1",
@@ -144,19 +156,19 @@ describe("resolveTwentyContext binding key", () => {
     });
     expect(context).not.toBeNull();
     expect(context!.baseUrl).toBe("https://crm-eu.example.com");
-    expect(context!.mcpServer.pluginInstallId).toBe("pi-eu");
     expect(context!.token).toBe("user-token");
+    // The credential is resolved per-user against the matched server row —
+    // no plugin install is consulted.
+    expect(resolveUserMcpBearerToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "u-1",
+        mcp: expect.objectContaining({ mcp_server_id: "srv-eu" }),
+      }),
+    );
   });
 
   it("fails closed (null) when the only server is bound under a DIFFERENT key", async () => {
-    const db = fakeDb([
-      {
-        url: "https://crm.example.com/mcp",
-        plugin_install_id: "pi-default",
-        slug: TWENTY_MCP_SLUG,
-        managed_application_key: "twenty",
-      },
-    ]);
+    const db = fakeDb([server()]);
     const context = await resolveTwentyContext(db, {
       tenantId: "t-1",
       userId: "u-1",
@@ -166,20 +178,24 @@ describe("resolveTwentyContext binding key", () => {
   });
 
   it("keeps the legacy default resolution when no binding key is given", async () => {
-    const db = fakeDb([
-      {
-        url: "https://crm.example.com/mcp",
-        plugin_install_id: "pi-default",
-        slug: TWENTY_MCP_SLUG,
-        managed_application_key: "twenty",
-      },
-    ]);
+    const db = fakeDb([server()]);
     const context = await resolveTwentyContext(db, {
       tenantId: "t-1",
       userId: "u-1",
     });
     expect(context).not.toBeNull();
-    expect(context!.mcpServer.pluginInstallId).toBe("pi-default");
+    expect(context!.mcpServer.url).toBe("https://crm.example.com/mcp");
+  });
+
+  it("throws 403 when the caller has no connected Twenty account", async () => {
+    // Regression guard: this is the branch migration 0279 pushed every
+    // caller into by nulling plugin_install_id. The old fixtures supplied
+    // that column by hand, so the break never surfaced here.
+    vi.mocked(resolveUserMcpBearerToken).mockResolvedValue(undefined);
+    const db = fakeDb([server()]);
+    await expect(
+      resolveTwentyContext(db, { tenantId: "t-1", userId: "u-1" }),
+    ).rejects.toThrow(HttpError);
   });
 });
 

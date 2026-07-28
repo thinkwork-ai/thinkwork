@@ -7,7 +7,7 @@
  */
 import { and, desc, eq, or } from "drizzle-orm";
 import { schema, type Database } from "@thinkwork/database-pg";
-import { createPluginDispatchAuthResolver } from "../plugins/activation.js";
+import { resolveUserMcpBearerToken } from "../mcp-configs.js";
 
 const { managedApplications, tenantMcpServers } = schema;
 
@@ -186,7 +186,6 @@ export type ResolvedTwentyContext = {
   token: string;
   mcpServer: {
     url: string;
-    pluginInstallId: string;
   };
 };
 
@@ -214,9 +213,9 @@ export function matchesTwentyBinding(
 /**
  * Resolve the tenant's Twenty deployment (base URL from the managed
  * application's desired_config or the approved MCP server URL) and the
- * caller's per-user bearer token. Returns null when the plugin is not
- * installed for the tenant; throws HttpError 403 when the plugin is
- * installed but the user has not connected their Twenty account.
+ * caller's per-user bearer token. Returns null when the tenant has no
+ * enabled+approved Twenty MCP server; throws HttpError 403 when it does but
+ * the caller has not connected their Twenty account.
  *
  * When `bindingKey` is provided (memory-source ingestion, Codex F3), only
  * the tenant MCP server matching exactly that binding is considered —
@@ -251,8 +250,10 @@ export async function resolveTwentyContext(
       );
   const candidates = await db
     .select({
+      id: tenantMcpServers.id,
       url: tenantMcpServers.url,
-      plugin_install_id: tenantMcpServers.plugin_install_id,
+      name: tenantMcpServers.name,
+      auth_config: tenantMcpServers.auth_config,
       slug: tenantMcpServers.slug,
       managed_application_key: tenantMcpServers.managed_application_key,
     })
@@ -287,15 +288,25 @@ export async function resolveTwentyContext(
   const baseUrl =
     publicHttpUrl(recordOrNull(app?.desired_config)?.publicUrl) ??
     baseUrlFromMcpUrl(mcpServer?.url);
-  if (!baseUrl || !mcpServer?.url || !mcpServer.plugin_install_id) {
+  if (!baseUrl || !mcpServer?.url) {
     return null;
   }
 
-  const token = await createPluginDispatchAuthResolver().resolveToken({
-    requesterUserId: args.userId,
-    pluginInstallId: mcpServer.plugin_install_id,
-    resource: mcpServer.url,
-    slug: TWENTY_MCP_SLUG,
+  // The caller's Twenty credential lives in `user_mcp_tokens`, the same place
+  // every other per-user MCP connection keeps one — which is why the Twenty
+  // detail page shows "Connected". This previously resolved through plugin
+  // activation and required a `plugin_install_id`; migration 0279 nulled that
+  // column on every row, so the old path returned null for all callers and
+  // both surfaces failed closed.
+  const token = await resolveUserMcpBearerToken({
+    userId: args.userId,
+    mcp: {
+      mcp_server_id: mcpServer.id,
+      slug: mcpServer.slug,
+      name: mcpServer.name,
+      url: mcpServer.url,
+      auth_config: mcpServer.auth_config,
+    },
     logPrefix: args.logPrefix ?? DEFAULT_LOG_PREFIX,
   });
   if (!token) {
@@ -309,10 +320,7 @@ export async function resolveTwentyContext(
   return {
     baseUrl,
     token,
-    mcpServer: {
-      url: mcpServer.url,
-      pluginInstallId: mcpServer.plugin_install_id,
-    },
+    mcpServer: { url: mcpServer.url },
   };
 }
 
