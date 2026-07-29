@@ -201,16 +201,6 @@ output "agentcore_memory_id" {
   value       = module.agentcore_memory.memory_id
 }
 
-output "hindsight_enabled" {
-  description = "Whether Hindsight canonical memory is enabled"
-  value       = local.hindsight_enabled
-}
-
-output "hindsight_endpoint" {
-  description = "Hindsight API endpoint (null when enable_hindsight = false)"
-  value       = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : null
-}
-
 output "brain_artifacts_bucket_name" {
   description = "Canonical ThinkWork Brain S3 bucket for source artifacts, ingestion manifests, migration snapshots, vault projections, and exports."
   value       = module.api.brain_artifacts_bucket_name

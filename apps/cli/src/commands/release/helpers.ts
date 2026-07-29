@@ -135,8 +135,6 @@ export interface PriorControllerInput {
   customerDomainDelegated?: boolean;
   customerDomainLegacyRetired?: boolean;
   authRetirementPhase?: "coexistence" | "cutover" | "retired";
-  enableHindsight?: boolean;
-  hindsightDatabaseName?: string;
   enableAgentCoreHarness?: boolean;
   agentCoreHarnessTenantSlug?: string;
   agentCoreHarnessOwnerAllowlist?: string;
@@ -228,12 +226,6 @@ export function parsePriorControllerInput(raw: unknown): PriorControllerInput {
       booleanValue(input.customerDomainLegacyRetired) ??
       booleanValue(preservedConfig.customerDomainLegacyRetired),
     authRetirementPhase: authRetirementPhaseValue(input.authRetirementPhase),
-    enableHindsight:
-      booleanValue(input.enableHindsight) ??
-      booleanValue(preservedConfig.enableHindsight),
-    hindsightDatabaseName:
-      stringValue(input.hindsightDatabaseName) ??
-      stringValue(preservedConfig.hindsightDatabaseName),
     enableAgentCoreHarness:
       booleanValue(input.enableAgentCoreHarness) ??
       booleanValue(preservedConfig.enableAgentCoreHarness),
@@ -259,8 +251,9 @@ function isCustomerEcrPiImage(
 
 /**
  * Keep the newest successful controller input as the configuration baseline,
- * but recover customer-owned facts such as its Pi image pin and Hindsight
- * configuration from an older success when a malformed update omitted them.
+ * but recover customer-owned facts such as its Pi image pin and AgentCore
+ * Harness configuration from an older success when a malformed update
+ * omitted them.
  */
 export function recoverPriorControllerInput(
   successfulInputsNewestFirst: unknown[],
@@ -291,13 +284,6 @@ export function recoverPriorControllerInput(
         recovered.agentcorePiSourceImageUri,
       ) && isCustomerEcrPiImage(recovered, candidate.agentcorePiSourceImageUri)
         ? { agentcorePiSourceImageUri: candidate.agentcorePiSourceImageUri }
-        : {}),
-      ...(recovered.enableHindsight === undefined &&
-      candidate.enableHindsight !== undefined
-        ? { enableHindsight: candidate.enableHindsight }
-        : {}),
-      ...(!recovered.hindsightDatabaseName && candidate.hindsightDatabaseName
-        ? { hindsightDatabaseName: candidate.hindsightDatabaseName }
         : {}),
       ...(recovered.enableAgentCoreHarness === undefined &&
       candidate.enableAgentCoreHarness !== undefined
@@ -386,12 +372,6 @@ export function buildControllerUpdateInput(options: {
       : {}),
     ...(prior.customerDomainLegacyRetired !== undefined
       ? { customerDomainLegacyRetired: prior.customerDomainLegacyRetired }
-      : {}),
-    ...(prior.enableHindsight !== undefined
-      ? { enableHindsight: prior.enableHindsight }
-      : {}),
-    ...(prior.hindsightDatabaseName
-      ? { hindsightDatabaseName: prior.hindsightDatabaseName }
       : {}),
     ...(enableAgentCoreHarness !== undefined ? { enableAgentCoreHarness } : {}),
     ...(agentCoreHarnessTenantSlug ? { agentCoreHarnessTenantSlug } : {}),

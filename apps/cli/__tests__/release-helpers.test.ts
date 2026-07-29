@@ -67,8 +67,8 @@ describe("buildControllerUpdateInput", () => {
     });
   });
 
-  it("preserves Hindsight configuration in release updates", () => {
-    const prior: PriorControllerInput = {
+  it("drops the retired Hindsight keys instead of carrying them forward", () => {
+    const prior = {
       customerName: "ThinkWork",
       environmentName: "tei-e2e",
       awsAccountId: "123456789012",
@@ -77,9 +77,11 @@ describe("buildControllerUpdateInput", () => {
       evidenceBucket: "thinkwork-tei-e2e-deploy-evidence",
       agentcorePiSourceImageUri:
         "123456789012.dkr.ecr.us-east-1.amazonaws.com/thinkwork-tei-e2e-agentcore:pinned@sha256:abc",
+      // THINK-407: a stage whose last successful input still carries these
+      // must keep deploying — they are simply ignored.
       enableHindsight: true,
       hindsightDatabaseName: "thinkwork_hindsight",
-    };
+    } as unknown as PriorControllerInput;
     const release: ResolvedReleaseManifest = {
       version: "v0.1.0-canary.355",
       manifestUrl:
@@ -91,21 +93,18 @@ describe("buildControllerUpdateInput", () => {
       prior,
       release,
       sessionId: "session-hindsight",
-    });
+    }) as Record<string, unknown>;
 
-    expect(input).toMatchObject({
-      enableHindsight: true,
-      hindsightDatabaseName: "thinkwork_hindsight",
-      preservedConfig: {
-        enableHindsight: true,
-        hindsightDatabaseName: "thinkwork_hindsight",
-      },
-    });
+    expect(input.enableHindsight).toBeUndefined();
+    expect(input.hindsightDatabaseName).toBeUndefined();
+    const preserved = (input.preservedConfig ?? {}) as Record<string, unknown>;
+    expect(preserved.enableHindsight).toBeUndefined();
+    expect(preserved.hindsightDatabaseName).toBeUndefined();
   });
 });
 
 describe("recoverPriorControllerInput", () => {
-  it("recovers Hindsight fields dropped by an intervening release update", () => {
+  it("ignores retired Hindsight keys in older successful inputs", () => {
     const required = {
       customerName: "ThinkWork",
       environmentName: "tei-e2e",
@@ -124,35 +123,12 @@ describe("recoverPriorControllerInput", () => {
         enableHindsight: true,
         hindsightDatabaseName: "thinkwork_hindsight",
       },
-    ]);
+    ]) as Record<string, unknown>;
 
-    expect(recovered).toMatchObject({
-      enableHindsight: true,
-      hindsightDatabaseName: "thinkwork_hindsight",
-    });
-  });
-
-  it("does not override an explicit Hindsight disablement", () => {
-    const required = {
-      customerName: "ThinkWork",
-      environmentName: "tei-e2e",
-      awsAccountId: "123456789012",
-      awsRegion: "us-east-1",
-      availabilityZones: [],
-      evidenceBucket: "thinkwork-tei-e2e-deploy-evidence",
-      agentcorePiSourceImageUri:
-        "123456789012.dkr.ecr.us-east-1.amazonaws.com/thinkwork-tei-e2e-agentcore:pinned@sha256:abc",
-    };
-
-    const recovered = recoverPriorControllerInput([
-      { ...required, enableHindsight: false },
-      {
-        ...required,
-        enableHindsight: true,
-        hindsightDatabaseName: "thinkwork_hindsight",
-      },
-    ]);
-
-    expect(recovered.enableHindsight).toBe(false);
+    expect(recovered.enableHindsight).toBeUndefined();
+    expect(recovered.hindsightDatabaseName).toBeUndefined();
+    expect(recovered.agentcorePiSourceImageUri).toBe(
+      required.agentcorePiSourceImageUri,
+    );
   });
 });

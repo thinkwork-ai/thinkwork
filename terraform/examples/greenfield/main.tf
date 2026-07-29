@@ -93,16 +93,10 @@ variable "database_engine" {
   default     = "aurora-serverless"
 }
 
-variable "hindsight_database_name" {
-  description = "Dedicated Hindsight database name (THINK-220 cutover flag). Empty keeps Hindsight in the hindsight schema of the primary database."
-  type        = string
-  default     = ""
-}
-
 variable "enable_hindsight" {
-  description = "Enable Hindsight canonical user and Space memory. Full ThinkWork installs default this on; set false only for explicit low-cost/development AgentCore-only deployments."
+  description = "DEPRECATED (THINK-407): the Hindsight memory engine and its infrastructure were removed; this input is inert and ignored. Retained so existing tfvars keep working."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "external_kb_source_arns" {
@@ -184,7 +178,7 @@ variable "neptune_loader_role_arn" {
 }
 
 variable "memory_engine" {
-  description = "Active long-term memory engine. Empty selects Hindsight when enable_hindsight = true. Use 'agentcore' only for explicit low-cost/development managed-memory deployments."
+  description = "DEPRECATED (THINK-407): AgentCore managed memory is the only engine; this input is inert and ignored. Retained so existing tfvars keep working."
   type        = string
   default     = ""
 }
@@ -881,7 +875,6 @@ module "thinkwork" {
   neptune_client_security_group_id            = var.neptune_client_security_group_id
   neptune_load_bucket                         = var.neptune_load_bucket
   neptune_loader_role_arn                     = var.neptune_loader_role_arn
-  hindsight_database_name                     = var.hindsight_database_name
   memory_engine                               = var.memory_engine
   twenty_provisioned                          = var.twenty_provisioned
   twenty_runtime_enabled                      = var.twenty_runtime_enabled
@@ -1202,15 +1195,6 @@ output "database_name" {
   value       = module.thinkwork.database_name
 }
 
-output "hindsight_enabled" {
-  description = "Whether Hindsight canonical memory is enabled"
-  value       = module.thinkwork.hindsight_enabled
-}
-
-output "hindsight_endpoint" {
-  description = "Hindsight API endpoint (null when enable_hindsight = false)"
-  value       = module.thinkwork.hindsight_endpoint
-}
 output "twenty_provisioned" {
   description = "Whether the Twenty CRM retained managed-app substrate is provisioned"
   value       = module.thinkwork.twenty_provisioned

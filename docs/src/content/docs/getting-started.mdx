@@ -96,7 +96,7 @@ Memory needs no configuration. Bedrock AgentCore Memory is the only memory
 engine: the runtime hands each completed turn to AgentCore, which extracts
 semantic facts, preferences, summaries, and episodes in the background. New
 stacks should leave `enable_hindsight` and `memory_engine` unset — both are
-deprecated no-op inputs kept only for older customer stages.
+declared-but-ignored inputs kept only so older tfvars keep applying.
 
 <Aside type="caution">
   Do not commit `db_password` to source control. Use a secrets manager or

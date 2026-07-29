@@ -482,12 +482,6 @@ export function buildTwinUpdateControllerInput(
     ...(prior.customerDomainLegacyRetired !== undefined
       ? { customerDomainLegacyRetired: prior.customerDomainLegacyRetired }
       : {}),
-    ...(prior.enableHindsight !== undefined
-      ? { enableHindsight: prior.enableHindsight }
-      : {}),
-    ...(prior.hindsightDatabaseName
-      ? { hindsightDatabaseName: prior.hindsightDatabaseName }
-      : {}),
   };
   return {
     schemaVersion: 1,

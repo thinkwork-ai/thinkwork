@@ -148,7 +148,6 @@ test("defaults match the inline block they replaced", async () => {
   assert.equal(vars.get("auth_retirement_phase"), "retired");
   assert.equal(vars.get("stripe_price_ids_json"), "{}");
   assert.equal(vars.get("wiki_source"), "planner");
-  assert.equal(vars.get("memory_engine"), "agentcore");
 });
 
 test("the coexistence auth phase still demands an RFC3339 deadline", async () => {
@@ -180,8 +179,9 @@ test("the coexistence auth phase still demands an RFC3339 deadline", async () =>
 
 test("produces the full variable set", async () => {
   const { vars } = await run();
-  // 61 -var flags: 65 at extraction, minus capability_self_extension_tenants
-  // (self-extension removal), analyst vars (#4137), and the ontology/KG pair
-  // (THINK-408). A change here is fine — an unnoticed change is not.
-  assert.equal(vars.size, 61);
+  // 58 -var flags: 65 at extraction, minus capability_self_extension_tenants
+  // (self-extension removal), analyst vars (#4137), the ontology/KG pair
+  // (THINK-408), and the hindsight/memory-engine trio (THINK-407).
+  // A change here is fine — an unnoticed change is not.
+  assert.equal(vars.size, 58);
 });
