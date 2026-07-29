@@ -7,8 +7,9 @@
  * the matched row IS the tenant selection (no tenant id embedded in the
  * token). Raw keys are never stored. Mirrors tenant_mcp_admin_keys.
  *
- * See drizzle/0274_tenant_mcp_twin_keys.sql for the canonical DDL — this
- * Drizzle schema mirrors that hand-rolled DDL (not registered in
+ * See drizzle/0274_tenant_mcp_twin_keys.sql for the canonical DDL (plus
+ * 0281 for suffix/expiry and 0282 for the grant columns) — this Drizzle
+ * schema mirrors that hand-rolled DDL (not registered in
  * meta/_journal.json); apply via psql.
  */
 
@@ -47,6 +48,24 @@ export const tenantMcpTwinKeys = pgTable(
      * via the published manifest's expiresAt, not by this database.
      */
     expires_at: timestamp("expires_at", { withTimezone: true }),
+    /**
+     * Graph security groups this key may see, on top of the always-visible
+     * PUBLIC group. Empty = PUBLIC only; `["*"]` = every group (what the
+     * provisioned "default" connector key carries). Enforced platform-side
+     * from the published manifest (twin-mcp-keys/v2), not by this database.
+     */
+    security_groups: text("security_groups")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
+    /**
+     * KB collection slugs this key may retrieve. KB is grant-only: empty =
+     * no KB access at all; `["*"]` = every collection.
+     */
+    kb_collections: text("kb_collections")
+      .array()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

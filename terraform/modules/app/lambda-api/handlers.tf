@@ -1701,6 +1701,10 @@ locals {
       "GET /api/tenants/{tenantId}/brain-api-keys"            = "brain-api-keys"
       "OPTIONS /api/tenants/{tenantId}/brain-api-keys"        = "brain-api-keys"
       "DELETE /api/tenants/{tenantId}/brain-api-keys/{keyId}" = "brain-api-keys"
+      # Per-key grants edit (twin-mcp-keys/v2): securityGroups +
+      # kbCollections, republishing the manifest on change.
+      "PATCH /api/tenants/{tenantId}/brain-api-keys/{keyId}"   = "brain-api-keys"
+      "OPTIONS /api/tenants/{tenantId}/brain-api-keys/{keyId}" = "brain-api-keys"
 
       # One-shot tenant provisioning for the admin-ops MCP. Mints a fresh
       # tkm_ key + stores it in Secrets Manager at
