@@ -77,6 +77,7 @@ import {
   notifyThreadTurnUpdate,
 } from "./notify.js";
 import { reconcileChangedFiles, type ReconcileReport } from "./reconcile.js";
+import { stripNulDeep } from "./sanitize.js";
 import type {
   AgentLoopEvidence,
   FinalizeAgentProfileRun,
@@ -613,13 +614,13 @@ export async function processFinalize(
         status: "succeeded",
         finished_at: new Date(),
         runtime_type: runtimeType || undefined,
-        system_prompt: capturedSystemPrompt || undefined,
-        result_json: {
+        system_prompt: stripNulDeep(capturedSystemPrompt) || undefined,
+        result_json: stripNulDeep({
           response: responseText.slice(0, 10000),
           runtime: runtimeType || undefined,
           ...(goalRun ? { goal_run: goalRun } : {}),
-        },
-        usage_json: turnUsage,
+        }),
+        usage_json: stripNulDeep(turnUsage),
       })
       .where(eq(threadTurns.id, turnId));
 
@@ -2248,8 +2249,8 @@ async function handleFailedTurn(
       .set({
         status: "failed",
         finished_at: new Date(),
-        error: errMessage,
-        system_prompt: input.systemPrompt || undefined,
+        error: stripNulDeep(errMessage),
+        system_prompt: stripNulDeep(input.systemPrompt) || undefined,
       })
       .where(eq(threadTurns.id, turnId));
 

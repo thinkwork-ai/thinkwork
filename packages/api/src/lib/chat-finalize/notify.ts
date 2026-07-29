@@ -17,6 +17,7 @@ import { getDb } from "@thinkwork/database-pg";
 import { validateMcpAppPart } from "@thinkwork/pi-runtime-core";
 import { validateThreadJsonRenderPart } from "@thinkwork/thread-json-render";
 import { publishAppSyncMutation } from "../appsync-iam-publisher.js";
+import { stripNulDeep } from "./sanitize.js";
 
 const db = getDb();
 
@@ -85,11 +86,13 @@ export async function insertAssistantMessage(
         thread_id: threadId,
         tenant_id: tenantId,
         role: "assistant",
-        content,
+        content: stripNulDeep(content),
         sender_type: "agent",
         sender_id: agentId,
-        parts: normalizeThreadJsonRenderParts(uiMessageParts) || undefined,
-        metadata,
+        parts:
+          stripNulDeep(normalizeThreadJsonRenderParts(uiMessageParts)) ||
+          undefined,
+        metadata: stripNulDeep(metadata),
       })
       .returning({ id: messages.id });
 
