@@ -28,6 +28,7 @@ export type MemoryStrategy =
   | "preferences"
   | "summaries"
   | "episodes"
+  | "reflections"
   | "graph"
   | "custom";
 

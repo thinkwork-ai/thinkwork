@@ -148,7 +148,7 @@ test("defaults match the inline block they replaced", async () => {
   assert.equal(vars.get("auth_retirement_phase"), "retired");
   assert.equal(vars.get("stripe_price_ids_json"), "{}");
   assert.equal(vars.get("wiki_source"), "planner");
-  assert.equal(vars.get("memory_engine"), "hindsight");
+  assert.equal(vars.get("memory_engine"), "agentcore");
 });
 
 test("the coexistence auth phase still demands an RFC3339 deadline", async () => {

@@ -10,11 +10,18 @@
 #
 # **Why not a first-class resource?** The AWS provider does not (yet) expose a
 # `aws_bedrockagentcore_memory` resource type. Until it does, we drive the
-# create/find/destroy lifecycle through the `aws bedrock-agentcore-control`
+# ensure/destroy lifecycle through the `aws bedrock-agentcore-control`
 # CLI via a small shell script, and read the resulting memory ID back into
-# Terraform via `data "external"`. The script is idempotent — it lists
-# existing memories with the same name and returns the existing ID if found,
-# which keeps `terraform apply` safe to re-run.
+# Terraform via `data "external"`.
+#
+# **Self-healing.** The script is an *ensure*, not a one-shot create: it
+# probes the live resource on every plan and every apply, and recreates it
+# when it has gone missing. That matters because Terraform state can hold a
+# memory ID whose resource was deleted out-of-band (THINK-404 found dev in
+# exactly that state — SSM advertised a memory ID that GetMemory 404'd on,
+# and nothing in the module ever re-checked). The module output therefore
+# reflects the memory that actually exists right now, not the one state
+# remembers.
 #
 # **BYO override:** If you already have an AgentCore Memory resource, set
 # `var.existing_memory_id` to skip provisioning. The module output will echo
@@ -97,12 +104,15 @@ resource "aws_iam_role_policy" "memory_execution" {
 }
 
 ################################################################################
-# Create-or-find via shell script (only when no existing_memory_id was given).
+# Ensure via shell script (only when no existing_memory_id was given).
 #
 # The script produces JSON: `{"memory_id": "..."}`. Terraform re-runs it on
-# every plan — if the memory already exists, the script returns the same ID
-# without side effects. Inputs are passed as JSON on stdin; outputs MUST be
-# a single JSON object on stdout for `data "external"` to parse.
+# every plan — if an ACTIVE memory with this name already exists, the script
+# returns that same ID and only drift-corrects its strategy list; if the
+# memory is missing, unresolvable, or DELETING/FAILED, the script creates a
+# replacement and waits for it to reach ACTIVE. It never deletes anything.
+# Inputs are passed as JSON on stdin; outputs MUST be a single JSON object
+# on stdout for `data "external"` to parse.
 ################################################################################
 
 data "external" "memory" {
@@ -121,8 +131,15 @@ data "external" "memory" {
 #
 # Terraform's `data "external"` has no destroy hook, so we use a paired
 # `terraform_data` resource with a destroy-time local-exec that deletes the
-# memory by ID. `triggers_replace` binds the resource to the memory ID so
-# that replacing one memory correctly destroys the old one.
+# memory by ID.
+#
+# `triggers_replace` is deliberately keyed on the memory *name* and region,
+# NOT on the memory ID. Keying it on the ID would turn every self-heal (new
+# ID for the same logical memory) into a replacement, firing the destroy
+# provisioner against the ID the heal just recovered from — at best a no-op
+# delete of an already-gone resource, at worst a delete of the freshly
+# created one. Renaming or re-regioning the memory is a real replacement and
+# still destroys the old resource; healing is an in-place `input` update.
 ################################################################################
 
 resource "terraform_data" "memory_lifecycle" {

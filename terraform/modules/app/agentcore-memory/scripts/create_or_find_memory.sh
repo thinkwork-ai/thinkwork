@@ -2,8 +2,9 @@
 ################################################################################
 # create_or_find_memory.sh
 #
-# Idempotent create-or-find for a Bedrock AgentCore Memory resource, plus
-# drift-correction for the strategy list on already-existing resources.
+# Idempotent **ensure** for a Bedrock AgentCore Memory resource: guarantee
+# that an ACTIVE memory with the desired strategy set exists, and return its
+# live ID. Runs on every plan and every apply.
 #
 # Input (stdin, JSON):
 #   {"name": "<logical name>", "region": "<aws-region>",
@@ -11,18 +12,34 @@
 # Output (stdout, JSON): {"memory_id": "<resource-id>"}
 #
 # Behavior:
-#   1. Lists existing memories via `aws bedrock-agentcore-control list-memories`
-#      and matches by exact `name` OR by ID starting with `name-` (the API
-#      uses `{name}-{randomSuffix}` for the resource ID, and `name` sometimes
-#      comes back null on existing resources).
-#   2. If a match exists: get-memory, diff its current strategies against the
-#      desired set, and call update-memory with addMemoryStrategies for any
-#      that are missing. This lets us add new strategies to an existing
-#      memory without destructive recreation.
-#   3. If no match: create-memory with the full desired strategy list.
+#   1. Pages through `aws bedrock-agentcore-control list-memories` and
+#      collects candidates matching by exact `name` OR by ID starting with
+#      `name-` (the API uses `{name}-{randomSuffix}` for the resource ID,
+#      and `name` sometimes comes back null on existing resources).
+#   2. Probes each candidate with `get-memory`, which is the authoritative
+#      answer. A candidate is usable only if get-memory succeeds AND its
+#      status is ACTIVE (a CREATING memory is waited out). Candidates that
+#      404, or that report DELETING / FAILED, are skipped.
+#   3. Usable candidate: diff its current strategies against the desired set
+#      and `update-memory` with addMemoryStrategies for any that are missing.
+#      Adds new strategies without destructive recreation.
+#   4. No usable candidate: `create-memory` with the full desired strategy
+#      list, then wait for ACTIVE.
 #
-# Strategy set must match memory.py:STRATEGY_NAMESPACES exactly so the
-# agent container's recall() finds records written by the extractors:
+# **Self-healing (THINK-404).** The dev memory was deleted out from under
+# Terraform while state still held its ID, so every runtime read 404'd until
+# a human noticed. Steps 1-2 are what make that unrecoverable-by-hand state
+# impossible: the ID is re-derived from a live probe on every plan, so a
+# missing or dying memory is simply recreated on the next apply and the
+# module output tracks the resource that actually exists. The probe never
+# deletes anything — teardown remains the exclusive job of the destroy-time
+# provisioner in main.tf, whose `triggers_replace` deliberately does NOT
+# include the memory ID so healing can't cascade into a delete.
+#
+# Strategy set must match the namespaces read by
+# `packages/api/src/lib/memory/adapters/agentcore-adapter.ts` and
+# `packages/agentcore-pi/agent-container/src/tools/memory.ts` so recall
+# finds records written by the extractors:
 #   semantic     -> assistant_{actorId}
 #   preferences  -> preferences_{actorId}
 #   summaries    -> session_{sessionId}
@@ -30,7 +47,8 @@
 #
 # Called from terraform/modules/app/agentcore-memory/main.tf via
 # `data "external"`. Keep stdout strictly JSON — any stray echo will break
-# Terraform's JSON parser. All diagnostics go to stderr.
+# Terraform's JSON parser. All diagnostics go to stderr. Dependencies are
+# bash, `aws`, and `jq` only, because this runs on the CI runner.
 ################################################################################
 
 set -euo pipefail
@@ -103,18 +121,123 @@ strategies_json='[
 desired_names=("semantic" "preferences" "summaries" "episodes")
 
 # ---------------------------------------------------------------------------
-# Step 1: look for an existing memory with this name
+# Helpers
 # ---------------------------------------------------------------------------
 
-existing_id="$(
-  aws bedrock-agentcore-control list-memories \
+# Echo the memory's status, or nothing at all when get-memory fails (the
+# resource is gone). get-memory — not the list output — is the authority:
+# list-memories has been observed returning IDs that no longer resolve.
+memory_status() {
+  local id="$1" out
+  # `|| true` twice, deliberately: under `set -e -o pipefail` a failing
+  # get-memory (i.e. the memory is gone — the case this whole function
+  # exists to detect) would otherwise abort the script through the command
+  # substitution that calls it.
+  out="$(aws bedrock-agentcore-control get-memory \
     --region "$region" \
-    --output json 2>/dev/null \
-    | jq -r --arg n "$name" '.memories[]? | select(.name == $n or (.id | startswith($n + "-"))) | .id' \
-    | head -n1 || true
-)"
+    --memory-id "$id" \
+    --output json 2>/dev/null || true)"
+  jq -r '.memory.status // empty' <<<"$out" 2>/dev/null || true
+  return 0
+}
 
-if [[ -n "$existing_id" && "$existing_id" != "null" ]]; then
+# Block until the memory reports ACTIVE. Returns non-zero if it never gets
+# there (deleted mid-wait, stuck in FAILED, or the wait budget expires).
+# ~5 minutes: creation is normally well under a minute.
+wait_for_active() {
+  local id="$1"
+  local status
+  for _ in $(seq 1 30); do
+    status="$(memory_status "$id")"
+    case "$status" in
+      ACTIVE) return 0 ;;
+      "" | FAILED | DELETING)
+        echo "[create_or_find_memory] $id is ${status:-gone}; not usable" >&2
+        return 1
+        ;;
+      *)
+        echo "[create_or_find_memory] $id is $status; waiting for ACTIVE" >&2
+        sleep 10
+        ;;
+    esac
+  done
+  echo "[create_or_find_memory] timed out waiting for $id to become ACTIVE" >&2
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# Step 1: find a live memory with this name
+#
+# Paginated so a large account can't hide the existing resource behind a
+# page boundary and trick us into creating a duplicate. Every candidate is
+# probed with get-memory before it is trusted — that probe is what heals a
+# memory that was deleted behind Terraform's back.
+# ---------------------------------------------------------------------------
+
+candidate_ids=()
+next_token=""
+list_err="$(mktemp)"
+trap 'rm -f "$list_err"' EXIT
+while :; do
+  set +e
+  if [[ -n "$next_token" ]]; then
+    page="$(aws bedrock-agentcore-control list-memories \
+      --region "$region" --max-results 100 --next-token "$next_token" \
+      --output json 2>"$list_err")"
+  else
+    page="$(aws bedrock-agentcore-control list-memories \
+      --region "$region" --max-results 100 \
+      --output json 2>"$list_err")"
+  fi
+  list_status=$?
+  set -e
+  # Fail loudly rather than treating an API error as "no memories exist" —
+  # that misreading would create a duplicate memory alongside the healthy
+  # one and silently split the tenant's records across two resources.
+  if [[ $list_status -ne 0 ]]; then
+    echo '{"error": "list-memories failed"}' >&2
+    cat "$list_err" >&2
+    exit "$list_status"
+  fi
+
+  while IFS= read -r id; do
+    [[ -n "$id" ]] && candidate_ids+=("$id")
+  done < <(
+    jq -r --arg n "$name" \
+      '.memories[]? | select(.name == $n or ((.id // "") | startswith($n + "-"))) | .id' \
+      <<<"$page"
+  )
+
+  next_token="$(jq -r '.nextToken // empty' <<<"$page")"
+  [[ -z "$next_token" ]] && break
+done
+
+existing_id=""
+for candidate in ${candidate_ids[@]+"${candidate_ids[@]}"}; do
+  status="$(memory_status "$candidate")"
+  case "$status" in
+    ACTIVE)
+      existing_id="$candidate"
+      break
+      ;;
+    CREATING)
+      if wait_for_active "$candidate"; then
+        existing_id="$candidate"
+        break
+      fi
+      ;;
+    "")
+      # Listed but unresolvable: the resource was deleted out from under us
+      # (exactly the state THINK-404 found dev in). Fall through to create.
+      echo "[create_or_find_memory] listed memory $candidate no longer exists; will recreate" >&2
+      ;;
+    *)
+      echo "[create_or_find_memory] skipping $candidate in status $status" >&2
+      ;;
+  esac
+done
+
+if [[ -n "$existing_id" ]]; then
   # ---------------------------------------------------------------------------
   # Step 2a: memory exists — drift-correct its strategy list
   #
@@ -128,7 +251,7 @@ if [[ -n "$existing_id" && "$existing_id" != "null" ]]; then
       --region "$region" \
       --memory-id "$existing_id" \
       --output json 2>/dev/null \
-      | jq -r '.memory.strategies[]? | .name'
+      | jq -r '.memory.strategies[]? | .name' || true
   )"
 
   missing=()
@@ -200,7 +323,7 @@ fi
 create_output=""
 create_status=1
 err_file="$(mktemp)"
-trap 'rm -f "$err_file"' EXIT
+trap 'rm -f "$err_file" "$list_err"' EXIT
 for attempt in $(seq 1 12); do
   set +e
   create_output="$(
@@ -240,4 +363,13 @@ if [[ -z "$new_id" || "$new_id" == "null" ]]; then
   exit 1
 fi
 
+# Don't hand Terraform an ID the runtime can't use yet: a memory in CREATING
+# rejects CreateEvent, and downstream SSM/runtime wiring is written in the
+# same apply.
+if ! wait_for_active "$new_id"; then
+  echo '{"error": "created memory never became ACTIVE"}' >&2
+  exit 1
+fi
+
+echo "[create_or_find_memory] created memory $new_id" >&2
 jq -nc --arg id "$new_id" '{memory_id: $id}'

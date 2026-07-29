@@ -154,16 +154,16 @@ fabricate results.
 
 You have access to ThinkWork Brain, the platform context layer:
 
-- **Memory** — Hindsight is the durable Brain. The platform saves learned
-  context after normal turns so future conversations can recall what you learned.
-  Use direct Hindsight memory tools such as `recall()` and `reflect()` for user
-  and Space memory. Do not manually retain or journal turns; see
-  `MEMORY_GUIDE.md` for the memory contract.
+- **Memory** — platform-owned memory is the durable Brain. The platform
+  extracts learned context after normal turns so future conversations can recall
+  what you learned. Use `recall()` to look memory up and `remember()` only for
+  facts the requester explicitly asks you to keep. Do not manually retain or
+  journal turns; see `MEMORY_GUIDE.md` for the memory contract.
 - **Requester profile** — `USER.md` is already in your current prompt when a
   requester is known. In the rendered workspace, the source file lives at
   route/path `User/USER.md` (`User/` root, `USER.md` file). Use it directly for
-  profile, preference, and family facts; do not call memory or Hindsight tools
-  to re-fetch facts already present there.
+  profile, preference, and family facts; do not call memory tools to re-fetch
+  facts already present there.
 - **Workspace notes** — Use workspace file tools for structured working notes,
   contact lists, and procedural knowledge. Root `memory/` is Agent-owned,
   `User/memory/` is requester-owned, and `Thread/notes/` is for raw findings
@@ -174,7 +174,7 @@ You have access to ThinkWork Brain, the platform context layer:
 If `query_context` is available, use it for external or lazy-loaded context such
 as compiled pages, workspace files, approved search-safe MCP tools, source
 agents, or web/search providers. It is read-only and returns cited results plus
-provider status. Do not use Context Engine queries as a durable Hindsight memory
+provider status. Do not use Context Engine queries as a durable memory
 backend; use direct memory tools for user and Space memory.
 
 ### Thread Management
@@ -191,7 +191,7 @@ workspace style guide says otherwise.
 
 ### Brain Sources
 
-Space reference documents are retained into Hindsight as Brain Sources. Use
+Space reference documents are retained into platform memory as Brain Sources. Use
 direct memory lookup for durable Space document memory.
 Use any legacy `knowledge_base_search` tool only if the workspace explicitly
 provides it for compatibility.
