@@ -1,5 +1,6 @@
 import { memoryRecords } from "./memoryRecords.query.js";
 import { memoryRecordsByIds } from "./memoryRecordsByIds.query.js";
+import { memoryEpisodicRecords } from "./memoryEpisodicRecords.query.js";
 import { memorySearch } from "./memorySearch.query.js";
 import { memoryGraph } from "./memoryGraph.query.js";
 import { memorySystemConfig } from "./memorySystemConfig.query.js";
@@ -25,6 +26,7 @@ import { tenantBankMemories } from "./tenantBankMemories.query.js";
 export const memoryQueries = {
   memoryRecords,
   memoryRecordsByIds,
+  memoryEpisodicRecords,
   memorySearch,
   spaceMemorySearch,
   memoryGraph,

@@ -29,8 +29,7 @@ function tabForPath(pathname: string): ActivityTab {
  * and Threads (recent thread activity) are sibling tabs rendered in the
  * AppTopBar — driven by the route so each tab is deep-linkable. This page owns
  * the page header and renders the active facet's body; each embedded facet
- * suppresses its own header so the "Activity" breadcrumb stays stable. Mirrors
- * SettingsMemoryHome.
+ * suppresses its own header so the "Activity" breadcrumb stays stable.
  */
 export function SettingsActivityHome() {
   const pathname = useLocation({ select: (location) => location.pathname });

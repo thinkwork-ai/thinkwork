@@ -2515,6 +2515,32 @@ export const ComputerMemoryRecordsQuery = gql`
   }
 `;
 
+/**
+ * Session-scoped episodes + cross-session reflections. `memoryRecords` fans
+ * out only over actor-scoped namespaces, so the episodic facet needs its own
+ * read (see memoryEpisodicRecords in memory.graphql).
+ */
+export const ComputerMemoryEpisodicRecordsQuery = gql`
+  query ComputerMemoryEpisodicRecords(
+    $tenantId: ID!
+    $userId: ID
+    $limit: Int
+  ) {
+    memoryEpisodicRecords(tenantId: $tenantId, userId: $userId, limit: $limit) {
+      memoryRecordId
+      content {
+        text
+      }
+      createdAt
+      updatedAt
+      namespace
+      strategyId
+      strategy
+      threadId
+    }
+  }
+`;
+
 export const ComputerMemoryRetainAttemptsQuery = gql`
   query ComputerMemoryRetainAttempts($tenantId: ID!, $limit: Int) {
     memoryRetainAttempts(tenantId: $tenantId, limit: $limit) {

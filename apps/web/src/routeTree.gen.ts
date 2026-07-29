@@ -60,7 +60,6 @@ import { Route as AuthedSettingsSpacesSpaceIdRouteImport } from "./routes/_authe
 import { Route as AuthedSettingsSkillsDraftsRouteImport } from "./routes/_authed/settings.skills.drafts";
 import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_authed/settings.skills.$skillSlug";
 import { Route as AuthedSettingsRoutinesRoutineIdRouteImport } from "./routes/_authed/settings.routines.$routineId";
-import { Route as AuthedSettingsMemoryRecordsRouteImport } from "./routes/_authed/settings.memory.records";
 import { Route as AuthedSettingsMcpServersServersRouteImport } from "./routes/_authed/settings.mcp-servers.servers";
 import { Route as AuthedSettingsMcpServersServerIdRouteImport } from "./routes/_authed/settings.mcp-servers.$serverId";
 import { Route as AuthedSettingsEvaluationsProfilesRouteImport } from "./routes/_authed/settings.evaluations.profiles";
@@ -379,12 +378,6 @@ const AuthedSettingsRoutinesRoutineIdRoute =
     path: "/routines/$routineId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
-const AuthedSettingsMemoryRecordsRoute =
-  AuthedSettingsMemoryRecordsRouteImport.update({
-    id: "/records",
-    path: "/records",
-    getParentRoute: () => AuthedSettingsMemoryRoute,
-  } as any);
 const AuthedSettingsMcpServersServersRoute =
   AuthedSettingsMcpServersServersRouteImport.update({
     id: "/mcp-servers/servers",
@@ -625,7 +618,7 @@ export interface FileRoutesByFullPath {
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
-  "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
+  "/settings/memory": typeof AuthedSettingsMemoryRoute;
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
   "/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
@@ -652,7 +645,6 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
-  "/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRouteWithChildren;
@@ -710,7 +702,7 @@ export interface FileRoutesByTo {
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
-  "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
+  "/settings/memory": typeof AuthedSettingsMemoryRoute;
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
   "/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
@@ -737,7 +729,6 @@ export interface FileRoutesByTo {
   "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
-  "/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRouteWithChildren;
@@ -802,7 +793,7 @@ export interface FileRoutesById {
   "/_authed/settings/billing": typeof AuthedSettingsBillingRoute;
   "/_authed/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
-  "/_authed/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
+  "/_authed/settings/memory": typeof AuthedSettingsMemoryRoute;
   "/_authed/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
   "/_authed/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
   "/_authed/settings/tools": typeof AuthedSettingsToolsRoute;
@@ -829,7 +820,6 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/_authed/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/_authed/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
-  "/_authed/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/_authed/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
   "/_authed/settings/skills/drafts": typeof AuthedSettingsSkillsDraftsRouteWithChildren;
@@ -920,7 +910,6 @@ export interface FileRouteTypes {
     | "/settings/evaluations/profiles"
     | "/settings/mcp-servers/$serverId"
     | "/settings/mcp-servers/servers"
-    | "/settings/memory/records"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
     | "/settings/skills/drafts"
@@ -1005,7 +994,6 @@ export interface FileRouteTypes {
     | "/settings/evaluations/profiles"
     | "/settings/mcp-servers/$serverId"
     | "/settings/mcp-servers/servers"
-    | "/settings/memory/records"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
     | "/settings/skills/drafts"
@@ -1096,7 +1084,6 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/profiles"
     | "/_authed/settings/mcp-servers/$serverId"
     | "/_authed/settings/mcp-servers/servers"
-    | "/_authed/settings/memory/records"
     | "/_authed/settings/routines/$routineId"
     | "/_authed/settings/skills/$skillSlug"
     | "/_authed/settings/skills/drafts"
@@ -1510,13 +1497,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsRoutinesRoutineIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
-    "/_authed/settings/memory/records": {
-      id: "/_authed/settings/memory/records";
-      path: "/records";
-      fullPath: "/settings/memory/records";
-      preLoaderRoute: typeof AuthedSettingsMemoryRecordsRouteImport;
-      parentRoute: typeof AuthedSettingsMemoryRoute;
-    };
     "/_authed/settings/mcp-servers/servers": {
       id: "/_authed/settings/mcp-servers/servers";
       path: "/mcp-servers/servers";
@@ -1916,17 +1896,6 @@ const AuthedSettingsArtifactsRouteWithChildren =
     AuthedSettingsArtifactsRouteChildren,
   );
 
-interface AuthedSettingsMemoryRouteChildren {
-  AuthedSettingsMemoryRecordsRoute: typeof AuthedSettingsMemoryRecordsRoute;
-}
-
-const AuthedSettingsMemoryRouteChildren: AuthedSettingsMemoryRouteChildren = {
-  AuthedSettingsMemoryRecordsRoute: AuthedSettingsMemoryRecordsRoute,
-};
-
-const AuthedSettingsMemoryRouteWithChildren =
-  AuthedSettingsMemoryRoute._addFileChildren(AuthedSettingsMemoryRouteChildren);
-
 interface AuthedSettingsSkillsDraftsRouteChildren {
   AuthedSettingsSkillsDraftsDraftIdRoute: typeof AuthedSettingsSkillsDraftsDraftIdRoute;
 }
@@ -1949,7 +1918,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsBillingRoute: typeof AuthedSettingsBillingRoute;
   AuthedSettingsCapabilitiesRoute: typeof AuthedSettingsCapabilitiesRoute;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
-  AuthedSettingsMemoryRoute: typeof AuthedSettingsMemoryRouteWithChildren;
+  AuthedSettingsMemoryRoute: typeof AuthedSettingsMemoryRoute;
   AuthedSettingsModelCatalogRoute: typeof AuthedSettingsModelCatalogRoute;
   AuthedSettingsRoutineRepoRoute: typeof AuthedSettingsRoutineRepoRoute;
   AuthedSettingsToolsRoute: typeof AuthedSettingsToolsRoute;
@@ -2001,7 +1970,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsBillingRoute: AuthedSettingsBillingRoute,
   AuthedSettingsCapabilitiesRoute: AuthedSettingsCapabilitiesRoute,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
-  AuthedSettingsMemoryRoute: AuthedSettingsMemoryRouteWithChildren,
+  AuthedSettingsMemoryRoute: AuthedSettingsMemoryRoute,
   AuthedSettingsModelCatalogRoute: AuthedSettingsModelCatalogRoute,
   AuthedSettingsRoutineRepoRoute: AuthedSettingsRoutineRepoRoute,
   AuthedSettingsToolsRoute: AuthedSettingsToolsRoute,

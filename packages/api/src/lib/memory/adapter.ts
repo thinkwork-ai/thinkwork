@@ -96,6 +96,19 @@ export interface MemoryAdapter {
     request: TenantInspectRequest,
   ): Promise<ThinkWorkMemoryRecord[]>;
 
+  /**
+   * List the owner's session-scoped episodic records (and any cross-session
+   * reflections filed alongside them).
+   *
+   * Deliberately separate from {@link inspect}: episodes are per-thread and
+   * would swamp the cross-thread listing/recall fan-out. Engines that don't
+   * model episodes omit this method, and callers must treat its absence as
+   * "no episodic facet available" rather than an error.
+   */
+  listEpisodicRecords?(
+    request: InspectRequest,
+  ): Promise<ThinkWorkMemoryRecord[]>;
+
   export(request: ExportRequest): Promise<MemoryExportBundle>;
 
   forget?(recordId: string): Promise<void>;

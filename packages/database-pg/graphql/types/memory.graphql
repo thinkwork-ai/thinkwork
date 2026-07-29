@@ -274,6 +274,19 @@ extend type Query {
     limit: Int
   ): [MemoryRecord!]!
   memoryRecordsByIds(tenantId: ID!, ids: [ID!]!): [MemoryRecord!]!
+  """
+  Session-scoped episodes plus the cross-session reflections filed alongside
+  them, for one user. Separate from `memoryRecords` on purpose: episodic
+  records are per-thread and would swamp the cross-thread listing, so the
+  Memory page loads them as their own facet. Engines with no episodic facet
+  return an empty list rather than erroring.
+  """
+  memoryEpisodicRecords(
+    tenantId: ID
+    userId: ID
+    assistantId: ID
+    limit: Int
+  ): [MemoryRecord!]!
   memorySearch(
     tenantId: ID
     userId: ID

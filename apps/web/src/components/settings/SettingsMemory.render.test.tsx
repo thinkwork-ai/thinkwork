@@ -7,35 +7,42 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
 import {
+  ComputerMemoryEpisodicRecordsQuery,
+  ComputerMemoryRecordsQuery,
   ComputerMemoryRetainAttemptsQuery,
-  SpacesQuery,
+  ComputerMemorySearchQuery,
+  ComputerMemorySystemConfigQuery,
 } from "@/lib/graphql-queries";
 import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
-import { SettingsMemory, type MemoryRefreshController } from "./SettingsMemory";
+import { SettingsMemory } from "./SettingsMemory";
 
 vi.mock("urql", () => ({
   useQuery: vi.fn(),
+  useMutation: vi.fn(),
 }));
 
 vi.mock("@/context/TenantContext", () => ({
-  useTenant: () => ({ tenantId: "tenant-1" }),
+  useTenant: () => ({ tenantId: "tenant-1", userId: "user-1" }),
 }));
 
 vi.mock("@/context/PageHeaderContext", () => ({
   usePageHeaderActions: vi.fn(),
 }));
 
-vi.mock("@thinkwork/graph", () => ({
-  MemoryGraph: React.forwardRef<HTMLDivElement>(
-    function MemoryGraphMock(_props, ref) {
-      return <div ref={ref}>Graph</div>;
-    },
+vi.mock("@/components/settings/SettingsContent", () => ({
+  SettingsPageTitle: ({ title }: { title: React.ReactNode }) => (
+    <h1>{title}</h1>
   ),
 }));
 
+vi.mock("@/components/LoadingShimmer", () => ({
+  LoadingShimmer: () => <div>Loading…</div>,
+}));
+
 vi.mock("@thinkwork/ui", () => ({
+  cn: (...classes: unknown[]) => classes.filter(Boolean).join(" "),
   Badge: ({ children }: { children?: React.ReactNode }) => (
     <span>{children}</span>
   ),
@@ -48,6 +55,23 @@ vi.mock("@thinkwork/ui", () => ({
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
     <input {...props} />
   ),
+  TooltipIconButton: ({
+    children,
+    ...props
+  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button {...props}>{children}</button>
+  ),
+  Select: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  SelectContent: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SelectItem: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SelectTrigger: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+  SelectValue: () => null,
   Sheet: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   SheetContent: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
@@ -61,38 +85,6 @@ vi.mock("@thinkwork/ui", () => ({
   SheetTitle: ({ children }: { children?: React.ReactNode }) => (
     <h2>{children}</h2>
   ),
-  ToggleGroup: ({
-    children,
-    onValueChange,
-  }: {
-    children?: React.ReactNode;
-    onValueChange?: (value: string) => void;
-  }) => (
-    <div>
-      {React.Children.map(children, (child) =>
-        React.isValidElement(child)
-          ? React.cloneElement(child as React.ReactElement<any>, {
-              onClick: () =>
-                onValueChange?.(
-                  (child.props as { value?: string }).value ?? "",
-                ),
-            })
-          : child,
-      )}
-    </div>
-  ),
-  ToggleGroupItem: ({
-    children,
-    ...props
-  }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
-  ),
-  DataTableTokenFilter: () => null,
-  dataTableTokenFilterFns: {
-    text: () => true,
-    option: () => true,
-    boolean: () => true,
-  },
   AlertDialog: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
   ),
@@ -162,108 +154,120 @@ vi.mock("@thinkwork/ui", () => ({
 }));
 
 const useQueryMock = vi.mocked(useQuery);
+const useMutationMock = vi.mocked(useMutation);
 
-describe("SettingsMemory render", () => {
-  beforeEach(() => {
-    useQueryMock.mockImplementation(({ query, variables }: any) => {
-      if (variables?.scope === "OPERATOR") {
-        return [
-          {
-            data: {
-              memoryRecords: [
-                {
-                  memoryRecordId: "space-memory",
-                  content: { text: "Space-bank memory" },
-                  createdAt: "2026-06-27T11:00:00.000Z",
-                  updatedAt: "2026-06-27T11:15:00.000Z",
-                  namespace: "space_space-1",
-                  bankId: "space_space-1",
-                  ownerType: "space",
-                  ownerId: "space-1",
-                  strategy: "semantic",
-                  strategyId: "world",
-                  factType: "world",
-                  proofCount: 3,
-                  accessCount: 0,
+const SEMANTIC_RECORD = {
+  memoryRecordId: "rec-semantic",
+  content: { text: "Eric prefers concise summaries" },
+  createdAt: "2026-07-25T10:00:00.000Z",
+  updatedAt: "2026-07-25T10:00:00.000Z",
+  namespace: "assistant_user-1",
+  strategy: "semantic",
+  strategyId: "semantic",
+  threadId: null,
+};
+
+const PREFERENCES_RECORD = {
+  memoryRecordId: "rec-pref",
+  content: { text: "Prefers dark mode" },
+  createdAt: "2026-07-24T10:00:00.000Z",
+  updatedAt: "2026-07-24T10:00:00.000Z",
+  namespace: "preferences_user-1",
+  strategy: "preferences",
+  strategyId: "preferences",
+  threadId: null,
+};
+
+const EPISODE_RECORD = {
+  memoryRecordId: "rec-episode",
+  content: { text: "Shipped the memory page" },
+  createdAt: "2026-07-23T10:00:00.000Z",
+  updatedAt: "2026-07-23T10:00:00.000Z",
+  namespace: "episodes_user-1/session-9",
+  strategy: "episodes",
+  strategyId: "episodes",
+  threadId: null,
+};
+
+let searchRecords: any[] = [];
+let recordsRefetch = vi.fn();
+
+function installQueryMock() {
+  useQueryMock.mockImplementation(({ query }: any) => {
+    if (query === ComputerMemoryRecordsQuery) {
+      return [
+        {
+          data: { memoryRecords: [SEMANTIC_RECORD, PREFERENCES_RECORD] },
+          fetching: false,
+        },
+        recordsRefetch,
+      ] as any;
+    }
+    if (query === ComputerMemoryEpisodicRecordsQuery) {
+      return [
+        { data: { memoryEpisodicRecords: [EPISODE_RECORD] }, fetching: false },
+        vi.fn(),
+      ] as any;
+    }
+    if (query === ComputerMemorySearchQuery) {
+      return [
+        { data: { memorySearch: { records: searchRecords } }, fetching: false },
+        vi.fn(),
+      ] as any;
+    }
+    if (query === ComputerMemoryRetainAttemptsQuery) {
+      return [
+        { data: { memoryRetainAttempts: [] }, fetching: false },
+        vi.fn(),
+      ] as any;
+    }
+    if (query === SettingsTenantMembersQuery) {
+      return [
+        {
+          data: {
+            tenantMembers: [
+              {
+                principalType: "USER",
+                principalId: "user-2",
+                user: {
+                  id: "user-2",
+                  name: "Ada Lovelace",
+                  email: "ada@example.com",
+                  profile: { callBy: "Ada" },
                 },
-                {
-                  memoryRecordId: "user-memory",
-                  content: { text: "User-bank memory" },
-                  createdAt: "2026-06-27T10:00:00.000Z",
-                  updatedAt: "2026-06-27T10:00:00.000Z",
-                  namespace: "user_user-1",
-                  bankId: "user_user-1",
-                  ownerType: "user",
-                  ownerId: "user-1",
-                  strategy: "semantic",
-                  strategyId: "world",
-                  factType: "world",
-                  proofCount: 3,
-                  accessCount: 0,
-                },
-              ],
-            },
-            fetching: false,
+              },
+            ],
           },
-        ] as any;
-      }
-
-      if (query === SpacesQuery) {
-        return [
-          {
-            data: {
-              spaces: [{ id: "space-1", name: "Launch Space", slug: "launch" }],
-            },
-            fetching: false,
-          },
-        ] as any;
-      }
-
-      if (query === SettingsTenantMembersQuery) {
-        return [
-          {
-            data: {
-              tenantMembers: [
-                {
-                  principalType: "USER",
-                  principalId: "user-1",
-                  user: {
-                    id: "user-1",
-                    name: "Eric Odom",
-                    email: "eric@example.com",
-                    profile: { callBy: "Eric" },
-                  },
-                },
-              ],
-            },
-            fetching: false,
-          },
-        ] as any;
-      }
-
-      if (query === ComputerMemoryRetainAttemptsQuery) {
-        return [
-          {
-            data: { memoryRetainAttempts: [] },
-            fetching: false,
-          },
-        ] as any;
-      }
-
+          fetching: false,
+        },
+        vi.fn(),
+      ] as any;
+    }
+    if (query === ComputerMemorySystemConfigQuery) {
       return [
         {
           data: {
             memorySystemConfig: {
-              activeEngine: "hindsight",
-              hindsightEnabled: true,
-              userMemoryEnabled: true,
-              spaceMemoryEnabled: true,
+              activeEngine: "agentcore",
+              managedMemoryEnabled: true,
             },
           },
           fetching: false,
         },
+        vi.fn(),
       ] as any;
-    });
+    }
+    // MemoryDetailSheet's source-thread lookup.
+    return [{ data: undefined, fetching: false }, vi.fn()] as any;
+  });
+}
+
+describe("SettingsMemory", () => {
+  beforeEach(() => {
+    searchRecords = [];
+    recordsRefetch = vi.fn();
+    installQueryMock();
+    useMutationMock.mockReturnValue([{ fetching: false }, vi.fn()] as any);
   });
 
   afterEach(() => {
@@ -271,202 +275,152 @@ describe("SettingsMemory render", () => {
     vi.clearAllMocks();
   });
 
-  it("renders operator-visible Hindsight rows with bank and owner evidence", () => {
-    render(<SettingsMemory embedded />);
-    // Default view is now Graph; switch to Table for the row/table assertions.
-    fireEvent.click(screen.getByText("Table"));
+  it("shows the active engine banner from memorySystemConfig", () => {
+    render(<SettingsMemory />);
+    expect(screen.getByTestId("memory-engine-banner").textContent).toContain(
+      "AgentCore managed memory",
+    );
+  });
 
+  it("merges the actor-scoped and episodic reads into one listing", () => {
+    render(<SettingsMemory />);
+    expect(screen.getByTestId("memory-row-rec-semantic")).toBeTruthy();
+    expect(screen.getByTestId("memory-row-rec-pref")).toBeTruthy();
+    expect(screen.getByTestId("memory-row-rec-episode")).toBeTruthy();
+    // Episodes come from a second query because memoryRecords deliberately
+    // skips the session-scoped namespaces.
     expect(useQueryMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        variables: expect.objectContaining({
-          tenantId: "tenant-1",
-          namespace: "requester",
-          scope: "OPERATOR",
-          limit: 500,
-        }),
+        query: ComputerMemoryEpisodicRecordsQuery,
+        variables: expect.objectContaining({ tenantId: "tenant-1" }),
       }),
     );
-    expect(screen.getByText("Bank")).toBeTruthy();
-    expect(screen.getByText("Scope")).toBeTruthy();
-    expect(screen.queryByText("Updated")).toBeNull();
-    expect(screen.getAllByText("Launch Space").length).toBeGreaterThan(0);
-    expect(screen.getByText("Space: Launch Space")).toBeTruthy();
-    expect(screen.getAllByText("Eric").length).toBeGreaterThan(0);
-    expect(screen.getByText("User: Eric")).toBeTruthy();
-    expect(screen.getByText("Space-bank memory")).toBeTruthy();
   });
 
-  it("publishes a refresh controller that reloads records and retain diagnostics", async () => {
-    const reexecuteRecordsQuery = vi.fn();
-    const reexecuteRetainAttemptsQuery = vi.fn();
-    const reexecuteOtherQuery = vi.fn();
+  it("filters the listing by facet chip", () => {
+    render(<SettingsMemory />);
+    fireEvent.click(screen.getByTestId("memory-facet-preferences"));
+    expect(screen.getByTestId("memory-row-rec-pref")).toBeTruthy();
+    expect(screen.queryByTestId("memory-row-rec-semantic")).toBeNull();
+    expect(screen.queryByTestId("memory-row-rec-episode")).toBeNull();
+  });
 
-    useQueryMock.mockImplementation(({ query, variables }: any) => {
-      if (variables?.scope === "OPERATOR") {
-        return [
-          {
-            data: { memoryRecords: [] },
-            fetching: false,
-          },
-          reexecuteRecordsQuery,
-        ] as any;
-      }
+  it("keeps facet counts from the browse listing, not the active facet", () => {
+    render(<SettingsMemory />);
+    expect(screen.getByTestId("memory-facet-all").textContent).toContain("3");
+    expect(screen.getByTestId("memory-facet-episodes").textContent).toContain(
+      "1",
+    );
+    fireEvent.click(screen.getByTestId("memory-facet-episodes"));
+    expect(screen.getByTestId("memory-facet-all").textContent).toContain("3");
+  });
 
-      if (query === ComputerMemoryRetainAttemptsQuery) {
-        return [
-          {
-            data: { memoryRetainAttempts: [] },
-            fetching: false,
-          },
-          reexecuteRetainAttemptsQuery,
-        ] as any;
-      }
+  it("runs the semantic search only on submit", () => {
+    searchRecords = [
+      {
+        memoryRecordId: "rec-hit",
+        content: { text: "Search hit" },
+        createdAt: "2026-07-25T10:00:00.000Z",
+        namespace: "assistant_user-1",
+        strategy: "semantic",
+        score: 0.87,
+      },
+    ];
+    render(<SettingsMemory />);
+    const input = screen.getByLabelText("Search memory");
 
-      return [
-        {
-          data:
-            query === SpacesQuery
-              ? { spaces: [] }
-              : query === SettingsTenantMembersQuery
-                ? { tenantMembers: [] }
-                : {
-                    memorySystemConfig: {
-                      activeEngine: "hindsight",
-                      hindsightEnabled: true,
-                    },
-                  },
-          fetching: false,
-        },
-        reexecuteOtherQuery,
-      ] as any;
-    });
-
-    let refreshController: MemoryRefreshController | null = null;
-    render(
-      <SettingsMemory
-        embedded
-        onRefreshControllerChange={(controller) => {
-          refreshController = controller;
-        }}
-      />,
+    fireEvent.change(input, { target: { value: "summaries" } });
+    // Typing alone must not fire the search — the query stays paused.
+    expect(useQueryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: ComputerMemorySearchQuery,
+        pause: true,
+      }),
     );
 
-    const controller = await waitFor(() => {
-      if (!refreshController) throw new Error("refresh controller missing");
-      return refreshController;
-    });
-    await controller.refresh();
-
-    expect(reexecuteRecordsQuery).toHaveBeenCalledWith({
-      requestPolicy: "network-only",
-    });
-    expect(reexecuteRetainAttemptsQuery).toHaveBeenCalledWith({
-      requestPolicy: "network-only",
-    });
-    expect(reexecuteOtherQuery).toHaveBeenCalledWith({
-      requestPolicy: "network-only",
-    });
-  });
-
-  it("surfaces retrying retain diagnostics without replacing memory rows", () => {
-    useQueryMock.mockImplementation(({ query, variables }: any) => {
-      if (variables?.scope === "OPERATOR") {
-        return [
-          {
-            data: {
-              memoryRecords: [
-                {
-                  memoryRecordId: "user-memory",
-                  content: { text: "User-bank memory" },
-                  createdAt: "2026-06-27T10:00:00.000Z",
-                  namespace: "user_user-1",
-                  bankId: "user_user-1",
-                  ownerType: "user",
-                  ownerId: "user-1",
-                  strategy: "semantic",
-                  // THINK-199: curated default hides uncorroborated raw units.
-                  proofCount: 3,
-                },
-              ],
-            },
-            fetching: false,
-          },
-        ] as any;
-      }
-
-      if (query === ComputerMemoryRetainAttemptsQuery) {
-        return [
-          {
-            data: {
-              memoryRetainAttempts: [
-                { id: "attempt-1", status: "failed_timeout" },
-                { id: "attempt-2", status: "dead_lettered" },
-              ],
-            },
-            fetching: false,
-          },
-        ] as any;
-      }
-
-      return [
-        {
-          data:
-            query === SettingsTenantMembersQuery
-              ? { tenantMembers: [] }
-              : query === SpacesQuery
-                ? { spaces: [] }
-                : { memorySystemConfig: { activeEngine: "hindsight" } },
-          fetching: false,
-        },
-      ] as any;
-    });
-
-    render(<SettingsMemory embedded />);
-    // Default view is now Graph; switch to Table for the row/table assertions.
-    fireEvent.click(screen.getByText("Table"));
-
-    expect(screen.getByRole("status").textContent).toContain(
-      "Memory retain status: 1 retrying, 1 dead-lettered",
+    fireEvent.submit(input.closest("form")!);
+    expect(useQueryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: ComputerMemorySearchQuery,
+        pause: false,
+        variables: expect.objectContaining({ query: "summaries" }),
+      }),
     );
-    expect(screen.getByText("User-bank memory")).toBeTruthy();
+    expect(screen.getByTestId("memory-row-rec-hit")).toBeTruthy();
+    expect(screen.getByText("Score")).toBeTruthy();
   });
 
-  it("opens operator memory details without the requester forget action", () => {
-    render(<SettingsMemory embedded />);
-    // Default view is now Graph; switch to Table for the row/table assertions.
-    fireEvent.click(screen.getByText("Table"));
-
-    fireEvent.click(screen.getByTestId("memory-row-space-memory"));
-
-    expect(screen.getByText("Memory Detail")).toBeTruthy();
-    expect(screen.getByText("space:space-1")).toBeTruthy();
-    expect(screen.queryByText("Forget")).toBeNull();
-  });
-
-  it("shows a neutral empty state without engine-switching instructions", () => {
-    useQueryMock.mockImplementation(({ variables }: { variables?: any }) => {
-      if (variables?.scope === "OPERATOR") {
-        return [{ data: { memoryRecords: [] }, fetching: false }] as any;
-      }
-
-      return [{ data: {}, fetching: false }] as any;
+  it("passes the selected facet to memorySearch as a strategy filter", () => {
+    render(<SettingsMemory />);
+    fireEvent.click(screen.getByTestId("memory-facet-preferences"));
+    fireEvent.change(screen.getByLabelText("Search memory"), {
+      target: { value: "dark" },
     });
+    fireEvent.submit(screen.getByLabelText("Search memory").closest("form")!);
+    expect(useQueryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: ComputerMemorySearchQuery,
+        variables: expect.objectContaining({ strategy: "PREFERENCES" }),
+      }),
+    );
+  });
 
-    render(<SettingsMemory embedded />);
-    // Default view is now Graph; switch to Table for the row/table assertions.
-    fireEvent.click(screen.getByText("Table"));
+  it("deletes the selected record and refetches", async () => {
+    const deleteMutation = vi.fn().mockResolvedValue({ error: undefined });
+    useMutationMock.mockReturnValue([
+      { fetching: false },
+      deleteMutation,
+    ] as any);
 
-    expect(screen.getAllByText("No memory rows found").length).toBe(1);
-    expect(
-      screen.getByText(
-        "This tenant does not have User, Space, or agent memory rows yet.",
+    render(<SettingsMemory />);
+    fireEvent.click(screen.getByTestId("memory-row-rec-semantic"));
+    // [0] is the sheet's trigger, [1] the confirm inside the alert dialog.
+    fireEvent.click(screen.getAllByText("Forget", { selector: "button" })[1]);
+
+    await waitFor(() =>
+      expect(deleteMutation).toHaveBeenCalledWith({
+        tenantId: "tenant-1",
+        userId: null,
+        memoryRecordId: "rec-semantic",
+      }),
+    );
+    await waitFor(() => expect(recordsRefetch).toHaveBeenCalled());
+  });
+
+  it("surfaces a delete failure instead of silently closing the sheet", async () => {
+    const deleteMutation = vi
+      .fn()
+      .mockResolvedValue({ error: new Error("record is immutable") });
+    useMutationMock.mockReturnValue([
+      { fetching: false },
+      deleteMutation,
+    ] as any);
+
+    render(<SettingsMemory />);
+    fireEvent.click(screen.getByTestId("memory-row-rec-semantic"));
+    fireEvent.click(screen.getAllByText("Forget", { selector: "button" })[1]);
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toContain(
+        "record is immutable",
       ),
-    ).toBeTruthy();
-    expect(screen.queryByText("Memory service update required")).toBeNull();
-    expect(screen.queryByText(/has not switched to Hindsight/i)).toBeNull();
-    expect(screen.queryByText(/MEMORY_ENGINE/i)).toBeNull();
-    expect(screen.queryByText(/Redeploy required/i)).toBeNull();
-    expect(screen.queryByText("Company distillation")).toBeNull();
-    expect(screen.queryByText("Wiki projection")).toBeNull();
+    );
+  });
+});
+
+describe("SettingsMemory contract", () => {
+  it("offers no edit action — AgentCore records are immutable", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const source = readFileSync(
+      resolve(process.cwd(), "src/components/settings/SettingsMemory.tsx"),
+      "utf8",
+    );
+    expect(source).not.toContain("updateMemoryRecord");
+    // No Hindsight-era graph view, raw/curated toggle, or space pickers.
+    expect(source).not.toContain("MemoryGraph");
+    expect(source).not.toContain("isCuratedMemory");
+    expect(source).not.toContain("SpacesQuery");
+    expect(source).not.toContain('scope: "OPERATOR"');
   });
 });
