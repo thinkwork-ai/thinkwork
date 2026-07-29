@@ -5,7 +5,8 @@
  * re-run harmlessly):
  *
  *   1. Mint a `tkt_` tenant key → SHA-256 hash row in tenant_mcp_twin_keys
- *      (revoke-before-insert on the same name, so re-runs rotate).
+ *      (revoke-before-insert on the same name, so re-runs rotate). The
+ *      row carries the wildcard grants (`["*"]`) — see TWIN_KEY_ALL_GRANTS.
  *   2. Store the raw key in Secrets Manager at
  *      `thinkwork/<stage>/mcp/<tenantId>/digital-twin` as {token, tenantId}.
  *   3. Upsert the APPROVED `tenant_mcp_servers` row (slug `digital-twin`,
@@ -52,6 +53,7 @@ import { resolveAgentWorkspacePrefix } from "../skills/assignment-state.js";
 import { materializeMcpAssignmentFoldersForAgents } from "../mcp/assignment-state.js";
 import {
   publishTwinKeyManifest,
+  TWIN_KEY_GRANT_WILDCARD,
   type PublishTwinKeyManifestOptions,
   type TwinKeyManifestEntry,
 } from "./key-manifest.js";
@@ -61,6 +63,14 @@ type DbLike = typeof defaultDb;
 export const TWIN_CONNECTOR_SLUG = "digital-twin";
 export const TWIN_CONNECTOR_NAME = "Company Brain";
 export const TWIN_KEY_NAME = "default";
+
+/**
+ * Grant lists for the provisioned connector key: `["*"]` = every security
+ * group, every KB collection (twin-mcp-keys/v2). This key backs the
+ * console's own proxy, so it is deliberately exempt from the per-key
+ * restrictions user-minted keys can carry.
+ */
+export const TWIN_KEY_ALL_GRANTS = [TWIN_KEY_GRANT_WILDCARD] as const;
 
 /**
  * The grant's operations list IS the runtime tool whitelist: folder
@@ -195,8 +205,12 @@ export async function provisionTwinConnector(
   // requires BOTH hashes live in the published manifest mid-rotation.
   const outgoingRows = await db
     .select({
+      id: tenantMcpTwinKeys.id,
       key_hash: tenantMcpTwinKeys.key_hash,
+      name: tenantMcpTwinKeys.name,
       created_at: tenantMcpTwinKeys.created_at,
+      security_groups: tenantMcpTwinKeys.security_groups,
+      kb_collections: tenantMcpTwinKeys.kb_collections,
     })
     .from(tenantMcpTwinKeys)
     .where(
@@ -205,9 +219,16 @@ export async function provisionTwinConnector(
         isNull(tenantMcpTwinKeys.revoked_at),
       ),
     );
+  // Grace entries carry the outgoing row's grants verbatim — a key that
+  // is still valid for the cache window must not silently change what it
+  // can see while it is being rotated out.
   const outgoingKeys: TwinKeyManifestEntry[] = outgoingRows.map((row) => ({
     keyHash: row.key_hash,
+    keyId: row.id,
+    name: row.name,
     createdAt: row.created_at ? row.created_at.toISOString() : null,
+    securityGroups: row.security_groups ?? [],
+    kbCollections: row.kb_collections ?? [],
   }));
 
   const { raw, hash } = generateTwinKey();
@@ -227,6 +248,11 @@ export async function provisionTwinConnector(
       tenant_id: input.tenantId,
       key_hash: hash,
       name: TWIN_KEY_NAME,
+      // The platform-managed connector key is the console's own proxy
+      // credential: it is minted with the wildcard grant so future
+      // per-key restrictions can never narrow what the console sees.
+      security_groups: [...TWIN_KEY_ALL_GRANTS],
+      kb_collections: [...TWIN_KEY_ALL_GRANTS],
       created_by_user_id: input.createdByUserId ?? null,
     })
     .returning({ id: tenantMcpTwinKeys.id });
