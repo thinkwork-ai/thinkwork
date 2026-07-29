@@ -6731,6 +6731,14 @@ export type Query = {
   managedApplications: Array<ManagedApplication>;
   me?: Maybe<User>;
   memoryClaims: Array<MemoryClaim>;
+  /**
+   * Session-scoped episodes plus the cross-session reflections filed alongside
+   * them, for one user. Separate from `memoryRecords` on purpose: episodic
+   * records are per-thread and would swamp the cross-thread listing, so the
+   * Memory page loads them as their own facet. Engines with no episodic facet
+   * return an empty list rather than erroring.
+   */
+  memoryEpisodicRecords: Array<MemoryRecord>;
   memoryEvidenceItems: Array<MemoryEvidenceItemSummary>;
   memoryGraph: MemoryGraph;
   memoryProcessorConfigs: Array<MemoryProcessorConfig>;
@@ -7404,6 +7412,14 @@ export type QueryMemoryClaimsArgs = {
   targetId: Scalars['ID']['input'];
   targetScope: Scalars['String']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
+export type QueryMemoryEpisodicRecordsArgs = {
+  assistantId?: InputMaybe<Scalars['ID']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
