@@ -4,7 +4,7 @@
  * Lightweight queries that return just enough info to populate the stage
  * picker and resolve a deployed stage → API URL + auth secret. The richer
  * scan used by `thinkwork status` lives inline in `commands/status.ts` and
- * covers AgentCore, Hindsight, CloudFront, etc.
+ * covers AgentCore, CloudFront, etc.
  */
 
 import { execSync } from "node:child_process";

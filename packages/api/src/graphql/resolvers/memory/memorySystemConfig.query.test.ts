@@ -15,35 +15,29 @@ afterEach(() => {
 });
 
 describe("memorySystemConfig", () => {
-  it("reports unavailable when the memory engine is retired", async () => {
+  it("reports unavailable when no AgentCore memory id is configured", async () => {
     vi.stubEnv("MEMORY_ENABLED", "true");
-    vi.stubEnv("MEMORY_ENGINE", "retired_graph");
-    vi.stubEnv("HINDSIGHT_ENDPOINT", "https://hindsight.legacy.example.com");
+    vi.stubEnv("MEMORY_ENGINE", "agentcore");
     resetMemory();
 
     await expect(memorySystemConfig()).resolves.toMatchObject({
       activeEngine: "unavailable",
       managedMemoryEnabled: false,
-      hindsightEnabled: false,
       userMemoryEnabled: false,
       spaceMemoryEnabled: false,
-      legacyHindsightAvailable: false,
       companyDistillationEnabled: false,
     });
   });
 
-  it("reports Hindsight as active user and Space memory when it is the active engine", async () => {
+  it("normalizes a retired MEMORY_ENGINE value to agentcore", async () => {
     vi.stubEnv("MEMORY_ENABLED", "true");
     vi.stubEnv("MEMORY_ENGINE", "hindsight");
-    vi.stubEnv("HINDSIGHT_ENDPOINT", "https://hindsight.active.example.com");
+    vi.stubEnv("AGENTCORE_MEMORY_ID", "mem-123");
     resetMemory();
 
     await expect(memorySystemConfig()).resolves.toMatchObject({
-      activeEngine: "hindsight",
-      hindsightEnabled: true,
+      activeEngine: "agentcore",
       userMemoryEnabled: true,
-      spaceMemoryEnabled: true,
-      legacyHindsightAvailable: false,
     });
   });
 
@@ -55,10 +49,8 @@ describe("memorySystemConfig", () => {
 
     await expect(memorySystemConfig()).resolves.toMatchObject({
       activeEngine: "agentcore",
-      hindsightEnabled: false,
       userMemoryEnabled: true,
       spaceMemoryEnabled: false,
-      legacyHindsightAvailable: false,
     });
   });
 });

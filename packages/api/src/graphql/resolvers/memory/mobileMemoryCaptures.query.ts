@@ -1,6 +1,6 @@
 /**
  * mobileMemoryCaptures — list the mobile quick-capture entries for a given
- * agent. Filters the full Hindsight bank down to units stamped with
+ * agent. Filters the full memory bank down to units stamped with
  * metadata.capture_source === 'mobile_quick_capture' so the Captures tab
  * segment shows only user-authored quick captures, not chat-derived memory.
  */

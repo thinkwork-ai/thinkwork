@@ -175,14 +175,14 @@ export function snapshotSecrets(
 export interface RuntimeEnvSnapshot {
   awsRegion: string;
   agentCoreMemoryId: string;
-  hindsightEndpoint: string;
   /**
-   * Canonical memory engine selection (THINK-401). Exactly two values across
-   * every layer: `"agentcore"` (AgentCore managed memory) or `"hindsight"`.
-   * The legacy input spelling `"managed"` is still accepted at the env parse
-   * boundary and normalized to `"agentcore"`.
+   * Memory engine selection. AgentCore managed memory is the only engine
+   * (THINK-406); the field survives so logs and snapshots keep a stable
+   * shape. Legacy `MEMORY_ENGINE` spellings (`"managed"`, `"hindsight"`) are
+   * still accepted at the env parse boundary and normalized to
+   * `"agentcore"` so customer stages on old tfvars keep booting.
    */
-  memoryEngine: "agentcore" | "hindsight";
+  memoryEngine: "agentcore";
   /**
    * Name of the API's `memory-retain` Lambda
    * (`thinkwork-${stage}-api-memory-retain`). Empty string disables
@@ -222,23 +222,15 @@ export interface RuntimeEnvSnapshot {
 export function snapshotRuntimeEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): RuntimeEnvSnapshot {
-  const memoryEngineRaw = (env.MEMORY_ENGINE || "hindsight")
-    .toLowerCase()
-    .trim();
-  // Canonical values are "agentcore" and "hindsight" (THINK-401). The legacy
-  // input spelling "managed" is still accepted here and normalized to
-  // "agentcore"; anything unrecognized falls back to hindsight.
-  const memoryEngine: RuntimeEnvSnapshot["memoryEngine"] =
-    memoryEngineRaw === "hindsight"
-      ? "hindsight"
-      : memoryEngineRaw === "managed" || memoryEngineRaw === "agentcore"
-        ? "agentcore"
-        : "hindsight";
+  // THINK-406 — AgentCore managed memory is the only engine. Every legacy
+  // `MEMORY_ENGINE` spelling ("hindsight", "managed", anything unrecognized)
+  // normalizes to "agentcore" rather than throwing, so customer stages still
+  // running old tfvars boot on the new image.
+  const memoryEngine: RuntimeEnvSnapshot["memoryEngine"] = "agentcore";
 
   return {
     awsRegion: env.AWS_REGION || "us-east-1",
     agentCoreMemoryId: env.AGENTCORE_MEMORY_ID || "",
-    hindsightEndpoint: env.HINDSIGHT_ENDPOINT || "",
     memoryEngine,
     memoryRetainFnName: env.MEMORY_RETAIN_FN_NAME || "",
     chatAgentFinalizeFnName: env.CHAT_AGENT_FINALIZE_FN_NAME || "",

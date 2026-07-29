@@ -139,7 +139,7 @@ function deriveProvider(modelId: string | null): string | null {
   if (lower.includes("claude") || lower.includes("anthropic"))
     return "anthropic";
   if (lower.includes("kimi") || lower.includes("moonshot")) return "moonshotai";
-  // Hindsight calls Bedrock-hosted GPT-OSS models — they're prefixed
+  // Some memory phases call Bedrock-hosted GPT-OSS models — they're prefixed
   // `openai.gpt-oss-...` in Bedrock but the spend goes to AWS, not OpenAI.
   if (lower.includes("gpt-oss")) return "bedrock";
   if (lower.includes("gpt") || lower.includes("openai")) return "openai";

@@ -9,6 +9,16 @@ This doc is a walking tour of how raw memories become Memory pages — the disti
 
 The first half is plain-language narrative. The second half (["Under the hood"](#under-the-hood)) has the code paths, SQL, and prompt contracts for anyone who needs to modify or debug the pipeline itself.
 
+<Aside type="caution">
+  **Status: paused on AgentCore.** The cursor-driven compile pipeline described
+  here was built against the Hindsight memory engine's
+  `listRecordsUpdatedSince` API. That engine was removed (THINK-406) and the
+  AgentCore adapter does not implement the cursor method, so automatic compiles
+  do not currently run. This page stays as the design record for the pipeline
+  and for the pages already compiled; treat the code paths below as the state
+  before the engine removal.
+</Aside>
+
 ## High-level shape
 
 There are two compile passes that run in the same job:
@@ -39,7 +49,7 @@ A job row lands in `wiki_compile_jobs` in one of four ways:
 
 `wiki-compile` Lambda claims the pending job (FOR UPDATE SKIP LOCKED) and reads the cursor for that `(tenant, owner)` — a bookmark of the last memory the worker processed.
 
-Then it reads the next 50 memories from Hindsight where `updated_at > cursor`. Hindsight is the canonical memory substrate; the wiki is a derived store.
+Then it reads the next 50 memories from the memory adapter's `listRecordsUpdatedSince` cursor API where `updated_at > cursor`. Raw memory is the canonical substrate; the wiki is a derived store.
 
 ### Step 1.3 — The planner reads memories in context
 
@@ -262,7 +272,7 @@ Link-densification + alias-dedupe counters (added by the deterministic-linking a
 
 ### Triggers
 
-- **Post-retain** — `maybeEnqueuePostTurnCompile` in `packages/api/src/lib/wiki/enqueue.ts`. Checks `tenants.wiki_compile_enabled`, confirms adapter is Hindsight, inserts a job row with dedupe key `${tenantId}:${ownerId}:${floor(epoch_s/300)}`, fires `Lambda.invoke` with `InvocationType: "Event"` and `{jobId}` payload.
+- **Post-retain** — `maybeEnqueuePostTurnCompile` in `packages/api/src/lib/wiki/enqueue.ts`. Checks `tenants.wiki_compile_enabled`, confirms the adapter implements the cursor API, inserts a job row with dedupe key `${tenantId}:${ownerId}:${floor(epoch_s/300)}`, fires `Lambda.invoke` with `InvocationType: "Event"` and `{jobId}` payload.
 - **Continuation (cap hit)** — when a job exits on any `cap_hit` without draining its cursor, `runCompileJob` enqueues a follow-up into the **next** dedupe bucket via `(parseCompileDedupeBucket(parent.dedupe_key) + 1) * DEDUPE_BUCKET_SECONDS`. The chained job inherits the parent's `trigger`, so `bootstrap_import` continuations keep the higher `MAX_RECORDS_PER_BOOTSTRAP_JOB = 1000` cap and self-complete without manual re-kick. Parsing the parent's dedupe bucket (not `Date.now()` or `created_at`) is what keeps the chain monotonic — see [`docs/solutions/logic-errors/compile-continuation-dedupe-bucket-2026-04-20.md`](/../../solutions/logic-errors/compile-continuation-dedupe-bucket-2026-04-20/).
 - **Admin mutation** — `compileWikiNow(tenantId, ownerId, modelId?)` resolver.
 - **Nightly lint** — `packages/api/src/handlers/wiki-lint.ts`.
@@ -288,7 +298,7 @@ const MAX_AGGREGATION_PAGES = 60; // top-N recently-changed pages fed to the agg
 ### Cursor SQL
 
 ```ts
-// packages/api/src/lib/memory/adapters/hindsight-adapter.ts
+// the Hindsight adapter's cursor query, kept as the reference implementation
 WHERE bank_id = ${bankId}
   AND (
     date_trunc('milliseconds', COALESCE(updated_at, created_at)) > ${sinceTs.toISOString()}::timestamptz

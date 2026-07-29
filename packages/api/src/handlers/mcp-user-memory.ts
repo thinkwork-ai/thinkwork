@@ -12,7 +12,6 @@ import {
   searchWikiForReadScope,
   type UserWikiSearchResult,
 } from "../lib/wiki/search.js";
-import { buildMcpUserMemoryRetainOptions } from "../lib/memory/hindsight-retain-params.js";
 
 const MAX_LIMIT = 50;
 const DEFAULT_WIKI_LIMIT = 5;
@@ -264,13 +263,8 @@ async function handleToolCall(
         ...owner,
         sourceType: "explicit_remember",
         content,
-        hindsight: buildMcpUserMemoryRetainOptions({
-          capturedAt,
-          callerTags: tags,
-        }),
         metadata: {
           source: "mcp-user-memory",
-          hindsight_async: true,
           captured_at: capturedAt,
           ...(kind ? { kind } : {}),
           ...(tags.length > 0 ? { tags } : {}),

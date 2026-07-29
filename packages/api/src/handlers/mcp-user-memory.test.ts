@@ -112,7 +112,7 @@ describe("mcp-user-memory handler", () => {
         id: "retained-1",
         content: { text: "Remember the onboarding call summary." },
       }),
-      backend: "hindsight",
+      backend: "agentcore",
     });
     const response = await handler(
       event(
@@ -148,23 +148,8 @@ describe("mcp-user-memory handler", () => {
         ownerId: "user-a",
         sourceType: "explicit_remember",
         content: "Remember the onboarding call summary.",
-        hindsight: expect.objectContaining({
-          tags: [
-            "source:mcp-user-memory",
-            "surface:mcp",
-            "scope:personal",
-            "scope:explicit-memory",
-            "codex-e2e",
-          ],
-          documentTags: ["source:mcp-user-memory", "scope:explicit-memory"],
-          observationScopes: [
-            ["source:mcp-user-memory"],
-            ["scope:explicit-memory"],
-          ],
-        }),
         metadata: expect.objectContaining({
           source: "mcp-user-memory",
-          hindsight_async: true,
           captured_at: expect.any(String),
           kind: "learning",
           tags: ["codex-e2e"],
@@ -178,7 +163,7 @@ describe("mcp-user-memory handler", () => {
         id: "retained-1",
         text: "Remember the onboarding call summary.",
       },
-      backend: "hindsight",
+      backend: "agentcore",
     });
   });
 
@@ -191,7 +176,7 @@ describe("mcp-user-memory handler", () => {
         }),
         score: 0.91,
         whyRecalled: "preference match",
-        backend: "hindsight",
+        backend: "agentcore",
       },
     ]);
     const response = await handler(
@@ -228,7 +213,7 @@ describe("mcp-user-memory handler", () => {
     });
   });
 
-  it("returns identical results through Hindsight-compatible aliases", async () => {
+  it("returns identical results through legacy tool aliases", async () => {
     const memory = {
       record: memoryRecord({
         id: "mem-alias",
@@ -236,7 +221,7 @@ describe("mcp-user-memory handler", () => {
       }),
       score: 0.8,
       whyRecalled: "alias match",
-      backend: "hindsight",
+      backend: "agentcore",
     };
     recallMock.mockResolvedValue([memory]);
     inspectMock.mockResolvedValue([memory.record]);
@@ -303,7 +288,7 @@ describe("mcp-user-memory handler", () => {
         }),
         score: 0.94,
         whyRecalled: "restaurant preference",
-        backend: "hindsight",
+        backend: "agentcore",
       },
     ]);
     searchWikiForReadScopeMock.mockResolvedValue([
@@ -411,7 +396,7 @@ describe("mcp-user-memory handler", () => {
         record: memoryRecord({ id: "mem-4" }),
         score: 0.7,
         whyRecalled: null,
-        backend: "hindsight",
+        backend: "agentcore",
       },
     ]);
     const response = await handler(

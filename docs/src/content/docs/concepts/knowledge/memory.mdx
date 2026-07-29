@@ -1,13 +1,13 @@
 ---
 title: Retained Memory
-description: The Hindsight-backed retained-memory layer for user and Space Brain recall.
+description: The Bedrock AgentCore Memory layer that carries learned context forward across threads.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Retained memory is the part of Memory that carries learned context forward across work. Unlike short-lived thread history, retained memory is selective: a user preference the agent noticed, a Space decision made in an earlier thread, a fact the agent confirmed and needs again, or an authored Space document retained as a Brain Source.
+Retained memory is the part of Memory that carries learned context forward across work. Unlike short-lived thread history, retained memory is selective: a preference the agent noticed, a fact it confirmed and needs again, a decision made in an earlier thread.
 
-Hosted ThinkWork now treats **Hindsight** as the canonical durable Brain substrate. Hindsight owns user memory, Space memory, retained documents, observations, recall, reflect, and redacted source evidence. The normalized ThinkWork APIs still protect callers from raw backend HTTP details, but Hindsight memory-domain concepts such as banks, document ids, timestamps, tags, observation scopes, recall, reflect, and evidence are first-class.
+**Bedrock AgentCore Memory is the memory engine.** There is no engine choice. The `MEMORY_ENGINE` environment variable is effectively fixed to `agentcore`; legacy values are tolerated at the env-parse boundary and normalized. ThinkWork's normalized memory APIs still shield callers from raw backend details, but the AgentCore model — namespaces, facets, actor scope, background extraction — is what those APIs describe.
 
 ## What long-term memory is for
 
@@ -16,40 +16,44 @@ Memory is the right place for things like:
 - **User or team preferences.** "Marco prefers Slack over email." "This team's code reviews should cite the style guide."
 - **Durable facts worth recalling across threads.** "The Austin office moved to 2nd and Lavaca." "Our incident post-mortems live in `/docs/incidents/`."
 - **Ongoing project context.** "The backend migration ships in Q3, not Q2."
-- **Summaries of earlier work.** "Last month we decided to make Hindsight the Brain foundation."
-- **Space documents and Brain Sources.** Uploaded or imported Space reference material retained with stable Hindsight document ids.
+- **Summaries of earlier work.** "Last month we decided to standardize on AgentCore Memory."
 - **Follow-up items.** "The customer asked about billing reports; still pending response."
 
 It's _not_ the right place for:
 
 - Verbatim thread transcripts. That's what the thread record is for.
 - Current-turn connector reads. Context Engine can lazy-load external SaaS, MCP, or workspace context without making it durable memory by default.
-- The wiki. The wiki is _derived_ from memory; it is a compiled projection above Hindsight, not a competing runtime Brain.
+- The wiki. The wiki is _derived_ from memory; it is a compiled projection above memory, not a competing runtime store.
 
-## Hindsight as the Brain foundation
+## How memory gets written
 
-Hindsight runs as an ECS Fargate service in the deployed stack and gives ThinkWork:
+ThinkWork does not own a fact-extraction step. The write path is one hop:
 
-- **Bank isolation** for users and Spaces. User memory lives in `user_<userId>` banks; Space memory lives in `space_<spaceId>` banks.
-- **Document retain** with stable `document_id` values for thread digests, requester memory documents, and Space Brain Sources.
-- **Temporal extraction** through first-class timestamps, including `timestamp: "unset"` for timeless reference material.
-- **Tags, document tags, and observation scopes** that make retained memories filterable and consolidatable.
-- **Recall and reflect** as the read path. Recall returns matching observations/facts; reflect synthesizes answer-like memory with evidence.
-- **Source evidence** through redacted source-fact and `based_on` descriptors so operators can audit why a memory surfaced without exposing raw source text by default.
+1. A turn completes in the Pi runtime.
+2. The runtime invokes the `memory-retain` Lambda for that turn.
+3. The Lambda calls `adapter.retainTurn`, handing AgentCore the turn.
+4. **AgentCore runs its own background extraction** into four namespaces: `semantic` (facts), `preferences`, `summaries`, and `episodes`.
+
+Two consequences follow from that shape, and they explain most operator confusion:
+
+- **Retain success is not extraction success.** A `retained` retain attempt means AgentCore accepted the turn, not that a record exists. Extraction is asynchronous.
+- **A turn can legitimately produce nothing.** AgentCore decides what is worth keeping. A turn that asked a question rather than stated a fact often extracts no record, and that is correct behavior rather than a dropped write.
+
+The agent can also write explicitly with the `remember` tool, and reads with `recall`.
 
 <Aside type="tip">
-  Use Hindsight concepts intentionally. Stable document ids, explicit context,
-  timestamps, tags, document tags, and observation scopes directly affect memory
-  quality and operator trust.
+  When memory looks empty, check `memoryRetainAttempts` before suspecting the
+  pipeline. A missing attempt is a wiring bug; a `retained` attempt with no
+  record is usually AgentCore declining to extract.
 </Aside>
 
-## Brain vs. external context
+## Memory vs. external context
 
 The boundary is simple:
 
-- **Hindsight is Brain.** Durable user memory, Space memory, retained documents, observations, recall, reflect, and evidence belong in Hindsight.
-- **Context Engine is external context orchestration.** It can query workspace files, compiled pages, approved MCP tools, web/search providers, and other lazy-loaded sources for the current turn.
-- **Wiki is a projection.** Compiled pages summarize and organize Hindsight memory; they do not replace Hindsight as the runtime memory substrate.
+- **AgentCore Memory is durable memory.** Facts, preferences, summaries, and episodes that should survive the thread.
+- **Context Engine is external context orchestration.** It queries workspace files, compiled pages, approved MCP tools, web/search providers, and other lazy-loaded sources for the current turn — without making them durable.
+- **Wiki is a projection.** Compiled pages summarize and organize retained memory; they do not replace it as the runtime substrate.
 
 ## Short-term vs. long-term
 
@@ -58,29 +62,34 @@ Short-term context comes from thread history and the current prompt. Long-term m
 Agents should usually:
 
 1. Read the current prompt and mounted files such as `USER.md`.
-2. Use direct Hindsight recall/reflect when durable user or Space memory matters.
-3. Use Context Engine only for lazy-loaded external context or compiled/source lookup.
-4. Let post-turn retention write learnings back to Hindsight automatically.
+2. Call `recall` when durable memory matters.
+3. Use Context Engine only for lazy-loaded external context or compiled-page lookup.
+4. Let post-turn retention hand the turn to AgentCore automatically.
+
+## Requester memory files
+
+Alongside AgentCore's own namespaces, ThinkWork keeps a small set of requester-scoped markdown files in S3 under `memory/`. Two background passes maintain them: an **idle learner** that notices durable signals as threads go quiet, and a **nightly dreaming** pass that consolidates and prunes the files. These are ThinkWork-owned prose the agent mounts, not a second extraction engine — they never mutate AgentCore's namespaces.
 
 ## Known limits
 
-- **Hindsight is deployment-wide for hosted memory.** User and Space banks are isolated inside Hindsight rather than split across multiple memory products.
-- **AgentCore managed memory is compatibility.** It remains an explicit low-cost/development mode, not the hosted default Brain substrate.
-- **Raw evidence expansion is deliberate.** Normal UIs show redacted evidence descriptors; raw source text expansion requires an operator/detail path.
-- **Backfills are separate work.** Newly retained memory uses the Hindsight field taxonomy; existing untagged memories remain recallable.
+- **Extraction is not ours to tune.** ThinkWork can hand AgentCore a turn; it cannot force a fact into a namespace.
+- **Records are requester-scoped.** There is no company-scope bank, no cross-scope promotion, and no team tier.
+- **Search is semantic-first.** Exact IDs and unusual strings can be missed.
+- **Mutations are one at a time.** Records can be updated or deleted individually; there is no bulk path.
 
 ## Related pages
 
 - [Memory](/concepts/knowledge/) — the umbrella
-- [Brain Sources](/concepts/knowledge/document-knowledge/) — authored document context
-- [Compiled Memory Pages](/concepts/knowledge/compounding-memory/) — what's built on top of Hindsight memory
+- [Compiled Memory Pages](/concepts/knowledge/compounding-memory/) — what's built on top of retained memory
 - [Source Routing](/concepts/knowledge/retrieval-and-context/) — where memory and external context sit in turn assembly
-- [Operating Compiled Memory Pages](/guides/compounding-memory-operations/) — recipes that depend on Hindsight memory
+- [Operating Compiled Memory Pages](/guides/compounding-memory-operations/) — recipes that depend on retained memory
+- [Admin — Memory](/applications/admin/memory/) — the operator surface
 
 ## Under the hood
 
-- **Hindsight adapter.** `packages/api/src/lib/memory/adapters/hindsight-adapter.ts` — HTTP client against the ECS service.
-- **Hindsight retain options.** `packages/api/src/lib/memory/hindsight-retain-params.ts` — shared timestamp, tag, document-tag, and observation-scope builders.
-- **Runtime memory provider.** `packages/agentcore-pi/agent-container/src/runtime/providers/hindsight-memory-provider.ts` — direct Pi recall/reflect access to Hindsight.
-- **Space document ingest.** `ingestSpaceMemoryDocument` — GraphQL mutation that retains Space Brain Sources into the Space Hindsight bank.
-- **Compile pipeline.** Wiki compilers read Hindsight memory through cursor/export APIs and produce compiled pages as projections.
+- **AgentCore adapter.** `packages/api/src/lib/memory/adapters/agentcore-adapter.ts` — the only memory adapter.
+- **Retain handler.** `packages/api/src/handlers/memory-retain.ts` — per-turn `retainTurn` call plus retain-attempt bookkeeping.
+- **Runtime tools.** `packages/agentcore-pi/agent-container/src/tools/memory.ts` — the `remember` and `recall` tools.
+- **Runtime retain client.** `packages/agentcore-pi/agent-container/src/runtime/tools/memory-retain-client.ts` — how the container reaches the retain Lambda.
+- **Background passes.** `packages/api/src/handlers/thread-idle-memory-learning.ts` and `requester-memory-dreaming.ts`.
+- **Compile pipeline.** Wiki compilers read retained memory through cursor/export APIs and produce compiled pages as projections.

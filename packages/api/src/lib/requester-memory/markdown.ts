@@ -4,8 +4,6 @@ import type {
   LearningCandidateSummary,
   RejectedLearningCandidate,
 } from "./learner.js";
-import type { RequesterMemoryHindsightSyncResult } from "./hindsight-sync.js";
-import type { RequesterThreadDigestRetainResult } from "./hindsight-primary.js";
 
 export function renderCandidateAppendSection(input: {
   runId: string;
@@ -200,8 +198,6 @@ export function renderIdleLearningReport(input: {
   changedPaths: string[];
   transcriptMessageCount: number;
   attachmentCount: number;
-  hindsightSync?: RequesterMemoryHindsightSyncResult;
-  primaryHindsightRetain?: RequesterThreadDigestRetainResult;
 }): string {
   const reportJson = {
     runId: input.runId,
@@ -216,8 +212,6 @@ export function renderIdleLearningReport(input: {
     changedPaths: input.changedPaths,
     transcriptMessageCount: input.transcriptMessageCount,
     attachmentCount: input.attachmentCount,
-    primaryHindsightRetain: input.primaryHindsightRetain ?? null,
-    hindsightSync: input.hindsightSync ?? null,
   };
 
   return [

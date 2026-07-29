@@ -221,8 +221,8 @@ export function WorkflowPlanReview({
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                Completed Thread conversations are already retained in
-                Hindsight; this run compounds that memory bank.
+                Completed Thread conversations are already retained in memory;
+                this run compounds that memory bank.
               </p>
             </div>
           </li>

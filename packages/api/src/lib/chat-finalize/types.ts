@@ -100,7 +100,7 @@ export interface FinalizePayload {
   agent_model?: string | null;
   /** Runtime substrate used for this turn; also persisted on thread_turns/cost_events. */
   runtime_type?: string | null;
-  /** Agent slug — used as the Hindsight bank id when recording Hindsight cost. */
+  /** Agent slug — used as the bank id when recording memory cost. */
   agent_slug?: string | null;
   /** Agent display name — used in cost notifications + push body title. */
   agent_name?: string | null;
@@ -146,13 +146,6 @@ export interface FinalizePayload {
     tool_costs?: Array<Record<string, unknown>>;
     /** Bedrock request IDs (for cost-trace linking). */
     bedrock_request_ids?: string[];
-    /** Hindsight phase costs to record. */
-    hindsight_usage?: Array<{
-      phase: "retain" | "reflect";
-      model: string;
-      input_tokens: number;
-      output_tokens: number;
-    }>;
     /** Runtime-specific diagnostics that are safe to persist on the turn. */
     diagnostics?: Record<string, unknown>;
     /** Pi goal-run evidence extracted by the runtime host. */

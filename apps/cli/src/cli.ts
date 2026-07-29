@@ -57,7 +57,6 @@ import { registerMigrateFolderCanonCommand } from "./commands/migrate-folder-can
 import { registerMigrateAgentFoldersCommand } from "./commands/migrate-agent-folders.js";
 import { registerMigrateConnectorsCommand } from "./commands/migrate-connectors.js";
 import { registerSidecarRetirementMoverCommand } from "./commands/sidecar-retirement-mover.js";
-import { registerCleanupSpaceHindsightBanksCommand } from "./commands/cleanup-space-hindsight-banks.js";
 import { stripForwardedSeparator } from "./lib/argv.js";
 
 const program = new Command();
@@ -159,7 +158,6 @@ registerMigrateFolderCanonCommand(program);
 registerMigrateAgentFoldersCommand(program);
 registerMigrateConnectorsCommand(program);
 registerSidecarRetirementMoverCommand(program);
-registerCleanupSpaceHindsightBanksCommand(program);
 
 // Company Brain white-glove installation (THINK-334) — engineer-run.
 registerTwinCommand(program);

@@ -12,14 +12,11 @@ interface DiscoveredStage {
   accountId: string;
   apiEndpoint?: string;
   appsyncUrl?: string;
-  hindsightEndpoint?: string;
   adminUrl?: string;
   docsUrl?: string;
   appsyncApiUrl?: string;
   dbEndpoint?: string;
   ecrUrl?: string;
-  hindsightEnabled?: boolean;
-  hindsightHealth?: string;
   agentcoreStatus?: string;
   bucketName?: string;
   lambdaCount?: number;
@@ -102,34 +99,6 @@ function discoverAwsStages(
     );
     info.bucketName = bucketRaw ? `thinkwork-${stage}-storage` : undefined;
 
-    // Hindsight ECS (optional add-on). Managed memory is always on so we
-    // don't probe for it — we just report "managed" in the output.
-    const ecsRaw = runAws(
-      `ecs describe-services --cluster thinkwork-${stage}-cluster --services thinkwork-${stage}-hindsight --region ${region} --query "services[0].runningCount" --output text 2>/dev/null`,
-    );
-    if (ecsRaw && ecsRaw !== "None" && ecsRaw !== "0") {
-      info.hindsightEnabled = true;
-      const albRaw = runAws(
-        `elbv2 describe-load-balancers --region ${region} --query "LoadBalancers[?contains(LoadBalancerName, 'tw-${stage}-hindsight')].DNSName|[0]" --output text`,
-      );
-      if (albRaw && albRaw !== "None") {
-        info.hindsightEndpoint = `http://${albRaw}`;
-        try {
-          const health = execSync(
-            `curl -s --max-time 3 http://${albRaw}/health`,
-            { encoding: "utf-8" },
-          ).trim();
-          info.hindsightHealth = health.includes("healthy")
-            ? "healthy"
-            : "unhealthy";
-        } catch {
-          info.hindsightHealth = "unreachable";
-        }
-      }
-    } else {
-      info.hindsightEnabled = false;
-    }
-
     // Database (RDS/Aurora)
     const dbRaw = runAws(
       `rds describe-db-clusters --region ${region} --query "DBClusters[?starts_with(DBClusterIdentifier, 'thinkwork-${stage}')].Endpoint|[0]" --output text`,
@@ -180,13 +149,6 @@ function printStageDetail(info: DiscoveredStage): void {
     `  ${chalk.bold("AgentCore:")}       ${info.agentcoreStatus || "unknown"}`,
   );
   console.log(`  ${chalk.bold("Memory:")}          managed (always on)`);
-  const hindsightLabel =
-    info.hindsightEnabled === undefined
-      ? "unknown"
-      : info.hindsightEnabled
-        ? info.hindsightHealth || "running"
-        : "disabled";
-  console.log(`  ${chalk.bold("Hindsight:")}       ${hindsightLabel}`);
   if (info.bucketName)
     console.log(`  ${chalk.bold("S3 bucket:")}       ${info.bucketName}`);
   if (info.dbEndpoint)
@@ -201,8 +163,6 @@ function printStageDetail(info: DiscoveredStage): void {
   if (info.appsyncApiUrl)
     console.log(`    AppSync:   ${link(info.appsyncApiUrl)}`);
   if (info.appsyncUrl) console.log(`    WebSocket: ${link(info.appsyncUrl)}`);
-  if (info.hindsightEndpoint)
-    console.log(`    Hindsight: ${link(info.hindsightEndpoint)}`);
   console.log(chalk.dim("  ─────────────────────────────────────────"));
 
   const local = loadEnvironment(info.stage);

@@ -1,7 +1,7 @@
 /**
  * Shared 2D renderer core (twin traversal KTD-1).
  *
- * The neo4j-style canvas painting MemoryGraph established — flat disc +
+ * The neo4j-style canvas painting the force-graph views established — flat disc +
  * rim + wrapped in-disc label, and links trimmed to disc rims with inline
  * rotated relationship labels and an arrowhead on the target rim — lives
  * here as parameterized paint functions so every 2D force-graph surface

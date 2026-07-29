@@ -966,26 +966,6 @@ export type BootstrapResult = {
   user: User;
 };
 
-/**
- * Dream-state run ledger row (THINK-133 U4). One row per (tenant, bank) dream
- * run; per-action detail is summarized in plannedCounts/appliedCounts.
- */
-export type BrainDreamRun = {
-  __typename?: 'BrainDreamRun';
-  appliedCounts?: Maybe<Scalars['AWSJSON']['output']>;
-  bankId: Scalars['String']['output'];
-  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  dedupeKey: Scalars['String']['output'];
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  plannedCounts?: Maybe<Scalars['AWSJSON']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-};
-
 export type BudgetPolicy = {
   __typename?: 'BudgetPolicy';
   actionOnExceed: Scalars['String']['output'];
@@ -2143,8 +2123,6 @@ export type DeploymentStatus = {
   deploymentRunnerProjectName?: Maybe<Scalars['String']['output']>;
   docsUrl?: Maybe<Scalars['String']['output']>;
   ecrUrl?: Maybe<Scalars['String']['output']>;
-  hindsightEnabled: Scalars['Boolean']['output'];
-  hindsightEndpoint?: Maybe<Scalars['String']['output']>;
   managedApplications: Array<ManagedApplicationDeployment>;
   managedMemoryEnabled: Scalars['Boolean']['output'];
   region: Scalars['String']['output'];
@@ -2985,38 +2963,6 @@ export type InboxItemStatusEvent = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
-export type IngestSpaceMemoryDocumentInput = {
-  content: Scalars['String']['input'];
-  contentType?: InputMaybe<Scalars['String']['input']>;
-  /**
-   * Stable caller document identity. When omitted, `path` is used. The resolver
-   * prefixes the final Hindsight document id with the Space id to avoid
-   * collisions inside the Space bank.
-   */
-  documentId?: InputMaybe<Scalars['String']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Stable document path/name from the source system. Required when `documentId`
-   * is omitted.
-   */
-  path?: InputMaybe<Scalars['String']['input']>;
-  /**
-   * Process through Hindsight async retain. Defaults to true for document-sized
-   * ingest so user-facing flows are not held open by extraction work.
-   */
-  processAsync?: InputMaybe<Scalars['Boolean']['input']>;
-  sourceUrl?: InputMaybe<Scalars['AWSURL']['input']>;
-  spaceId: Scalars['ID']['input'];
-  tags?: InputMaybe<Array<Scalars['String']['input']>>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  /**
-   * Event timestamp for temporal extraction. Omit for timeless reference
-   * material; the resolver sends Hindsight `timestamp: "unset"`.
-   */
-  timestamp?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  title?: InputMaybe<Scalars['String']['input']>;
-};
-
 export type InstallPluginInput = {
   idempotencyKey: Scalars['String']['input'];
   /** ThinkWork-provided one-time key for premium plugins when no entitlement exists. */
@@ -3371,7 +3317,7 @@ export type MemoryContent = {
   text?: Maybe<Scalars['String']['output']>;
 };
 
-/** Evidence → Hindsight projection lineage row. */
+/** Evidence → memory-document projection lineage row. */
 export type MemoryDerivation = {
   __typename?: 'MemoryDerivation';
   currentVersion: Scalars['String']['output'];
@@ -3399,52 +3345,6 @@ export type MemoryEvidenceItemSummary = {
   sourceConfigId: Scalars['ID']['output'];
   sourceItemId: Scalars['String']['output'];
   sourceVersion: Scalars['String']['output'];
-};
-
-export type MemoryGraph = {
-  __typename?: 'MemoryGraph';
-  /**
-   * All banks in scope for this graph (tenant-enumerated in allTenantBanks
-   * mode), including banks with no visible nodes.
-   */
-  banks: Array<MemoryGraphBank>;
-  edges: Array<MemoryGraphEdge>;
-  nodes: Array<MemoryGraphNode>;
-};
-
-/**
- * A Hindsight bank enumerated from tenant tables (user / space / agent),
- * independent of whether any of its entities appear in the returned graph.
- * The Bank filter facet builds from this list, never from node data.
- */
-export type MemoryGraphBank = {
-  __typename?: 'MemoryGraphBank';
-  id: Scalars['String']['output'];
-  name: Scalars['String']['output'];
-};
-
-export type MemoryGraphEdge = {
-  __typename?: 'MemoryGraphEdge';
-  label?: Maybe<Scalars['String']['output']>;
-  source: Scalars['String']['output'];
-  target: Scalars['String']['output'];
-  type: Scalars['String']['output'];
-  weight: Scalars['Float']['output'];
-};
-
-export type MemoryGraphNode = {
-  __typename?: 'MemoryGraphNode';
-  /** Hindsight bank the entity belongs to (populated when allTenantBanks is set). */
-  bankId?: Maybe<Scalars['String']['output']>;
-  /** Human label for the bank (space/user/agent name), for the Bank facet. */
-  bankName?: Maybe<Scalars['String']['output']>;
-  edgeCount: Scalars['Int']['output'];
-  entityType?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  latestThreadId?: Maybe<Scalars['String']['output']>;
-  strategy?: Maybe<Scalars['String']['output']>;
-  type: Scalars['String']['output'];
 };
 
 /**
@@ -3556,8 +3456,8 @@ export enum MemoryRecordScope {
 }
 
 /**
- * ThinkWork-owned ledger row for a Hindsight retain attempt.
- * The retained memory record itself remains in Hindsight; this type exposes
+ * ThinkWork-owned ledger row for a memory retain attempt.
+ * The retained memory record itself lives in the memory engine; this type exposes
  * retry, timeout, and dead-letter state for diagnostics.
  */
 export type MemoryRetainAttempt = {
@@ -3704,23 +3604,13 @@ export enum MemoryStrategy {
  */
 export type MemorySystemConfig = {
   __typename?: 'MemorySystemConfig';
-  /** Active long-term memory engine selected by MEMORY_ENGINE. */
+  /** Active long-term memory engine. Always "agentcore" (THINK-406). */
   activeEngine: Scalars['String']['output'];
   /**
    * ThinkWork Brain distillation is intentionally deferred from this memory
    * provider pivot.
    */
   companyDistillationEnabled: Scalars['Boolean']['output'];
-  /**
-   * True when Hindsight is the active long-term memory engine for canonical
-   * user and Space memory.
-   */
-  hindsightEnabled: Scalars['Boolean']['output'];
-  /**
-   * True when a Hindsight endpoint is configured while another engine is
-   * active. Operators should treat it as non-canonical diagnostic evidence.
-   */
-  legacyHindsightAvailable: Scalars['Boolean']['output'];
   /**
    * True when managed AgentCore Memory is provisioned and wired into the
    * agent container. This is the always-on baseline — when false, memory
@@ -3836,7 +3726,7 @@ export type MintArtifactShareLinkResult = {
 
 /**
  * Fact-type picker values exposed to the mobile quick-capture footer. Maps to
- * Hindsight's native fact_type via the resolver. FACT is the default when the
+ * the engine's native fact type via the resolver. FACT is the default when the
  * user doesn't override.
  */
 export enum MobileCaptureFactType {
@@ -3954,7 +3844,6 @@ export type Mutation = {
   cancelSkillRun: SkillRun;
   cancelThreadTurn: ThreadTurn;
   captureMobileMemory: MobileMemoryCapture;
-  captureSpaceMemory: MemoryRecord;
   checkoutCanvas: Artifact;
   checkoutThread: Thread;
   claimNextOpenEngineWorkItem?: Maybe<WorkItem>;
@@ -4090,7 +3979,6 @@ export type Mutation = {
   handleJsonRenderAction: Message;
   importPiExtensionFromGitHub: PiExtension;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
-  ingestSpaceMemoryDocument: SpaceMemoryDocumentIngest;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
   /**
    * Install a catalog plugin tenant-wide (tenant admin). Idempotent per
@@ -4131,7 +4019,6 @@ export type Mutation = {
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
-  promoteSpaceMemoriesToTenant: TenantMemoryPromotionResult;
   /**
    * Rank candidate matches for one entity's unmapped target system and persist
    * the set for the consent echo check (THINK-321 KTD-2). Turn-bound service
@@ -4208,7 +4095,7 @@ export type Mutation = {
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
   /**
-   * Enqueue a retraction for one derivation's Hindsight document and process
+   * Enqueue a retraction for one derivation's memory document and process
    * it inline once (RequestResponse semantics — errors surface to the caller).
    */
   retractMemoryDerivation: MemoryRetractionAttempt;
@@ -4602,15 +4489,6 @@ export type MutationCaptureMobileMemoryArgs = {
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   userId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type MutationCaptureSpaceMemoryArgs = {
-  clientCaptureId?: InputMaybe<Scalars['ID']['input']>;
-  content: Scalars['String']['input'];
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  spaceId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -5034,11 +4912,6 @@ export type MutationImportTenantBedrockModelsArgs = {
 };
 
 
-export type MutationIngestSpaceMemoryDocumentArgs = {
-  input: IngestSpaceMemoryDocumentInput;
-};
-
-
 export type MutationInstallManagedApplicationMcpServerArgs = {
   key: Scalars['String']['input'];
 };
@@ -5239,14 +5112,6 @@ export type MutationPlanRoutineDraftArgs = {
 
 export type MutationPromoteDraftAppletArgs = {
   input: PromoteDraftAppletInput;
-};
-
-
-export type MutationPromoteSpaceMemoriesToTenantArgs = {
-  justification: Scalars['String']['input'];
-  memoryIds: Array<Scalars['ID']['input']>;
-  spaceId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -6624,7 +6489,6 @@ export type Query = {
   artifactShares: Array<ArtifactShare>;
   artifacts: Array<Artifact>;
   bedrockModelImportCandidates: Array<BedrockModelImportCandidate>;
-  brainDreamRuns: Array<BrainDreamRun>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
   canonicalEntities: Array<CanonicalEntity>;
@@ -6740,7 +6604,6 @@ export type Query = {
    */
   memoryEpisodicRecords: Array<MemoryRecord>;
   memoryEvidenceItems: Array<MemoryEvidenceItemSummary>;
-  memoryGraph: MemoryGraph;
   memoryProcessorConfigs: Array<MemoryProcessorConfig>;
   memoryRecords: Array<MemoryRecord>;
   memoryRecordsByIds: Array<MemoryRecord>;
@@ -6753,8 +6616,8 @@ export type Query = {
   messages: MessageConnection;
   mobileMemoryCaptures: Array<MobileMemoryCapture>;
   /**
-   * Free-text search across the full Hindsight bank for the given user.
-   * Hits Hindsight's recall endpoint (semantic + rerank) and normalizes results
+   * Free-text search across the full memory bank for the given user.
+   * Hits the engine's recall endpoint (semantic + rerank) and normalizes results
    * back to MobileMemoryCapture so the Memories list can render search results
    * with the same rows it uses for captures. Not filtered by capture_source —
    * search is meant to answer "what does this user know?", including chat-
@@ -6840,13 +6703,11 @@ export type Query = {
   skillRuns: Array<SkillRun>;
   slackWorkspaces: Array<SlackWorkspace>;
   space?: Maybe<Space>;
-  spaceMemorySearch: MemorySearchResult;
   spaces: Array<Space>;
   tenant?: Maybe<Tenant>;
   tenantAgent: Agent;
   tenantAgentSummary: TenantAgentSummary;
   tenantArtifactShares: Array<ArtifactShare>;
-  tenantBankMemories: Array<TenantBankMemory>;
   tenantBySlug?: Maybe<Tenant>;
   tenantCredentials: Array<TenantCredential>;
   tenantDocumentPalette: TenantDocumentPalette;
@@ -7081,14 +6942,6 @@ export type QueryArtifactsArgs = {
 
 export type QueryBedrockModelImportCandidatesArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryBrainDreamRunsArgs = {
-  bankId?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -7430,14 +7283,6 @@ export type QueryMemoryEvidenceItemsArgs = {
 };
 
 
-export type QueryMemoryGraphArgs = {
-  allTenantBanks?: InputMaybe<Scalars['Boolean']['input']>;
-  assistantId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
 export type QueryMemoryProcessorConfigsArgs = {
   tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
@@ -7763,14 +7608,6 @@ export type QuerySpaceArgs = {
 };
 
 
-export type QuerySpaceMemorySearchArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  query: Scalars['String']['input'];
-  spaceId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
 export type QuerySpacesArgs = {
   includeAllForAdmin?: InputMaybe<Scalars['Boolean']['input']>;
   status?: InputMaybe<SpaceStatus>;
@@ -7795,12 +7632,6 @@ export type QueryTenantAgentSummaryArgs = {
 
 export type QueryTenantArtifactSharesArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryTenantBankMemoriesArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -9413,17 +9244,6 @@ export enum SpaceMemberRole {
   Viewer = 'VIEWER'
 }
 
-export type SpaceMemoryDocumentIngest = {
-  __typename?: 'SpaceMemoryDocumentIngest';
-  contentBytes: Scalars['Int']['output'];
-  context: Scalars['String']['output'];
-  documentId: Scalars['String']['output'];
-  path: Scalars['String']['output'];
-  processAsync: Scalars['Boolean']['output'];
-  spaceId: Scalars['ID']['output'];
-  status: Scalars['String']['output'];
-};
-
 export enum SpaceNotificationPreference {
   Mentions = 'MENTIONS',
   Muted = 'MUTED',
@@ -9767,25 +9587,6 @@ export type TenantAgentSummary = {
   type: AgentType;
 };
 
-/**
- * One Tenant Bank memory with its Governed Promotion provenance and consumption
- * signal (company-brain plan U11 — provenance queryable in one step).
- */
-export type TenantBankMemory = {
-  __typename?: 'TenantBankMemory';
-  accessCount?: Maybe<Scalars['Int']['output']>;
-  content: Scalars['String']['output'];
-  createdAt?: Maybe<Scalars['String']['output']>;
-  factType?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  justification?: Maybe<Scalars['String']['output']>;
-  promotedAt?: Maybe<Scalars['String']['output']>;
-  promotedBy?: Maybe<Scalars['String']['output']>;
-  sourceBankId?: Maybe<Scalars['String']['output']>;
-  sourceMemoryId?: Maybe<Scalars['ID']['output']>;
-  sourceTimestamp?: Maybe<Scalars['String']['output']>;
-};
-
 export type TenantCredential = {
   __typename?: 'TenantCredential';
   createdAt: Scalars['AWSDateTime']['output'];
@@ -9841,18 +9642,6 @@ export type TenantMember = {
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   user?: Maybe<User>;
-};
-
-/**
- * Governed Promotion (company-brain plan U10): explicitly selected space-bank
- * memories copied into the Tenant Bank with provenance intact. Idempotent per
- * source memory; the source rows are untouched.
- */
-export type TenantMemoryPromotionResult = {
-  __typename?: 'TenantMemoryPromotionResult';
-  alreadyPromoted: Array<Scalars['ID']['output']>;
-  missing: Array<Scalars['ID']['output']>;
-  promoted: Array<Scalars['ID']['output']>;
 };
 
 export type TenantModelCatalogEntry = {
@@ -10155,8 +9944,6 @@ export type ThreadIdleLearningChangedFile = {
   afterHash?: Maybe<Scalars['String']['output']>;
   beforeBytes?: Maybe<Scalars['Int']['output']>;
   beforeHash?: Maybe<Scalars['String']['output']>;
-  hindsightDocumentId?: Maybe<Scalars['String']['output']>;
-  hindsightStatus?: Maybe<Scalars['String']['output']>;
   key?: Maybe<Scalars['String']['output']>;
   path: Scalars['String']['output'];
   snapshotKey?: Maybe<Scalars['String']['output']>;
@@ -12223,24 +12010,6 @@ export type CliMemberTenantBySlugQueryVariables = Exact<{
 
 export type CliMemberTenantBySlugQuery = { __typename?: 'Query', tenantBySlug?: { __typename?: 'Tenant', id: string, slug: string, name: string } | null };
 
-export type CliPromoteSpaceMemoriesMutationVariables = Exact<{
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  spaceId: Scalars['ID']['input'];
-  memoryIds: Array<Scalars['ID']['input']> | Scalars['ID']['input'];
-  justification: Scalars['String']['input'];
-}>;
-
-
-export type CliPromoteSpaceMemoriesMutation = { __typename?: 'Mutation', promoteSpaceMemoriesToTenant: { __typename?: 'TenantMemoryPromotionResult', promoted: Array<string>, alreadyPromoted: Array<string>, missing: Array<string> } };
-
-export type CliTenantBankMemoriesQueryVariables = Exact<{
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type CliTenantBankMemoriesQuery = { __typename?: 'Query', tenantBankMemories: Array<{ __typename?: 'TenantBankMemory', id: string, content: string, factType?: string | null, sourceBankId?: string | null, sourceMemoryId?: string | null, sourceTimestamp?: string | null, promotedBy?: string | null, promotedAt?: string | null, justification?: string | null, accessCount?: number | null, createdAt?: string | null }> };
-
 export type CliMemoryRecordsQueryVariables = Exact<{
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   assistantId?: InputMaybe<Scalars['ID']['input']>;
@@ -12260,14 +12029,6 @@ export type CliMemorySearchQueryVariables = Exact<{
 
 
 export type CliMemorySearchQuery = { __typename?: 'Query', memorySearch: { __typename?: 'MemorySearchResult', records: Array<{ __typename?: 'MemoryRecord', memoryRecordId: string, namespace?: string | null, score?: number | null, content?: { __typename?: 'MemoryContent', text?: string | null } | null }> } };
-
-export type CliMemoryGraphQueryVariables = Exact<{
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  assistantId?: InputMaybe<Scalars['ID']['input']>;
-}>;
-
-
-export type CliMemoryGraphQuery = { __typename?: 'Query', memoryGraph: { __typename?: 'MemoryGraph', nodes: Array<{ __typename?: 'MemoryGraphNode', id: string, label: string, type: string }>, edges: Array<{ __typename?: 'MemoryGraphEdge', source: string, target: string, type: string }> } };
 
 export type CliUpdateMemoryRecordMutationVariables = Exact<{
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -12889,11 +12650,8 @@ export const CliResendMemberInviteDocument = {"kind":"Document","definitions":[{
 export const CliUpdateTenantMemberDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliUpdateTenantMember"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateTenantMemberInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTenantMember"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"role"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<CliUpdateTenantMemberMutation, CliUpdateTenantMemberMutationVariables>;
 export const CliRemoveTenantMemberDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliRemoveTenantMember"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"removeTenantMember"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<CliRemoveTenantMemberMutation, CliRemoveTenantMemberMutationVariables>;
 export const CliMemberTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliMemberTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]} as unknown as DocumentNode<CliMemberTenantBySlugQuery, CliMemberTenantBySlugQueryVariables>;
-export const CliPromoteSpaceMemoriesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliPromoteSpaceMemories"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"spaceId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memoryIds"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"justification"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"promoteSpaceMemoriesToTenant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"spaceId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"spaceId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memoryIds"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memoryIds"}}},{"kind":"Argument","name":{"kind":"Name","value":"justification"},"value":{"kind":"Variable","name":{"kind":"Name","value":"justification"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"promoted"}},{"kind":"Field","name":{"kind":"Name","value":"alreadyPromoted"}},{"kind":"Field","name":{"kind":"Name","value":"missing"}}]}}]}}]} as unknown as DocumentNode<CliPromoteSpaceMemoriesMutation, CliPromoteSpaceMemoriesMutationVariables>;
-export const CliTenantBankMemoriesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliTenantBankMemories"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBankMemories"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"factType"}},{"kind":"Field","name":{"kind":"Name","value":"sourceBankId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceMemoryId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceTimestamp"}},{"kind":"Field","name":{"kind":"Name","value":"promotedBy"}},{"kind":"Field","name":{"kind":"Name","value":"promotedAt"}},{"kind":"Field","name":{"kind":"Name","value":"justification"}},{"kind":"Field","name":{"kind":"Name","value":"accessCount"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliTenantBankMemoriesQuery, CliTenantBankMemoriesQueryVariables>;
 export const CliMemoryRecordsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliMemoryRecords"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"namespace"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"memoryRecords"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"assistantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"namespace"},"value":{"kind":"Variable","name":{"kind":"Name","value":"namespace"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"memoryRecordId"}},{"kind":"Field","name":{"kind":"Name","value":"namespace"}},{"kind":"Field","name":{"kind":"Name","value":"content"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"text"}}]}},{"kind":"Field","name":{"kind":"Name","value":"strategy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<CliMemoryRecordsQuery, CliMemoryRecordsQueryVariables>;
 export const CliMemorySearchDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliMemorySearch"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"query"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"strategy"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"MemoryStrategy"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"memorySearch"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"assistantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"query"},"value":{"kind":"Variable","name":{"kind":"Name","value":"query"}}},{"kind":"Argument","name":{"kind":"Name","value":"strategy"},"value":{"kind":"Variable","name":{"kind":"Name","value":"strategy"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"records"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"memoryRecordId"}},{"kind":"Field","name":{"kind":"Name","value":"namespace"}},{"kind":"Field","name":{"kind":"Name","value":"content"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"text"}}]}},{"kind":"Field","name":{"kind":"Name","value":"score"}}]}}]}}]}}]} as unknown as DocumentNode<CliMemorySearchQuery, CliMemorySearchQueryVariables>;
-export const CliMemoryGraphDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliMemoryGraph"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"memoryGraph"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"assistantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"nodes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}},{"kind":"Field","name":{"kind":"Name","value":"edges"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"target"}},{"kind":"Field","name":{"kind":"Name","value":"type"}}]}}]}}]}}]} as unknown as DocumentNode<CliMemoryGraphQuery, CliMemoryGraphQueryVariables>;
 export const CliUpdateMemoryRecordDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliUpdateMemoryRecord"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memoryRecordId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"content"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateMemoryRecord"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"assistantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memoryRecordId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memoryRecordId"}}},{"kind":"Argument","name":{"kind":"Name","value":"content"},"value":{"kind":"Variable","name":{"kind":"Name","value":"content"}}}]}]}}]} as unknown as DocumentNode<CliUpdateMemoryRecordMutation, CliUpdateMemoryRecordMutationVariables>;
 export const CliDeleteMemoryRecordDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliDeleteMemoryRecord"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"memoryRecordId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteMemoryRecord"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"assistantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"assistantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"memoryRecordId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"memoryRecordId"}}}]}]}}]} as unknown as DocumentNode<CliDeleteMemoryRecordMutation, CliDeleteMemoryRecordMutationVariables>;
 export const CliMemoryTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliMemoryTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]} as unknown as DocumentNode<CliMemoryTenantBySlugQuery, CliMemoryTenantBySlugQueryVariables>;

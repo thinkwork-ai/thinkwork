@@ -4,7 +4,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { mockClient } from "aws-sdk-client-mock";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   extractLearningCandidates,
   runRequesterIdleMemoryLearning,
@@ -88,7 +88,7 @@ describe("requester idle memory learner", () => {
     ]);
   });
 
-  it("promotes explicit durable preferences to MEMORY.md and syncs Hindsight", async () => {
+  it("promotes explicit durable preferences to MEMORY.md", async () => {
     const db = makeDb([
       [
         {
@@ -136,21 +136,8 @@ describe("requester idle memory learner", () => {
       })
       .rejects(Object.assign(new Error("missing"), { name: "NoSuchKey" }));
     s3Mock.on(PutObjectCommand).resolves({});
-    const syncHindsight = vi.fn().mockResolvedValue({
-      status: "success",
-      files: [
-        {
-          path: "memory/MEMORY.md",
-          documentId: "requester_memory:user-1:memory/MEMORY.md",
-          status: "upserted",
-        },
-      ],
-    });
 
-    const result = await runRequesterIdleMemoryLearning(baseInput, {
-      db,
-      syncHindsight,
-    });
+    const result = await runRequesterIdleMemoryLearning(baseInput, { db });
 
     expect(result).toMatchObject({
       ok: true,
@@ -176,18 +163,6 @@ describe("requester idle memory learner", () => {
     expect(result.changedFiles[1].path).toBe("memory/MEMORY.md");
     expect(result.changedFiles[1]).toMatchObject({
       evidenceMessageIds: ["msg-1"],
-      hindsightDocumentId: "requester_memory:user-1:memory/MEMORY.md",
-      hindsightStatus: "upserted",
-    });
-    expect(syncHindsight).toHaveBeenCalledWith({
-      tenantId: "tenant-1",
-      userId: "user-1",
-      runId: "run-1",
-      threadId: "thread-1",
-      changedFiles: [
-        expect.objectContaining({ path: "memory/working/2026-05-18.md" }),
-        expect.objectContaining({ path: "memory/MEMORY.md" }),
-      ],
     });
 
     const putCalls = s3Mock.commandCalls(PutObjectCommand);
@@ -212,9 +187,6 @@ describe("requester idle memory learner", () => {
     );
     expect(String(putCalls[3].args[0].input.Body)).toContain(
       '"durablePromotionEnabled": true',
-    );
-    expect(String(putCalls[3].args[0].input.Body)).toContain(
-      '"hindsightSync": {',
     );
   });
 
@@ -263,15 +235,8 @@ describe("requester idle memory learner", () => {
       })
       .rejects(Object.assign(new Error("missing"), { name: "NoSuchKey" }));
     s3Mock.on(PutObjectCommand).resolves({});
-    const syncHindsight = vi.fn().mockResolvedValue({
-      status: "skipped",
-      files: [],
-    });
 
-    const result = await runRequesterIdleMemoryLearning(baseInput, {
-      db,
-      syncHindsight,
-    });
+    const result = await runRequesterIdleMemoryLearning(baseInput, { db });
 
     expect(result.candidateSummary).toMatchObject({
       accepted: 1,
@@ -283,16 +248,6 @@ describe("requester idle memory learner", () => {
       "memory/working/2026-05-18.md",
       "memory/candidates/2026-05-18.md",
     ]);
-    expect(syncHindsight).toHaveBeenCalledWith({
-      tenantId: "tenant-1",
-      userId: "user-1",
-      runId: "run-1",
-      threadId: "thread-1",
-      changedFiles: [
-        expect.objectContaining({ path: "memory/working/2026-05-18.md" }),
-        expect.objectContaining({ path: "memory/candidates/2026-05-18.md" }),
-      ],
-    });
   });
 
   it("does not rewrite staged candidates when the rendered thread section is unchanged", async () => {
@@ -380,15 +335,8 @@ describe("requester idle memory learner", () => {
       })
       .resolves(s3Body(existingCandidateMemory));
     s3Mock.on(PutObjectCommand).resolves({});
-    const syncHindsight = vi.fn().mockResolvedValue({
-      status: "skipped",
-      files: [],
-    });
 
-    const result = await runRequesterIdleMemoryLearning(baseInput, {
-      db,
-      syncHindsight,
-    });
+    const result = await runRequesterIdleMemoryLearning(baseInput, { db });
 
     expect(result.status).toBe("no_change");
     expect(result.candidateSummary).toMatchObject({
@@ -452,21 +400,8 @@ describe("requester idle memory learner", () => {
       })
       .rejects(Object.assign(new Error("missing"), { name: "NoSuchKey" }));
     s3Mock.on(PutObjectCommand).resolves({});
-    const syncHindsight = vi.fn().mockResolvedValue({
-      status: "success",
-      files: [
-        {
-          path: "memory/working/2026-05-18.md",
-          documentId: "requester_memory:user-1:memory/working/2026-05-18.md",
-          status: "upserted",
-        },
-      ],
-    });
 
-    const result = await runRequesterIdleMemoryLearning(baseInput, {
-      db,
-      syncHindsight,
-    });
+    const result = await runRequesterIdleMemoryLearning(baseInput, { db });
 
     expect(result.status).toBe("changed");
     expect(result.candidateSummary).toMatchObject({
@@ -479,9 +414,6 @@ describe("requester idle memory learner", () => {
     expect(result.changedFiles[0]).toMatchObject({
       path: "memory/working/2026-05-18.md",
       evidenceMessageIds: ["msg-1", "msg-2"],
-      hindsightDocumentId:
-        "requester_memory:user-1:memory/working/2026-05-18.md",
-      hindsightStatus: "upserted",
     });
     const putCalls = s3Mock.commandCalls(PutObjectCommand);
     expect(putCalls).toHaveLength(2);
@@ -565,21 +497,8 @@ describe("requester idle memory learner", () => {
       })
       .resolves(s3Body(existingWorkingMemory));
     s3Mock.on(PutObjectCommand).resolves({});
-    const syncHindsight = vi.fn().mockResolvedValue({
-      status: "success",
-      files: [
-        {
-          path: "memory/working/2026-05-18.md",
-          documentId: "requester_memory:user-1:memory/working/2026-05-18.md",
-          status: "upserted",
-        },
-      ],
-    });
 
-    const result = await runRequesterIdleMemoryLearning(baseInput, {
-      db,
-      syncHindsight,
-    });
+    const result = await runRequesterIdleMemoryLearning(baseInput, { db });
 
     expect(result.status).toBe("changed");
     const putCalls = s3Mock.commandCalls(PutObjectCommand);
@@ -674,25 +593,11 @@ describe("requester idle memory learner", () => {
       })
       .resolves(s3Body(existingWorkingMemory));
     s3Mock.on(PutObjectCommand).resolves({});
-    const syncHindsight = vi.fn().mockResolvedValue({
-      status: "skipped",
-      files: [],
-    });
 
-    const result = await runRequesterIdleMemoryLearning(baseInput, {
-      db,
-      syncHindsight,
-    });
+    const result = await runRequesterIdleMemoryLearning(baseInput, { db });
 
     expect(result.status).toBe("no_change");
     expect(result.changedFiles).toEqual([]);
-    expect(syncHindsight).toHaveBeenCalledWith({
-      tenantId: "tenant-1",
-      userId: "user-1",
-      runId: "run-1",
-      threadId: "thread-1",
-      changedFiles: [],
-    });
     const putCalls = s3Mock.commandCalls(PutObjectCommand);
     expect(putCalls).toHaveLength(1);
     expect(putCalls[0].args[0].input.Key).toBe(

@@ -1,7 +1,7 @@
 /**
  * Per-turn auto-retain — fire-and-forget invoke of the `memory-retain` Lambda
  * after each agent turn, so the API's normalized memory layer can persist the
- * conversation transcript through the active engine (Hindsight or AgentCore).
+ * conversation transcript through AgentCore managed memory.
  *
  * Runtime memory-retain client adapted to Pi's identity + env snapshot shape:
  *   - Identity comes from `IdentitySnapshot` validated at /invocations entry

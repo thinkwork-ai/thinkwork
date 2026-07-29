@@ -228,7 +228,6 @@ async function buildBundle(
     env: {
       awsRegion: "us-east-1",
       agentCoreMemoryId: "",
-      hindsightEndpoint: "",
       memoryEngine: "agentcore",
       memoryRetainFnName: "",
       dbClusterArn: "",

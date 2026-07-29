@@ -1,17 +1,11 @@
-// @thinkwork/graph — shared 3D force-graph rendering for web surfaces.
+// @thinkwork/graph — shared force-graph rendering primitives for web surfaces.
 //
-// Hosts:
-//   - MemoryGraph — Hindsight memory + entity graph (used by Brain).
-//
-// The components were ported out of the app layer to keep graph
-// rendering behavior reusable and versioned in one package.
+// The concrete graph views were removed with their backing queries; what
+// remains is the reusable classification, painting, and pointer layer that
+// any future graph surface can build on.
 //
 // Performance invariants (in-place opacity mute on filter, one-shot camera
-// init, stable nodeThreeObject) are load-bearing — see each component's
-// header comment before changing them.
-
-export { MemoryGraph } from "./MemoryGraph.js";
-export type { MemoryGraphHandle, MemoryGraphNode } from "./MemoryGraph.js";
+// init, stable nodeThreeObject) are load-bearing.
 
 export {
   classifyNode,
@@ -27,15 +21,6 @@ export type {
   GraphEndpoint,
   NodeVisualState,
 } from "./graph-utils.js";
-
-export {
-  MEMORY_COLOR,
-  ENTITY_COLOR,
-  AGENT_COLOR,
-  MEMORY_TYPE_COLORS,
-} from "./palettes/memory-palette.js";
-
-export { MemoryGraphQuery } from "./queries.js";
 
 export {
   paintNodeDisc,

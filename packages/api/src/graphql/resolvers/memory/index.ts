@@ -2,13 +2,10 @@ import { memoryRecords } from "./memoryRecords.query.js";
 import { memoryRecordsByIds } from "./memoryRecordsByIds.query.js";
 import { memoryEpisodicRecords } from "./memoryEpisodicRecords.query.js";
 import { memorySearch } from "./memorySearch.query.js";
-import { memoryGraph } from "./memoryGraph.query.js";
 import { memorySystemConfig } from "./memorySystemConfig.query.js";
 import { deleteMemoryRecord } from "./deleteMemoryRecord.mutation.js";
 import { updateMemoryRecord } from "./updateMemoryRecord.mutation.js";
 import { captureMobileMemory } from "./captureMobileMemory.mutation.js";
-import { captureSpaceMemory } from "./captureSpaceMemory.mutation.js";
-import { ingestSpaceMemoryDocument } from "./ingestSpaceMemoryDocument.mutation.js";
 import { mobileMemoryCaptures } from "./mobileMemoryCaptures.query.js";
 import { mobileMemorySearch } from "./mobileMemorySearch.query.js";
 import { deleteMobileMemoryCapture } from "./deleteMobileMemoryCapture.mutation.js";
@@ -17,23 +14,15 @@ import {
   threadIdleLearningRunsQuery,
 } from "./threadIdleLearningRuns.query.js";
 import { rollbackThreadIdleLearningRun } from "./rollbackThreadIdleLearningRun.mutation.js";
-import { spaceMemorySearch } from "./spaceMemorySearch.query.js";
 import { memoryRetainAttempts } from "./memoryRetainAttempts.query.js";
-import { brainDreamRuns } from "./brainDreamRuns.query.js";
-import { promoteSpaceMemoriesToTenant } from "./promoteSpaceMemoriesToTenant.mutation.js";
-import { tenantBankMemories } from "./tenantBankMemories.query.js";
 
 export const memoryQueries = {
   memoryRecords,
   memoryRecordsByIds,
   memoryEpisodicRecords,
   memorySearch,
-  spaceMemorySearch,
-  memoryGraph,
   memorySystemConfig,
   memoryRetainAttempts,
-  brainDreamRuns,
-  tenantBankMemories,
   mobileMemoryCaptures,
   mobileMemorySearch,
   threadIdleLearningRuns: threadIdleLearningRunsQuery,
@@ -44,9 +33,6 @@ export const memoryMutations = {
   deleteMemoryRecord,
   updateMemoryRecord,
   captureMobileMemory,
-  captureSpaceMemory,
-  ingestSpaceMemoryDocument,
-  promoteSpaceMemoriesToTenant,
   deleteMobileMemoryCapture,
   rollbackThreadIdleLearningRun,
 };

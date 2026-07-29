@@ -36,12 +36,12 @@ describe("memorySearch requester scope", () => {
           content: {
             text: "Eric prefers concise launch briefs.",
           },
-          backendRefs: [{ backend: "hindsight", ref: "user_eric" }],
+          backendRefs: [{ backend: "agentcore", ref: "user_eric" }],
           createdAt: "2026-05-17T12:00:00.000Z",
           metadata: {},
         },
         score: 0.9,
-        backend: "hindsight",
+        backend: "agentcore",
       },
     ]);
     getMemoryServicesMock.mockReturnValue({

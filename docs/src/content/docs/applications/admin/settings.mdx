@@ -47,7 +47,7 @@ This section is conditional — it only renders if the tenant row's `settings` f
 | Monthly budget     | Tenant-wide spend cap for month-to-date                                                             |
 | Auto-close threads | After N minutes of inactivity, threads auto-close (prevents forever-open threads from accumulating) |
 | Max agents         | Hard cap on the number of agents the tenant can have                                                |
-| Feature flags      | JSON object with any tenant-level feature flags (e.g. `enable_hindsight`, `enable_voice_dictation`) |
+| Feature flags      | JSON object with any tenant-level feature flags (e.g. `enable_voice_dictation`)                     |
 
 Like Organization, this is read-only. Changes go through Terraform.
 
@@ -62,8 +62,7 @@ The Deployment card is where operators check "what's actually deployed and is it
 | Region           | AWS region                                                |
 | Account ID       | AWS account id                                            |
 | AgentCore status | Managed / Disabled / Self-hosted — with a status badge    |
-| Managed memory   | Enabled / Disabled                                        |
-| Hindsight        | Enabled / Disabled — the optional long-term memory add-on |
+| Managed memory   | Enabled / Disabled — Bedrock AgentCore Memory             |
 
 <Aside type="note">
   `DeploymentStatusQuery` typically reads from cached deployment metadata (stack
@@ -114,7 +113,6 @@ The last card is a list of copyable rows for the infrastructure endpoints the op
 - **API endpoint** — the HTTP GraphQL / REST endpoint
 - **AppSync URL** — the HTTPS AppSync endpoint for GraphQL mutations
 - **WebSocket URL** — the AppSync realtime URL for subscriptions
-- **Hindsight endpoint** — only shown when Hindsight is enabled
 
 Every row has a copy button that yanks the value to the clipboard. The rows are not secret values; they're resource identifiers the operator regularly pastes into CLI tools, AWS consoles, or downstream configuration.
 
@@ -174,9 +172,9 @@ The deliberately heavy use of "No — Terraform" is the design philosophy: tenan
 ### Diagnose "why is memory empty for everyone?"
 
 1. Open `/settings` → Deployment card
-2. Check `Managed memory: Enabled`
-3. Check `Hindsight: Enabled` (if that's the expected backend)
-4. If either is Disabled, the tenant config doesn't match expectations and a Terraform update + redeploy is needed
+2. Check `Managed memory: Enabled` — AgentCore Memory is the only memory engine, so if this is Disabled nothing will retain
+3. If it is Disabled, the tenant config doesn't match expectations and a Terraform update + redeploy is needed
+4. If it is Enabled but records are still missing, move to `/settings/memory` and check retain attempts (see [Admin — Memory](/applications/admin/memory/))
 
 ### Upgrade an external customer release
 

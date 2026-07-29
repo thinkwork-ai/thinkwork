@@ -1,11 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
 import { threadIdleLearningRuns } from "@thinkwork/database-pg/schema";
-import type { MemoryAdapter } from "../memory/adapter.js";
-import {
-  syncRequesterMemoryToHindsight,
-  type RequesterMemoryHindsightSyncResult,
-} from "./hindsight-sync.js";
 import {
   restoreRequesterMemorySnapshot,
   type ChangedRequesterMemoryFile,
@@ -17,12 +12,10 @@ export type RollbackRequesterIdleLearningRunInput = {
   tenantId: string;
   userId: string;
   runId: string;
-  adapter?: Pick<MemoryAdapter, "upsertMarkdownMemoryDocument">;
 };
 
 export type RollbackRequesterIdleLearningRunResult = {
   run: ThreadIdleLearningRunRow;
-  hindsightSync: RequesterMemoryHindsightSyncResult;
 };
 
 export type ThreadIdleLearningRunRow = {
@@ -55,14 +48,7 @@ export async function rollbackRequesterIdleLearningRun(
     throw new Error("idle-learning run not found");
   }
   if (run.status === "rolled_back") {
-    return {
-      run,
-      hindsightSync: {
-        status: "skipped",
-        files: [],
-        error: "already rolled back",
-      },
-    };
+    return { run };
   }
 
   const changedFiles = parseChangedFiles(run.changed_files);
@@ -79,15 +65,6 @@ export async function rollbackRequesterIdleLearningRun(
     });
   }
 
-  const hindsightSync = await syncRequesterMemoryToHindsight({
-    tenantId: input.tenantId,
-    userId: input.userId,
-    runId: input.runId,
-    threadId: run.thread_id,
-    changedFiles,
-    adapter: input.adapter,
-  });
-
   const rollbackMetadata = {
     ...(isRecord(run.metadata) ? run.metadata : {}),
     rollback: {
@@ -96,7 +73,6 @@ export async function rollbackRequesterIdleLearningRun(
         path: file.path,
         snapshotKey: file.snapshotKey ?? null,
       })),
-      hindsightSync,
     },
   };
 
@@ -107,11 +83,7 @@ export async function rollbackRequesterIdleLearningRun(
       finished_at: new Date(),
       updated_at: new Date(),
       metadata: rollbackMetadata,
-      error:
-        hindsightSync.status === "failed"
-          ? (hindsightSync.error ??
-            "requester memory rollback Hindsight sync failed")
-          : run.error,
+      error: run.error,
     })
     .where(
       and(
@@ -124,7 +96,6 @@ export async function rollbackRequesterIdleLearningRun(
 
   return {
     run: (updated ?? run) as ThreadIdleLearningRunRow,
-    hindsightSync,
   };
 }
 
@@ -167,14 +138,6 @@ export function parseChangedFiles(
             (id): id is string => typeof id === "string",
           )
         : undefined,
-      hindsightDocumentId:
-        typeof file.hindsightDocumentId === "string"
-          ? file.hindsightDocumentId
-          : undefined,
-      hindsightStatus:
-        typeof file.hindsightStatus === "string"
-          ? file.hindsightStatus
-          : undefined,
     }))
     .filter((file) => file.path);
 }

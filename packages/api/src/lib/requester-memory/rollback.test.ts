@@ -5,7 +5,6 @@ const mocks = vi.hoisted(() => ({
   updateRows: [] as any[],
   updateSet: null as Record<string, unknown> | null,
   restoreRequesterMemorySnapshot: vi.fn(),
-  syncRequesterMemoryToHindsight: vi.fn(),
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -32,10 +31,6 @@ vi.mock("@thinkwork/database-pg", () => ({
 
 vi.mock("./storage.js", () => ({
   restoreRequesterMemorySnapshot: mocks.restoreRequesterMemorySnapshot,
-}));
-
-vi.mock("./hindsight-sync.js", () => ({
-  syncRequesterMemoryToHindsight: mocks.syncRequesterMemoryToHindsight,
 }));
 
 import {
@@ -85,13 +80,6 @@ describe("requester memory rollback", () => {
     mocks.updateRows = [];
     mocks.updateSet = null;
     mocks.restoreRequesterMemorySnapshot.mockReset();
-    mocks.syncRequesterMemoryToHindsight.mockReset();
-    mocks.syncRequesterMemoryToHindsight.mockResolvedValue({
-      status: "success",
-      files: [
-        { path: "memory/MEMORY.md", documentId: "doc", status: "upserted" },
-      ],
-    });
   });
 
   it("parses changed files defensively", () => {
@@ -116,7 +104,7 @@ describe("requester memory rollback", () => {
     ]);
   });
 
-  it("restores each changed file, syncs Hindsight, and marks the run rolled back", async () => {
+  it("restores each changed file and marks the run rolled back", async () => {
     const original = runRow();
     const updated = runRow({ status: "rolled_back" });
     mocks.selectRows = [original];
@@ -135,14 +123,6 @@ describe("requester memory rollback", () => {
       snapshotKey:
         "tenants/tenant-1/users/user-1/memory/.snapshots/run-1/memory%2FMEMORY.md.md",
     });
-    expect(mocks.syncRequesterMemoryToHindsight).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: "tenant-1",
-        userId: "user-1",
-        runId: "run-1",
-        threadId: "thread-1",
-      }),
-    );
     expect(mocks.updateSet).toMatchObject({
       status: "rolled_back",
       error: null,

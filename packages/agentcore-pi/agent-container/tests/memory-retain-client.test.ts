@@ -1,7 +1,7 @@
 /**
  * Vitest coverage for the per-turn auto-retain client.
  *
- * Pattern follows `hindsight.test.ts`: inject the AWS client (here a
+ * Pattern: inject the AWS client (here a
  * minimal `LambdaClient` stub) so the test surface stays explicit and
  * parallel-safe. Avoids module-private mutable state.
  */
@@ -75,8 +75,7 @@ function makeEnv(
   return {
     awsRegion: "us-east-1",
     agentCoreMemoryId: "",
-    hindsightEndpoint: "",
-    memoryEngine: "hindsight",
+    memoryEngine: "agentcore",
     memoryRetainFnName: "thinkwork-dev-api-memory-retain",
     dbClusterArn: "",
     dbSecretArn: "",

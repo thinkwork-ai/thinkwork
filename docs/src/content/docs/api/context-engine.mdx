@@ -3,7 +3,7 @@ title: Context Engine API
 description: "The internal Context Engine contract for lazy-loaded external context: `query_context`, provider families, statuses, and MCP/runtime behavior."
 ---
 
-**Context Engine** is ThinkWork's read-only orchestration layer for context that should be loaded for the current turn without becoming durable memory by default. Hosted user and Space Brain memory is Hindsight-backed; Context Engine remains useful for workspace files, compiled pages, approved MCP tools, source agents, web/search providers, and explicit diagnostics.
+**Context Engine** is ThinkWork's read-only orchestration layer for context that should be loaded for the current turn without becoming durable memory by default. Durable memory is Bedrock AgentCore Memory, reached directly through the `recall` tool; Context Engine covers workspace files, compiled pages, approved MCP tools, source agents, web/search providers, and explicit diagnostics.
 
 ## Contract
 
@@ -15,13 +15,13 @@ description: "The internal Context Engine contract for lazy-loaded external cont
 - `depth`: `quick` or `deep`.
 - `providers`: optional provider ids or families.
 - `agentId`: optional target agent id when the caller needs agent-scoped workspace files or legacy compatibility attachments.
-- provider options: optional source-specific settings, currently including Hindsight `recall` vs `reflect` and ThinkWork Brain source/dataset scoping for `query_brain_context`.
+- provider options: optional source-specific settings, currently ThinkWork Brain source/dataset scoping for `query_brain_context`.
 
 Every response includes normalized hits plus provider statuses. Provider failures are local to that source; successful sources still return.
 
 ## Provider Families
 
-- `memory`: explicit Hindsight user/Space memory recall or reflect. It is not part of default `query_context`; use `query_memory_context` when durable memory is specifically needed.
+- `memory`: explicit recall over AgentCore memory records. It is not part of default `query_context`; use `query_memory_context` when durable memory is specifically needed.
 - `brain`: tenant-shared memory pages and facets.
 - `wiki`: compiled memory pages, via the database-backed wiki provider behind
   `query_wiki_context`.
@@ -35,7 +35,7 @@ The `brain` family is the business/domain memory provider. It searches active Th
 
 Retrieved Brain snippets are source data, not instructions; runtime responses mark them with an untrusted source boundary and preserve citations.
 
-If the active ThinkWork Brain substrate is not installed, disabled, failed, or missing required retrieval/provenance capability posture, Context Engine reports that as a Brain provider status. A Brain-only call does not silently fall back to Hindsight Memory or raw backend access.
+If the active ThinkWork Brain substrate is not installed, disabled, failed, or missing required retrieval/provenance capability posture, Context Engine reports that as a Brain provider status. A Brain-only call does not silently fall back to durable memory or raw backend access.
 
 `query_brain_context` accepts the normal `query`, `mode`, `scope`, `depth`, and `limit` fields plus optional source filters used by the dogfood proof: `sourceKind`, `sourceType`, `datasetId`, `nodeSetIds`, `topK`, and `onlyContext`. These options are provider-scoped hints; they do not grant direct database, graph-storage, or object-storage access.
 
@@ -52,19 +52,16 @@ During a production migration, Context Engine keeps `query_brain_context` on the
 
 Tenant-facing status callers receive redacted posture. Raw substrate details such as storage roots, graph identifiers, and file-system ids are reserved for operator evidence and are not part of agent-facing Brain context.
 
-Context Engine sources are intentionally separate from the Hindsight Brain substrate:
+Context Engine sources are intentionally separate from the durable memory substrate:
 
-- Hindsight `memory`, which owns durable user/Space observations, retained documents, recall, reflect, and evidence;
+- `memory`, a read-through to AgentCore memory records;
 - `wiki`, which reads owner-scoped compiled pages derived from memory.
 
-## Hindsight Strategy
+## Memory Provider
 
-The memory provider can use Hindsight in two modes:
+The memory provider performs a recall against AgentCore memory records for the requester and returns them as normalized hits. There is no synthesis mode: the `reflect` tool was removed with the Hindsight engine, and AgentCore does its own consolidation into the summaries namespace instead.
 
-- `recall`: returns matching memory records directly.
-- `reflect`: asks Hindsight to synthesize a higher-level reflection over matching memories.
-
-Admin exposes this as the Hindsight strategy control on Memory -> Sources. For agent-facing use, direct Hindsight recall/reflect is the normal durable-memory path; `query_memory_context` is useful when a Context Engine caller needs the same Hindsight memory through the external context facade.
+For agent-facing use, the runtime `recall` tool is the normal durable-memory path; `query_memory_context` is useful when a Context Engine caller needs the same records through the external context facade.
 
 ## ThinkWork Brain MCP
 
@@ -78,9 +75,9 @@ MCP server approval is necessary but not sufficient. A tool must also have a row
 
 Pi registers `query_context` as a platform-owned built-in tool. The tool calls the API-owned Context Engine service through ThinkWork Brain, keeping source routing and result normalization aligned with mobile and external MCP callers.
 
-When Context Engine is enabled for a first-party Pi runtime, the Pi Context Engine extension exposes specialized split tools: `query_memory_context`, `query_brain_context`, and `query_wiki_context`. Hindsight remains the direct memory provider for normal Brain recall/reflect; these tools exist for explicit context lookup, diagnostics, and source-specific retrieval.
+When Context Engine is enabled for a first-party Pi runtime, the Pi Context Engine extension exposes specialized split tools: `query_memory_context`, `query_brain_context`, and `query_wiki_context`. The runtime `recall` tool remains the direct path for durable memory; these tools exist for explicit context lookup, diagnostics, and source-specific retrieval.
 
-`query_context` should be the model's first choice for lazy-loaded external context such as workspace files, compiled pages, approved MCP tools, and source agents. Use direct memory tools or `query_memory_context` when durable Hindsight memory is specifically needed, and `query_wiki_context` for compiled page/entity/topic lookup. Raw graph storage, object storage, and storage backends are not runtime tools.
+`query_context` should be the model's first choice for lazy-loaded external context such as workspace files, compiled pages, approved MCP tools, and source agents. Use `recall` or `query_memory_context` when durable memory is specifically needed, and `query_wiki_context` for compiled page/entity/topic lookup. Raw graph storage, object storage, and storage backends are not runtime tools.
 
 After deploy, verify a named dogfood workflow through `query_brain_context` and compare it with the memory-only path. The GraphQL posture checks should stay read-only unless an operator explicitly runs a mutation-enabled verification.
 
@@ -90,10 +87,9 @@ Admin operators verify source routing from **Memory → Sources**. The test harn
 
 - choose participating sources with the Sources dropdown;
 - select an agent target so workspace files and agent-specific attachments are considered;
-- choose Hindsight `recall` or `reflect`;
 - run a query against the same backend Context Engine path used by runtimes;
 - inspect provider statuses, latency, partial failures, top hits, and the full structured response.
 
-Provider failures are expected to be partial. A Hindsight timeout, unavailable MCP adapter, or empty source result should appear as provider-local status while successful providers still return hits.
+Provider failures are expected to be partial. A memory timeout, unavailable MCP adapter, or empty source result should appear as provider-local status while successful providers still return hits.
 
 `act_on_context` is reserved for future mutation support and is not callable in v0.

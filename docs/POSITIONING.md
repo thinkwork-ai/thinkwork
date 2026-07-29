@@ -49,7 +49,7 @@ We are deliberately _not_ these things, and copy that drifts toward them is wron
 - **Not a hosted SaaS agent platform.** We do not run a multi-tenant control plane in our AWS. Even ThinkWork for Business deploys into the customer's AWS — we operate the runtime _in their account_, not ours. **Managed does not mean vendor-hosted.**
 - **Not "AgentCore + glue."** AgentCore is one runtime adapter beneath the harness. The harness is a contract above it (Threads, Memory, Audit, Cost, Templates) that survives any single vendor service.
 - **Not a chat product.** Threads carry every kind of work, not just chat. The thread shape is what makes audit, cost, and replay tractable across automations, integrations, and conversation.
-- **Not a Bedrock wrapper.** The harness is the durable layer; Bedrock is one execution surface. AgentCore Memory and Hindsight are interchangeable adapters under one ThinkWork memory contract.
+- **Not a Bedrock wrapper.** The harness is the durable layer; Bedrock is one execution surface. AgentCore Memory is today's only memory adapter, but it sits under a ThinkWork memory contract that outlives it.
 - **Not for K8s shops.** AWS-only is a positioning commitment, not a limitation. Trying to be cloud-neutral dilutes the wedge against hosted SaaS platforms.
 
 If a paragraph could describe any AI vendor with a few words swapped out, it isn't ThinkWork.
@@ -92,7 +92,7 @@ CI-enforced and review-enforced. Edits that introduce these fail the build or fa
 - **"AI platform" / "AI infrastructure"** without "agent harness" anchoring it. Generic descriptors that describe any vendor.
 - **"AI adoption journey"** — retired category framing. The rollout-path framing replaced it.
 - **"AgentCore platform"** — AgentCore is an adapter, not the product.
-- **"AgentCore managed memory is the memory system"** — memory is a contract above adapters; AgentCore Memory and Hindsight are interchangeable.
+- **"AgentCore managed memory is the memory system"** — memory is a ThinkWork contract (retain, recall, records, episodes) that AgentCore Memory currently implements. Name the contract, not the vendor service.
 
 **Voice traps (CI-enforced):**
 

@@ -28,7 +28,7 @@ import { Type } from "typebox";
  *   the managed extraction namespaces `assistant_<userId>` (semantic) and
  *   `preferences_<userId>` — all keyed on the user id, never the tenant.
  *
- * Async semantics (per `feedback_hindsight_async_tools` — the same
+ * Async semantics (per `feedback_memory_async_tools` — the same
  * principle applies to AgentCore Memory even though the SDK is sync):
  * - Each tool invocation receives a fresh `BedrockAgentCoreClient`
  *   from the caller (U9 will pass one minted at handler entry). The

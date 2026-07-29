@@ -46,19 +46,17 @@ vi.mock("./repository.js", () => {
     resolveTargetBankId: vi.fn(() => "user_owner-1"),
   };
 });
-const consolidateBankById = vi.fn();
+// THINK-406: the surviving AgentCore adapter has no markdown-document store
+// and no targeted bank consolidation, so the retain and compound stages fail
+// closed. `upsertMarkdownMemoryDocument` is still stubbed here because the
+// non-compound stages under test probe for it.
 vi.mock("../memory/index.js", () => ({
   getMemoryServices: () => ({
     adapter: {
       upsertMarkdownMemoryDocument: vi.fn(),
-      consolidateBankById,
     },
-    config: { engine: "hindsight" },
+    config: { engine: "agentcore" },
   }),
-}));
-const runBrainDreamState = vi.fn();
-vi.mock("../brain/dream/runner.js", () => ({
-  runBrainDreamState: (...args: unknown[]) => runBrainDreamState(...args),
 }));
 
 import { recordRunItem } from "./evidence.js";
@@ -242,10 +240,7 @@ describe("runAcquire family dispatch", () => {
 describe("zero-external-source personal run", () => {
   const personal = { mode: "personal", targetScope: "user", sources: [] };
 
-  it("external stages no-op but compound still processes Thread memory in the User Bank", async () => {
-    runBrainDreamState.mockResolvedValue({
-      banks: [{ status: "applied", runId: "dream-threads", applied: 3 }],
-    });
+  it("external stages no-op and compound fails closed with no consolidation engine", async () => {
     for (const [stage, run] of [
       ["acquire", runAcquire],
       ["extract", runExtract],
@@ -258,34 +253,24 @@ describe("zero-external-source personal run", () => {
       expect(result.counts?.noop, stage).toBe(1);
     }
 
+    // THINK-406: no engine implements targeted bank consolidation, so the
+    // compound stage fails closed with an explicit unsupported message.
     const compound = await runCompound(
       ctxWith({ ...personal, stage: "compound" }),
     );
-    expect(compound.status).toBe("succeeded");
-    expect(compound.counts).toEqual({ compounded: 1 });
-    expect(runBrainDreamState).toHaveBeenCalledTimes(1);
-    expect(runBrainDreamState).toHaveBeenCalledWith(
-      expect.objectContaining({
-        input: expect.objectContaining({ bankId: "user_owner-1" }),
-      }),
+    expect(compound.status).toBe("failed");
+    expect((compound as { error?: string }).error).toMatch(
+      /no targeted bank consolidation/,
     );
-    // No external source means no valid memory_run_items FK target. The
-    // workflow step output is still the durable execution evidence.
     expect(vi.mocked(recordRunItem)).not.toHaveBeenCalled();
   });
 
-  it("compound with sources still records its run item against a REAL source", async () => {
-    runBrainDreamState.mockResolvedValue({
-      banks: [{ status: "applied", runId: "dream-1", applied: 1 }],
-    });
+  it("compound fails closed even when real sources are selected", async () => {
     const result = await runCompound(
       ctxWith({ stage: "compound", sources: [source("s-1", "twenty")] }),
     );
-    expect(result.status).toBe("succeeded");
-    expect(vi.mocked(recordRunItem)).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ sourceConfigId: "s-1", stage: "compound" }),
-    );
+    expect(result.status).toBe("failed");
+    expect(vi.mocked(recordRunItem)).not.toHaveBeenCalled();
   });
 
   it("compound no-ops a zero-source shared processor without touching its empty bank", async () => {
@@ -294,7 +279,6 @@ describe("zero-external-source personal run", () => {
     );
     expect(result.status).toBe("succeeded");
     expect(result.counts).toEqual({ noop: 1 });
-    expect(runBrainDreamState).not.toHaveBeenCalled();
     expect(vi.mocked(recordRunItem)).not.toHaveBeenCalled();
   });
 });

@@ -114,8 +114,7 @@ function dynamicToolDefinition(
   return {
     name: toolName,
     label: descriptor.displayName ?? descriptor.name ?? toolName,
-    description:
-      `Proxy tool for reviewed Pi extension ${descriptor.displayName ?? descriptor.name ?? descriptor.extensionId}.`,
+    description: `Proxy tool for reviewed Pi extension ${descriptor.displayName ?? descriptor.name ?? descriptor.extensionId}.`,
     parameters: Type.Object({}, { additionalProperties: true }),
     executionMode: "sequential",
     execute: async (_toolCallId, params) => {
@@ -159,10 +158,12 @@ function parseDynamicPiExtensionDescriptor(
     agentProfileId: string | null;
     reservedToolNames: Set<string>;
   },
-): { ok: true; descriptor: PiExtensionRuntimeDescriptor } | {
-  ok: false;
-  reason: string;
-} {
+):
+  | { ok: true; descriptor: PiExtensionRuntimeDescriptor }
+  | {
+      ok: false;
+      reason: string;
+    } {
   const record = objectRecord(value);
   if (!record) return { ok: false, reason: "descriptor_not_object" };
   const descriptor = {
@@ -276,7 +277,10 @@ function parseDynamicPiExtensionDescriptor(
   ) {
     return { ok: false, reason: "unrequested_permission_grant" };
   }
-  if (descriptor.permissionClasses.length > descriptor.grantedPermissionClasses.length) {
+  if (
+    descriptor.permissionClasses.length >
+    descriptor.grantedPermissionClasses.length
+  ) {
     return { ok: false, reason: "missing_granted_provider" };
   }
   if (descriptor.grantedPermissionClasses.length > 0) {

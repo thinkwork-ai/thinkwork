@@ -3,75 +3,21 @@
  * and routes them through the normalized memory
  * layer.
  *
- * For per-thread retain (event.threadId present + adapter.retainConversation
- * available), the handler fetches the canonical transcript from the messages
- * table — filtered by BOTH tenant_id AND thread_id for cross-tenant safety —
- * and merges with the runtime-supplied event.transcript using a
- * longest-suffix-prefix overlap match. This handles both transcript shapes
- * the runtime sends: small (latest pair only) and large (full history +
- * latest pair) without producing duplicate-bloated documents.
+ * The active engine (AgentCore managed memory) ingests each conversational
+ * turn via `adapter.retainTurn` and runs its own background extraction. The
+ * attempt ledger in Aurora records every retain so failures retry.
  *
  * Cutover compatibility accepts the legacy agent-scoped messages payload while
  * runtime callers roll forward.
  */
 
 import { createHash } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
-import { getDb, getHindsightDb, hindsightSql } from "@thinkwork/database-pg";
-import { agents, messages, spaces } from "@thinkwork/database-pg/schema";
+import { and, eq } from "drizzle-orm";
+import { getDb } from "@thinkwork/database-pg";
+import { agents, messages } from "@thinkwork/database-pg/schema";
 import { getMemoryServices } from "../lib/memory/index.js";
-import {
-  isEvalTrafficMetadata,
-  isReflectExhaustMetadata,
-} from "../lib/memory/eval-traffic.js";
+import { isReflectExhaustMetadata } from "../lib/memory/eval-traffic.js";
 
-/**
- * THINK-261 / company-brain plan U8 — per-space conversation-sharing opt-in.
- * Thread visibility in this codebase is participant-based (space membership
- * grants no thread access — see callerVisibleThreadPredicate), so conversation
- * content flows into the team-readable space bank only when a space admin
- * deliberately opted the space in via `spaces.config.memorySharing =
- * "conversations"`. Default (absent key) is explicit-only: space banks fill
- * through deliberate capture paths, never ordinary conversation. Fail-closed
- * on lookup errors.
- */
-async function spaceConversationSharingEnabled(
-  tenantId: string,
-  spaceId: string,
-): Promise<boolean> {
-  try {
-    const rows = await getDb()
-      .select({ config: spaces.config })
-      .from(spaces)
-      .where(and(eq(spaces.tenant_id, tenantId), eq(spaces.id, spaceId)))
-      .limit(1);
-    const config = rows[0]?.config;
-    if (!config || typeof config !== "object" || Array.isArray(config)) {
-      return false;
-    }
-    return (
-      (config as Record<string, unknown>).memorySharing === "conversations"
-    );
-  } catch (err) {
-    console.warn(
-      `[memory-retain] space-sharing lookup failed (fail-closed) space=${spaceId}: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
-    return false;
-  }
-}
-import {
-  buildDailyMemoryRetainOptions,
-  buildHighConfidenceFactRetainOptions,
-  buildSpaceThreadRetainOptions,
-  buildThreadRetainOptions,
-} from "../lib/memory/hindsight-retain-params.js";
-import {
-  extractHighConfidenceFacts,
-  type ExtractedHighConfidenceFact,
-  type RejectedHighConfidenceFactCandidate,
-} from "../lib/memory/high-confidence-facts.js";
 import {
   buildRetainSourceEventKey,
   claimRetainAttempt,
@@ -83,7 +29,6 @@ import {
   upsertRetainAttempt,
   type RetainAttemptRow,
 } from "../lib/memory/retain-attempts.js";
-import { writeUserContextMdForUser } from "../lib/user-context-md-writer.js";
 
 type RetainMessage = {
   role?: string;
@@ -178,26 +123,6 @@ export async function handler(
       ownerType: "user" as const,
       ownerId: userId,
     };
-
-    if (eventKind === "daily" || eventDate || eventContent) {
-      if (!eventDate || typeof eventContent !== "string") {
-        console.warn(
-          "[memory-retain] MISSING_DOCUMENT_ID daily payload missing date/content",
-        );
-        return { ok: false, error: "MISSING_DOCUMENT_ID" };
-      }
-      if (!adapter.retainDailyMemory) {
-        return { ok: false, error: "retainDailyMemory not supported" };
-      }
-      await adapter.retainDailyMemory({
-        ...owner,
-        date: eventDate,
-        content: eventContent,
-        hindsight: buildDailyMemoryRetainOptions(eventDate),
-        metadata: eventMetadata,
-      });
-      return { ok: true, engine: config.engine };
-    }
 
     if (!eventThreadId) {
       console.warn("[memory-retain] MISSING_DOCUMENT_ID missing threadId");
@@ -304,257 +229,53 @@ async function processClaimedRetainAttempt(
     ownerType: "user" as const,
     ownerId: userId,
   };
-  let highConfidenceFacts: {
-    documents: RetainedHighConfidenceFactDocument[];
-    rejected: RejectedHighConfidenceFactCandidate[];
-  } = { documents: [], rejected: [] };
-  let highConfidenceFactError: unknown = null;
-  const evalTraffic = isEvalTrafficMetadata(eventMetadata);
-
   try {
     const eventMessages = normalizeMessages(
       eventTranscript || eventLegacyMessages || [],
     );
 
-    // Per-thread upsert path: when the adapter supports retainConversation
-    // AND we have a threadId, fetch the canonical full transcript from the
-    // messages table and merge with the event tail before calling the
-    // adapter. This survives the messages-commit-vs-Lambda-fire race.
-    if (adapter.retainConversation) {
-      let dbMessages: NormalizedMessage[] = [];
-      try {
-        dbMessages = await fetchThreadTranscript(tenantId, eventThreadId);
-      } catch (err) {
-        const msg = (err as Error)?.message || String(err);
-        console.warn(
-          `[memory-retain] fetchThreadTranscript failed; falling back to event transcript: ${msg}`,
-        );
-        dbMessages = [];
-      }
-
-      const merged = mergeTranscriptSuffix(dbMessages, eventMessages);
-
-      if (merged.length === 0) {
-        throw new Error("no_content");
-      }
-
-      if (eventLegacyMessages && !eventTranscript) {
-        console.warn(
-          "[memory-retain] legacy messages payload converted to conversation retain",
-          {
-            tenantId,
-            userId,
-            threadId: eventThreadId,
-          },
-        );
-      }
-
-      // Eval/test traffic (THINK-133 U3): the conversation document is still
-      // retained (carrying the evalTraffic marker in its metadata so KG
-      // ingest and the dream state can exclude it), but high-confidence-fact
-      // extraction is skipped — it writes synthetic fixtures into
-      // Hindsight memory_units and user_profiles as if they were real facts.
-      const highConfidenceFactPromise = evalTraffic
-        ? Promise.resolve({
-            documents: [] as RetainedHighConfidenceFactDocument[],
-            rejected: [] as RejectedHighConfidenceFactCandidate[],
-          })
-        : retainHighConfidenceFacts({
-            adapter,
-            attempt,
-            tenantId,
-            userId,
-            spaceId: attempt.space_id,
-            threadId: eventThreadId,
-            messages: merged,
-          });
-      // THINK-263 U1 — stamp thread provenance at write time, mirroring the
-      // high-confidence-fact path, so recall hits can deep-link to their
-      // source thread without read-time guessing. The turn id rides the
-      // attempt ledger row (the handler stamped it at upsert).
-      const provenanceStampedMetadata = {
-        ...(eventMetadata || {}),
+    if (eventMessages.length === 0) {
+      throw new Error("no_content");
+    }
+    if (eventLegacyMessages && !eventTranscript) {
+      console.warn("[memory-retain] legacy messages payload converted", {
+        tenantId,
+        userId,
         threadId: eventThreadId,
-        ...(attempt.thread_turn_id
-          ? { threadTurnId: attempt.thread_turn_id }
-          : {}),
-      };
-      const conversationPromise = adapter.retainConversation({
-        ...owner,
-        threadId: eventThreadId,
-        messages: merged,
-        hindsight: buildThreadRetainOptions(merged),
-        metadata: provenanceStampedMetadata,
-      });
-
-      const [highConfidenceFactResult, conversationResult] =
-        await Promise.allSettled([
-          highConfidenceFactPromise,
-          conversationPromise,
-        ]);
-
-      if (highConfidenceFactResult.status === "fulfilled") {
-        highConfidenceFacts = highConfidenceFactResult.value;
-      } else {
-        highConfidenceFactError = highConfidenceFactResult.reason;
-      }
-
-      if (conversationResult.status === "rejected") {
-        throw conversationResult.reason;
-      }
-
-      console.log(
-        `[memory-retain] engine=${engine} tenant=${tenantId} ` +
-          `user=${userId} thread=${eventThreadId} db=${dbMessages.length} ` +
-          `event=${eventMessages.length} merged=${merged.length}`,
-      );
-
-      // THINK-261 / company-brain plan U8 — space dual-write, opt-in per
-      // space. Runs after the user-bank retain succeeded; its failure is
-      // loud but independent (the personal copy stands, the attempt records
-      // the space outcome). Eval traffic never dual-writes. Idempotent on
-      // retry: retainConversation upserts per thread document.
-      let spaceDualWrite: "retained" | "failed" | undefined;
-      const dualWriteSpaceId = attempt.space_id;
-      if (dualWriteSpaceId && !evalTraffic) {
-        if (await spaceConversationSharingEnabled(tenantId, dualWriteSpaceId)) {
-          try {
-            await adapter.retainConversation({
-              tenantId,
-              ownerType: "space",
-              ownerId: dualWriteSpaceId,
-              threadId: eventThreadId,
-              messages: merged,
-              hindsight: buildSpaceThreadRetainOptions({
-                spaceId: dualWriteSpaceId,
-                messages: merged,
-              }),
-              metadata: provenanceStampedMetadata,
-            });
-            spaceDualWrite = "retained";
-          } catch (err) {
-            spaceDualWrite = "failed";
-            console.error(
-              `[memory-retain] space_dual_write_failed space=${dualWriteSpaceId} thread=${eventThreadId} tenant=${tenantId}: ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-            );
-          }
-        }
-      }
-
-      if (highConfidenceFactError) {
-        throw highConfidenceFactError;
-      }
-
-      // THINK-201 fail-loud seam: the 0.5.0 incident stored conversation
-      // documents while extraction silently produced ZERO units, and the
-      // attempt ledger still said "retained". Retention is synchronous, so a
-      // post-retain readback makes silent-extraction failure visible. Zero can
-      // be legitimate for trivial threads, so this warns (grep/alarm on
-      // `retained_zero_units`) and records the count instead of failing.
-      const extractedUnitCount = evalTraffic
-        ? null
-        : await countExtractedUnitsForThread(eventThreadId);
-      if (extractedUnitCount === 0) {
-        console.warn(
-          `[memory-retain] retained_zero_units thread=${eventThreadId} tenant=${tenantId} merged=${merged.length} — document stored but extraction produced no memory units`,
-        );
-      }
-
-      await markRetainAttemptRetained(attempt.id, {
-        backendLatencyMs: Date.now() - started,
-        providerDocumentId: eventThreadId,
-        providerResult: {
-          engine,
-          adapterKind: adapter.kind,
-          messageCount: merged.length,
-          highConfidenceFactCount: highConfidenceFacts.documents.length,
-          ...(extractedUnitCount !== null ? { extractedUnitCount } : {}),
-          ...(spaceDualWrite ? { spaceDualWrite } : {}),
-        },
-        metadata: mergeAttemptMetadata(attempt.metadata, {
-          dbMessageCount: dbMessages.length,
-          eventMessageCount: eventMessages.length,
-          mergedMessageCount: merged.length,
-          highConfidenceFacts: highConfidenceFacts.documents,
-          rejectedHighConfidenceFacts: highConfidenceFacts.rejected,
-          fallbackUsed: dbMessages.length === 0 && eventMessages.length > 0,
-          ...(extractedUnitCount !== null ? { extractedUnitCount } : {}),
-          retainedAt: new Date().toISOString(),
-        }),
-      });
-    } else {
-      // AgentCore engine fallback: adapter without retainConversation
-      // (e.g. AgentCore managed memory) keeps today's per-turn semantics.
-      if (eventMessages.length === 0) {
-        throw new Error("no_content");
-      }
-      await adapter.retainTurn({
-        ...owner,
-        threadId: eventThreadId,
-        messages: eventMessages,
-        metadata: eventMetadata,
-      });
-      console.log(
-        `[memory-retain] engine=${engine} fallback retainTurn tenant=${tenantId} ` +
-          `user=${userId} thread=${eventThreadId} messages=${eventMessages.length}`,
-      );
-      await markRetainAttemptRetained(attempt.id, {
-        backendLatencyMs: Date.now() - started,
-        providerDocumentId: eventThreadId,
-        providerResult: {
-          engine,
-          adapterKind: adapter.kind,
-          messageCount: eventMessages.length,
-        },
-        metadata: mergeAttemptMetadata(attempt.metadata, {
-          eventMessageCount: eventMessages.length,
-          retainedAt: new Date().toISOString(),
-        }),
       });
     }
+    await adapter.retainTurn({
+      ...owner,
+      threadId: eventThreadId,
+      messages: eventMessages,
+      metadata: eventMetadata,
+    });
+    console.log(
+      `[memory-retain] engine=${engine} retainTurn tenant=${tenantId} ` +
+        `user=${userId} thread=${eventThreadId} messages=${eventMessages.length}`,
+    );
+    await markRetainAttemptRetained(attempt.id, {
+      backendLatencyMs: Date.now() - started,
+      providerDocumentId: eventThreadId,
+      providerResult: {
+        engine,
+        adapterKind: adapter.kind,
+        messageCount: eventMessages.length,
+      },
+      metadata: mergeAttemptMetadata(attempt.metadata, {
+        eventMessageCount: eventMessages.length,
+        retainedAt: new Date().toISOString(),
+      }),
+    });
 
     return { ok: true, engine, attemptId: attempt.id };
   } catch (err) {
     const classification = classifyRetainError(err);
-    if (
-      highConfidenceFacts.documents.length > 0 &&
-      highConfidenceFactError === null
-    ) {
-      await markRetainAttemptRetained(attempt.id, {
-        backendLatencyMs: Date.now() - started,
-        providerDocumentId: eventThreadId,
-        providerResult: {
-          engine,
-          adapterKind: adapter.kind,
-          highConfidenceFactCount: highConfidenceFacts.documents.length,
-          conversationRetainStatus: "failed_after_high_confidence_retained",
-          conversationRetainErrorClass: classification.errorClass,
-          conversationRetainErrorMessage: classification.errorMessage,
-        },
-        metadata: mergeAttemptMetadata(attempt.metadata, {
-          retainedAt: new Date().toISOString(),
-          retainedVia: "high_confidence_fact",
-          highConfidenceFacts: highConfidenceFacts.documents,
-          rejectedHighConfidenceFacts: highConfidenceFacts.rejected,
-          conversationRetainFailedAt: new Date().toISOString(),
-          conversationRetainFailedStatus: classification.status,
-          conversationRetainErrorClass: classification.errorClass,
-        }),
-      });
-      console.warn(
-        `[memory-retain] attempt=${attempt.id} retained via high-confidence facts after conversation retain failed: ${classification.errorMessage}`,
-      );
-      return { ok: true, engine, attemptId: attempt.id };
-    }
     const status = await markRetainAttemptFailed(attempt, classification, {
       backendLatencyMs: Date.now() - started,
       metadata: mergeAttemptMetadata(attempt.metadata, {
         failedAt: new Date().toISOString(),
         failedStatus: classification.status,
-        highConfidenceFacts: highConfidenceFacts.documents,
-        rejectedHighConfidenceFacts: highConfidenceFacts.rejected,
       }),
     });
     console.error(
@@ -614,428 +335,6 @@ async function drainDueRetainAttempts(limit = 25): Promise<MemoryRetainResult> {
   }
 
   return { ok: failed === 0, processed: retained + failed, retained, failed };
-}
-
-type RetainedHighConfidenceFactDocument = {
-  factId: string;
-  documentId: string;
-  scope: "user" | "space";
-  kind: ExtractedHighConfidenceFact["kind"];
-};
-
-async function retainHighConfidenceFacts(input: {
-  adapter: ReturnType<typeof getMemoryServices>["adapter"];
-  attempt: RetainAttemptRow;
-  tenantId: string;
-  userId: string;
-  spaceId?: string | null;
-  threadId: string;
-  messages: NormalizedMessage[];
-}): Promise<{
-  documents: RetainedHighConfidenceFactDocument[];
-  rejected: RejectedHighConfidenceFactCandidate[];
-}> {
-  const extracted = extractHighConfidenceFacts({
-    messages: input.messages,
-    spaceId: input.spaceId,
-  });
-  if (extracted.facts.length === 0) {
-    return { documents: [], rejected: extracted.rejected };
-  }
-  const documents: RetainedHighConfidenceFactDocument[] = [];
-  for (const fact of extracted.facts) {
-    if (fact.scope === "space" && !input.spaceId) continue;
-    const owner =
-      fact.scope === "space"
-        ? {
-            tenantId: input.tenantId,
-            ownerType: "space" as const,
-            ownerId: input.spaceId!,
-          }
-        : {
-            tenantId: input.tenantId,
-            ownerType: "user" as const,
-            ownerId: input.userId,
-          };
-    const documentId = highConfidenceFactDocumentId(fact);
-    const path = `memory/high-confidence-facts/${input.threadId}/${fact.id}.md`;
-    const retainOptions = buildHighConfidenceFactRetainOptions({
-      scope: fact.scope,
-      spaceId: input.spaceId,
-      timestamp: fact.timestamp,
-    });
-    const metadata = {
-      source: "high_confidence_fact",
-      sourceContext: "thinkwork_high_confidence_fact",
-      retainAttemptId: input.attempt.id,
-      tenantId: input.tenantId,
-      userId: input.userId,
-      spaceId: input.spaceId,
-      threadId: input.threadId,
-      factId: fact.id,
-      factScope: fact.scope,
-      factKind: fact.kind,
-      confidence: fact.confidence,
-      sourceText: fact.sourceText,
-      sourceMessageIndex: String(fact.sourceMessageIndex),
-    };
-    await persistHighConfidenceFactMemoryUnit({
-      bankId:
-        fact.scope === "space"
-          ? `space_${input.spaceId!}`
-          : `user_${input.userId}`,
-      documentId,
-      content: fact.text,
-      path,
-      metadata,
-      eventDate: fact.timestamp,
-      tags: retainOptions.tags || [],
-      retainParams: {
-        context: "thinkwork_high_confidence_fact",
-        metadata: {
-          ...metadata,
-          ownerType: owner.ownerType,
-          path,
-        },
-        ...(retainOptions.timestamp
-          ? { event_date: retainOptions.timestamp }
-          : {}),
-      },
-    });
-    if (fact.scope === "user") {
-      await projectHighConfidenceFactToUserContext({
-        tenantId: input.tenantId,
-        userId: input.userId,
-        fact,
-      });
-    }
-    documents.push({
-      factId: fact.id,
-      documentId,
-      scope: fact.scope,
-      kind: fact.kind,
-    });
-  }
-
-  return { documents, rejected: extracted.rejected };
-}
-
-async function projectHighConfidenceFactToUserContext(input: {
-  tenantId: string;
-  userId: string;
-  fact: ExtractedHighConfidenceFact;
-}): Promise<void> {
-  const field = profileFieldForHighConfidenceFact(input.fact);
-  if (!field) return;
-
-  const db = getDb();
-  const factLine = input.fact.text;
-  if (field === "family") {
-    const replacePattern = profileReplacementPatternForFact(input.fact);
-    const currentFamily = replacePattern
-      ? sql`btrim(regexp_replace(COALESCE(user_profiles.family, ''), ${replacePattern}, '', 'g'))`
-      : sql`COALESCE(user_profiles.family, '')`;
-    await db.execute(sql`
-      INSERT INTO user_profiles (user_id, tenant_id, family, updated_at)
-      VALUES (${input.userId}::uuid, ${input.tenantId}::uuid, ${factLine}, now())
-      ON CONFLICT (user_id)
-      DO UPDATE SET
-        tenant_id = EXCLUDED.tenant_id,
-        family = CASE
-          WHEN ${currentFamily} LIKE ${`%${input.fact.text}%`} THEN ${currentFamily}
-          WHEN ${currentFamily} = '' THEN EXCLUDED.family
-          ELSE ${currentFamily} || E'\n' || EXCLUDED.family
-        END,
-        updated_at = now()
-    `);
-  } else {
-    await db.execute(sql`
-      INSERT INTO user_profiles (user_id, tenant_id, notes, updated_at)
-      VALUES (${input.userId}::uuid, ${input.tenantId}::uuid, ${factLine}, now())
-      ON CONFLICT (user_id)
-      DO UPDATE SET
-        tenant_id = EXCLUDED.tenant_id,
-        notes = CASE
-          WHEN COALESCE(user_profiles.notes, '') LIKE ${`%${input.fact.text}%`} THEN user_profiles.notes
-          WHEN COALESCE(user_profiles.notes, '') = '' THEN EXCLUDED.notes
-          ELSE user_profiles.notes || E'\n' || EXCLUDED.notes
-        END,
-        updated_at = now()
-    `);
-  }
-
-  await writeUserContextMdForUser(db, input.tenantId, input.userId, {
-    overwrite: true,
-  });
-}
-
-function profileReplacementPatternForFact(
-  fact: ExtractedHighConfidenceFact,
-): string | null {
-  if (fact.kind !== "pet") return null;
-  const match = /^(User's .+ has .+) named [^\n.]+\.?$/.exec(fact.text);
-  if (!match) return null;
-  return `(^|\\n)${escapePostgresRegex(match[1])} named [^\\n.]+\\.?`;
-}
-
-function escapePostgresRegex(value: string): string {
-  return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-}
-
-function profileFieldForHighConfidenceFact(
-  fact: ExtractedHighConfidenceFact,
-): "family" | "notes" | null {
-  if (fact.kind === "pet" || fact.kind === "family") return "family";
-  if (fact.kind === "allergy" || fact.kind === "preference") return "notes";
-  return null;
-}
-
-async function persistHighConfidenceFactMemoryUnit(input: {
-  bankId: string;
-  documentId: string;
-  content: string;
-  path: string;
-  metadata: Record<string, unknown>;
-  eventDate?: string;
-  tags: string[];
-  retainParams: Record<string, unknown>;
-}): Promise<void> {
-  // Every statement here targets Hindsight tables — route to the Hindsight
-  // handle (identical to getDb() until the cutover env var is set).
-  const db = getHindsightDb();
-  const now = new Date();
-  const contentHash = createHash("sha256").update(input.content).digest("hex");
-  const factId =
-    typeof input.metadata.factId === "string" ? input.metadata.factId : "";
-  await db.execute(sql`
-    INSERT INTO ${hindsightSql()}banks (bank_id, name, updated_at)
-    VALUES (${input.bankId}, ${input.bankId}, ${now})
-    ON CONFLICT (bank_id)
-    DO UPDATE SET updated_at = EXCLUDED.updated_at
-  `);
-  await db.execute(sql`
-    INSERT INTO ${hindsightSql()}documents (
-      id,
-      bank_id,
-      original_text,
-      content_hash,
-      retain_params,
-      tags,
-      updated_at
-    )
-    VALUES (
-      ${input.documentId},
-      ${input.bankId},
-      ${input.content},
-      ${contentHash},
-      ${JSON.stringify(input.retainParams)}::jsonb,
-      ${varcharArraySql(input.tags)},
-      ${now}
-    )
-    ON CONFLICT (id, bank_id)
-    DO UPDATE SET
-      original_text = EXCLUDED.original_text,
-      content_hash = EXCLUDED.content_hash,
-      retain_params = EXCLUDED.retain_params,
-      tags = EXCLUDED.tags,
-      updated_at = EXCLUDED.updated_at
-  `);
-  await db.execute(sql`
-    DELETE FROM ${hindsightSql()}memory_units
-    WHERE bank_id = ${input.bankId}
-      AND document_id = ${input.documentId}
-      AND context = 'thinkwork_high_confidence_fact'
-  `);
-  if (factId) {
-    await db.execute(sql`
-      WITH stale_units AS (
-        DELETE FROM ${hindsightSql()}memory_units
-        WHERE bank_id = ${input.bankId}
-          AND context = 'thinkwork_high_confidence_fact'
-          AND metadata->>'factId' = ${factId}
-          AND document_id <> ${input.documentId}
-        RETURNING document_id
-      )
-      DELETE FROM ${hindsightSql()}documents d
-      USING stale_units s
-      WHERE d.bank_id = ${input.bankId}
-        AND d.id = s.document_id
-        AND d.id LIKE 'high_confidence_fact:%'
-    `);
-  }
-  await db.execute(sql`
-    INSERT INTO ${hindsightSql()}memory_units (
-      bank_id,
-      document_id,
-      text,
-      context,
-      fact_type,
-      event_date,
-      mentioned_at,
-      metadata,
-      tags,
-      updated_at
-    )
-    VALUES (
-      ${input.bankId},
-      ${input.documentId},
-      ${input.content},
-      'thinkwork_high_confidence_fact',
-      'experience',
-      ${input.eventDate ? new Date(input.eventDate) : now},
-      ${input.eventDate ? new Date(input.eventDate) : now},
-      ${JSON.stringify(input.metadata)}::jsonb,
-      ${varcharArraySql(input.tags)},
-      ${now}
-    )
-  `);
-}
-
-function varcharArraySql(values: string[]) {
-  if (values.length === 0) return sql`ARRAY[]::varchar[]`;
-  return sql`ARRAY[${sql.join(
-    values.map((value) => sql`${value}`),
-    sql`, `,
-  )}]::varchar[]`;
-}
-
-function highConfidenceFactDocumentId(
-  fact: ExtractedHighConfidenceFact,
-): string {
-  return `high_confidence_fact:${fact.id}`;
-}
-
-/**
- * Fetch the canonical thread transcript from the messages table.
- *
- * SECURITY: filters by BOTH tenant_id AND thread_id to prevent confused-deputy
- * attacks via forged threadId in the event payload. A threadId belonging to
- * tenant B will return zero rows when the event claims tenantId=A, and the
- * caller falls through to the event tail (which contains A's content) — no
- * cross-tenant leak.
- *
- * Logging hygiene: never include message content in logs. Identifiers are
- * prefix-truncated.
- */
-/**
- * THINK-201: post-retain extraction readback. Conversation retains store the
- * whole thread as one Hindsight document with `document_id = threadId`;
- * extracted units carry the same document_id, so a count answers "did
- * extraction actually produce anything?". Returns null (never throws) on any
- * failure — the readback is diagnostic, not a retain gate.
- */
-export async function countExtractedUnitsForThread(
-  threadId: string,
-): Promise<number | null> {
-  try {
-    const db = getHindsightDb();
-    const result = await db.execute(
-      sql`SELECT count(*)::int AS n FROM ${hindsightSql()}memory_units WHERE document_id = ${threadId}`,
-    );
-    const row = (result.rows ?? [])[0] as { n?: number } | undefined;
-    return typeof row?.n === "number" ? row.n : null;
-  } catch (err) {
-    console.warn(
-      `[memory-retain] extraction readback failed (diagnostic only): ${(err as Error)?.message}`,
-    );
-    return null;
-  }
-}
-
-async function fetchThreadTranscript(
-  tenantId: string,
-  threadId: string,
-): Promise<NormalizedMessage[]> {
-  const db = getDb();
-  const rows = await db
-    .select({
-      role: messages.role,
-      content: messages.content,
-      created_at: messages.created_at,
-      tenant_id: messages.tenant_id,
-    })
-    .from(messages)
-    .where(
-      and(eq(messages.tenant_id, tenantId), eq(messages.thread_id, threadId)),
-    )
-    .orderBy(asc(messages.created_at));
-
-  const anomalous = rows.filter((r) => r.tenant_id !== tenantId);
-  if (anomalous.length > 0) {
-    // Defense-in-depth: the WHERE filter above already excludes rows from
-    // other tenants, but if database state is somehow inconsistent surface
-    // it loudly rather than silently leak content.
-    console.error(
-      `[memory-retain] tenant_anomaly tenant=${tenantId.slice(0, 8)} ` +
-        `thread=${threadId.slice(0, 8)} mismatched=${anomalous.length}`,
-    );
-    throw new Error("tenant_anomaly");
-  }
-
-  return rows
-    .filter(
-      (
-        r,
-      ): r is {
-        role: string;
-        content: string;
-        created_at: Date;
-        tenant_id: string;
-      } => typeof r.content === "string" && r.content.trim().length > 0,
-    )
-    .map((r) => ({
-      role:
-        r.role === "assistant" || r.role === "system"
-          ? (r.role as "assistant" | "system")
-          : ("user" as const),
-      content: r.content.trim(),
-      timestamp: r.created_at.toISOString(),
-    }));
-}
-
-/**
- * Longest-suffix-prefix overlap merge between DB rows (canonical) and the
- * runtime-supplied event tail.
- *
- * Algorithm: find the largest k such that event[0..k-1] equals db.tail[-k..]
- * compared by (role, content) only. Append event[k..] after the DB rows; the
- * first k event entries are the overlap and are dropped.
- *
- * Handles both transcript shapes:
- * - event = [latest_pair_only]  (small, k typically 0 or 2)
- * - event = full_history + [latest_pair]  (k matches whatever DB tail
- *   already has)
- *
- * Timestamp is excluded from the match key on purpose: createdAt differs
- * between runtime-stamped event entries and DB-writer-stamped rows, and
- * including it in the dedup key produces phantom duplicates over long threads.
- */
-export function mergeTranscriptSuffix(
-  db: NormalizedMessage[],
-  event: NormalizedMessage[],
-): NormalizedMessage[] {
-  if (event.length === 0) return [...db];
-  if (db.length === 0) return [...event];
-
-  const max = Math.min(db.length, event.length);
-  let bestK = 0;
-  for (let k = max; k >= 1; k -= 1) {
-    let match = true;
-    for (let i = 0; i < k; i += 1) {
-      const a = db[db.length - k + i];
-      const b = event[i];
-      if (a.role !== b.role || a.content !== b.content) {
-        match = false;
-        break;
-      }
-    }
-    if (match) {
-      bestK = k;
-      break;
-    }
-  }
-
-  return [...db, ...event.slice(bestK)];
 }
 
 async function resolveUserIdFromAgent(

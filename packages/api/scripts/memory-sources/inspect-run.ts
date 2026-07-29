@@ -3,9 +3,9 @@
  *
  * Dumps the workflow run row, its step events, task tokens, memory ledger
  * rows (evidence/run items/checkpoint/derivations), the dream ledger row for
- * the target bank, and a live Hindsight recall against the target bank.
+ * and the target bank.
  *
- * Usage (dev DATABASE_URL + HINDSIGHT_ENDPOINT exported):
+ * Usage (dev DATABASE_URL exported):
  *   npx tsx scripts/memory-sources/inspect-run.ts --run <workflowRunId> \
  *     [--source <sourceConfigId>] [--bank <bankId>] [--query "..."]
  */
@@ -134,26 +134,6 @@ async function main() {
       finished_at: dream.finished_at,
     };
 
-    const endpoint = process.env.HINDSIGHT_ENDPOINT;
-    if (endpoint) {
-      const resp = await fetch(
-        `${endpoint.replace(/\/$/, "")}/v1/default/banks/${encodeURIComponent(bankId)}/memories/recall`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, budget: "low", max_tokens: 600 }),
-          signal: AbortSignal.timeout(60000),
-        },
-      );
-      const json: any = await resp.json().catch(() => ({}));
-      out.recall = {
-        status: resp.status,
-        query,
-        texts: (json?.results ?? json?.memory_units ?? [])
-          .slice(0, 8)
-          .map((u: any) => u.text),
-      };
-    }
   }
 
   console.log(JSON.stringify(out, null, 2));

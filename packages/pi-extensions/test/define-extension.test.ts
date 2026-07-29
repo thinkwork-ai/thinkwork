@@ -66,14 +66,14 @@ describe("defineExtension", () => {
 
 describe("requireProvider", () => {
   it("returns the provider when present", () => {
-    const memory = { recall: () => {}, reflect: () => {} };
-    const providers = { memory } as unknown as ProviderBundle;
-    expect(requireProvider(providers, "memory", "ext")).toBe(memory);
+    const search = { search: () => {} };
+    const providers = { search } as unknown as ProviderBundle;
+    expect(requireProvider(providers, "search", "ext")).toBe(search);
   });
 
   it("throws a descriptive, extension-named error when absent", () => {
-    expect(() => requireProvider({}, "memory", "my-ext")).toThrow(
-      /Extension "my-ext" requires a "memory" provider/,
+    expect(() => requireProvider({}, "search", "my-ext")).toThrow(
+      /Extension "my-ext" requires a "search" provider/,
     );
   });
 });
@@ -87,8 +87,8 @@ describe("emptyToolParameters", () => {
 
 describe("toExtensionFactory", () => {
   it("binds providers and registers against the live ExtensionAPI", async () => {
-    const memory = { recall: vi.fn(), reflect: vi.fn() };
-    const providers: ProviderBundle = { memory };
+    const search = { search: vi.fn() } as unknown as ProviderBundle["search"];
+    const providers: ProviderBundle = { search };
     let seenProviders: ProviderBundle | undefined;
     const ext = defineExtension({
       name: "capability",

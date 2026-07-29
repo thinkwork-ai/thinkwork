@@ -92,7 +92,7 @@ is_default: true
 compatibility: Requires Google OAuth credentials
 allowed-tools:
   - render_package
-  - hindsight_recall`;
+  - memory_recall`;
 
 // ---------------------------------------------------------------------------
 // parseSkillMd (strict — SI-4 surface) — happy paths
@@ -121,7 +121,7 @@ describe("parseSkillMd — happy paths", () => {
     expect(r.parsed.execution).toBe("script");
     expect(r.parsed.allowedToolsDeclared).toEqual([
       "render_package",
-      "hindsight_recall",
+      "memory_recall",
     ]);
     // Internal carries everything except name/description/allowed-tools.
     const internal = r.parsed.internal ?? {};
@@ -343,7 +343,7 @@ describe("parseSkillMdInternal — happy paths", () => {
     expect(r.parsed.data.description).toContain("every supported field");
     expect(r.parsed.data["allowed-tools"]).toEqual([
       "render_package",
-      "hindsight_recall",
+      "memory_recall",
     ]);
     expect(r.parsed.execution).toBe("script");
     expect(

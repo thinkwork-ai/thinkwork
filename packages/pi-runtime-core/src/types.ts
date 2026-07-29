@@ -170,7 +170,6 @@ export interface InvocationResponse {
     model_routed_tool_calls?: ModelRoutedToolCallRecord[];
     agent_profile_runs?: AgentProfileRunRecord[];
     tool_costs?: ToolCostRecord[];
-    hindsight_usage?: unknown[];
     goal_run?: GoalRunEvidence;
   };
   runtime: "pi";
@@ -184,7 +183,6 @@ export interface InvocationResponse {
   model_routed_tool_calls?: ModelRoutedToolCallRecord[];
   agent_profile_runs?: AgentProfileRunRecord[];
   tool_costs?: ToolCostRecord[];
-  hindsight_usage?: unknown[];
   goal_run?: GoalRunEvidence;
 }
 

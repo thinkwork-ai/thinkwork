@@ -17,6 +17,10 @@ import type {
 
 export type NormalizedInspectService = {
   inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
+  /**
+   * Cross-owner tenant listing. No engine implements a tenant-wide inspect
+   * since Hindsight was retired (THINK-406), so this always resolves `[]`.
+   */
   inspectTenant(
     request: TenantInspectRequest,
   ): Promise<ThinkWorkMemoryRecord[]>;
@@ -42,13 +46,9 @@ export function createInspectService(
       );
     },
     async inspectTenant(
-      request: TenantInspectRequest,
+      _request: TenantInspectRequest,
     ): Promise<ThinkWorkMemoryRecord[]> {
-      if (!config.enabled || !adapter.inspectTenant) return [];
-      const records = await adapter.inspectTenant(request);
-      return [...records].sort((a, b) =>
-        (b.createdAt || "").localeCompare(a.createdAt || ""),
-      );
+      return [];
     },
     async inspectEpisodic(
       request: InspectRequest,

@@ -7,7 +7,6 @@ import type {
   CanvasProvider,
   DelegationProvider,
   IdentityResolutionProvider,
-  MemoryProvider,
   ModelProvider,
   SearchProvider,
   WorkspaceProvider,
@@ -20,14 +19,13 @@ import type {
 /**
  * The U3 provider seam handed to every extension. Extensions call these host
  * capabilities (creds/clients supplied by the cloud or desktop host) rather
- * than constructing AWS/Bedrock/Hindsight clients themselves — that is what
+ * than constructing AWS/Bedrock clients themselves — that is what
  * keeps a single extension package host-agnostic. Each provider is optional
  * because a host only supplies what a given deployment needs.
  */
 export interface ProviderBundle {
   model?: ModelProvider;
   workspace?: WorkspaceProvider;
-  memory?: MemoryProvider;
   delegation?: DelegationProvider;
   identityResolution?: IdentityResolutionProvider;
   canvas?: CanvasProvider;

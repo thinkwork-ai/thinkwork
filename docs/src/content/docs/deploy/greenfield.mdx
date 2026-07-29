@@ -34,8 +34,7 @@ ThinkWork is organized into three infrastructure tiers that deploy in order:
 - Integration Lambda functions (Slack, GitHub, Google)
 - Step Functions state machines (automations, Workflow execution adapter)
 - CloudFront distributions (web app)
-- Hindsight on ECS Fargate (hosted Brain memory for user and Space recall)
-- Bedrock AgentCore Memory (explicit compatibility mode when selected)
+- Bedrock AgentCore Memory (durable agent memory: retain, recall, episodes)
 
 ## Prerequisites
 
@@ -115,9 +114,8 @@ In the AWS console:
    # domain_name    = "thinkwork.example.com"
    # hosted_zone_id = "Z1234567890ABC"
 
-   # Memory
-   # Hindsight Brain memory is enabled by default.
-   # enable_hindsight = true
+   # Memory needs no configuration — Bedrock AgentCore Memory is the only
+   # engine and is always on.
 
    # Database engine
    database_engine = "aurora-serverless"   # recommended for dev

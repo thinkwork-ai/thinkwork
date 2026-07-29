@@ -92,10 +92,8 @@ describe("computer GraphQL queries", () => {
     const printed = print(ComputerMemorySystemConfigQuery);
     expect(printed).toContain("memorySystemConfig");
     expect(printed).toContain("activeEngine");
-    expect(printed).toContain("hindsightEnabled");
     expect(printed).toContain("userMemoryEnabled");
     expect(printed).toContain("spaceMemoryEnabled");
-    expect(printed).toContain("legacyHindsightAvailable");
     expect(printed).toContain("managedMemoryEnabled");
   });
 

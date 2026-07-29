@@ -404,7 +404,7 @@ thinkwork verify -s <stage>
 | `--api-auth-secret <value>` | Service bearer for the authenticated probe |
 
 Probes: GraphQL API answers, an authenticated API call succeeds, the web app
-serves HTML, the database schema is applied (Data API), Hindsight `/health`,
+serves HTML, the database schema is applied (Data API),
 workspace seeding, and deployed-artifact evidence (Lambda env + code size vs
 placeholder). Pending external approvals — SES production access, domain DNS
 delegation — render as a tracked checklist and never fail verification.
@@ -461,7 +461,7 @@ thinkwork status [-s <stage>]
 
 Without `-s`, prints a table of every deployed stage across the account.
 
-With `-s`, prints the detailed view for one stage — Lambda counts, AgentCore, memory backends, etc.
+With `-s`, prints the detailed view for one stage — Lambda counts, AgentCore, AgentCore Memory, etc.
 
 Aliases: `list`, `ls`.
 
@@ -1123,7 +1123,7 @@ thinkwork tenant settings set [tenant] [--default-model <id>] [--monthly-budget-
 - `[tenant]` is optional; defaults to the session's tenant. Pass a slug to target a different tenant.
 - `--monthly-budget-usd` converts to `budgetMonthlyCents` (× 100).
 - `--auto-close-after-days` converts to `autoCloseThreadMinutes` (× 60 × 24).
-- `--feature key=value` is repeatable. Values are auto-parsed: `true`/`false` → bool, integers → number, otherwise string. Example: `--feature hindsight=true --feature beta_tool=false`.
+- `--feature key=value` is repeatable. Values are auto-parsed: `true`/`false` → bool, integers → number, otherwise string. Example: `--feature beta_tool=false --feature enable_voice_dictation=true`.
 
 ---
 
@@ -1244,14 +1244,15 @@ thinkwork skill push <folder>
 
 ### memory
 
-Inspect, search, and edit an agent's managed memory (AgentCore / Hindsight) and memory graph.
+Inspect, search, and edit an agent's Bedrock AgentCore Memory records.
 
 ```bash
-thinkwork memory list --agent <id> [--namespace semantic|preferences|episodes|reflections]
+thinkwork memory list --agent <id> [--namespace semantic|preferences|summaries|episodes]
 thinkwork memory search --agent <id> --query <q> [--strategy] [--limit]
 thinkwork memory get <recordId> | update <recordId> --content <text> | delete <recordId>
-thinkwork memory graph --agent <id>
 ```
+
+`memory graph`, `memory promote`, and `memory bank` are **retired** along with the memory graph view and Tenant Bank promotion.
 
 ### recipe
 

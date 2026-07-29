@@ -73,7 +73,7 @@ If the DM status call fails for any reason (most commonly a workspace that has n
 
 ## Data sent to the agent
 
-ThinkWork sends only the invoked Slack context needed for the turn: team id, channel id, invoking Slack user id, linked requester ThinkWork user id, source message, bounded messages from the source thread, and referenced file metadata. Messages outside the invoked thread are not included. Completed turns follow the ordinary Hindsight memory and Wiki processing paths.
+ThinkWork sends only the invoked Slack context needed for the turn: team id, channel id, invoking Slack user id, linked requester ThinkWork user id, source message, bounded messages from the source thread, and referenced file metadata. Messages outside the invoked thread are not included. Completed turns follow the ordinary AgentCore memory and Wiki processing paths.
 
 For the formal disclosure, see [Slack data handling](/compliance/slack-data-handling/).
 

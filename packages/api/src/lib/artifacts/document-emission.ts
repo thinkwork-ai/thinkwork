@@ -69,10 +69,6 @@ import {
   writeArtifactPayloadToS3,
 } from "./payload-storage.js";
 import {
-  ingestDocumentArtifactMemory,
-  type DocumentMemoryInput,
-} from "./document-memory.js";
-import {
   appendThreadTurnEvent,
   drizzleThreadTurnEventStore,
 } from "../thread-turn-events.js";
@@ -386,12 +382,6 @@ export interface DocumentEmissionDeps {
   loadDocumentRow: (artifactId: string) => Promise<DocumentRow | null>;
   hasSpaceWriteRole: typeof hasSpaceWriteRole;
   pinDocumentHead: typeof pinDocumentHead;
-  /**
-   * Documents-as-memory (THINK-152 / THINK-193 P3): retain the digest +
-   * colophon into the memory engine. Best-effort — a memory fault never fails
-   * the emission.
-   */
-  ingestDocumentMemory: (input: DocumentMemoryInput) => Promise<unknown>;
   appendCardEvent: (input: {
     tenantId: string;
     turnId: string;
@@ -641,7 +631,6 @@ function defaultDeps(): DocumentEmissionDeps {
     },
     hasSpaceWriteRole,
     pinDocumentHead,
-    ingestDocumentMemory: ingestDocumentArtifactMemory,
     appendCardEvent: async ({
       tenantId,
       turnId,
@@ -1425,33 +1414,6 @@ export async function handleDocumentEmission(
       );
     }
   }
-
-  // ---- Documents-as-memory (THINK-152 / THINK-193 P3) --------------------
-  // Best-effort like the card append: the document is durably persisted; a
-  // memory fault costs Brain ingestion, not data.
-  await deps
-    .ingestDocumentMemory({
-      tenantId: input.tenantId,
-      threadId: input.threadId,
-      agentId: input.agentId,
-      artifactId,
-      documentId,
-      genre: doc.genre,
-      title: doc.title,
-      abstract: doc.abstract,
-      digestMarkdown: doc.digestMarkdown,
-      status,
-      headVersion,
-      actingUserId,
-      spaceId: memorySpaceId,
-      emittedAt: new Date().toISOString(),
-    })
-    .catch((err) => {
-      console.error(
-        "[document-emission] memory ingest failed (best-effort):",
-        err,
-      );
-    });
 
   // ---- Compact card event (R4) — abstract truncated to the ceiling -------
   const card = buildDocumentCard({

@@ -117,9 +117,7 @@ export function registerConfigCommand(program: Command): void {
         console.log(
           `  ${chalk.bold("Database:")}        ${env.databaseEngine}`,
         );
-        console.log(
-          `  ${chalk.bold("Memory:")}          ${env.enableHindsight ? "hindsight" : "agentcore"}`,
-        );
+        console.log(`  ${chalk.bold("Memory:")}          agentcore`);
         console.log(`  ${chalk.bold("Terraform dir:")}   ${env.terraformDir}`);
         console.log(`  ${chalk.bold("Created:")}         ${env.createdAt}`);
         console.log(`  ${chalk.bold("Updated:")}         ${env.updatedAt}`);
@@ -170,9 +168,7 @@ export function registerConfigCommand(program: Command): void {
       );
 
       for (const env of envs) {
-        const memBadge = env.enableHindsight
-          ? chalk.magenta("managed+hindsight")
-          : chalk.dim("managed");
+        const memBadge = chalk.dim("managed");
         const dbBadge =
           env.databaseEngine === "rds-postgres"
             ? chalk.yellow("rds")
@@ -253,22 +249,15 @@ export function registerConfigCommand(program: Command): void {
         let tfValue = value;
 
         if (tfKey === "memory_engine") {
-          if (
-            value !== "managed" &&
-            value !== "hindsight" &&
-            value !== "agentcore"
-          ) {
-            printError(
-              `Invalid memory engine "${value}". Must be 'agentcore' or 'hindsight' (legacy 'managed' is accepted and stored as 'agentcore').`,
-            );
-            process.exit(1);
-          }
-          if (value === "managed") {
+          // AgentCore managed memory is the only engine (THINK-406). Legacy
+          // values are accepted and normalized rather than rejected so
+          // existing stage configs keep working.
+          if (value !== "agentcore") {
             printWarning(
-              "memory_engine value 'managed' is deprecated — storing it as 'agentcore'.",
+              `memory_engine value "${value}" is retired — storing it as 'agentcore'.`,
             );
-            tfValue = "agentcore";
           }
+          tfValue = "agentcore";
         }
 
         if (

@@ -23,7 +23,7 @@ That's it. No redeploy. The next time anyone in that tenant has a conversation t
 
 Two things have to also be true for compiles to run:
 
-1. **The tenant is using Hindsight as its memory engine.** AgentCore tenants will silently skip compiles in v1 — the cursor method isn't implemented there yet.
+1. **The memory adapter implements the `listRecordsUpdatedSince` cursor.** Only the removed Hindsight adapter did; the AgentCore adapter does not, so the enqueue path currently short-circuits with `skipped_adapter` and compiles are paused. Everything below still applies to already-compiled pages and to a restored cursor read.
 2. **Memories are being written with an owning agent.** If a retain call can't identify which agent the memory belongs to, it skips the enqueue rather than failing the retain.
 
 Both of these are usually true; this is mostly a heads-up for when you're wondering why compiles aren't happening.
@@ -159,7 +159,7 @@ A user reports: "I searched for X in my wiki and got Y, which has nothing to do 
 
 The issue is almost always polluted provenance — somewhere along the line a memory got attributed as a source for a section where it doesn't belong. Here's the investigation flow:
 
-**1. Figure out which memory is causing it.** Run the same query against Hindsight directly and note the top hit's memory id.
+**1. Figure out which memory is causing it.** Run the same query against memory directly (`memorySearch`, or `thinkwork memory search`) and note the top hit's record id.
 
 **2. Check which sections cite that memory:**
 
@@ -176,7 +176,7 @@ ORDER BY p.slug;
 
 **3. Do the citations make sense?** If the memory is about "Austin weather" and it's cited as a source for "Aldape Auto Center," that's polluted provenance. Rebuild the agent's wiki from scratch (the nuclear way above) — current compiler rules prevent re-introducing the pollution.
 
-If citations look clean and the result is still wrong, the bug isn't in the wiki layer — check that Hindsight itself is returning the right memories for the query.
+If citations look clean and the result is still wrong, the bug isn't in the wiki layer — check that memory search itself is returning the right records for the query.
 
 ## Exporting the vault
 
@@ -287,7 +287,7 @@ It reports, per tenant: source ledger state per family (configs, active grants, 
 Cross-source quality is scored separately by the golden set (entity precision, duplicate-page rate, claim faithfulness, provenance completeness, retraction correctness):
 
 ```bash
-DATABASE_URL=… HINDSIGHT_ENDPOINT=… pnpm -C packages/api exec tsx \
+DATABASE_URL=… pnpm -C packages/api exec tsx \
   scripts/run-external-memory-golden-set.ts --tenant <tenant-uuid> --entity Acme
 ```
 
@@ -297,11 +297,11 @@ DATABASE_URL=… HINDSIGHT_ENDPOINT=… pnpm -C packages/api exec tsx \
 - Per tenant: `tenants.wiki_compile_enabled` (canonical wiki writes).
 - Stage-global: the `WIKI_SOURCE` Lambda env var (graph vs legacy planner).
 
-Rollback disables new writes but **preserves ledgers** for diagnosis and retraction. Recovery is forward-only: pause the source/workflow, inspect the durable ledgers (`memory_run_items`, `memory_evidence_items`, `memory_retraction_attempts`), correct the adapter/rule, replay the affected run items, and recompile dirty canonical IDs. Never delete ledgers or reset Hindsight wholesale to recover one source.
+Rollback disables new writes but **preserves ledgers** for diagnosis and retraction. Recovery is forward-only: pause the source/workflow, inspect the durable ledgers (`memory_run_items`, `memory_evidence_items`, `memory_retraction_attempts`), correct the adapter/rule, replay the affected run items, and recompile dirty canonical IDs. Never delete ledgers or wipe memory wholesale to recover one source.
 
 ### Erase epochs
 
-"Delete this source's data" is a durable, self-finalizing aggregate driven by the `memory-retraction-drainer` (rate 5 minutes): every derivation's Hindsight document is deleted through the retraction saga, every S3 snapshot version under the source prefix is destroyed, and then ALL of the source's evidence rows are **hard-deleted** — the erase marker row and run items remain the audit trail. Because nothing tombstones the evidence unique slot, re-enabling the source later re-acquires identical content cleanly and mints fresh active claims (the erase epoch rule in `upsertClaimsForEvidence`). Dead-lettered attempts surface on the readiness report and the drainer alarms; requeue them with `retryMemoryRetractionAttempt`.
+"Delete this source's data" is a durable, self-finalizing aggregate driven by the `memory-retraction-drainer` (rate 5 minutes): every derivation's provider document is deleted through the retraction saga, every S3 snapshot version under the source prefix is destroyed, and then ALL of the source's evidence rows are **hard-deleted** — the erase marker row and run items remain the audit trail. Because nothing tombstones the evidence unique slot, re-enabling the source later re-acquires identical content cleanly and mints fresh active claims (the erase epoch rule in `upsertClaimsForEvidence`). Dead-lettered attempts surface on the readiness report and the drainer alarms; requeue them with `retryMemoryRetractionAttempt`.
 
 ### Alarms
 
@@ -320,7 +320,7 @@ Rollback disables new writes but **preserves ledgers** for diagnosis and retract
 
 ### Enqueue path
 
-`packages/api/src/lib/wiki/enqueue.ts` checks `tenants.wiki_compile_enabled`, verifies `adapterKind === 'hindsight'`, inserts a job with dedupe key `${tenantId}:${ownerId}:${floor(epoch_s/300)}`, fires `Lambda.invoke` with `InvocationType: "Event"`.
+`packages/api/src/lib/wiki/enqueue.ts` checks `tenants.wiki_compile_enabled`, verifies the adapter implements the cursor API, inserts a job with dedupe key `${tenantId}:${ownerId}:${floor(epoch_s/300)}`, fires `Lambda.invoke` with `InvocationType: "Event"`.
 
 ### Job ledger fields
 

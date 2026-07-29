@@ -43,7 +43,7 @@ describe("retain-attempts helpers", () => {
     expect(
       classifyRetainError(
         new Error(
-          "[hindsight-adapter] retainConversation failed: The operation was aborted due to timeout",
+          "[memory-adapter] retainTurn failed: The operation was aborted due to timeout",
         ),
       ),
     ).toMatchObject({
@@ -53,47 +53,43 @@ describe("retain-attempts helpers", () => {
     });
   });
 
-  it("classifies Hindsight 5xx as retryable backend failure", () => {
+  it("classifies engine 5xx as retryable backend failure", () => {
     expect(
       classifyRetainError(
-        new Error(
-          "[hindsight-adapter] retainConversation failed: hindsight retainConversation 503",
-        ),
+        new Error("[memory-adapter] retainTurn failed: memory retainTurn 503"),
       ),
     ).toMatchObject({
       status: "failed_backend",
       retryable: true,
-      errorClass: "hindsight_503",
+      errorClass: "http_503",
     });
   });
 
   it("classifies an ALB 504 HTML error page as retryable backend failure", () => {
-    // Real shape observed on dev: the Hindsight ALB times out before the
+    // Real shape observed on dev: the load balancer times out before the
     // backend finishes and returns its own HTML 504 page.
     expect(
       classifyRetainError(
         new Error(
-          "[hindsight-adapter] retainConversation failed: hindsight retainConversation 504: <html>\r\n<head><title>504 Gateway Time-out</title></head>",
+          "[memory-adapter] retainTurn failed: memory retainTurn 504: <html>\r\n<head><title>504 Gateway Time-out</title></head>",
         ),
       ),
     ).toMatchObject({
       status: "failed_backend",
       retryable: true,
-      errorClass: "hindsight_504",
+      errorClass: "http_504",
     });
   });
 
-  it("classifies Hindsight 4xx as non-retryable dead letter", () => {
+  it("classifies engine 4xx as non-retryable dead letter", () => {
     expect(
       classifyRetainError(
-        new Error(
-          "[hindsight-adapter] retainConversation failed: hindsight retainConversation 400",
-        ),
+        new Error("[memory-adapter] retainTurn failed: memory retainTurn 400"),
       ),
     ).toMatchObject({
       status: "dead_lettered",
       retryable: false,
-      errorClass: "hindsight_400",
+      errorClass: "http_400",
     });
   });
 

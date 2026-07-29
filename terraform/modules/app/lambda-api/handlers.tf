@@ -402,15 +402,7 @@ locals {
     # invokes its named endpoint with a purpose-bound CUSTOM_JWT. It receives
     # no Harness control-plane inputs or permissions.
     # 240s: sync Hindsight retain (LLM extraction + auto-consolidation) can
-    # exceed 60s; the client timeout must stay below the Lambda timeout (300s)
-    # and below the Hindsight ALB idle_timeout (300s) so failures classify as
-    # client timeouts, never ALB 504s.
-    "memory-retain" = {
-      HINDSIGHT_TIMEOUT_MS = "240000"
-    }
-    "brain-dream-state" = {
-      BRAIN_DREAM_STATE_ENABLED = tostring(var.brain_dream_state_enabled)
-    }
+    # exceed 60s; the client timeout must stay below the Lambda timeout.
     # Company Brain U5: Neptune coordinates for the twin graph projector.
     # Empty endpoint leaves the projector inert (nudge helper skips too).
     "identity-graph-projector" = {
@@ -686,9 +678,7 @@ resource "aws_lambda_function" "handler" {
     "msteams-install-complete",
     "msteams-account-link-complete",
     "github-app",
-    "memory",
     "memory-retain",
-    "brain-dream-state",
     "memory-stage-worker",
     # THINK-193 U2 (Codex P1 #3): scheduled retry drainer for the retraction
     # saga ledger. Claims due/stale memory_retraction_attempts rows with the
@@ -917,7 +907,7 @@ resource "aws_lambda_function" "handler" {
   # headroom for transient slowness.
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "requester-memory-dreaming" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "requester-memory-dreaming" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
   memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "requester-memory-dreaming" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(4096, var.lambda_max_memory_mb) : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
@@ -1548,7 +1538,6 @@ locals {
       "POST /msteams/account-link/complete" = "msteams-account-link-complete"
 
       # Memory
-      "ANY /api/memory/{proxy+}" = "memory"
 
       # Artifacts
       "POST /api/artifacts/{proxy+}" = "artifact-deliver"
@@ -1843,42 +1832,6 @@ resource "aws_scheduler_schedule" "webhook_deliveries_cleanup" {
 # ---------------------------------------------------------------------------
 # Requester memory dreaming — broad per-user memory compaction/reflection sweep
 # ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# Brain dream state — per-bank Hindsight consolidation with audit ledger
-# (THINK-133 U4). Retries are the ledger's job (staged plan -> atomic apply
-# -> applied markers; unfinished runs resume on the next tick), so Lambda
-# async retries stay at 0, mirroring memory-retain.
-# ---------------------------------------------------------------------------
-
-resource "aws_lambda_function_event_invoke_config" "brain_dream_state" {
-  count                        = local.deploy_lambda_handlers ? 1 : 0
-  function_name                = aws_lambda_function.handler["brain-dream-state"].function_name
-  maximum_retry_attempts       = 0
-  maximum_event_age_in_seconds = 3600
-}
-
-resource "aws_scheduler_schedule" "brain_dream_state" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-brain-dream-state"
-  group_name          = "default"
-  schedule_expression = var.brain_dream_state_schedule_expression
-  state               = var.brain_dream_state_enabled ? "ENABLED" : "DISABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["brain-dream-state"].arn
-    role_arn = aws_iam_role.scheduler.arn
-
-    retry_policy {
-      maximum_retry_attempts = 0
-    }
-  }
-}
 
 resource "aws_scheduler_schedule" "requester_memory_dreaming" {
   count = local.deploy_lambda_handlers ? 1 : 0
