@@ -6,7 +6,7 @@ import {
 } from "./repository.js";
 
 describe("normalizeTenantSubtype", () => {
-  it("allows approved ontology-style dynamic entity type slugs", () => {
+  it("allows approved dynamic entity type slugs", () => {
     expect(normalizeTenantSubtype("support_case")).toBe("support_case");
     expect(normalizeTenantSubtype("Customer")).toBe("customer");
   });

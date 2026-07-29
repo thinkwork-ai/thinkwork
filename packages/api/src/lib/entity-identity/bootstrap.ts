@@ -6,7 +6,7 @@
  * validating the connector row exists and identity rules exist for every
  * target entity type, then re-projects the workspace routing map.
  *
- * The match job mirrors `ontology.suggestion_scan_jobs` exactly (KTD-7):
+ * The match job uses the durable-job convention (KTD-7):
  * dedupe-key insert-or-load on `identity.match_jobs`, async Event invoke of
  * the dedicated `identity-match` Lambda, invoke failure marked on the row
  * with an `invokeFailure` metric. Metrics report scanned / autoLinked /
@@ -26,11 +26,11 @@
  */
 
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
+  canonicalEntities,
   entitySourceMappings,
   identityMatchJobs,
-  ontologyEntityTypes,
   sourceSystemConnectors,
   tenantMcpServers,
 } from "@thinkwork/database-pg/schema";
@@ -43,7 +43,6 @@ import type {
 import { matchCanonicalEntity, defaultIdentityRules } from "./matcher.js";
 import {
   computeIdentitySignature,
-  parseIdentityRules,
   type IdentityRule,
 } from "./normalizers.js";
 import {
@@ -56,10 +55,6 @@ import {
   type OpenResolutionCaseResult,
 } from "./resolution.js";
 import { normalizeNaturalKeys } from "./matcher.js";
-import {
-  refreshRoutingMapFile,
-  type RoutingMapRefreshResult,
-} from "./routing-map-file.js";
 
 const LOG_PREFIX = "[identity-match]";
 
@@ -96,23 +91,16 @@ export interface RegisterIdentitySourceResult {
   sourceSystem: string;
   connectorSlug: string;
   entityTypeSlugs: string[];
-  routingMap: { agents: number; written: number };
 }
 
 export interface RegisterIdentitySourceDeps {
   db?: IdentityDbClient;
-  /** Test seam — defaults to the shared routing-map materializer (U4). */
-  refreshRoutingMap?: (
-    db: IdentityDbClient,
-    tenantId: string,
-  ) => Promise<RoutingMapRefreshResult>;
 }
 
 /**
  * Register a source system as an identity source: validate the connector
- * row exists for the tenant and identity rules exist for every target
- * entity type, write the `source_system_connectors` link (upsert on the
- * (tenant, source_system) primary key), and re-project the routing map.
+ * row exists for the tenant, then write the `source_system_connectors`
+ * link (upsert on the (tenant, source_system) primary key).
  */
 export async function registerIdentitySource(
   input: RegisterIdentitySourceInput,
@@ -157,35 +145,10 @@ export async function registerIdentitySource(
     );
   }
 
-  // Identity rules must exist for every target type (ontology snapshot read
-  // — approved types only, mirroring the matcher's rule source).
-  const typeRows = await db
-    .select({
-      slug: ontologyEntityTypes.slug,
-      identity_rules: ontologyEntityTypes.identity_rules,
-    })
-    .from(ontologyEntityTypes)
-    .where(
-      and(
-        eq(ontologyEntityTypes.tenant_id, input.tenantId),
-        eq(ontologyEntityTypes.lifecycle_status, "approved"),
-        inArray(ontologyEntityTypes.slug, entityTypeSlugs),
-      ),
-    );
-  const rulesBySlug = new Map(
-    typeRows.map((row) => [row.slug, parseIdentityRules(row.identity_rules)]),
-  );
-  const missing = entityTypeSlugs.filter(
-    (slug) => (rulesBySlug.get(slug) ?? []).length === 0,
-  );
-  if (missing.length > 0) {
-    throw new IdentitySourceRegistrationError(
-      "identity_rules_missing",
-      `entity type(s) ${missing.map((slug) => `"${slug}"`).join(", ")} have no ` +
-        "approved identity rules — author identity rules for each target type " +
-        "before registering an identity source against it",
-    );
-  }
+  // THINK-408: the ontology subsystem was removed, so there is no operator
+  // -authored identity-rule store to validate the declared target types
+  // against. Every type now matches on the built-in default rules
+  // (`defaultIdentityRules()`), which the matcher applies unconditionally.
 
   await db
     .insert(sourceSystemConnectors)
@@ -202,26 +165,11 @@ export async function registerIdentitySource(
       set: { connector_slug: connectorSlug },
     });
 
-  const refresh = deps.refreshRoutingMap ?? refreshRoutingMapFile;
-  let routingMap: RoutingMapRefreshResult;
-  try {
-    routingMap = await refresh(db, input.tenantId);
-  } catch (err) {
-    // The registration write already landed; the map converges on the next
-    // trigger. Best-effort, mirroring the U4 refresh posture.
-    console.warn(
-      `${LOG_PREFIX} routing-map refresh failed after registration:`,
-      err instanceof Error ? err.message : err,
-    );
-    routingMap = { content: "", agents: 0, written: 0, skipped: [] };
-  }
-
   return {
     tenantId: input.tenantId,
     sourceSystem,
     connectorSlug,
     entityTypeSlugs,
-    routingMap: { agents: routingMap.agents, written: routingMap.written },
   };
 }
 
@@ -702,41 +650,30 @@ export async function runIdentityMatchJob(
       );
     }
 
-    // Scan targets per source: approved entity types whose system_map
-    // declares the source system (U3's persisted linkage), restricted to
-    // types with identity rules.
-    const typeRows = await db
-      .select({
-        slug: ontologyEntityTypes.slug,
-        identity_rules: ontologyEntityTypes.identity_rules,
-        system_map: ontologyEntityTypes.system_map,
-      })
-      .from(ontologyEntityTypes)
+    // THINK-408: the ontology's type-level `system_map` was the old
+    // (sourceSystem -> entityTypeSlug[]) declaration. With ontology removed,
+    // the ontology-free registry of the entity types actually in use is the
+    // distinct `entity_type_slug` of the tenant's active canonical entities;
+    // every registered source scans all of them on the default rules.
+    const typeSlugRows = await db
+      .select({ slug: canonicalEntities.entity_type_slug })
+      .from(canonicalEntities)
       .where(
         and(
-          eq(ontologyEntityTypes.tenant_id, args.tenantId),
-          eq(ontologyEntityTypes.lifecycle_status, "approved"),
+          eq(canonicalEntities.tenant_id, args.tenantId),
+          eq(canonicalEntities.status, "active"),
         ),
       );
+    const knownTypeSlugs = [
+      ...new Set(
+        typeSlugRows
+          .map((row) => row.slug)
+          .filter((slug): slug is string => Boolean(slug)),
+      ),
+    ];
     const rulesByType = new Map<string, IdentityRule[]>();
-    const typesBySource = new Map<string, string[]>();
-    for (const row of typeRows) {
-      const rules = parseIdentityRules(row.identity_rules);
-      rulesByType.set(
-        row.slug,
-        rules.length > 0 ? rules : defaultIdentityRules(),
-      );
-      const entries = Array.isArray(row.system_map)
-        ? (row.system_map as Array<Record<string, unknown>>)
-        : [];
-      for (const entry of entries) {
-        const source =
-          typeof entry?.sourceSystem === "string" ? entry.sourceSystem : null;
-        if (!source) continue;
-        const list = typesBySource.get(source) ?? [];
-        if (!list.includes(row.slug)) list.push(row.slug);
-        typesBySource.set(source, list);
-      }
+    for (const slug of knownTypeSlugs) {
+      rulesByType.set(slug, defaultIdentityRules());
     }
 
     const priorCursors =
@@ -748,12 +685,10 @@ export async function runIdentityMatchJob(
     let remaining = maxRecords;
 
     for (const target of targets) {
-      const entityTypeSlugs = (
-        typesBySource.get(target.sourceSystem) ?? []
-      ).sort();
+      const entityTypeSlugs = [...knownTypeSlugs].sort();
       if (entityTypeSlugs.length === 0) {
         warnings.push(
-          `source "${target.sourceSystem}" has no approved entity type declaring it in system_map — nothing to scan`,
+          `tenant has no active canonical entity types — nothing to scan for source "${target.sourceSystem}"`,
         );
         continue;
       }

@@ -1,7 +1,7 @@
 /**
  * Identity-source registration + bootstrap/drift match job tests
  * (THINK-321 U7). Covers the plan's U7 test list: registration validation
- * (missing rules / unknown connector / routing-map refresh), job dedupe,
+ * (unknown connector), job dedupe,
  * invoke-failure marking, the matcher-verdict split, VISIBLE queue-budget
  * displacement (F4), drift-over-revoked suppression (AE4's half), stale
  * source records, and predecessor-derived continuation dedupe keys.
@@ -18,7 +18,6 @@ import { createFakeIdentityDb } from "./fake-db.test-helper.js";
 import {
   buildIdentityMatchDedupeKey,
   deriveContinuationDedupeKey,
-  IdentitySourceRegistrationError,
   registerIdentitySource,
   runIdentityMatchJob,
   startIdentityMatchJob,
@@ -80,7 +79,6 @@ describe("registerIdentitySource", () => {
   it("rejects an unknown connector with a typed error", async () => {
     const fake = createFakeIdentityDb();
     fake.selectQueue.push([]); // connector lookup
-    const refresh = vi.fn();
 
     await expect(
       registerIdentitySource(
@@ -90,72 +88,18 @@ describe("registerIdentitySource", () => {
           connectorSlug: "nope",
           entityTypeSlugs: ["customer"],
         },
-        {
-          db: fake.db as unknown as IdentityDbClient,
-          refreshRoutingMap: refresh,
-        },
+        { db: fake.db as unknown as IdentityDbClient },
       ),
     ).rejects.toMatchObject({
       name: "IdentitySourceRegistrationError",
       code: "connector_not_found",
     });
-    expect(refresh).not.toHaveBeenCalled();
     expect(fake.inserts).toHaveLength(0);
   });
 
-  it("rejects registration when a target type has no identity rules", async () => {
-    const fake = createFakeIdentityDb();
-    fake.selectQueue.push([{ slug: "lastmile-pg" }]); // connector
-    fake.selectQueue.push([{ slug: "customer", identity_rules: [] }]); // types
-    const refresh = vi.fn();
-
-    await expect(
-      registerIdentitySource(
-        {
-          tenantId: TENANT,
-          sourceSystem: "lastmile",
-          connectorSlug: "lastmile-pg",
-          entityTypeSlugs: ["customer"],
-        },
-        {
-          db: fake.db as unknown as IdentityDbClient,
-          refreshRoutingMap: refresh,
-        },
-      ),
-    ).rejects.toMatchObject({
-      code: "identity_rules_missing",
-    });
-    expect(refresh).not.toHaveBeenCalled();
-    expect(fake.inserts).toHaveLength(0);
-  });
-
-  it("also rejects when the target type is absent from the approved snapshot", async () => {
+  it("writes the connector link on success and echoes the declared types", async () => {
     const fake = createFakeIdentityDb();
     fake.selectQueue.push([{ slug: "lastmile-pg" }]);
-    fake.selectQueue.push([]); // no approved rows at all
-    await expect(
-      registerIdentitySource(
-        {
-          tenantId: TENANT,
-          sourceSystem: "lastmile",
-          connectorSlug: "lastmile-pg",
-          entityTypeSlugs: ["customer"],
-        },
-        {
-          db: fake.db as unknown as IdentityDbClient,
-          refreshRoutingMap: vi.fn(),
-        },
-      ),
-    ).rejects.toBeInstanceOf(IdentitySourceRegistrationError);
-  });
-
-  it("writes the connector link and refreshes the routing map on success", async () => {
-    const fake = createFakeIdentityDb();
-    fake.selectQueue.push([{ slug: "lastmile-pg" }]);
-    fake.selectQueue.push([{ slug: "customer", identity_rules: [NAME_RULE] }]);
-    const refresh = vi
-      .fn()
-      .mockResolvedValue({ content: "x", agents: 2, written: 1, skipped: [] });
 
     const result = await registerIdentitySource(
       {
@@ -164,13 +108,9 @@ describe("registerIdentitySource", () => {
         connectorSlug: "lastmile-pg",
         entityTypeSlugs: ["customer"],
       },
-      {
-        db: fake.db as unknown as IdentityDbClient,
-        refreshRoutingMap: refresh,
-      },
+      { db: fake.db as unknown as IdentityDbClient },
     );
 
-    expect(refresh).toHaveBeenCalledWith(fake.db, TENANT);
     const linkInsert = fake.inserts.find(
       (write) => write.table === sourceSystemConnectors,
     );
@@ -179,7 +119,7 @@ describe("registerIdentitySource", () => {
       source_system: "lastmile",
       connector_slug: "lastmile-pg",
     });
-    expect(result.routingMap).toEqual({ agents: 2, written: 1 });
+    expect(result.entityTypeSlugs).toEqual(["customer"]);
   });
 });
 
@@ -317,7 +257,11 @@ function runDeps(
   };
 }
 
-/** Queue the standard run preamble: job row, registered sources, type rows. */
+/**
+ * Queue the standard run preamble: job row, registered sources, and the
+ * tenant's distinct active canonical entity types (THINK-408 replaced the
+ * ontology `system_map` read with this ontology-free type registry).
+ */
 function queuePreamble(
   fake: ReturnType<typeof createFakeIdentityDb>,
   job: Record<string, unknown>,
@@ -326,13 +270,7 @@ function queuePreamble(
   fake.selectQueue.push([
     { source_system: "lastmile", connector_slug: "lastmile-pg" },
   ]); // registered identity sources
-  fake.selectQueue.push([
-    {
-      slug: "customer",
-      identity_rules: [NAME_RULE],
-      system_map: [{ facet: "orders", sourceSystem: "lastmile" }],
-    },
-  ]); // approved entity types
+  fake.selectQueue.push([{ slug: "customer" }]); // active canonical types
 }
 
 describe("runIdentityMatchJob", () => {
@@ -595,13 +533,10 @@ describe("runIdentityMatchJob", () => {
       fetchSourceRecords: vi.fn(),
       matchEntity: vi.fn(),
     });
-    // Registered-sources select throws via a poisoned queue: simulate by
-    // making the select chain reject through a fetch throw instead — here
-    // the type-rows select returns garbage that breaks iteration.
     fake.selectQueue.push([{ source_system: "lastmile", connector_slug: "x" }]);
-    // Force a failure inside the try block: system_map access throws.
+    // Force a failure inside the try block: reading the type slug throws.
     const badRow = {} as Record<string, unknown>;
-    Object.defineProperty(badRow, "identity_rules", {
+    Object.defineProperty(badRow, "slug", {
       get() {
         throw new Error("boom mid-run");
       },

@@ -7,14 +7,6 @@ const CONTEXT_ENGINE_ALIASES = [
   "query_catalog_context",
 ] as const;
 
-const KNOWLEDGE_GRAPH_ALIASES = [
-  "knowledge_graph_search",
-  "knowledge_graph_get_entity",
-  "knowledge_graph_neighbors",
-  "knowledge-graph",
-  "knowledge_graph",
-] as const;
-
 const IDENTITY_RESOLUTION_ALIASES = [
   "resolve_entities",
   "propose_mapping_candidates",
@@ -24,11 +16,6 @@ const IDENTITY_RESOLUTION_ALIASES = [
 ] as const;
 
 const TOOL_POLICY_ALIASES: Record<string, readonly string[]> = {
-  knowledge_graph_search: KNOWLEDGE_GRAPH_ALIASES,
-  knowledge_graph_get_entity: KNOWLEDGE_GRAPH_ALIASES,
-  knowledge_graph_neighbors: KNOWLEDGE_GRAPH_ALIASES,
-  "knowledge-graph": KNOWLEDGE_GRAPH_ALIASES,
-  knowledge_graph: KNOWLEDGE_GRAPH_ALIASES,
   resolve_entities: IDENTITY_RESOLUTION_ALIASES,
   propose_mapping_candidates: IDENTITY_RESOLUTION_ALIASES,
   confirm_mapping: IDENTITY_RESOLUTION_ALIASES,

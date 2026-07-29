@@ -113,11 +113,6 @@ describe("GraphQL Schema Contract", () => {
       // Memory
       "memoryRecords",
       "memorySearch",
-      // Ontology
-      "ontologyDefinitions",
-      "ontologyChangeSets",
-      "ontologySuggestionScanJob",
-      "ontologyReprocessJob",
       // Inbox
       "inboxItems",
       "inboxItem",
@@ -596,14 +591,6 @@ describe("GraphQL Schema Contract", () => {
       // Memory
       "deleteMemoryRecord",
       "updateMemoryRecord",
-      // Ontology
-      "startOntologySuggestionScan",
-      "updateOntologyChangeSet",
-      "approveOntologyChangeSet",
-      "rejectOntologyChangeSet",
-      "rejectOntologyChangeSetItem",
-      "updateOntologyEntityType",
-      "updateOntologyRelationshipType",
       // Inbox
       "createInboxItem",
       "approveInboxItem",
@@ -755,16 +742,16 @@ describe("GraphQL Schema Contract", () => {
       expect(sdl).not.toContain("autoResearch");
     });
 
-    it("has business ontology types and change-set mutations", () => {
-      expect(sdl).toContain("type OntologyEntityType");
-      expect(sdl).toContain("type OntologyRelationshipType");
-      expect(sdl).toContain("type OntologyChangeSet");
-      expect(sdl).toContain("type OntologySuggestionScanJob");
-      expect(sdl).toContain("ontologyDefinitions(");
-      expect(sdl).toContain("startOntologySuggestionScan(");
-      expect(sdl).toContain("approveOntologyChangeSet(");
-      expect(sdl).toContain("updateOntologyEntityType(");
-      expect(sdl).toContain("updateOntologyRelationshipType(");
+    it("no ontology or knowledge-graph types (THINK-408 removal)", () => {
+      expect(sdl).not.toContain("Ontology");
+      // `ontologyPredicate` on MemoryClaim is the only survivor: it mirrors
+      // the applied `memory_claims.ontology_predicate` column, whose rename
+      // is a deferred migration.
+      expect(sdl.replaceAll("ontologyPredicate", "")).not.toContain("ontology");
+      expect(sdl).not.toContain("KnowledgeGraph");
+      expect(sdl).not.toContain("knowledgeGraph");
+      expect(sdl).not.toContain("EntityDossier");
+      expect(sdl).not.toContain("entityDossier");
     });
 
     // Eval types were originally cut from v1 but landed in PR #147

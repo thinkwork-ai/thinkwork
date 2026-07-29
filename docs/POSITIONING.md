@@ -104,24 +104,23 @@ CI-enforced and review-enforced. Edits that introduce these fail the build or fa
 
 ## Company Brain positioning
 
-Added 2026-07-22, following the Company Brain arc (THINK-325); product noun updated to **Company Brain** 2026-07-23 (user-directed reversal of the earlier Digital Twin decision). This section governs every surface that talks about the graph, the ontology, or company knowledge.
+Added 2026-07-22, following the Company Brain arc (THINK-325); product noun updated to **Company Brain** 2026-07-23 (user-directed reversal of the earlier Digital Twin decision). This section governs every surface that talks about the graph or company knowledge.
 
 ### The naming contract
 
-Four terms, four jobs. Copy that blurs them is wrong.
+Three terms, three jobs. Copy that blurs them is wrong.
 
 - **Company Brain** (formerly Digital Twin) — the product noun. The living graph of the customer's business: entities, relationships, and operating knowledge, projected from their systems into Neptune in their account. When one name has to stand for the whole capability, this is it. "A company brain for your business" / "your company's brain" are the approved long forms.
-- **Ontology** — the schema, never the product. The declared entity types, relationships, facets, and page sections that govern the brain. Always positioned as something the customer controls: "governed by an ontology you control." Never "ThinkWork is an ontology" — that names the map, not the territory, and invites a Palantir comparison we don't want to run head-on.
-- **Knowledge** — the user-facing umbrella in the product UI (nav item; tabs Memory / Pages / KBs / Ontology). UI copy says Knowledge; marketing copy says Company Brain. Do not swap them.
+- **Knowledge** — the user-facing umbrella in the product UI (nav item; tabs Memory / Pages / KBs). UI copy says Knowledge; marketing copy says Company Brain. Do not swap them.
 - **Digital Twin** — retired product noun (2026-07-23). Do not use in new copy; a one-line "formerly Digital Twin" parenthetical is allowed where continuity matters. Runtime identifiers that carry `twin` (`twin-mapping/v1`, S3 prefixes, module paths, the `thinkwork twin` CLI command) are unaffected — identifier migration is a separate program.
 
 **Banned:** "World Model" as a product noun or capability name. It is claimed by AI research for a different thing (video/simulation models) and will read as trend-chasing. Permissible once, lowercase, in explanatory body copy ("a working model of your company") — never as a heading, feature name, or label.
 
 ### The one-sentence positioning
 
-> **ThinkWork builds a company brain for your business — a living graph of your entities, relationships, and operating knowledge — governed by an ontology you control, running in your own AWS account.**
+> **ThinkWork builds a company brain for your business — a living graph of your entities, relationships, and operating knowledge — running in your own AWS account.**
 
-Every term in that sentence is load-bearing: _living_ (freshness is tracked, staleness is visible), _governed_ (changes go through approved change sets, not silent mutation), _you control_ (the ontology is the customer's), _your own AWS account_ (the brain never leaves their boundary).
+Every term in that sentence is load-bearing: _living_ (freshness is tracked, staleness is visible), _governed_ (changes go through approved change sets, not silent mutation), _your own AWS account_ (the brain never leaves their boundary).
 
 ### The narrative: the model is a commodity; the brain is the asset
 
@@ -139,22 +138,19 @@ This does not demote the harness category. The harness is what makes a brain mor
 ### Differentiators (in the order that wins)
 
 1. **In your account.** The full answer to the IP objection, not a mitigation. No shared control plane, no vendor-side copy of the graph, no data path through us. "If ThinkWork the company disappears tomorrow, your brain keeps working" — the durability line applies here verbatim.
-2. **Governed, including when not to act.** Ontology changes ship through approved change sets. Writes are asymmetric — agents cannot silently author identity mappings. Access is scoped: security-group visibility on nodes and edges means the brain can hold HR-sensitive material without exposing it to every caller, human or agent. Most of the market demos retrieval; almost nobody demos governance. This is the demo we win.
+2. **Governed, including when not to act.** Writes are asymmetric — agents cannot silently author identity mappings. Access is scoped: security-group visibility on nodes and edges means the brain can hold HR-sensitive material without exposing it to every caller, human or agent. Most of the market demos retrieval; almost nobody demos governance. This is the demo we win.
 3. **Live, and honest about freshness.** Every projected fact carries provenance and cache age. Stale data says it is stale. A brain that cannot tell you what has degraded is a wiki with a graph rendering.
 4. **Model-agnostic by construction.** The brain is the durable layer; Bedrock models are execution surfaces beneath it. Swapping the model is an operational change, not a migration.
 
 ### Objection handling
 
-- **"Isn't this Palantir's ontology?"** Palantir proved the category. The difference is deployment shape and buyer: Foundry is Palantir's platform holding your data; ThinkWork is a brain in _your_ AWS account, governed by _your_ ontology, with the harness as an Apache-2.0 contract you could operate without us. We ride the category validation; we do not fight the brand.
 - **"We already bought everyone Claude licenses."** Seats teach people to use a model; they build no asset. Every prompt that pastes context is context the company reconstructs by hand, forever. The brain is what makes the seats compound: the same model, given the brain, does account-aware work on the first turn. Seats are spend; the brain is capital.
 - **"We already connected our tools to [assistant] via connectors."** Connectors fetch documents; they do not resolve identity across systems, track freshness, encode relationships, or govern visibility. "Search my Drive" and "traverse from this customer to their past-due invoices and low tanks across three systems" are different capabilities. The brain is the second one.
-- **"Is this just a knowledge graph project?"** No standing graph team required. The ontology is declared, projection is automated from live systems, and drift shows up as visible staleness — not as a quarterly re-ingestion project.
 
 ### Approved phrases (Company Brain addendum)
 
 - **A company brain for your business** — the long-form product line
 - **A living graph of your entities, relationships, and operating knowledge** — the teaching line
-- **Governed by an ontology you control** — the schema line
 - **The harness stays yours. So does the brain.** — the extended refrain
 - **The model is a commodity; the brain is the asset** — the narrative line
 - **No ThinkWork in the data path** — the IP-objection answer
@@ -167,7 +163,6 @@ This does not demote the harness category. The harness is what makes a brain mor
 - **"Digital Twin"** in new copy — retired product noun; "formerly Digital Twin" continuity parentheticals only
 - **"Second brain" / "hive mind" / "LLM wiki"** — SMB/prosumer register; wrong audience
 - **"Your data is the moat"** verbatim — the phrase is commodity discourse by now; use the narrative line instead
-- **"Ontology" as the product name** — schema only, always possessed by the customer
 - **Palantir comparisons we start** — answer the objection when raised; never lead with the comparison
 
 ## How to use this doc

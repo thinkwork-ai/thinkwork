@@ -95,7 +95,6 @@ import {
   openOrCoalesceResolutionCase,
   type ResolutionCaseKeyInput,
 } from "../entity-identity/resolution.js";
-import { loadIdentityRulesByTypeSlug } from "../entity-identity/snapshot-resolution.js";
 
 // Re-exports for existing importers/tests (helpers moved in the U5 seam
 // extraction; twenty cursor helpers now live with the twenty adapter).
@@ -142,38 +141,8 @@ export interface StageContext {
   lease?: StageLease;
   /** Injected S3 client for snapshot IO; defaults to the lazy module client. */
   s3?: S3Client;
-  /** Test/ops seams for the graph/wiki stages (THINK-193 U4 stitch).
-   * Defaults are the real Lambda invoke + wiki compile-job repository. */
-  graphWiki?: GraphWikiStageDeps;
 }
 
-/** Injectable dependencies for runGraph (defaults in this module). */
-export interface GraphWikiStageDeps {
-  /** RequestResponse-invoke the targeted observations ingest Lambda. */
-  invokeObservationsIngest?: (
-    payload: GraphIngestInvokePayload,
-  ) => Promise<GraphIngestInvokeResult>;
-}
-
-/** Payload sent to thinkwork-<stage>-api-knowledge-graph-observations-ingest. */
-export interface GraphIngestInvokePayload {
-  tenantId: string;
-  bankIds: string[];
-  trigger: "manual" | "scheduled";
-}
-
-/**
- * Structural mirror of KnowledgeGraphObservationsIngestResult (the handler's
- * response shape). Declared here so lib code does not import from handlers/.
- */
-export interface GraphIngestInvokeResult {
-  ok: boolean;
-  status: "succeeded" | "failed" | "stale_noop" | "skipped" | "sweep";
-  runId?: string;
-  tenantId?: string;
-  metrics?: Record<string, unknown>;
-  error?: string;
-}
 
 /**
  * Approved-plan override carried in options.override (THINK-193 U3). The
@@ -722,7 +691,7 @@ async function runProjectInner(
     }
     const dossier = adapter.buildProjection(snapshot, item.source_item_id);
     const projectionKey = adapter.projectionKeyFor(item.source_item_id);
-    // U2: extract durable ontology-shaped claims and attach support edges to
+    // U2: extract durable structured claims and attach support edges to
     // this evidence item. Idempotent per (fingerprint, evidence) pair.
     const claims = adapter.extractClaims({
       snapshot,
@@ -1235,11 +1204,11 @@ export function identityFromClaims(
 }
 
 /**
- * Identity rules for a claim subject type: the tenant's approved ontology
- * rules when present, otherwise the matcher's default (unique + autoLink
- * exact name). `domain` is appended as a strong key for customers unless the
- * operator's own rules already define it — it is the deterministic
- * cross-source join (Twenty `domainName` ≡ web page host).
+ * Identity rules for a claim subject type: the caller's rules when
+ * supplied, otherwise the matcher's default (unique + autoLink exact name).
+ * `domain` is appended as a strong key for customers unless the supplied
+ * rules already define it — it is the deterministic cross-source join
+ * (Twenty `domainName` ≡ web page host).
  */
 export function claimIdentityRules(
   entityTypeSlug: string,
@@ -1392,7 +1361,9 @@ async function runResolveInner(
   }
 
   const sourceById = new Map(ctx.sources.map((source) => [source.id, source]));
-  const rulesByType = await loadIdentityRulesByTypeSlug(db, tenantId);
+  // THINK-408: the ontology subsystem (which held operator-authored
+  // per-type identity rules) was removed — every subject type now resolves
+  // on the built-in defaults inside `claimIdentityRules`.
   const resolved: Array<{ subjectKey: string; canonicalEntityId: string }> = [];
   const deferredCaseIds: string[] = [];
 
@@ -1432,10 +1403,7 @@ async function runResolveInner(
       continue;
     }
     const entityTypeSlug = subject.subjectEntityType ?? identity.entityTypeSlug;
-    const rules = claimIdentityRules(
-      entityTypeSlug,
-      rulesByType.get(entityTypeSlug),
-    );
+    const rules = claimIdentityRules(entityTypeSlug, undefined);
     const activeClaims = await listActiveClaimsForSubject(db, {
       tenantId,
       targetScope: writable.target_scope,
@@ -1603,240 +1571,5 @@ async function runResolveInner(
       deferredCaseIds: deferredCaseIds.slice(0, 50),
       ...(remaining > 0 ? { continuation: true, remaining } : {}),
     },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Graph + Wiki stages (THINK-193 U4 run-orchestration stitch).
-//
-// runGraph RequestResponse-invokes the targeted observations ingest Lambda
-// for the processor's shared bank. SHARED-ONLY: `user_*` banks are
-// hard-rejected (AE7) on top of the worker's own scope gate and the personal
-// blueprint structurally omitting this step.
-//
-// In-process vs. Lambda-invoke (documented choice): the ingest performs
-// Bedrock classifier + extraction calls whose model ids
-// (OBSERVATION_CLASSIFIER_MODEL_ID / KG_EXTRACTION_MODEL_ID) and memory/
-// timeout sizing (1024MB / 480s, bundled Bedrock SDK) live on the ingest
-// Lambda's own env — the memory-stage-worker (256MB) carries none of that.
-// The worker therefore invokes the ingest function RequestResponse (its
-// 900s timeout comfortably brackets the ingest's 480s) and consumes the
-// structured response. The shared api role already grants
-// lambda:InvokeFunction on the ingest function (iam-grouped.tf).
-// ---------------------------------------------------------------------------
-
-/**
- * Record a graph/wiki run item against the processor's first source config.
- * With ZERO sources there is no valid memory_run_items FK target — skip the
- * ledger row (the stage result output still carries the detail) instead of
- * writing a row that violates memory_run_items_source_config_id_fkey.
- */
-async function recordBankRunItem(
-  ctx: StageContext,
-  args: {
-    stage: "graph" | "wiki";
-    sourceItemId: string;
-    result: "changed" | "noop";
-    detail: Record<string, unknown>;
-  },
-): Promise<void> {
-  const sourceConfigId = ctx.sources[0]?.id;
-  if (!sourceConfigId) return;
-  await recordRunItem(ctx.db, {
-    tenantId: ctx.processor.tenant_id,
-    workflowRunId: ctx.event.workflowRunId,
-    sourceConfigId,
-    sourceItemId: args.sourceItemId,
-    stage: args.stage,
-    result: args.result,
-    detail: args.detail,
-  });
-}
-
-/** Shared-only guard for graph/wiki: `user_*` banks are hard-rejected. */
-function requireSharedGraphWikiProcessor(
-  ctx: StageContext,
-  what: string,
-):
-  | {
-      ok: true;
-      processor: MemoryProcessorConfig & { target_scope: "space" | "tenant" };
-    }
-  | { ok: false; result: MemoryStageWorkerResult } {
-  const shared = requireSharedProcessor(ctx);
-  if (!shared || ctx.processor.mode !== "shared") {
-    return {
-      ok: false,
-      result: failed(
-        ctx.event.stage,
-        `stage '${ctx.event.stage}' rejects bank '${resolveTargetBankId(ctx.processor)}' — ${what} publishes shared knowledge and never reads or writes user_* banks (AE7)`,
-      ),
-    };
-  }
-  return { ok: true, processor: shared };
-}
-
-/** Default RequestResponse invoke of the observations-ingest Lambda. */
-async function defaultInvokeObservationsIngest(
-  payload: GraphIngestInvokePayload,
-): Promise<GraphIngestInvokeResult> {
-  const fnName =
-    process.env.KG_OBSERVATIONS_INGEST_FN ??
-    (process.env.STAGE
-      ? `thinkwork-${process.env.STAGE}-api-knowledge-graph-observations-ingest`
-      : null);
-  if (!fnName) {
-    throw new Error(
-      "observations-ingest function name unresolved (no STAGE or KG_OBSERVATIONS_INGEST_FN)",
-    );
-  }
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
-  const response = await new LambdaClient({}).send(
-    new InvokeCommand({
-      FunctionName: fnName,
-      InvocationType: "RequestResponse",
-      Payload: new TextEncoder().encode(JSON.stringify(payload)),
-    }),
-  );
-  const body = response.Payload
-    ? new TextDecoder().decode(response.Payload)
-    : "";
-  if (response.FunctionError) {
-    throw new Error(
-      `observations-ingest invoke errored (${response.FunctionError}): ${body.slice(0, 300)}`,
-    );
-  }
-  return JSON.parse(body) as GraphIngestInvokeResult;
-}
-
-/**
- * Minimum lease headroom before starting the synchronous ingest invoke: the
- * ingest Lambda can legitimately run its full 480s timeout, and an invoke
- * cut off by the WORKER's own deadline would strand the claim mid-flight.
- * Only enforced when the harness wired remainingMs.
- */
-const GRAPH_INGEST_MIN_LEASE_MS = 540_000;
-
-export async function runGraph(
-  ctx: StageContext,
-): Promise<MemoryStageWorkerResult> {
-  const guard = requireSharedGraphWikiProcessor(ctx, "targeted graph ingest");
-  if (!guard.ok) return guard.result;
-  const { db, event } = ctx;
-  const processor = guard.processor;
-  const targetBankId = resolveTargetBankId(processor);
-
-  const remainingMs = ctx.lease?.remainingMs?.();
-  if (remainingMs !== undefined && remainingMs < GRAPH_INGEST_MIN_LEASE_MS) {
-    // Not enough runway for a full ingest invoke — hand back a continuation
-    // so the harness re-invokes this worker fresh instead of failing
-    // spuriously mid-flight.
-    return {
-      status: "succeeded",
-      stage: event.stage,
-      counts: { noop: 1 },
-      output: {
-        continuation: true,
-        note: "insufficient lease headroom to start the targeted graph ingest — continuing on a fresh invocation",
-      },
-    };
-  }
-
-  const invoke =
-    ctx.graphWiki?.invokeObservationsIngest ?? defaultInvokeObservationsIngest;
-  let ingest: GraphIngestInvokeResult;
-  try {
-    ingest = await invoke({
-      tenantId: processor.tenant_id,
-      bankIds: [targetBankId],
-      trigger: "manual",
-    });
-  } catch (err) {
-    return failed(
-      event.stage,
-      `targeted graph ingest invoke failed for bank ${targetBankId}: ${(err as Error)?.message ?? String(err)}`,
-    );
-  }
-
-  if (ingest.status === "skipped") {
-    // Another observations ingest run is already active for this tenant —
-    // fail visibly/resumably rather than silently skipping the graph pass.
-    return failed(
-      event.stage,
-      `targeted graph ingest was skipped: another observations ingest run is active for this tenant (runId=${ingest.runId ?? "unknown"}) — re-run the stage after it settles`,
-    );
-  }
-  if (ingest.status === "stale_noop") {
-    // Zero candidates: nothing to publish. Record the visible no-op.
-    const detail = {
-      ingestRunId: ingest.runId ?? null,
-      ingestStatus: "stale_noop",
-    };
-    await recordBankRunItem(ctx, {
-      stage: "graph",
-      sourceItemId: targetBankId,
-      result: "noop",
-      detail,
-    });
-    return {
-      status: "succeeded",
-      stage: event.stage,
-      counts: { noop: 1 },
-      output: {
-        targetBankId,
-        ...detail,
-        note: "no new observation candidates in the target bank",
-      },
-    };
-  }
-  if (!ingest.ok || ingest.status !== "succeeded") {
-    return failed(
-      event.stage,
-      `targeted graph ingest ${ingest.runId ?? ""} failed for bank ${targetBankId}: ${ingest.error ?? `status ${ingest.status}`}`,
-    );
-  }
-
-  const metrics = ingest.metrics ?? {};
-  const deferrals = Array.isArray(metrics.identityDeferrals)
-    ? (metrics.identityDeferrals as Array<Record<string, unknown>>)
-    : [];
-  const counts = {
-    candidates: boundedInt(
-      metrics.candidateCount,
-      0,
-      0,
-      Number.MAX_SAFE_INTEGER,
-    ),
-    gated: Array.isArray(metrics.promotedIds) ? metrics.promotedIds.length : 0,
-    merged: boundedInt(metrics.entityCount, 0, 0, Number.MAX_SAFE_INTEGER),
-    deferred: boundedInt(
-      metrics.identityDeferredCount,
-      0,
-      0,
-      Number.MAX_SAFE_INTEGER,
-    ),
-  };
-  const detail = {
-    ingestRunId: ingest.runId ?? null,
-    ingestStatus: "succeeded",
-    counts,
-    deferredCaseIds: deferrals
-      .map((d) => d.caseId)
-      .filter((id): id is string => typeof id === "string")
-      .slice(0, 50),
-  };
-  await recordBankRunItem(ctx, {
-    stage: "graph",
-    sourceItemId: targetBankId,
-    result: counts.merged > 0 || counts.gated > 0 ? "changed" : "noop",
-    detail,
-  });
-
-  return {
-    status: "succeeded",
-    stage: event.stage,
-    counts,
-    output: { targetBankId, ...detail },
   };
 }

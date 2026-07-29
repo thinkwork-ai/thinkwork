@@ -46,41 +46,6 @@ import type { CapabilitySignedBy } from "./sidecar-signing.js";
 
 const LOG_PREFIX = "[connection-folder-reconcile]";
 
-/**
- * THINK-321 U4: connector attach/detach changes what the routing map may
- * address, so the workspace projection refreshes behind both choke points
- * below. Best-effort like every other write here — the refresh itself
- * skips unchanged content and no-ops for tenants with no identity
- * declarations, so this stays cheap on unrelated provisioning flows.
- */
-async function refreshRoutingMapBestEffort(tenantId: string): Promise<void> {
-  try {
-    const { refreshRoutingMapFile } =
-      await import("../entity-identity/routing-map-file.js");
-    await refreshRoutingMapFile(db, tenantId);
-  } catch (err) {
-    console.warn(
-      `${LOG_PREFIX} routing-map refresh failed tenant=${tenantId}:`,
-      err instanceof Error ? err.message : err,
-    );
-  }
-  // Company Brain U3 (KTD-3): connector attach/detach/rename changes which
-  // sourceSystem slugs the twin declarations can address, so the compiled
-  // twin mapping export follows behind the same choke points. Same
-  // best-effort contract — regenerateTwinMappingExport never throws, and a
-  // tenant with no twin declarations skips the upload entirely.
-  try {
-    const { regenerateTwinMappingExport } =
-      await import("../ontology/twin-export.js");
-    await regenerateTwinMappingExport({ tenantId });
-  } catch (err) {
-    console.warn(
-      `${LOG_PREFIX} twin-export refresh failed tenant=${tenantId}:`,
-      err instanceof Error ? err.message : err,
-    );
-  }
-}
-
 function workspaceBucketConfigured(): boolean {
   try {
     return Boolean(getConfig("WORKSPACE_BUCKET"));
@@ -194,7 +159,6 @@ export async function writeConnectionFoldersForAgents(input: {
       );
     }
   }
-  await refreshRoutingMapBestEffort(input.tenantId);
 }
 
 /** Explicit removal for detach/uninstall paths that know the registry row. */
@@ -233,6 +197,5 @@ export async function removeConnectionFoldersForAgents(input: {
     }
   }
   if (input.tenantId) {
-    await refreshRoutingMapBestEffort(input.tenantId);
-  }
+    }
 }

@@ -14,15 +14,14 @@ const RECORDS = "/settings/memory/records";
 type MemoryTab = "memory";
 
 function tabForPath(pathname: string): MemoryTab {
-  // THINK-339 U15: the Company Brain and Ontology tabs moved to the
-  // standalone console (brain.thinkwork.ai) — Memory records are the
-  // landing tab again; the bare /settings/memory path renders them.
+  // THINK-408: Memory records are the only tab — the bare /settings/memory
+  // path renders them.
   return "memory";
 }
 
 /**
- * The unified Memory settings page. The Company Brain and Ontology tabs
- * retired to the standalone console (THINK-339 U15).
+ * The unified Memory settings page (Knowledge umbrella). Memory records are
+ * the only facet.
  */
 export function SettingsMemoryHome() {
   const pathname = useLocation({ select: (location) => location.pathname });

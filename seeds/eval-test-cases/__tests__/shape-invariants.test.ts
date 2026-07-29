@@ -72,7 +72,7 @@ const ALLOWED_RED_TEAM_CATEGORIES = new Set([
 const ALLOWED_BRAIN_CATEGORIES = new Set(["brain-leverage", "brain-data-loss"]);
 
 const BRAIN_CASE_COUNT_BY_FILE: Record<string, number> = {
-  "brain-leverage.json": 4,
+  "brain-leverage.json": 3,
   "brain-data-loss.json": 3,
 };
 

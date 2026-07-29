@@ -3,11 +3,10 @@
 # One fan-out operation over the tenant brain's fast retrieval legs. Each leg
 # returns independently (per-leg status) so a slow or failing leg never blanks
 # the others. The memory leg is excluded from keystroke find by callers
-# (`sources`) and serves ask/dossier surfaces; it reads the caller's own bank.
+# (`sources`) and serves ask surfaces; it reads the caller's own bank.
 
 enum SearchSource {
   THREADS
-  ENTITIES
   MEMORY
 }
 
@@ -25,16 +24,6 @@ type SearchThreadHit {
   updatedAt: String
 }
 
-type SearchEntityHit {
-  entityId: ID!
-  label: String!
-  ontologyTypeSlug: String
-  summary: String
-  aliases: [String!]
-  relationshipCount: Int
-  evidenceCount: Int
-}
-
 type SearchMemoryHit {
   memoryRecordId: ID!
   text: String!
@@ -48,7 +37,6 @@ type SearchLeg {
   status: SearchLegStatus!
   error: String
   threadHits: [SearchThreadHit!]
-  entityHits: [SearchEntityHit!]
   memoryHits: [SearchMemoryHit!]
 }
 
@@ -72,21 +60,6 @@ extend type Query {
     limit: Int = 10
     queryId: ID
   ): SearchResults!
-
-  """
-  THINK-263 U5 — server-assembled dossier for one grounded knowledge-graph
-  entity: contributing memories, linked threads, and artifacts.
-  Every thread-derived surface is fenced behind the caller's thread
-  visibility; content from threads the caller cannot open is dropped entirely
-  (the thread, its artifacts, and any memory hit stamped with it). Multiple
-  grounded matches with no `entityId` selector return a disambiguation list
-  and assemble nothing; passing `entityId` resolves the ambiguity.
-  """
-  entityDossier(
-    tenantId: ID!
-    query: String!
-    entityId: ID
-  ): EntityDossierResult!
 }
 
 """
@@ -135,50 +108,4 @@ extend type Mutation {
     query: String!
     threadId: ID
   ): SearchResearchResult!
-}
-
-"An artifact produced in an accessible thread linked to the entity."
-type DossierArtifact {
-  id: ID!
-  title: String
-  type: String
-  threadId: ID
-}
-
-"Everything the tenant brain knows about one grounded entity."
-type EntityDossier {
-  entityId: ID!
-  label: String!
-  ontologyTypeSlug: String
-  summary: String
-  aliases: [String!]
-  """
-  Canonical identity for twin routing (THINK-327 U7): consumers link to the
-  Explorer entity detail with these. Null when the matched entity has no
-  canonical identity yet.
-  """
-  canonicalEntityId: ID
-  "Ontology entity-type slug of the canonical identity (pairs with canonicalEntityId)."
-  entityType: String
-  """
-  Dual-read gate verdict (Company Brain U9 / AE8): true when this entity's
-  tenant/type has flipped to the projected twin page, so search consumers
-  can route to the living render.
-  """
-  twinProjected: Boolean!
-  memories: [SearchMemoryHit!]!
-  threads: [SearchThreadHit!]!
-  artifacts: [DossierArtifact!]!
-}
-
-"""
-Two-part dossier result: exactly one of `match` (resolved) or a non-empty
-`disambiguation` (>1 grounded candidate) is populated. Both are empty/null
-when there is no grounded match.
-"""
-type EntityDossierResult {
-  "The assembled dossier, or null when ambiguous or no grounded match."
-  match: EntityDossier
-  "Grounded candidates when >1 matched and no `entityId` was supplied."
-  disambiguation: [SearchEntityHit!]!
 }

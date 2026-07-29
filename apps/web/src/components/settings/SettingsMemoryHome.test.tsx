@@ -5,10 +5,6 @@ import { describe, expect, it } from "vitest";
 const read = (p: string) => readFileSync(resolve(process.cwd(), p), "utf8");
 const source = read("src/components/settings/SettingsMemoryHome.tsx");
 const memoryRoute = read("src/routes/_authed/settings.memory.tsx");
-const kgRoute = read("src/routes/_authed/settings.knowledge-graph.tsx");
-const memoryKgRoute = read(
-  "src/routes/_authed/settings.memory.knowledge-graph.tsx",
-);
 
 describe("SettingsMemoryHome", () => {
   it("owns a single stable Knowledge breadcrumb (U9 umbrella naming)", () => {
@@ -18,10 +14,8 @@ describe("SettingsMemoryHome", () => {
 
   it("publishes the Knowledge tabs into the page header", () => {
     expect(source).toContain("tabs: [");
-    // THINK-339 U15: the Company Brain and Ontology tabs moved to the
-    // standalone console — Memory leads and is the default tab.
+    // Memory is the only tab (THINK-408).
     expect(source).not.toContain('label: "Company Brain"');
-    expect(source).not.toContain('label: "Ontology"');
     expect(source).toContain('to: RECORDS, label: "Memory"');
     expect(source).not.toContain('label: "KBs"');
     // The bare /settings/memory path lands on Memory records.
@@ -45,7 +39,7 @@ describe("SettingsMemoryHome", () => {
   it("renders the active facet selected by the current route", () => {
     expect(source).toContain("tabForPath");
     expect(source).toMatch(/<SettingsMemory\s+[\s\S]*?\bembedded\b/);
-    // The twin explorer and ontology tabs are gone (THINK-339 U15).
+    // The twin explorer tab is gone (THINK-339 U15).
     expect(source).not.toContain("KnowledgeModelTab");
     expect(source).not.toContain("TwinExplorer");
     // No in-body tab strip — the tabs live in the header now.
@@ -54,15 +48,5 @@ describe("SettingsMemoryHome", () => {
 
   it("mounts the combined page across the Memory sub-routes", () => {
     expect(memoryRoute).toContain("SettingsMemoryHome");
-  });
-
-  it("redirects retired memory routes into the matching tab", () => {
-    // The retired knowledge-graph/ontology URLs land on Memory records.
-    expect(kgRoute).toContain(
-      'redirect({ to: "/settings/memory/records", replace: true })',
-    );
-    expect(memoryKgRoute).toContain(
-      'redirect({ to: "/settings/memory/records", replace: true })',
-    );
   });
 });

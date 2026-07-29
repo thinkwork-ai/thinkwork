@@ -125,7 +125,7 @@ export interface MemorySourceAdapter {
     snapshot: Record<string, unknown>,
     sourceItemId: string,
   ): { title: string; markdown: string };
-  /** Ontology-shaped claims from one normalized snapshot. */
+  /** Structured claims from one normalized snapshot. */
   extractClaims(input: {
     snapshot: Record<string, unknown>;
     sourceItemId: string;

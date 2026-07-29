@@ -2,8 +2,7 @@
  * SearchProvider — the host-supplied seam for ThinkWork's unified search
  * broker (THINK-263 U8).
  *
- * Mirrors {@link KnowledgeGraphProvider}: a narrow request/response contract;
- * the host supplies transport + identity. The search extension reaches the
+ * A narrow request/response contract; the host supplies transport + identity. The search extension reaches the
  * broker ONLY through this interface — it never builds an HTTP/GraphQL client
  * of its own — so the extension is identical on the cloud and desktop hosts.
  *
@@ -18,7 +17,7 @@
 
 /** One source-tagged group of hits from a single retrieval leg. */
 export interface SearchLegResult {
-  /** Retrieval source: "THREADS" | "ENTITIES" | "MEMORY". */
+  /** Retrieval source: "THREADS" | "MEMORY". */
   source: string;
   /** Per-leg status: "OK" | "TIMEOUT" | "ERROR". */
   status: string;
@@ -31,7 +30,7 @@ export interface SearchProviderRequest {
   query: string;
   /**
    * Which legs to run. Omitted → the broker's default find set
-   * (threads/entities; memory is opt-in). The agent tool defaults to
+   * (threads; memory is opt-in). The agent tool defaults to
    * the find set and does not run the memory leg unless asked.
    */
   sources?: string[];

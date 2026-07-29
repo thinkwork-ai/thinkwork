@@ -2,7 +2,6 @@
 //
 // Hosts:
 //   - MemoryGraph — Hindsight memory + entity graph (used by Brain).
-//   - KnowledgeGraph — Bedrock thread graph with trust/provenance styling.
 //
 // The components were ported out of the app layer to keep graph
 // rendering behavior reusable and versioned in one package.
@@ -13,22 +12,6 @@
 
 export { MemoryGraph } from "./MemoryGraph.js";
 export type { MemoryGraphHandle, MemoryGraphNode } from "./MemoryGraph.js";
-
-export {
-  KnowledgeGraph,
-  buildKnowledgeGraphData,
-  knowledgeGraphTrustColor,
-  knowledgeGraphTrustState,
-} from "./KnowledgeGraph.js";
-export type {
-  KnowledgeGraphConnectedEdge,
-  KnowledgeGraphEdge,
-  KnowledgeGraphGroundingStatus,
-  KnowledgeGraphHandle,
-  KnowledgeGraphNode,
-  KnowledgeGraphProvenanceStatus,
-  KnowledgeGraphTrustState,
-} from "./KnowledgeGraph.js";
 
 export {
   classifyNode,
@@ -52,7 +35,7 @@ export {
   MEMORY_TYPE_COLORS,
 } from "./palettes/memory-palette.js";
 
-export { KnowledgeGraphQuery, MemoryGraphQuery } from "./queries.js";
+export { MemoryGraphQuery } from "./queries.js";
 
 export {
   paintNodeDisc,

@@ -23,7 +23,7 @@ import type {
  * never re-read from `process.env` mid-turn), then hands it to the
  * identity-resolution extension through the provider bundle. Only THIS
  * module knows the platform GraphQL shape, so the extension stays
- * host-agnostic. Mirrors the knowledge-graph provider exactly.
+ * host-agnostic.
  *
  * Turn-bound auth (KTD-1): the request carries the current
  * `x-thread-turn-id` (or `x-thread-id` when no turn row exists). The API's

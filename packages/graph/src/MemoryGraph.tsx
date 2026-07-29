@@ -827,8 +827,7 @@ export const MemoryGraph = forwardRef<MemoryGraphHandle, MemoryGraphProps>(
         emptyFallback ?? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <p className="text-sm text-muted-foreground">
-              No knowledge graph yet. Click Dream to build one from agent
-              memories.
+              No memory graph yet. Click Dream to build one from agent memories.
             </p>
           </div>
         )

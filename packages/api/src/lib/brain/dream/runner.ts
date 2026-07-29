@@ -4,7 +4,7 @@
  * Per tenant, per bank: resume any unfinished run first (its staged actions
  * apply exactly once), else create a fresh run (dedupe-key guarded), plan,
  * stage, apply. Distillation is NOT invoked here — the existing
- * knowledge-graph observations-ingest schedule consumes the cleaned
+ * downstream Brain distillation consumes the cleaned
  * observations via its own cursors (plan lifecycle: Mark → Distill happens
  * downstream on its own cadence).
  */

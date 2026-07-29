@@ -37,7 +37,6 @@ interface SplitImpactInput {
   claimCountFollowingB: number;
   claimCountRemainingA: number;
   memoryClaimCount: number;
-  graphEntityCount: number;
 }
 
 function toSplitImpact(input: SplitImpactInput): SplitImpactPreview {
@@ -47,7 +46,6 @@ function toSplitImpact(input: SplitImpactInput): SplitImpactPreview {
     claimCountFollowingB: input.claimCountFollowingB,
     claimCountRemainingA: input.claimCountRemainingA,
     memoryClaimCount: input.memoryClaimCount,
-    graphEntityCount: input.graphEntityCount,
   };
 }
 

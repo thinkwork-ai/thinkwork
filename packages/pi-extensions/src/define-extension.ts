@@ -7,7 +7,6 @@ import type {
   CanvasProvider,
   DelegationProvider,
   IdentityResolutionProvider,
-  KnowledgeGraphProvider,
   MemoryProvider,
   ModelProvider,
   SearchProvider,
@@ -30,7 +29,6 @@ export interface ProviderBundle {
   workspace?: WorkspaceProvider;
   memory?: MemoryProvider;
   delegation?: DelegationProvider;
-  knowledgeGraph?: KnowledgeGraphProvider;
   identityResolution?: IdentityResolutionProvider;
   canvas?: CanvasProvider;
   search?: SearchProvider;

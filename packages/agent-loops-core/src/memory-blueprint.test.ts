@@ -57,7 +57,7 @@ describe("memory blueprints", () => {
         (step): step is MemoryStageWorkflowStep => step.kind === "memory_stage",
       )
       .map((step) => step.stage);
-    expect(stages.slice(-2)).toEqual(["graph", "wiki"]);
+    expect(stages.slice(-2)).toEqual(["compound", "wiki"]);
   });
 
   it("plan review pauses only manual runs and follows preflight", () => {
@@ -129,11 +129,7 @@ describe("memory stage toggles", () => {
       .map((step) => step.stage);
 
   it("only compound/graph/wiki are toggleable", () => {
-    expect([...TOGGLEABLE_MEMORY_STAGES]).toEqual([
-      "compound",
-      "graph",
-      "wiki",
-    ]);
+    expect([...TOGGLEABLE_MEMORY_STAGES]).toEqual(["compound", "wiki"]);
     for (const spine of [
       "preflight",
       "acquire",
@@ -161,11 +157,10 @@ describe("memory stage toggles", () => {
   it("drops disabled tail stages from the shared definition", () => {
     const stages = stagesOf(
       buildSharedMemoryWorkflowDefinition(PROCESSOR_ID, {
-        disabledStages: ["graph", "wiki"],
+        disabledStages: ["wiki"],
       }),
     );
     expect(stages).toContain("compound");
-    expect(stages).not.toContain("graph");
     expect(stages).not.toContain("wiki");
   });
 
@@ -189,7 +184,7 @@ describe("memory stage toggles", () => {
   it("a toggled definition still validates", () => {
     const result = validateWorkflowDefinition(
       buildSharedMemoryWorkflowDefinition(PROCESSOR_ID, {
-        disabledStages: ["compound", "graph", "wiki"],
+        disabledStages: ["compound", "wiki"],
       }),
     );
     expect(result.ok).toBe(true);

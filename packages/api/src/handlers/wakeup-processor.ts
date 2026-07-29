@@ -2023,12 +2023,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const effectiveContextEngineConfig = effectiveContextEngineEnabled
     ? contextEngineConfig
     : undefined;
-  // Plan 2026-06-09-004 U8 — graph tool parity with chat-agent-invoke:
-  // wakeup turns get knowledge_graph_search under the same stage env flag
-  // and per-agent tool policy.
-  const effectiveKnowledgeGraphEnabled =
-    (process.env.KNOWLEDGE_GRAPH_TOOL_ENABLED || "").toLowerCase() === "true" &&
-    isAnyToolAllowed(...toolPolicyAliases("knowledge_graph_search"));
   // THINK-321 U5 — identity-resolution tool parity with chat-agent-invoke:
   // wakeup turns get the crosswalk tools under the same stage env flag and
   // per-agent tool policy.
@@ -2355,7 +2349,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         : undefined,
       context_engine_enabled: effectiveContextEngineEnabled || undefined,
       context_engine_config: effectiveContextEngineConfig,
-      knowledge_graph_enabled: effectiveKnowledgeGraphEnabled || undefined,
       identity_resolution_enabled:
         effectiveIdentityResolutionEnabled || undefined,
       runtime_type: runtimeType,
@@ -3142,8 +3135,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
               : undefined,
             context_engine_enabled: effectiveContextEngineEnabled || undefined,
             context_engine_config: effectiveContextEngineConfig,
-            knowledge_graph_enabled:
-              effectiveKnowledgeGraphEnabled || undefined,
             identity_resolution_enabled:
               effectiveIdentityResolutionEnabled || undefined,
             runtime_type: runtimeType,

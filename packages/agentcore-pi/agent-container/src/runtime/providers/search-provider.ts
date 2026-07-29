@@ -22,7 +22,7 @@ import type {
  * `x-tenant-id` header, so there is no caller-asserted scope to trust.
  *
  * Transport: a SINGLE attempt with a 12s timeout (the broker's memory leg can
- * take longer than the KG one). A degraded backend surfaces as the
+ * take longer than the thread one). A degraded backend surfaces as the
  * extension's "unavailable" result rather than stalling the turn.
  */
 
@@ -48,11 +48,6 @@ const SEARCH_QUERY = /* GraphQL */ `
         threadHits {
           title
           identifier
-        }
-        entityHits {
-          label
-          ontologyTypeSlug
-          summary
         }
         memoryHits {
           text
@@ -138,13 +133,6 @@ function legToResult(raw: unknown): SearchLegResult | null {
     const title = str(hit.title) ?? str(hit.identifier) ?? "(untitled thread)";
     const id = str(hit.identifier);
     lines.push(id ? `${title} [${id}]` : title);
-  }
-  for (const hit of arr(leg.entityHits)) {
-    const label = str(hit.label) ?? "(entity)";
-    const type = str(hit.ontologyTypeSlug);
-    const summary = str(hit.summary);
-    const head = type ? `${label} (${type})` : label;
-    lines.push(summary ? `${head} — ${summary}` : head);
   }
   for (const hit of arr(leg.memoryHits)) {
     const text = str(hit.text) ?? "";

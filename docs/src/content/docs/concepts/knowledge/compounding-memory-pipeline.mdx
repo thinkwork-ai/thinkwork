@@ -24,17 +24,6 @@ Both passes are driven by one compile job. The job is always scoped to one `(ten
   what makes the wiki feel compounded instead of just piled up.
 </Aside>
 
-## Where ontology fits
-
-The compile pipeline still starts from Hindsight memory and writes compiled pages. The [Business Ontology](/concepts/knowledge/business-ontology/) adds a governed meaning layer beside it:
-
-- suggestion scans observe memory, current Brain pages, and external references to propose new entity types, relationship types, facet templates, and mappings;
-- admins approve those proposals as ontology change sets in Ontology Studio;
-- approval queues an ontology reprocess job that applies the approved definitions and materializes tenant-shared Brain pages/facets;
-- future compiles and Brain retrieval use approved templates instead of relying only on generic page defaults.
-
-This means "compile to wiki" is no longer the whole story. Hindsight remains the source memory substrate, owner-scoped compiled wiki pages remain stable, and the ontology-driven Brain becomes the shared business view that can be rebuilt when the tenant vocabulary changes.
-
 ## Pass 1: Leaf compile
 
 ### Step 1.1 — A compile job gets queued
@@ -260,15 +249,11 @@ Link-densification + alias-dedupe counters (added by the deterministic-linking a
 - `fuzzy_dedupe_merges` — same, via `pg_trgm` similarity ≥ 0.85 (same-type gate).
 - `deterministic_linking_flag_suppressed` — `true` when `WIKI_DETERMINISTIC_LINKING_ENABLED=false` skipped both emitters.
 
-Ontology reprocess jobs have their own metrics on `ontology_reprocess_jobs.metrics`. Those metrics track applied definitions, mappings, facets, materialized pages, preserved higher-trust sections, and errors from the ontology materializer. Use them when an approved change set did not appear in Brain output.
-
 ## Related pages
 
 - [Compiled Memory Pages](/concepts/knowledge/compounding-memory/) — the overview
 - [Memory Page Model](/concepts/knowledge/compounding-memory-pages/) — the data model
-- [Business Ontology](/concepts/knowledge/business-ontology/) — the governed business vocabulary that shapes tenant Brain materialization
 - [Operating Compiled Memory Pages](/guides/compounding-memory-operations/) — hands-on recipes
-- [Operating Business Ontology](/guides/business-ontology-operations/) — change-set and reprocess recovery workflow
 - [Compiled Pages API](/api/compounding-memory/) — GraphQL reference
 
 ---
@@ -282,13 +267,6 @@ Ontology reprocess jobs have their own metrics on `ontology_reprocess_jobs.metri
 - **Admin mutation** — `compileWikiNow(tenantId, ownerId, modelId?)` resolver.
 - **Nightly lint** — `packages/api/src/handlers/wiki-lint.ts`.
 - **CLI** — `thinkwork wiki compile --tenant … --owner …`.
-
-Ontology uses a separate trigger path:
-
-- **Suggestion scan** — `startOntologySuggestionScan` inserts an `ontology_suggestion_scan_jobs` row and invokes `ontology-scan`.
-- **Approval reprocess** — `approveOntologyChangeSet` applies an approved ontology version, queues an `ontology_reprocess_jobs` row, and invokes `ontology-reprocess`.
-
-Those jobs can change tenant-shared Brain materialization without advancing an owner-scoped `wiki_compile_cursors` row.
 
 ### Caps (leaf pass)
 

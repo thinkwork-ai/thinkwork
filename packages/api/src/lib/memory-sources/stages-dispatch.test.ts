@@ -66,7 +66,6 @@ import {
   runAcquire,
   runCompound,
   runExtract,
-  runGraph,
   runProject,
   runResolve,
   runRetain,
@@ -117,7 +116,6 @@ function ctxWith(overrides: {
   targetScope?: string;
   createdBy?: string | null;
   stage?: string;
-  graphWiki?: Record<string, unknown>;
 }): StageContext {
   return {
     db: {} as never,
@@ -142,7 +140,6 @@ function ctxWith(overrides: {
         overrides.createdBy === undefined ? USER_ID : overrides.createdBy,
     } as never,
     sources: (overrides.sources ?? []) as never,
-    graphWiki: overrides.graphWiki as never,
   };
 }
 
@@ -298,24 +295,6 @@ describe("zero-external-source personal run", () => {
     expect(result.status).toBe("succeeded");
     expect(result.counts).toEqual({ noop: 1 });
     expect(runBrainDreamState).not.toHaveBeenCalled();
-    expect(vi.mocked(recordRunItem)).not.toHaveBeenCalled();
-  });
-
-  it("graph on a zero-source shared processor records no run item", async () => {
-    const result = await runGraph(
-      ctxWith({
-        stage: "graph",
-        sources: [],
-        graphWiki: {
-          invokeObservationsIngest: vi.fn(async () => ({
-            ok: true,
-            status: "stale_noop",
-          })),
-        },
-      }),
-    );
-    expect(result.status).toBe("succeeded");
-    expect(result.counts?.noop).toBe(1);
     expect(vi.mocked(recordRunItem)).not.toHaveBeenCalled();
   });
 });

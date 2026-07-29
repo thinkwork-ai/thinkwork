@@ -75,14 +75,9 @@ import {
   SearchPalette,
   type PaletteThreadTarget,
 } from "@/components/shell/SearchPalette";
-import { EntityDossierCard } from "@/components/shell/EntityDossierCard";
 import type { SearchAskViewModel } from "@/components/shell/SearchAskView";
 import { humanizeAskStep } from "@/components/shell/SearchAskView";
-import type {
-  EntityDossierResult,
-  SearchAskResult,
-  SearchResearchResult,
-} from "@/gql/graphql";
+import type { SearchAskResult, SearchResearchResult } from "@/gql/graphql";
 import { SEARCH_PALETTE_RAILS_ENABLED } from "@/lib/search-palette-gate";
 import {
   DEFAULT_WORK_ITEM_SEARCH,
@@ -94,7 +89,6 @@ import { useThreadNotifications } from "@/hooks/useThreadNotifications";
 import {
   ComputerThreadQuery,
   DeleteThreadMutation,
-  EntityDossierQuery,
   MarkThreadsReadMutation,
   NewMessageSubscription,
   PinThreadMutation,
@@ -221,10 +215,6 @@ export function ChatSidebar() {
   >(() => new Map(routeThreadId ? [[routeThreadId, Date.now()]] : []));
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  // U5 dossier: which entity the dossier resolves. Null lets the broker pick
-  // the best grounded match (or disambiguate); the entities rail sets it to
-  // refine which entity the dossier shows.
-  const [dossierEntityId, setDossierEntityId] = useState<string | null>(null);
   // U7 ask (KTD-6): all state lives in the shell, not the palette dialog, so
   // closing the palette leaves the turn running and reopening resumes the
   // stream. The subscriptions + catch-up query below stay mounted the whole
@@ -278,30 +268,6 @@ export function ChatSidebar() {
     const timeout = window.setTimeout(() => setDebouncedSearch(search), 200);
     return () => window.clearTimeout(timeout);
   }, [search]);
-
-  // A new typed query invalidates any prior entity refinement — the broker
-  // re-resolves the best match (or disambiguates) for the fresh query.
-  useEffect(() => {
-    setDossierEntityId(null);
-  }, [debouncedSearch]);
-
-  const dossierQueryText = debouncedSearch.trim();
-  const [{ data: dossierData, fetching: dossierFetching }] = useQuery<{
-    entityDossier: EntityDossierResult;
-  }>({
-    query: EntityDossierQuery,
-    variables: {
-      tenantId: tenantId ?? "",
-      query: dossierQueryText,
-      entityId: dossierEntityId,
-    },
-    pause:
-      !tenantId ||
-      !searchOpen ||
-      !SEARCH_PALETTE_RAILS_ENABLED ||
-      !dossierQueryText,
-    requestPolicy: "cache-and-network",
-  });
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -1053,22 +1019,6 @@ export function ChatSidebar() {
     [activateThread, defaultSpaceIds, navigate],
   );
 
-  // An artifact result opens the artifact's canvas/reader (THINK-263 U5).
-  const openSearchArtifact = useCallback(
-    (id: string) => {
-      setSearchOpen(false);
-      void navigate({ to: "/artifacts/$id", params: { id } });
-    },
-    [navigate],
-  );
-
-  // The entities rail no longer leaves the palette — it refines which entity
-  // the U5 dossier resolves, so picking an entity swaps the dossier in place.
-  const selectDossierEntity = useCallback(
-    (entityId: string) => setDossierEntityId(entityId),
-    [],
-  );
-
   // U7 ask escalation: dispatch the hidden-thread ask turn and stream the
   // answer INTO the palette. We do NOT navigate away or close the palette — the
   // answer, live activity, and any error render in the ask view in place of the
@@ -1388,7 +1338,6 @@ export function ChatSidebar() {
         defaultSpaceIds={defaultSpaceIds}
         locallyReadThreadAt={locallyReadThreadAt}
         onSelectThread={openSearchThread}
-        onSelectEntity={(hit) => selectDossierEntity(hit.entityId)}
         onAsk={askFromPalette}
         onResearch={researchFromPalette}
         askView={askView}
@@ -1396,15 +1345,6 @@ export function ChatSidebar() {
         onAskOpenPermalink={openAskPermalink}
         emptyStateLoading={searchFetching && !searchData}
         emptyStateError={searchError?.message ?? null}
-        dossierSlot={
-          <EntityDossierCard
-            result={dossierData?.entityDossier ?? null}
-            fetching={dossierFetching}
-            onOpenThread={openSearchThread}
-            onOpenArtifact={openSearchArtifact}
-            onSelectEntity={selectDossierEntity}
-          />
-        }
       />
     </div>
   );

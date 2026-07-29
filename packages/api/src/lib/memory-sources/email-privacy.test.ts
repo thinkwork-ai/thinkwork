@@ -7,8 +7,8 @@
  *     `private_unmapped` — it never key-matches into tenant identity and
  *     never creates mappings/canonical rows/cases; requireActiveGrant
  *     blocks a shared email source with no explicit shared grant.
- *  2. Structure: the personal blueprint has NO graph/wiki steps, and the
- *     stage gate hard-rejects graph/wiki for personal processors — email
+ *  2. Structure: the personal blueprint has NO wiki step, and the
+ *     stage gate hard-rejects wiki for personal processors — email
  *     evidence cannot reach shared publication at all.
  *  3. Case payloads: the resolution-queue candidate shape (mirrored from
  *     snapshot-resolution.ts) is closed over
@@ -123,12 +123,11 @@ describe("AE4: private ambiguous email identity", () => {
 });
 
 describe("AE4: personal runs structurally cannot publish shared pages", () => {
-  it("the personal blueprint has no graph or wiki steps", () => {
+  it("the personal blueprint has no wiki step", () => {
     const definition = buildPersonalMemoryWorkflowDefinition("proc-1");
     const stages = definition.steps
       .filter((step) => step.kind === "memory_stage")
       .map((step) => (step as { stage: string }).stage);
-    expect(stages).not.toContain("graph");
     expect(stages).not.toContain("wiki");
     expect(stages).toContain("acquire");
     expect(stages).toContain("retain");
@@ -137,17 +136,16 @@ describe("AE4: personal runs structurally cannot publish shared pages", () => {
     const sharedStages = shared.steps
       .filter((step) => step.kind === "memory_stage")
       .map((step) => (step as { stage: string }).stage);
-    expect(sharedStages).toContain("graph");
     expect(sharedStages).toContain("wiki");
   });
 
-  it("the stage gate hard-rejects graph/wiki for personal processors", () => {
+  it("the stage gate hard-rejects wiki for personal processors", () => {
     const personal = {
       id: "proc-1",
       mode: "personal",
       target_scope: "user",
     } as never;
-    for (const stage of ["graph", "wiki"]) {
+    for (const stage of ["wiki"]) {
       expect(() => assertStageAllowedForScope(personal, stage)).toThrow(
         MemoryScopeError,
       );

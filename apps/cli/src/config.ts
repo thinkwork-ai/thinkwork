@@ -12,12 +12,14 @@ export const PROD_LIKE_STAGES = ["main", "prod", "production", "staging"];
 
 /**
  * Lambda function names cap at 64 characters. API handlers are named
- * `thinkwork-<stage>-api-<handler>` (15 fixed characters of scaffolding) and
- * the longest platform handler is `knowledge-graph-observations-ingest` (35),
- * leaving 14 for the stage. Dev (3 chars) never sees the wall; a 16-character
- * stage hits it 437 resources into its first apply (harness cycle-6 ledger
- * entry). `bedrock-singletons`-style fixture test pins this against the
- * actual handler list.
+ * `thinkwork-<stage>-api-<handler>` (15 fixed characters of scaffolding), so
+ * the cap is 49 minus the longest platform handler name. The cap is held at
+ * 14 rather than recomputed: it is the historical value every deployed stage
+ * was validated against, and loosening it would let a stage name land that
+ * a future longer handler would break (harness cycle-6 ledger entry — a
+ * 16-character stage blew the limit 437 resources into its first apply).
+ * `bedrock-singletons`-style fixture test pins this against the actual
+ * handler list.
  */
 export const MAX_STAGE_NAME_LENGTH = 14;
 

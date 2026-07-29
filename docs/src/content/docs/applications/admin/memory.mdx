@@ -11,8 +11,6 @@ The Memory page is the operator view for retained Hindsight records. It reports 
 **Route wrapper:** `apps/web/src/routes/_authed/settings.memory.tsx`
 **Page implementation:** `apps/web/src/components/settings/SettingsMemory.tsx`
 
-The Knowledge Graph subview remains available at `/settings/memory/knowledge-graph` when ThinkWork Brain graph evidence is present.
-
 ## Layout
 
 The page has three primary controls:
@@ -41,7 +39,6 @@ Clicking a row opens a detail sheet with full content, bank/scope metadata, and 
 - **Hindsight memory** — canonical user and Space memory for this pass.
 - **Brain Sources** — retained Space documents in Hindsight.
 - **AgentCore managed memory** — an explicit low-cost/development compatibility mode.
-- **ThinkWork Brain graph infrastructure** — ontology and graph diagnostics, not the user or Space memory provider.
 
 ## Graph View
 
@@ -49,8 +46,8 @@ When graph infrastructure is enabled, the graph view renders entities and relati
 
 <Aside type="note">
   The graph view is a Brain infrastructure inspection tool. It is not the full
-  ThinkWork Brain projection: distillation, ontology processing, wiki pages,
-  aliases, and source citations are follow-up work.
+  ThinkWork Brain projection: distillation, wiki pages, aliases, and source
+  citations are follow-up work.
 </Aside>
 
 ## Workflows
@@ -89,7 +86,7 @@ Cross-bank delete is disabled in the operator table for this pass. For bulk reda
 ## Known Limits
 
 - **Graph diagnostics are not memory authority.** Hindsight is the user and Space memory path for this pass.
-- **ThinkWork Brain distillation is separate.** This page proves retained-memory inspection; compiled pages and ontology views are projections over or beside memory.
+- **ThinkWork Brain distillation is separate.** This page proves retained-memory inspection; compiled pages are projections over or beside memory.
 - **Wiki projection is separate.** Wiki pages are compiled context, not an upstream source of truth for retained memory.
 - **Operator rows are read-only.** Editing/deleting across Hindsight banks is intentionally disabled in this pass.
 - **Graph view lacks drill-in.** Clicking a node does not open a detail sheet.

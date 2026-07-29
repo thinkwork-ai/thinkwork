@@ -4,7 +4,6 @@ const selectMock = vi.hoisted(() => vi.fn());
 const insertMock = vi.hoisted(() => vi.fn());
 const executeMock = vi.hoisted(() => vi.fn());
 const recallMock = vi.hoisted(() => vi.fn());
-const searchKgMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@thinkwork/database-pg", async (importOriginal) => {
   const actual =
@@ -21,10 +20,6 @@ vi.mock("@thinkwork/database-pg", async (importOriginal) => {
 
 vi.mock("../memory/index.js", () => ({
   getMemoryServices: () => ({ recall: { recall: recallMock } }),
-}));
-
-vi.mock("../knowledge-graph/graph-search.js", () => ({
-  searchKnowledgeGraph: searchKgMock,
 }));
 
 import { searchBroker, type SearchSource } from "./broker.js";
@@ -66,7 +61,6 @@ describe("searchBroker", () => {
     insertMock.mockReset();
     executeMock.mockReset();
     recallMock.mockReset();
-    searchKgMock.mockReset();
     insertChain();
   });
 
@@ -81,36 +75,14 @@ describe("searchBroker", () => {
       },
     ]);
     selectMock.mockReturnValue({ from: chain.from });
-    searchKgMock.mockResolvedValue({
-      entities: [
-        {
-          id: "e1",
-          label: "Acme",
-          typeSlug: "organization",
-          summary: null,
-          aliases: ["ACME Corp"],
-          relationshipCount: 3,
-          evidenceCount: 5,
-          observationIds: [],
-        },
-      ],
-      relationships: [],
-    });
-
-    const result = await searchBroker(baseArgs(["THREADS", "ENTITIES"]));
+    const result = await searchBroker(baseArgs(["THREADS"]));
 
     expect(result.legs.map((l) => [l.source, l.status])).toEqual([
       ["THREADS", "OK"],
-      ["ENTITIES", "OK"],
     ]);
     expect(result.legs[0].threadHits?.[0]).toMatchObject({
       id: "t1",
       title: "Acme SOW",
-    });
-    expect(result.legs[1].entityHits?.[0]).toMatchObject({
-      entityId: "e1",
-      label: "Acme",
-      ontologyTypeSlug: "organization",
     });
     expect(recallMock).not.toHaveBeenCalled();
   });
@@ -118,36 +90,33 @@ describe("searchBroker", () => {
   it("a timing-out leg yields TIMEOUT for its rail while others return OK", async () => {
     const chain = threadSelectChain([]);
     selectMock.mockReturnValue({ from: chain.from });
-    searchKgMock.mockImplementation(
-      () =>
-        new Promise((resolve) =>
-          setTimeout(() => resolve({ entities: [], relationships: [] }), 250),
-        ),
+    recallMock.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve([]), 250)),
     );
 
     const result = await searchBroker(
-      baseArgs(["THREADS", "ENTITIES"], {
-        timeoutMs: { ENTITIES: 20 },
+      baseArgs(["THREADS", "MEMORY"], {
+        timeoutMs: { MEMORY: 20 },
       }),
     );
 
     const bySource = Object.fromEntries(
       result.legs.map((l) => [l.source, l.status]),
     );
-    expect(bySource.ENTITIES).toBe("TIMEOUT");
+    expect(bySource.MEMORY).toBe("TIMEOUT");
     expect(bySource.THREADS).toBe("OK");
   });
 
   it("a throwing leg yields per-leg ERROR, not a query-level failure", async () => {
     const chain = threadSelectChain([]);
     selectMock.mockReturnValue({ from: chain.from });
-    searchKgMock.mockRejectedValue(new Error("entities exploded"));
+    recallMock.mockRejectedValue(new Error("memory exploded"));
 
-    const result = await searchBroker(baseArgs(["THREADS", "ENTITIES"]));
+    const result = await searchBroker(baseArgs(["THREADS", "MEMORY"]));
 
-    const entities = result.legs.find((l) => l.source === "ENTITIES");
-    expect(entities?.status).toBe("ERROR");
-    expect(entities?.error).toContain("entities exploded");
+    const memory = result.legs.find((l) => l.source === "MEMORY");
+    expect(memory?.status).toBe("ERROR");
+    expect(memory?.error).toContain("memory exploded");
     expect(result.legs.filter((l) => l.status === "OK")).toHaveLength(1);
   });
 
@@ -198,9 +167,7 @@ describe("searchBroker", () => {
   it("never invokes the memory adapter when MEMORY is not requested", async () => {
     const chain = threadSelectChain([]);
     selectMock.mockReturnValue({ from: chain.from });
-    searchKgMock.mockResolvedValue({ entities: [], relationships: [] });
-
-    await searchBroker(baseArgs(["THREADS", "ENTITIES"]));
+    await searchBroker(baseArgs(["THREADS"]));
     expect(recallMock).not.toHaveBeenCalled();
   });
 
@@ -227,10 +194,10 @@ describe("searchBroker", () => {
       },
     ]);
     selectMock.mockReturnValue({ from: chain.from });
-    searchKgMock.mockResolvedValue({ entities: [], relationships: [] });
+    recallMock.mockResolvedValue([]);
     const values = insertChain();
 
-    await searchBroker(baseArgs(["THREADS", "ENTITIES"]));
+    await searchBroker(baseArgs(["THREADS", "MEMORY"]));
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(values).toHaveBeenCalledTimes(1);
@@ -240,8 +207,8 @@ describe("searchBroker", () => {
       query_text: "acme",
       total_hits: 1,
       escalated: false,
-      leg_hit_counts: { THREADS: 1, ENTITIES: 0 },
-      leg_statuses: { THREADS: "OK", ENTITIES: "OK" },
+      leg_hit_counts: { THREADS: 1, MEMORY: 0 },
+      leg_statuses: { THREADS: "OK", MEMORY: "OK" },
     });
   });
 

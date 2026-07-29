@@ -148,8 +148,7 @@ type MemoryGraph {
 
 """
 Runtime memory system configuration exposed to the admin UI.
-Lets the UI decide which views to render (e.g. Knowledge Graph toggle is
-only meaningful when the active engine supports graph inspection).
+Lets the UI decide which views to render based on the active engine.
 """
 type MemorySystemConfig {
   """
@@ -466,7 +465,7 @@ extend type Mutation {
 """
 External Memory Compounding (THINK-193 U2). Operator-only inspection and
 control surface for external memory sources: processor configs, source
-bindings, authorization grants, the evidence ledger, ontology claims, and
+bindings, authorization grants, the evidence ledger, durable claims, and
 the retraction ledger. Queries and mutations below require tenant admin,
 with one exception (THINK-193 U6): grantMemorySourceAuthorization and
 setMemorySourceConfig on a PERSONAL processor are owner self-service,
@@ -530,7 +529,7 @@ type MemoryEvidenceItemSummary {
 }
 
 """
-Durable ontology-shaped claim. supportCount is the number of ACTIVE
+Durable structured claim. supportCount is the number of ACTIVE
 evidence support edges (memory_claim_evidence status = 'active').
 """
 type MemoryClaim {

@@ -77,7 +77,7 @@ The unified web surface. A React SPA at `apps/web`, authenticated through Cognit
 
 <p align="center">
   <img src="./assets/screenshots/mobile/threads-list.png" alt="Threads tab in the ThinkWork mobile app" width="280" />
-  <img src="./assets/screenshots/mobile/wiki-graph.png" alt="Wiki tab — Compounding Memory pages rendered as a knowledge graph in the ThinkWork mobile app" width="280" />
+  <img src="./assets/screenshots/mobile/wiki-graph.png" alt="Wiki tab — Compounding Memory pages rendered as a graph in the ThinkWork mobile app" width="280" />
 </p>
 
 The end-user surface. An Expo + React Native client at `apps/mobile`, currently shipping on iOS via TestFlight. Users get a unified inbox across chat threads, scheduled automations, and emails — with narrow-policy push notifications and realtime activity on every turn. The companion **Wiki** tab surfaces Compounding Memory pages (Entity, Topic, Decision) that the agent builds as it learns — browseable on device, linked to each other, and scoped per agent. The mobile app owns per-user OAuth and MCP tokens; tenant configuration stays on the admin side. See the [mobile docs](https://docs.thinkwork.ai/applications/mobile/) for the full surface.
@@ -88,7 +88,6 @@ We ship things only after they're load-bearing in production. Everything below i
 
 | Item                | Status  | Notes                                                                                      |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------ |
-| Ontology Studio     | Planned | Authoring UI for entity/relation schemas — a step beyond today's memory graph view         |
 | AutoResearch        | Planned | Long-running research agents with structured citations; schema reserved, runtime not wired |
 | Places service      | Planned | Location/venue entity service for field- and route-based workflows                         |
 | Web end-user client | Planned | Browser counterpart to the mobile inbox; today the admin web app is operator-only          |

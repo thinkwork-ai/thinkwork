@@ -35,7 +35,5 @@ export const registerIdentitySource = async (
     sourceSystem: result.sourceSystem,
     connectorSlug: result.connectorSlug,
     entityTypeSlugs: result.entityTypeSlugs,
-    routingMapAgents: result.routingMap.agents,
-    routingMapWritten: result.routingMap.written,
   };
 };

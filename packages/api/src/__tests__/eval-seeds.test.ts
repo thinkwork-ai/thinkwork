@@ -35,7 +35,7 @@ describe("eval seed pack", () => {
   });
 
   it("carries evaluator choices from seed content", () => {
-    expect(EVAL_SEEDS).toHaveLength(196);
+    expect(EVAL_SEEDS).toHaveLength(195);
     expect(
       EVAL_SEEDS.every((seed) => seed.agentcore_evaluator_ids?.length),
     ).toBe(true);

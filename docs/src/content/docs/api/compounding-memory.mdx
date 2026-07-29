@@ -28,8 +28,6 @@ Start here if you're building a client (the mobile app, an SDK, another service)
 
 **Reset an agent's wiki** (admin only). Clear the cursor, optionally archive pages.
 
-**Govern business ontology** (admin only). Start suggestion scans, review change sets, approve/reject ontology updates, inspect active definitions, and monitor reprocess jobs that materialize tenant-shared Brain pages.
-
 ## Who can call what
 
 All wiki reads are **agent-scoped**. Every query requires `ownerId` (the agent id), and the system checks that you're either that agent yourself or an admin of the tenant.
@@ -37,8 +35,6 @@ All wiki reads are **agent-scoped**. Every query requires `ownerId` (the agent i
 There is no tenant-wide read path. If you want to know what's in another agent's wiki in the same tenant, you need admin rights.
 
 Mutations (`compileWikiNow`, `bootstrapJournalImport`, `resetWikiCursor`) are admin-only across the board.
-
-Ontology queries and mutations are tenant-admin only. They operate on tenant-shared business Brain definitions, not a single agent's owner-scoped wiki.
 
 ## Reading one page
 
@@ -237,130 +233,10 @@ mutation Reset($tenantId: ID!, $ownerId: ID!, $force: Boolean) {
 
 For a truly clean rebuild (including deleting provenance rows), see [the operations guide](/guides/compounding-memory-operations/#rebuilding-an-agents-wiki-from-scratch).
 
-## Governing business ontology
-
-The business ontology API sits beside compiled-page APIs. It is the admin contract behind **Manage → Ontology**.
-
-```graphql
-query OntologyDefinitions($tenantId: ID!) {
-  ontologyDefinitions(tenantId: $tenantId) {
-    activeVersion {
-      id
-      versionNumber
-      activatedAt
-    }
-    entityTypes {
-      id
-      slug
-      name
-      lifecycleStatus
-    }
-    relationshipTypes {
-      id
-      slug
-      name
-      lifecycleStatus
-    }
-    facetTemplates {
-      id
-      slug
-      heading
-      entityTypeId
-      lifecycleStatus
-    }
-    externalMappings {
-      id
-      subjectKind
-      mappingKind
-      vocabulary
-      externalUri
-    }
-  }
-}
-```
-
-Suggestion scans create evidence-backed change sets:
-
-```graphql
-mutation StartOntologyScan($tenantId: ID!) {
-  startOntologySuggestionScan(
-    input: { tenantId: $tenantId, trigger: "manual" }
-  ) {
-    id
-    status
-    result
-    metrics
-  }
-}
-```
-
-Operators review and edit change sets before approval:
-
-```graphql
-query OntologyChangeSets($tenantId: ID!) {
-  ontologyChangeSets(tenantId: $tenantId, status: PENDING_REVIEW) {
-    id
-    title
-    confidence
-    observedFrequency
-    expectedImpact
-    evidenceExamples {
-      sourceKind
-      sourceLabel
-      quote
-      observedAt
-    }
-    items {
-      id
-      itemType
-      action
-      status
-      title
-      proposedValue
-      editedValue
-    }
-  }
-}
-```
-
-Approval queues asynchronous reprocessing. Track application through the job ledger:
-
-```graphql
-mutation ApproveOntologyChangeSet($tenantId: ID!, $changeSetId: ID!) {
-  approveOntologyChangeSet(
-    input: { tenantId: $tenantId, changeSetId: $changeSetId }
-  ) {
-    id
-    status
-    appliedVersionId
-    approvedAt
-  }
-}
-```
-
-```graphql
-query OntologyReprocessJob($tenantId: ID!, $jobId: ID!) {
-  ontologyReprocessJob(tenantId: $tenantId, jobId: $jobId) {
-    id
-    status
-    attempt
-    input
-    impact
-    metrics
-    error
-    startedAt
-    finishedAt
-  }
-}
-```
-
-See [Operating Business Ontology](/guides/business-ontology-operations/) for review, retry, and failure recovery guidance.
-
 ## Errors
 
 - **Auth or scope failures** surface as `Agent not found or access denied` (mobile paths) or `Forbidden` (admin paths). Scope mismatch is treated as unauthorized, not "not found."
 - **Compile job failures** show up in the job row's `error` field — common ones are `Too many requests` (Bedrock throttling) and adapter-not-implemented errors.
-- **Ontology scan/reprocess failures** show up on `ontologySuggestionScanJob.error` or `ontologyReprocessJob.error`. Approval and application are separate states, so always inspect the reprocess job before assuming approved definitions reached Brain output.
 - **Read paths don't call LLMs,** so they don't see Bedrock errors.
 
 ## Related pages
@@ -368,9 +244,7 @@ See [Operating Business Ontology](/guides/business-ontology-operations/) for rev
 - [Compiled Memory Pages](/concepts/knowledge/compounding-memory/) — the overview
 - [Memory Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — what compiles do
 - [Memory Page Model](/concepts/knowledge/compounding-memory-pages/) — the data model
-- [Business Ontology](/concepts/knowledge/business-ontology/) — governed business definitions and materialization
 - [Operating Compiled Memory Pages](/guides/compounding-memory-operations/) — hands-on recipes
-- [Operating Business Ontology](/guides/business-ontology-operations/) — change-set and reprocess runbook
 - [GraphQL Schema](/api/graphql/) — the full ThinkWork GraphQL API
 
 ---
@@ -381,7 +255,6 @@ See [Operating Business Ontology](/guides/business-ontology-operations/) for rev
 
 - `packages/database-pg/graphql/types/wiki.graphql` — wiki types, queries, mutations
 - `packages/database-pg/graphql/types/memory.graphql` — `MemoryRecord.wikiPages` + `mobileWikiSearch`
-- `packages/database-pg/graphql/types/ontology.graphql` — ontology definitions, change sets, suggestion scan jobs, and reprocess jobs
 
 ### `mobileWikiSearch` scoring (implementation)
 

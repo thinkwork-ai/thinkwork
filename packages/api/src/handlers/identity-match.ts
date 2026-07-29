@@ -2,7 +2,7 @@
  * identity-match — bootstrap/drift identity matching Lambda (THINK-321 U7,
  * KTD-7 — R9/R10).
  *
- * Two modes, mirroring ontology-scan:
+ * Two modes:
  *
  *   - **Job mode** (`{tenantId, jobId}`) — Event-invoked by
  *     `startIdentityMatchJob` after the durable `identity.match_jobs` row is

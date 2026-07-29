@@ -66,10 +66,6 @@ const STAGE_COPY: Record<string, { label: string; description: string }> = {
     description:
       "Consolidate related memories so repeated facts reinforce instead of duplicate.",
   },
-  graph: {
-    label: "Graph",
-    description: "Ingest the affected entities into the knowledge graph.",
-  },
   wiki: {
     label: "Wiki",
     description: "Recompile the Wiki pages this run touched.",

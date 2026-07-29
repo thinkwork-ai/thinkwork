@@ -1,5 +1,5 @@
 /**
- * memoryGraph — Fetch knowledge graph from the active memory engine.
+ * memoryGraph — Fetch the memory graph from the active memory engine.
  *
  * Capability-gated: engines without graph inspection (AgentCore) return
  * an empty graph. Hindsight's entity / cooccurrence tables live directly
@@ -168,7 +168,7 @@ export const memoryGraph = async (
 
   // For each entity, look up the most recent source memory_unit that carries
   // a thread_id in its metadata. Surfaces the originating thread in the
-  // knowledge-graph detail sheet. One query, bounded by the 200-entity cap.
+  // graph detail sheet. One query, bounded by the 200-entity cap.
   const threadByEntity = new Map<string, string>();
   if (entityIds.length > 0) {
     try {

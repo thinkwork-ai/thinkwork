@@ -117,7 +117,6 @@ function okLeg(source: string, hits: Record<string, unknown>) {
 
 function renderPalette(props?: Partial<Parameters<typeof SearchPalette>[0]>) {
   const onSelectThread = vi.fn();
-  const onSelectEntity = vi.fn();
   const onAsk = vi.fn();
   const onResearch = vi.fn();
   const utils = render(
@@ -132,7 +131,6 @@ function renderPalette(props?: Partial<Parameters<typeof SearchPalette>[0]>) {
       defaultSpaceIds={new Set()}
       locallyReadThreadAt={new Map()}
       onSelectThread={onSelectThread}
-      onSelectEntity={onSelectEntity}
       onAsk={onAsk}
       onResearch={onResearch}
       emptyStateLoading={false}
@@ -144,7 +142,6 @@ function renderPalette(props?: Partial<Parameters<typeof SearchPalette>[0]>) {
   return {
     ...utils,
     onSelectThread,
-    onSelectEntity,
     onAsk,
     onResearch,
   };
@@ -181,30 +178,14 @@ describe("SearchPalette", () => {
         ],
       }),
     );
-    legResults.set(
-      "ENTITIES",
-      okLeg("ENTITIES", {
-        entityHits: [
-          {
-            entityId: "e1",
-            label: "Acme Corp",
-            summary: null,
-            ontologyTypeSlug: "customer",
-            aliases: ["Acme"],
-            evidenceCount: 3,
-          },
-        ],
-      }),
-    );
 
     const { onSelectThread } = renderPalette({ search: "acme" });
 
     await waitFor(() => expect(screen.getByText("Threads")).toBeTruthy());
-    // No Wiki rail (THINK-327 U7) — threads + entities only.
+    // Threads is the only broker rail (THINK-408 retired the Entities rail).
     expect(screen.queryByText("Wiki")).toBeNull();
-    expect(screen.getByText("Entities")).toBeTruthy();
+    expect(screen.queryByText("Entities")).toBeNull();
     expect(screen.getByText("Acme onboarding")).toBeTruthy();
-    expect(screen.getAllByText("Acme Corp").length).toBe(1);
 
     fireEvent.click(screen.getByText("Acme onboarding"));
     expect(onSelectThread).toHaveBeenCalledWith({
@@ -213,51 +194,24 @@ describe("SearchPalette", () => {
     });
   });
 
-  it("a rail with zero hits shows its own empty state while others show results", async () => {
-    legResults.set(
-      "THREADS",
-      okLeg("THREADS", {
-        threadHits: [
-          {
-            id: "t9",
-            title: "Acme onboarding",
-            updatedAt: "2026-07-12T00:00:00.000Z",
-          },
-        ],
-      }),
-    );
-    legResults.set("ENTITIES", okLeg("ENTITIES", { entityHits: [] }));
+  it("a rail with zero hits shows its own empty state", async () => {
+    legResults.set("THREADS", okLeg("THREADS", { threadHits: [] }));
 
     renderPalette({ search: "acme" });
 
     await waitFor(() =>
-      expect(screen.getByText("Acme onboarding")).toBeTruthy(),
+      expect(screen.getAllByText("No matches").length).toBeGreaterThanOrEqual(
+        1,
+      ),
     );
-    expect(screen.getAllByText("No matches").length).toBeGreaterThanOrEqual(1);
   });
 
-  it("shows distinct timeout and error rail states without blocking others", async () => {
+  it("shows a distinct timeout rail state", async () => {
     legResults.set("THREADS", {
       data: {
         search: {
           queryId: "q1",
           legs: [{ source: "THREADS", status: "TIMEOUT", threadHits: [] }],
-        },
-      },
-      fetching: false,
-    });
-    legResults.set("ENTITIES", {
-      data: {
-        search: {
-          queryId: "q1",
-          legs: [
-            {
-              source: "ENTITIES",
-              status: "ERROR",
-              error: "boom",
-              entityHits: [],
-            },
-          ],
         },
       },
       fetching: false,
@@ -268,7 +222,31 @@ describe("SearchPalette", () => {
     await waitFor(() =>
       expect(screen.getByText("Still searching…")).toBeTruthy(),
     );
-    expect(screen.getByText("Search unavailable")).toBeTruthy();
+  });
+
+  it("shows a distinct error rail state", async () => {
+    legResults.set("THREADS", {
+      data: {
+        search: {
+          queryId: "q1",
+          legs: [
+            {
+              source: "THREADS",
+              status: "ERROR",
+              error: "boom",
+              threadHits: [],
+            },
+          ],
+        },
+      },
+      fetching: false,
+    });
+
+    renderPalette({ search: "acme" });
+
+    await waitFor(() =>
+      expect(screen.getByText("Search unavailable")).toBeTruthy(),
+    );
   });
 
   it("⌘Enter escalates to ask with the current query", () => {
@@ -280,7 +258,6 @@ describe("SearchPalette", () => {
 
   it("the Ask row activates ask", async () => {
     legResults.set("THREADS", okLeg("THREADS", { threadHits: [] }));
-    legResults.set("ENTITIES", okLeg("ENTITIES", { entityHits: [] }));
 
     const { onAsk } = renderPalette({ search: "acme" });
     const askRow = await screen.findByText(/Ask/);
@@ -290,7 +267,6 @@ describe("SearchPalette", () => {
 
   it("the Research this row renders on a typed query and activates research", async () => {
     legResults.set("THREADS", okLeg("THREADS", { threadHits: [] }));
-    legResults.set("ENTITIES", okLeg("ENTITIES", { entityHits: [] }));
 
     const { onResearch } = renderPalette({ search: "acme" });
     const researchRow = await screen.findByText(/Research this/);
@@ -300,7 +276,6 @@ describe("SearchPalette", () => {
 
   it("renders the ask view in place of the rails when askView is active", () => {
     legResults.set("THREADS", okLeg("THREADS", { threadHits: [] }));
-    legResults.set("ENTITIES", okLeg("ENTITIES", { entityHits: [] }));
 
     renderPalette({
       search: "acme",
@@ -334,6 +309,7 @@ describe("SearchPalette", () => {
     // No broker rails, no Ask row.
     expect(screen.queryByText("Wiki")).toBeNull();
     expect(screen.queryByText("Entities")).toBeNull();
+    expect(screen.queryByText("Threads")).toBeNull();
     expect(screen.queryByText(/Ask/)).toBeNull();
   });
 });
