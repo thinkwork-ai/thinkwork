@@ -205,11 +205,22 @@ describe("snapshotRuntimeEnv", () => {
     ).toBe("hindsight");
   });
 
-  it("maps explicit agentcore memory engine to the managed compatibility path", () => {
+  it("keeps explicit agentcore memory engine canonical", () => {
     expect(
       snapshotRuntimeEnv({ MEMORY_ENGINE: "agentcore" } as NodeJS.ProcessEnv)
         .memoryEngine,
-    ).toBe("managed");
+    ).toBe("agentcore");
+  });
+
+  it("normalizes the legacy 'managed' input value to canonical 'agentcore'", () => {
+    expect(
+      snapshotRuntimeEnv({ MEMORY_ENGINE: "managed" } as NodeJS.ProcessEnv)
+        .memoryEngine,
+    ).toBe("agentcore");
+    expect(
+      snapshotRuntimeEnv({ MEMORY_ENGINE: "MANAGED" } as NodeJS.ProcessEnv)
+        .memoryEngine,
+    ).toBe("agentcore");
   });
 
   it("prefers WORKSPACE_BUCKET over AGENTCORE_FILES_BUCKET", () => {

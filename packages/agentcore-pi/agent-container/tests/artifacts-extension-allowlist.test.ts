@@ -50,7 +50,7 @@ function baseArgs(
       awsRegion: "us-east-1",
       agentCoreMemoryId: "",
       hindsightEndpoint: "",
-      memoryEngine: "managed" as const,
+      memoryEngine: "agentcore" as const,
       memoryRetainFnName: "",
       dbClusterArn: "",
       dbSecretArn: "",
