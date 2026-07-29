@@ -470,6 +470,58 @@ describe("runAgentLoop", () => {
     expect(session.disposed).toBe(true);
   });
 
+  it("sums usage across every assistant message produced by the turn", async () => {
+    // A multi-step tool loop makes several model calls; each appends its own
+    // assistant message. Reporting only the LAST message's usage drops all
+    // earlier calls (and with prompt caching the last call's uncached input
+    // can be ~1 token), so the turn must aggregate messages added after the
+    // pre-prompt baseline — resumed durable-session history stays excluded.
+    const history = [historyAssistant("prior turn — not this turn's usage")];
+    const turnMessages: AgentMessage[] = [];
+    const usageMessage = (input: number, output: number, cacheRead: number) =>
+      ({
+        role: "assistant",
+        content: [{ type: "text", text: "step" }],
+        usage: {
+          input,
+          output,
+          cacheRead,
+          cacheWrite: 0,
+          totalTokens: input + output + cacheRead,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+      }) as unknown as AgentMessage;
+    let listener: ((event: AgentSessionEvent) => void) | undefined;
+    const session = {
+      disposed: false,
+      subscribe(fn: (event: AgentSessionEvent) => void) {
+        listener = fn;
+        void listener;
+        return () => {};
+      },
+      async prompt() {
+        turnMessages.push(usageMessage(9000, 40, 0));
+        turnMessages.push(usageMessage(1, 653, 42000));
+      },
+      get messages() {
+        return [...history, ...turnMessages] as AgentMessage[];
+      },
+      dispose() {
+        (this as { disposed: boolean }).disposed = true;
+      },
+    };
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async () => ({
+        session: session as unknown as AgentSessionLike,
+        modelId: "m",
+      }),
+    });
+    expect(result.usage?.input).toBe(9001);
+    expect(result.usage?.output).toBe(693);
+    expect(result.usage?.cacheRead).toBe(42000);
+    expect(result.usage?.totalTokens).toBe(9000 + 40 + 1 + 653 + 42000);
+  });
+
   it("sets logical PWD to the workspace cwd while prompting", async () => {
     const originalPwd = process.env.PWD;
     process.env.PWD = "/previous";

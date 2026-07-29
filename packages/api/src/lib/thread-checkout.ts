@@ -33,17 +33,26 @@ export async function claimThreadCheckout(input: {
   threadId: string;
   runId: string;
 }): Promise<boolean> {
+  // threads.checkout_run_id is a TEXT column (schema/threads.ts), so the run
+  // id must be compared as text — a ::uuid cast on either side raises 42883
+  // "operator does not exist: text = uuid" and the claim fails open. The
+  // liveness join casts the column to uuid only behind a CASE format guard:
+  // the orchestration mutations accept client-supplied run ids, so a non-uuid
+  // value must read as "no live holder" (steal) rather than abort the claim.
   const result = await db.execute(sql`
 		UPDATE threads
-		SET checkout_run_id = ${input.runId}::uuid, updated_at = NOW()
+		SET checkout_run_id = ${input.runId}, updated_at = NOW()
 		WHERE id = ${input.threadId}::uuid
 		  AND tenant_id = ${input.tenantId}::uuid
 		  AND (
 		    checkout_run_id IS NULL
-		    OR checkout_run_id = ${input.runId}::uuid
+		    OR checkout_run_id = ${input.runId}
 		    OR NOT EXISTS (
 		      SELECT 1 FROM thread_turns tt
-		      WHERE tt.id = threads.checkout_run_id
+		      WHERE tt.id = CASE
+		          WHEN threads.checkout_run_id ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+		            THEN threads.checkout_run_id::uuid
+		        END
 		        AND tt.status = 'running'
 		        AND tt.finalized_at IS NULL
 		        AND tt.last_activity_at > NOW() - (${STALE_CHECKOUT_MINUTES} * INTERVAL '1 minute')
@@ -69,7 +78,7 @@ export async function releaseThreadCheckout(input: {
 			UPDATE threads
 			SET checkout_run_id = NULL, updated_at = NOW()
 			WHERE id = ${input.threadId}::uuid
-			  AND checkout_run_id = ${input.runId}::uuid
+			  AND checkout_run_id = ${input.runId}
 		`);
   } catch (err) {
     console.warn(
