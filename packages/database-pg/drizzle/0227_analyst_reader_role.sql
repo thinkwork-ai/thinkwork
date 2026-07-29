@@ -215,11 +215,6 @@ BEGIN
   ELSE
     missing := missing || 'agent_capabilities'::text;
   END IF;
-  IF to_regclass('public.agent_knowledge_bases') IS NOT NULL THEN
-    GRANT SELECT ON public.agent_knowledge_bases TO analyst_reader;
-  ELSE
-    missing := missing || 'agent_knowledge_bases'::text;
-  END IF;
   IF to_regclass('public.agent_loop_iterations') IS NOT NULL THEN
     GRANT SELECT ON public.agent_loop_iterations TO analyst_reader;
   ELSE
@@ -525,21 +520,6 @@ BEGIN
   ELSE
     missing := missing || 'inbox_items'::text;
   END IF;
-  IF to_regclass('public.knowledge_base_documents') IS NOT NULL THEN
-    GRANT SELECT ON public.knowledge_base_documents TO analyst_reader;
-  ELSE
-    missing := missing || 'knowledge_base_documents'::text;
-  END IF;
-  IF to_regclass('public.knowledge_base_sources') IS NOT NULL THEN
-    GRANT SELECT ON public.knowledge_base_sources TO analyst_reader;
-  ELSE
-    missing := missing || 'knowledge_base_sources'::text;
-  END IF;
-  IF to_regclass('public.knowledge_bases') IS NOT NULL THEN
-    GRANT SELECT ON public.knowledge_bases TO analyst_reader;
-  ELSE
-    missing := missing || 'knowledge_bases'::text;
-  END IF;
   IF to_regclass('public.linked_task_events') IS NOT NULL THEN
     GRANT SELECT ON public.linked_task_events TO analyst_reader;
   ELSE
@@ -829,11 +809,6 @@ BEGIN
     GRANT SELECT ON public.space_integrations TO analyst_reader;
   ELSE
     missing := missing || 'space_integrations'::text;
-  END IF;
-  IF to_regclass('public.space_knowledge_bases') IS NOT NULL THEN
-    GRANT SELECT ON public.space_knowledge_bases TO analyst_reader;
-  ELSE
-    missing := missing || 'space_knowledge_bases'::text;
   END IF;
   IF to_regclass('public.space_mcp_servers') IS NOT NULL THEN
     GRANT SELECT ON public.space_mcp_servers TO analyst_reader;

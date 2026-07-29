@@ -178,7 +178,7 @@ We use these names consistently. Not "conversations," not "workflows," not "the 
 |---|---|
 | Threads | conversations, chats, sessions |
 | Agents | bots, assistants, AI agents |
-| Memory | context, knowledge base (KB is a specific thing, not the umbrella) |
+| Memory | context, knowledge base |
 | Connectors | integrations (integrations is a *kind of* connector) |
 | Automations | workflows, jobs, schedules |
 | Control | governance, safety, guardrails-only |

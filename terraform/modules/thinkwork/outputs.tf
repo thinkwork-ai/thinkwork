@@ -108,10 +108,6 @@ output "aurora_aws_s3_iam_role_arn" {
   value       = module.database.aws_s3_iam_role_arn
 }
 
-output "kb_service_role_arn" {
-  value = module.bedrock_kb.kb_service_role_arn
-}
-
 # App
 output "api_endpoint" {
   value = module.api.api_endpoint

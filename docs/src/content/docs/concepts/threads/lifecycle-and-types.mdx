@@ -104,7 +104,7 @@ For email and GitHub, the same pattern uses `inReplyTo` chains and `(repoFullNam
 
 ### Promote a `BLOCKED` thread on dependency clear
 
-When a tool call fails non-retryably (a integration hits an external auth failure, a knowledge-base query times out), the agent flips the thread to `BLOCKED` and writes the failure context as a turn. The operator inbox surfaces `BLOCKED` threads in a distinct queue.
+When a tool call fails non-retryably (a integration hits an external auth failure, a memory query times out), the agent flips the thread to `BLOCKED` and writes the failure context as a turn. The operator inbox surfaces `BLOCKED` threads in a distinct queue.
 
 To resume: an operator clicks "Resume" in the admin thread detail. The status flips `BLOCKED → IN_PROGRESS` and a new turn fires against the same thread. Memory and prior turns are visible to the new turn — the agent doesn't repeat the failed approach unless it has reason to.
 

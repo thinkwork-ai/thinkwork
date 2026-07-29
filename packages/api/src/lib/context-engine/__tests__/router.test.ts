@@ -174,7 +174,7 @@ describe("Context Engine router", () => {
         provider({ id: "wiki", family: "wiki" }),
         provider({
           id: "kb",
-          family: "knowledge-base",
+          family: "mcp",
           query: async () => {
             throw new Error("Bedrock throttled");
           },

@@ -942,16 +942,6 @@ module "database" {
   enable_aws_s3      = var.database_engine == "aurora-serverless"
 }
 
-module "bedrock_kb" {
-  source = "../data/bedrock-knowledge-base"
-
-  stage                   = var.stage
-  account_id              = var.account_id
-  region                  = var.region
-  bucket_name             = module.s3.bucket_name
-  external_kb_source_arns = var.external_kb_source_arns
-}
-
 ################################################################################
 # App Tier
 ################################################################################
@@ -1149,8 +1139,6 @@ module "api" {
 
   appsync_api_id  = module.appsync.graphql_api_id
   appsync_api_url = module.appsync.graphql_api_url
-
-  kb_service_role_arn = module.bedrock_kb.kb_service_role_arn
 
   lambda_zips_dir                       = var.lambda_zips_dir
   api_auth_secret                       = var.api_auth_secret

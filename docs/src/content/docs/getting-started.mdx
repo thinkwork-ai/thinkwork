@@ -113,7 +113,7 @@ thinkwork deploy -s dev
 This command runs `terraform init` followed by `terraform apply` inside the ThinkWork module. The first deploy provisions approximately 260 AWS resources across three tiers:
 
 - **Foundation** — VPC, subnets, Cognito user pool, KMS keys, Route53 records
-- **Data** — Aurora Postgres cluster, S3 buckets, Bedrock Knowledge Base
+- **Data** — Aurora Postgres cluster, S3 buckets
 - **App** — AppSync API, API Gateway, AgentCore Lambda, Step Functions, SES
 
 A typical first deploy takes 12–18 minutes. Subsequent deploys that don't touch the database or VPC take 2–4 minutes.

@@ -22,9 +22,8 @@ ThinkWork is organized into three infrastructure tiers that deploy in order:
 
 **Data tier** — Storage and AI services
 
-- Aurora Postgres (serverless v2 by default, 0.5–16 ACUs) with `pgvector` for the Bedrock KB vector index
+- Aurora Postgres (serverless v2 by default, 0.5–16 ACUs) with `pgvector`
 - S3 buckets: skill catalog, knowledge documents, audit logs, assets
-- Bedrock Knowledge Base service role (vector store lives in Aurora — no OpenSearch)
 - Secrets Manager secret for DB credentials
 
 **App tier** — Compute and APIs
@@ -151,7 +150,6 @@ In the AWS console:
    Applying data tier...
    ✓ Aurora cluster (4m 22s)
    ✓ S3 buckets (0m 08s)
-   ✓ Bedrock Knowledge Base service role (0m 12s)
 
    Applying app tier...
    ✓ AppSync API (0m 22s)
@@ -216,7 +214,7 @@ In the AWS console:
 | Cognito         | 6        | User pool, identity pool, app client, domain, groups                  |
 | KMS             | 4        | App data, audit logs, credential vault, Bedrock                       |
 | Aurora          | 12       | Cluster, instance, subnet group, parameter groups, security groups    |
-| S3              | 8        | Skill catalog, KB docs, audit logs, assets, CF logs, Lambda artifacts |
+| S3              | 8        | Skill catalog, source docs, audit logs, assets, CF logs, Lambda artifacts |
 | Lambda          | 18       | AgentCore, integration handlers, auth triggers, migration runner      |
 | AppSync         | 14       | API, schema, resolvers, data sources, functions                       |
 | API Gateway     | 8        | HTTP API, routes, integrations, stage                                 |

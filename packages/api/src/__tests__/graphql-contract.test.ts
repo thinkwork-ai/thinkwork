@@ -110,9 +110,6 @@ describe("GraphQL Schema Contract", () => {
       "budgetStatus",
       "userBudgetStatus",
       "agentBudgetStatus",
-      // Knowledge
-      "knowledgeBases",
-      "knowledgeBase",
       // Memory
       "memoryRecords",
       "memorySearch",
@@ -596,10 +593,6 @@ describe("GraphQL Schema Contract", () => {
       // Messages
       "sendMessage",
       "deleteMessage",
-      // Knowledge
-      "createKnowledgeBase",
-      "deleteKnowledgeBase",
-      "syncKnowledgeBase",
       // Memory
       "deleteMemoryRecord",
       "updateMemoryRecord",

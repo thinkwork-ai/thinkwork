@@ -87,7 +87,7 @@ export type BoundaryDimension =
   | { kind: "urlSet"; default: readonly string[] }
   /**
    * Opaque-identifier allowlist over an OPEN value domain (U6 email label
-   * ids like "INBOX"/"Label_1234…", U7 knowledge_bases.id values — both
+   * ids like "INBOX"/"Label_1234…" — both
    * are dynamic tenant/provider data, so a closed allowlist domain is
    * impossible). Values on BOTH sides are non-empty trimmed single-line
    * strings (bounded length, no control characters —
@@ -277,20 +277,6 @@ export const BOUNDARY_SCHEMAS: Record<string, BoundarySchema> = {
   firecrawl: {
     urls: { kind: "urlSet", default: [] },
     maxPages: { kind: "cap", default: 5, min: 1, max: 50 },
-    projectBatch: { kind: "cap", default: 25, min: 1, max: 100 },
-    retainBatch: { kind: "cap", default: 25, min: 1, max: 100 },
-    snapshotTtlDays: { kind: "cap", default: 30, min: 7, max: 90 },
-  },
-  // U7: Bedrock Knowledge Base document projection. `knowledgeBaseIds`
-  // is the readable envelope of knowledge_bases.id values (default [] =
-  // nothing readable); the source_binding_key convention is the
-  // knowledge_bases.id — one source config per KB — so the config-side
-  // set is normally exactly [bindingKey]. `maxDocuments` caps manifest
-  // rows acquired per run. Defaults/caps track adapters/bedrock-kb.ts.
-  bedrock_kb: {
-    knowledgeBaseIds: { kind: "stringSet", default: [] },
-    maxDocuments: { kind: "cap", default: 25, min: 1, max: 500 },
-    pageSize: { kind: "cap", default: 10, min: 1, max: 100 },
     projectBatch: { kind: "cap", default: 25, min: 1, max: 100 },
     retainBatch: { kind: "cap", default: 25, min: 1, max: 100 },
     snapshotTtlDays: { kind: "cap", default: 30, min: 7, max: 90 },

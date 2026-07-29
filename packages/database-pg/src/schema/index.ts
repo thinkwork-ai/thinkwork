@@ -32,7 +32,6 @@ export * from "./memory-retain-attempts";
 export * from "./memory-sources";
 export * from "./entity-identity";
 export * from "./brain-dream-runs";
-export * from "./knowledge-bases";
 export * from "./knowledge-graph";
 export * from "./email-channel";
 export * from "./thread-dependencies";

@@ -59,10 +59,6 @@ BUNDLED_AGENTCORE_ESBUILD_FLAGS=(
   --external:@aws-sdk/client-ses
   --external:@aws-sdk/client-sns
   --external:@aws-sdk/client-ssm
-  # NOTE: @aws-sdk/client-bedrock-agent is deliberately NOT external here
-  # (THINK-193 U7): knowledge-base-manager needs the KnowledgeBaseDocuments
-  # commands (List/Get/Ingest/Delete), which the Lambda runtime's built-in
-  # SDK may predate — the workspace-pinned 3.1028.0 client inlines instead.
   --external:@aws-sdk/client-dynamodb
   --external:@aws-sdk/lib-dynamodb
   --external:@aws-sdk/client-sts
@@ -86,7 +82,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "chat-agent-invoke" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wakeup-processor" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "knowledge-base-manager" ] || [ "$name" = "skills" ] || [ "$name" = "identity-graph-projector" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "chat-agent-invoke" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wakeup-processor" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "skills" ] || [ "$name" = "identity-graph-projector" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -554,18 +550,6 @@ build_handler "skill-runs-reconciler" \
   "$REPO_ROOT/packages/api/src/handlers/skill-runs-reconciler.ts"
 
 
-# External S3 KB source U6 — hourly as-role access probe + daily sync
-# dispatch for s3-connect sources (paired with its handlers.tf entry).
-build_handler "kb-source-reconciler" \
-  "$REPO_ROOT/packages/api/src/handlers/kb-source-reconciler.ts"
-
-# KB page transcription U3: splits image-bearing PDFs page by page (pdf-lib)
-# and transcribes each page with a Claude vision model via the Bedrock
-# document content block. Bundled, not externalized — pdf-lib and pdfjs-dist
-# are not on the Lambda runtime.
-build_handler "kb-transcribe" \
-  "$REPO_ROOT/packages/api/src/handlers/kb-transcribe.ts"
-
 # Unit 8 — composable-skills webhook ingress pattern. Each integration
 # has a thin handler under handlers/webhooks/; the shared helper
 # (_shared.ts) owns HMAC + bootstrap + dispatch.
@@ -583,12 +567,6 @@ build_handler "github-app-webhook" \
 
 build_handler "github-app-callback" \
   "$REPO_ROOT/packages/api/github-app-callback.ts"
-
-build_handler "knowledge-base-manager" \
-  "$REPO_ROOT/packages/api/knowledge-base-manager.ts"
-
-build_handler "knowledge-base-files" \
-  "$REPO_ROOT/packages/api/knowledge-base-files.ts"
 
 build_handler "workspace-files" \
   "$REPO_ROOT/packages/api/workspace-files.ts"

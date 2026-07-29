@@ -2690,49 +2690,6 @@ export const EntityDossierQuery = gql`
   }
 `;
 
-export const ComputerKnowledgeBasesQuery = gql`
-  query ComputerKnowledgeBases($tenantId: ID!) {
-    knowledgeBases(tenantId: $tenantId) {
-      id
-      tenantId
-      name
-      slug
-      description
-      status
-      documentCount
-      lastSyncAt
-      lastSyncStatus
-      errorMessage
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
-export const ComputerKnowledgeBaseDetailQuery = gql`
-  query ComputerKnowledgeBaseDetail($id: ID!) {
-    knowledgeBase(id: $id) {
-      id
-      tenantId
-      name
-      slug
-      description
-      embeddingModel
-      chunkingStrategy
-      chunkSizeTokens
-      chunkOverlapPercent
-      status
-      awsKbId
-      lastSyncAt
-      lastSyncStatus
-      documentCount
-      errorMessage
-      createdAt
-      updatedAt
-    }
-  }
-`;
-
 // ─── Customize page (apps/web Customize) ─────────────────────────────
 // The Skills tab (SkillCatalogQuery + enableSkill documents) was
 // removed in Composer plan U3 — skill wiring lives in Settings→Composer.

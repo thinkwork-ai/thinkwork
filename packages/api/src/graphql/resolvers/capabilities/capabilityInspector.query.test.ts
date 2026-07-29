@@ -185,7 +185,6 @@ function baseConfig(overrides: Record<string, unknown> = {}) {
       },
     ],
     trustedSkillIds: ["approve-receipt", "ratio-review", "web-search"],
-    knowledgeBasesConfig: undefined,
     mcpConfigs: [
       {
         name: "github",

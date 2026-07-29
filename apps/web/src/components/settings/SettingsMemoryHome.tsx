@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
-import { Eye, EyeOff, Plus, RefreshCw } from "lucide-react";
+import { Eye, EyeOff, RefreshCw } from "lucide-react";
 import { TooltipIconButton, cn } from "@thinkwork/ui";
 import { usePageHeaderActions } from "@/context/PageHeaderContext";
 import {
@@ -8,18 +8,12 @@ import {
   type MemoryRawUnitsController,
   type MemoryRefreshController,
 } from "@/components/settings/SettingsMemory";
-import {
-  SettingsKnowledgeBases,
-  type KnowledgeBasesHeaderController,
-} from "@/components/settings/SettingsKnowledgeBases";
 
 const RECORDS = "/settings/memory/records";
-const KNOWLEDGE_BASES = "/settings/memory/knowledge-bases";
 
-type MemoryTab = "memory" | "knowledge-bases";
+type MemoryTab = "memory";
 
 function tabForPath(pathname: string): MemoryTab {
-  if (pathname.startsWith(KNOWLEDGE_BASES)) return "knowledge-bases";
   // THINK-339 U15: the Company Brain and Ontology tabs moved to the
   // standalone console (brain.thinkwork.ai) — Memory records are the
   // landing tab again; the bare /settings/memory path renders them.
@@ -27,10 +21,8 @@ function tabForPath(pathname: string): MemoryTab {
 }
 
 /**
- * The unified Memory settings page. Memory records and KBs are siblings
- * rendered in the AppTopBar and driven by the route so each tab is
- * deep-linkable. The Company Brain and Ontology tabs retired to the
- * standalone console (THINK-339 U15).
+ * The unified Memory settings page. The Company Brain and Ontology tabs
+ * retired to the standalone console (THINK-339 U15).
  */
 export function SettingsMemoryHome() {
   const pathname = useLocation({ select: (location) => location.pathname });
@@ -40,8 +32,6 @@ export function SettingsMemoryHome() {
   const [refreshPending, setRefreshPending] = useState(false);
   const [rawUnitsController, setRawUnitsController] =
     useState<MemoryRawUnitsController | null>(null);
-  const [kbController, setKbController] =
-    useState<KnowledgeBasesHeaderController | null>(null);
 
   const updateRefreshController = useCallback(
     (controller: MemoryRefreshController | null) => {
@@ -52,12 +42,6 @@ export function SettingsMemoryHome() {
   const updateRawUnitsController = useCallback(
     (controller: MemoryRawUnitsController | null) => {
       setRawUnitsController(controller);
-    },
-    [],
-  );
-  const updateKbController = useCallback(
-    (controller: KnowledgeBasesHeaderController | null) => {
-      setKbController(controller);
     },
     [],
   );
@@ -120,35 +104,14 @@ export function SettingsMemoryHome() {
       </div>
     ) : null;
 
-  // KBs header action: the new-source gesture renders as a Plus
-  // TooltipIconButton in the page header while the KBs tab is active.
-  const kbAction =
-    activeTab === "knowledge-bases" && kbController ? (
-      <TooltipIconButton
-        label="New source"
-        aria-label="New source"
-        data-testid="settings-kb-new-source"
-        onClick={() => kbController.openNewSource()}
-      >
-        <Plus className="size-4" />
-      </TooltipIconButton>
-    ) : null;
-
   usePageHeaderActions({
     // "Knowledge" umbrella naming (Company Brain U9): the nav item and this
     // page title read Knowledge. URLs unchanged.
     title: "Knowledge",
     breadcrumbs: [{ label: "Knowledge" }],
-    tabs: [
-      { to: RECORDS, label: "Memory", active: activeTab === "memory" },
-      {
-        to: KNOWLEDGE_BASES,
-        label: "KBs",
-        active: activeTab === "knowledge-bases",
-      },
-    ],
-    action: activeTab === "knowledge-bases" ? kbAction : refreshAction,
-    actionKey: `memory-refresh:${activeTab}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}:${rawUnitsController ? `${rawUnitsController.showRaw ? "raw" : "curated"}:${rawUnitsController.hiddenCount}` : "no-raw"}:${kbController ? "kb" : "no-kb"}`,
+    tabs: [{ to: RECORDS, label: "Memory", active: activeTab === "memory" }],
+    action: refreshAction,
+    actionKey: `memory-refresh:${activeTab}:${refreshDisabled ? "disabled" : "enabled"}:${refreshing ? "refreshing" : "idle"}:${rawUnitsController ? `${rawUnitsController.showRaw ? "raw" : "curated"}:${rawUnitsController.hiddenCount}` : "no-raw"}`,
   });
 
   return (
@@ -158,12 +121,6 @@ export function SettingsMemoryHome() {
           embedded
           onRefreshControllerChange={updateRefreshController}
           onRawUnitsControllerChange={updateRawUnitsController}
-        />
-      ) : null}
-      {activeTab === "knowledge-bases" ? (
-        <SettingsKnowledgeBases
-          embedded
-          onHeaderControllerChange={updateKbController}
         />
       ) : null}
     </div>

@@ -181,7 +181,6 @@ import {
 } from "./runtime/pi-goal-adapter.js";
 import { createScrubbingFetch } from "./scrubbing-fetch.js";
 import { buildMemoryTools } from "./tools/memory.js";
-import { buildKnowledgeTools } from "./tools/knowledge.js";
 import {
   directMemoryGroundingQuery,
   explicitMemoryTurn,
@@ -1927,62 +1926,6 @@ export async function buildInvocationResources(
   if (args.delegationProvider) {
     addExtension(createDelegationExtension(), {
       delegation: args.delegationProvider,
-    });
-  }
-
-  // Knowledge (external S3 KB source U7) — search_knowledge assembles ONLY
-  // when the payload carries bound KB IDs (agent/Space bindings resolved
-  // API-side, KTD6). No bindings ⇒ no tool ⇒ byte-identical behavior (AE3).
-  const boundKnowledgeBases = Array.isArray(args.payload.bound_knowledge_bases)
-    ? (
-        args.payload.bound_knowledge_bases as Array<{
-          awsKbId?: unknown;
-          name?: unknown;
-          description?: unknown;
-          retrieval?: unknown;
-        }>
-      )
-        .map((kb) => {
-          const retrieval = kb?.retrieval as
-            | { mode?: unknown; url?: unknown; toolName?: unknown }
-            | undefined;
-          const mcpRetrieval =
-            retrieval &&
-            retrieval.mode === "mcp" &&
-            typeof retrieval.url === "string" &&
-            retrieval.url &&
-            typeof retrieval.toolName === "string" &&
-            retrieval.toolName
-              ? (kb.retrieval as import("./tools/knowledge.js").BoundKbMcpRetrieval)
-              : undefined;
-          const awsKbId =
-            typeof kb?.awsKbId === "string" && kb.awsKbId
-              ? kb.awsKbId
-              : undefined;
-          if (!awsKbId && !mcpRetrieval) return null;
-          return {
-            ...(awsKbId ? { awsKbId } : {}),
-            ...(mcpRetrieval ? { retrieval: mcpRetrieval } : {}),
-            name: typeof kb.name === "string" ? kb.name : null,
-            description:
-              typeof kb.description === "string" ? kb.description : null,
-          };
-        })
-        .filter((kb): kb is NonNullable<typeof kb> => kb !== null)
-    : [];
-  if (boundKnowledgeBases.length > 0) {
-    tools.push(
-      ...buildKnowledgeTools({
-        knowledgeBases: boundKnowledgeBases,
-        tenantId: args.identity.tenantId,
-      }),
-    );
-    logStructured({
-      level: "info",
-      event: "knowledge_tool_enabled",
-      tenantId: args.identity.tenantId,
-      threadId: args.identity.threadId,
-      detail: `bound KBs: ${boundKnowledgeBases.length}`,
     });
   }
 

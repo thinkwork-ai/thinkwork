@@ -58,7 +58,7 @@ Memory is an umbrella over durable Hindsight memory plus source families that ca
 
 ## Why It Exists
 
-Most agent systems expose memory, RAG, workspace search, and external search as separate tools. That makes agents choose implementation details mid-turn and makes operators debug the wrong layer: was the answer bad because the memory engine missed, the KB was stale, or the agent never called the right tool?
+Most agent systems expose memory, RAG, workspace search, and external search as separate tools. That makes agents choose implementation details mid-turn and makes operators debug the wrong layer: was the answer bad because the memory engine missed, the source was stale, or the agent never called the right tool?
 
 Memory puts those sources behind one operator boundary:
 
@@ -131,7 +131,7 @@ compatibility, but the canonical operator route for this pass is
 
 ## Related Pages
 
-- [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) — authored document sources and legacy Bedrock KBs
+- [Brain Sources](/concepts/knowledge/document-knowledge/) — authored document sources
 - [Retained Memory](/concepts/knowledge/memory/) — Hindsight-backed retained facts and Space memory
 - [Compiled Pages](/concepts/knowledge/compounding-memory/) — durable page distillation
 - [Business Ontology](/concepts/knowledge/business-ontology/) — governed business/domain meaning for durable memory materialization

@@ -417,41 +417,6 @@ locals {
     "brain-dream-state" = {
       BRAIN_DREAM_STATE_ENABLED = tostring(var.brain_dream_state_enabled)
     }
-    # Bedrock KB provisioning. Per-handler (not common_env) so these don't bloat
-    # the already-near-4KB graphql-http env. Bedrock's RDS-backed KB needs the
-    # cluster ARN + the KB service role (passed at CreateKnowledgeBase time).
-    "knowledge-base-manager" = {
-      KB_SERVICE_ROLE_ARN  = var.kb_service_role_arn
-      DATABASE_CLUSTER_ARN = var.db_cluster_arn
-    }
-    # View-URL presigning for s3-connect documents: customer buckets are
-    # granted only to the KB service role, so the files handler assumes it
-    # (same trust path as the manager's preflight) to presign GETs.
-    "knowledge-base-files" = {
-      KB_SERVICE_ROLE_ARN = var.kb_service_role_arn
-    }
-    # External S3 KB source U6 — scheduled access probes run AS the KB
-    # service role (STS assume), and sync mode resolves the kb-manager fn
-    # ARN from SSM.
-    "kb-source-reconciler" = {
-      KB_SERVICE_ROLE_ARN = var.kb_service_role_arn
-    }
-    # KB page transcription U3. Reads source documents AS the KB service role
-    # (connected customer buckets are granted to it, never to this Lambda's
-    # own role) and writes derived pages to the workspace bucket. The model
-    # ladder is walked in order and the first model the ACCOUNT can call
-    # wins — availability is per-account, so pinning one model strands
-    # tenants whose account lacks it.
-    # WORKSPACE_BUCKET comes from the shared env block above.
-    "kb-transcribe" = {
-      KB_SERVICE_ROLE_ARN        = var.kb_service_role_arn
-      KB_TRANSCRIBE_MODEL_LADDER = var.kb_transcribe_model_ladder
-      # In-flight Bedrock calls are this TIMES the reserved concurrency above.
-      # Kept low by default because a model's requests-per-minute quota, not
-      # Lambda, is the real ceiling — and an account can be provisioned with a
-      # far lower RPM limit than the AWS default.
-      KB_TRANSCRIBE_CONCURRENCY = "2"
-    }
     # Observations → Knowledge Graph worker. Extraction is now a Bedrock
     # structured-output call inside this Lambda. KG_EXTRACTION_MODEL_ID pins
     # the gpt-oss extraction model (Bedrock IAM via the shared lambda_bedrock
@@ -731,15 +696,6 @@ resource "aws_lambda_function" "handler" {
     # 2026-06-12-002 U4). Bearer API_AUTH_SECRET + x-tenant-id; the runtime
     # fetch tool authorizes here, then downloads the returned S3 keys itself.
     "workspace-fetch-source",
-    "knowledge-base-manager",
-    # External S3 KB source U6 — hourly access probe (fail closed to
-    # access_revoked) + daily sync dispatch for s3-connect sources.
-    "kb-source-reconciler",
-    # KB page transcription U3 — splits image-bearing PDFs page by page and
-    # transcribes each with a Claude vision model so scanned pages and
-    # embedded screenshots reach the index at all.
-    "kb-transcribe",
-    "knowledge-base-files",
     "email-send",
     "email-inbound",
     "email-provider-webhook",
@@ -984,8 +940,8 @@ resource "aws_lambda_function" "handler" {
   # headroom for transient slowness.
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "knowledge-base-manager" ? 900 : each.key == "kb-transcribe" ? 900 : each.key == "eval-worker" ? 240 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(4096, var.lambda_max_memory_mb) : each.key == "folder-bundle-import" ? 1024 : each.key == "kb-transcribe" ? 2048 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(4096, var.lambda_max_memory_mb) : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
@@ -1003,8 +959,7 @@ resource "aws_lambda_function" "handler" {
   # document-conformance-judge is also a single-writer: direct
   # process-and-complete with no in-flight claim status depends on never
   # having two sweepers race the same pending rows (THINK-189 KTD4).
-  # kb-source-reconciler is capped at 1 for the same single-writer reason.
-  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : each.key == "kb-source-reconciler" ? 1 : each.key == "kb-transcribe" ? var.kb_transcribe_reserved_concurrency : -1
+  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : -1
 
   environment {
     variables = merge(
@@ -1646,9 +1601,6 @@ locals {
       # Workspace files
       "ANY /api/workspaces/{proxy+}" = "workspace-files"
 
-      # Knowledge bases
-      "ANY /api/knowledge-bases/{proxy+}" = "knowledge-base-files"
-
       # Email
       "POST /api/email/send"                                 = "email-send"
       "POST /api/email/provider-webhook/{providerInstallId}" = "email-provider-webhook"
@@ -2087,83 +2039,6 @@ resource "aws_scheduler_schedule" "skill_runs_reconciler" {
   target {
     arn      = aws_lambda_function.handler["skill-runs-reconciler"].arn
     role_arn = aws_iam_role.scheduler.arn
-  }
-}
-
-# ---------------------------------------------------------------------------
-# kb_source_reconciler — external S3 KB source U6. Two schedules over one
-# handler: an hourly as-role access probe for every s3-connect source (fail
-# closed to access_revoked; restores healthy when access returns — R10/AE7)
-# and a daily sync dispatch to the kb-manager for KBs with connected
-# sources (R13). retry-0 + DLQ: the next tick IS the retry.
-# ---------------------------------------------------------------------------
-
-resource "aws_sqs_queue" "kb_source_reconciler_dlq" {
-  count                     = local.deploy_lambda_handlers ? 1 : 0
-  name                      = "thinkwork-${var.stage}-kb-source-reconciler-dlq"
-  message_retention_seconds = 1209600 # 14 days
-
-  tags = {
-    Name = "thinkwork-${var.stage}-kb-source-reconciler-dlq"
-  }
-}
-
-resource "aws_lambda_function_event_invoke_config" "kb_source_reconciler" {
-  count                        = local.deploy_lambda_handlers ? 1 : 0
-  function_name                = aws_lambda_function.handler["kb-source-reconciler"].function_name
-  maximum_retry_attempts       = 0
-  maximum_event_age_in_seconds = 3600
-
-  destination_config {
-    on_failure {
-      destination = aws_sqs_queue.kb_source_reconciler_dlq[0].arn
-    }
-  }
-}
-
-resource "aws_scheduler_schedule" "kb_source_access_probe" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-kb-source-access-probe"
-  group_name          = "default"
-  schedule_expression = "rate(1 hour)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["kb-source-reconciler"].arn
-    role_arn = aws_iam_role.scheduler.arn
-    input    = jsonencode({ mode = "probe" })
-
-    retry_policy {
-      maximum_retry_attempts = 0
-    }
-  }
-}
-
-resource "aws_scheduler_schedule" "kb_source_daily_sync" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-kb-source-daily-sync"
-  group_name          = "default"
-  schedule_expression = "rate(1 day)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["kb-source-reconciler"].arn
-    role_arn = aws_iam_role.scheduler.arn
-    input    = jsonencode({ mode = "sync" })
-
-    retry_policy {
-      maximum_retry_attempts = 0
-    }
   }
 }
 
@@ -2917,7 +2792,6 @@ resource "aws_ssm_parameter" "cloudflare_namespace_token" {
 resource "aws_ssm_parameter" "lambda_arns" {
   for_each = local.deploy_lambda_handlers ? {
     "chat-agent-invoke-fn-arn"    = aws_lambda_function.handler["chat-agent-invoke"].arn
-    "kb-manager-fn-arn"           = aws_lambda_function.handler["knowledge-base-manager"].arn
     "job-schedule-manager-fn-arn" = aws_lambda_function.handler["job-schedule-manager"].arn
     "memory-retain-fn-arn"        = aws_lambda_function.handler["memory-retain"].arn
     "eval-runner-fn-arn"          = aws_lambda_function.handler["eval-runner"].arn

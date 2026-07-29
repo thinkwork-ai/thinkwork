@@ -32,7 +32,6 @@ import { registerAgentCommand } from "./commands/agent.js";
 import { registerComputerCommand } from "./commands/computer.js";
 import { registerTenantCommand } from "./commands/tenant.js";
 import { registerMemberCommand } from "./commands/member.js";
-import { registerKbCommand } from "./commands/kb.js";
 // Phase-3 (automation / integrations).
 import { registerRoutineCommand } from "./commands/routine.js";
 import { registerScheduledJobCommand } from "./commands/scheduled-job.js";
@@ -133,7 +132,6 @@ registerAgentCommand(program);
 registerComputerCommand(program);
 registerTenantCommand(program);
 registerMemberCommand(program);
-registerKbCommand(program);
 
 // Phase-3 stubs
 registerRoutineCommand(program);

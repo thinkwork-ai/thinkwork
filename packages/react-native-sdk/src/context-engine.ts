@@ -7,14 +7,12 @@ export type ContextProviderFamily =
   | "memory"
   | "brain"
   | "workspace"
-  | "knowledge-base"
   | "mcp"
   | "sub-agent";
 export type ContextSourceFamily =
   | "brain"
   | "pages"
   | "workspace"
-  | "knowledge-base"
   | "web"
   | "mcp"
   | "source-agent";

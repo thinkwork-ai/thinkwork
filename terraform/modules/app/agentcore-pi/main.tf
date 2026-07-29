@@ -127,17 +127,6 @@ resource "aws_iam_role_policy" "agentcore_pi" {
         Resource = "*"
       },
       {
-        # External S3 KB source U7 — the Pi `search_knowledge` tool calls
-        # bedrock:Retrieve against the KBs bound to the agent/Space. Which
-        # KBs an agent may query is enforced API-side (bound-KB IDs in the
-        # wakeup payload); knowledge-base ARNs are account+region scoped
-        # here. Inert until an agent has bound KBs.
-        Sid      = "BedrockKbRetrieve"
-        Effect   = "Allow"
-        Action   = ["bedrock:Retrieve"]
-        Resource = "arn:aws:bedrock:${var.region}:${var.account_id}:knowledge-base/*"
-      },
-      {
         # Some Bedrock Marketplace-backed models require the invoking role to
         # view/accept the model subscription before Converse can stream. Without
         # these actions Bedrock returns an assistant error with zero token usage.

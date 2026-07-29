@@ -19,7 +19,6 @@ import {
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { tenants, users } from "./core";
-import { agentKnowledgeBases } from "./knowledge-bases";
 import { agentTemplates } from "./agent-templates.js";
 import { guardrails } from "./guardrails.js";
 
@@ -559,7 +558,6 @@ export const agentsRelations = relations(agents, ({ one, many }) => ({
   capabilities: many(agentCapabilities),
   skills: many(agentSkills),
   apiKeys: many(agentApiKeys),
-  knowledgeBases: many(agentKnowledgeBases),
   agentTemplate: one(agentTemplates, {
     fields: [agents.template_id],
     references: [agentTemplates.id],

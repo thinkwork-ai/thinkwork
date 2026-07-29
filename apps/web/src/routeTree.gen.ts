@@ -42,7 +42,6 @@ import { Route as AuthedSettingsSpacesIndexRouteImport } from "./routes/_authed/
 import { Route as AuthedSettingsSkillsIndexRouteImport } from "./routes/_authed/settings.skills.index";
 import { Route as AuthedSettingsRoutinesIndexRouteImport } from "./routes/_authed/settings.routines.index";
 import { Route as AuthedSettingsMcpServersIndexRouteImport } from "./routes/_authed/settings.mcp-servers.index";
-import { Route as AuthedSettingsKnowledgeBasesIndexRouteImport } from "./routes/_authed/settings.knowledge-bases.index";
 import { Route as AuthedSettingsEvaluationsIndexRouteImport } from "./routes/_authed/settings.evaluations.index";
 import { Route as AuthedSettingsAutomationsIndexRouteImport } from "./routes/_authed/settings.automations.index";
 import { Route as AuthedSettingsArtifactsIndexRouteImport } from "./routes/_authed/settings.artifacts.index";
@@ -64,10 +63,8 @@ import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_aut
 import { Route as AuthedSettingsRoutinesRoutineIdRouteImport } from "./routes/_authed/settings.routines.$routineId";
 import { Route as AuthedSettingsMemoryRecordsRouteImport } from "./routes/_authed/settings.memory.records";
 import { Route as AuthedSettingsMemoryKnowledgeGraphRouteImport } from "./routes/_authed/settings.memory.knowledge-graph";
-import { Route as AuthedSettingsMemoryKnowledgeBasesRouteImport } from "./routes/_authed/settings.memory.knowledge-bases";
 import { Route as AuthedSettingsMcpServersServersRouteImport } from "./routes/_authed/settings.mcp-servers.servers";
 import { Route as AuthedSettingsMcpServersServerIdRouteImport } from "./routes/_authed/settings.mcp-servers.$serverId";
-import { Route as AuthedSettingsKnowledgeBasesKbIdRouteImport } from "./routes/_authed/settings.knowledge-bases.$kbId";
 import { Route as AuthedSettingsEvaluationsProfilesRouteImport } from "./routes/_authed/settings.evaluations.profiles";
 import { Route as AuthedSettingsEvaluationsCompareRouteImport } from "./routes/_authed/settings.evaluations.compare";
 import { Route as AuthedSettingsEvaluationsRunIdRouteImport } from "./routes/_authed/settings.evaluations.$runId";
@@ -278,12 +275,6 @@ const AuthedSettingsMcpServersIndexRoute =
     path: "/mcp-servers/",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
-const AuthedSettingsKnowledgeBasesIndexRoute =
-  AuthedSettingsKnowledgeBasesIndexRouteImport.update({
-    id: "/knowledge-bases/",
-    path: "/knowledge-bases/",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
 const AuthedSettingsEvaluationsIndexRoute =
   AuthedSettingsEvaluationsIndexRouteImport.update({
     id: "/evaluations/",
@@ -408,12 +399,6 @@ const AuthedSettingsMemoryKnowledgeGraphRoute =
     path: "/knowledge-graph",
     getParentRoute: () => AuthedSettingsMemoryRoute,
   } as any);
-const AuthedSettingsMemoryKnowledgeBasesRoute =
-  AuthedSettingsMemoryKnowledgeBasesRouteImport.update({
-    id: "/knowledge-bases",
-    path: "/knowledge-bases",
-    getParentRoute: () => AuthedSettingsMemoryRoute,
-  } as any);
 const AuthedSettingsMcpServersServersRoute =
   AuthedSettingsMcpServersServersRouteImport.update({
     id: "/mcp-servers/servers",
@@ -424,12 +409,6 @@ const AuthedSettingsMcpServersServerIdRoute =
   AuthedSettingsMcpServersServerIdRouteImport.update({
     id: "/mcp-servers/$serverId",
     path: "/mcp-servers/$serverId",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
-const AuthedSettingsKnowledgeBasesKbIdRoute =
-  AuthedSettingsKnowledgeBasesKbIdRouteImport.update({
-    id: "/knowledge-bases/$kbId",
-    path: "/knowledge-bases/$kbId",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
 const AuthedSettingsEvaluationsProfilesRoute =
@@ -686,10 +665,8 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
   "/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
   "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
-  "/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
-  "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
@@ -711,7 +688,6 @@ export interface FileRoutesByFullPath {
   "/settings/artifacts/": typeof AuthedSettingsArtifactsIndexRoute;
   "/settings/automations/": typeof AuthedSettingsAutomationsIndexRoute;
   "/settings/evaluations/": typeof AuthedSettingsEvaluationsIndexRoute;
-  "/settings/knowledge-bases/": typeof AuthedSettingsKnowledgeBasesIndexRoute;
   "/settings/mcp-servers/": typeof AuthedSettingsMcpServersIndexRoute;
   "/settings/routines/": typeof AuthedSettingsRoutinesIndexRoute;
   "/settings/skills/": typeof AuthedSettingsSkillsIndexRoute;
@@ -776,10 +752,8 @@ export interface FileRoutesByTo {
   "/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
   "/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
   "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
-  "/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
-  "/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
@@ -801,7 +775,6 @@ export interface FileRoutesByTo {
   "/settings/artifacts": typeof AuthedSettingsArtifactsIndexRoute;
   "/settings/automations": typeof AuthedSettingsAutomationsIndexRoute;
   "/settings/evaluations": typeof AuthedSettingsEvaluationsIndexRoute;
-  "/settings/knowledge-bases": typeof AuthedSettingsKnowledgeBasesIndexRoute;
   "/settings/mcp-servers": typeof AuthedSettingsMcpServersIndexRoute;
   "/settings/routines": typeof AuthedSettingsRoutinesIndexRoute;
   "/settings/skills": typeof AuthedSettingsSkillsIndexRoute;
@@ -873,10 +846,8 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/$runId": typeof AuthedSettingsEvaluationsRunIdRoute;
   "/_authed/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
   "/_authed/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
-  "/_authed/settings/knowledge-bases/$kbId": typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   "/_authed/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/_authed/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
-  "/_authed/settings/memory/knowledge-bases": typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   "/_authed/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/_authed/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
@@ -898,7 +869,6 @@ export interface FileRoutesById {
   "/_authed/settings/artifacts/": typeof AuthedSettingsArtifactsIndexRoute;
   "/_authed/settings/automations/": typeof AuthedSettingsAutomationsIndexRoute;
   "/_authed/settings/evaluations/": typeof AuthedSettingsEvaluationsIndexRoute;
-  "/_authed/settings/knowledge-bases/": typeof AuthedSettingsKnowledgeBasesIndexRoute;
   "/_authed/settings/mcp-servers/": typeof AuthedSettingsMcpServersIndexRoute;
   "/_authed/settings/routines/": typeof AuthedSettingsRoutinesIndexRoute;
   "/_authed/settings/skills/": typeof AuthedSettingsSkillsIndexRoute;
@@ -969,10 +939,8 @@ export interface FileRouteTypes {
     | "/settings/evaluations/$runId"
     | "/settings/evaluations/compare"
     | "/settings/evaluations/profiles"
-    | "/settings/knowledge-bases/$kbId"
     | "/settings/mcp-servers/$serverId"
     | "/settings/mcp-servers/servers"
-    | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/records"
     | "/settings/routines/$routineId"
@@ -994,7 +962,6 @@ export interface FileRouteTypes {
     | "/settings/artifacts/"
     | "/settings/automations/"
     | "/settings/evaluations/"
-    | "/settings/knowledge-bases/"
     | "/settings/mcp-servers/"
     | "/settings/routines/"
     | "/settings/skills/"
@@ -1059,10 +1026,8 @@ export interface FileRouteTypes {
     | "/settings/evaluations/$runId"
     | "/settings/evaluations/compare"
     | "/settings/evaluations/profiles"
-    | "/settings/knowledge-bases/$kbId"
     | "/settings/mcp-servers/$serverId"
     | "/settings/mcp-servers/servers"
-    | "/settings/memory/knowledge-bases"
     | "/settings/memory/knowledge-graph"
     | "/settings/memory/records"
     | "/settings/routines/$routineId"
@@ -1084,7 +1049,6 @@ export interface FileRouteTypes {
     | "/settings/artifacts"
     | "/settings/automations"
     | "/settings/evaluations"
-    | "/settings/knowledge-bases"
     | "/settings/mcp-servers"
     | "/settings/routines"
     | "/settings/skills"
@@ -1155,10 +1119,8 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/$runId"
     | "/_authed/settings/evaluations/compare"
     | "/_authed/settings/evaluations/profiles"
-    | "/_authed/settings/knowledge-bases/$kbId"
     | "/_authed/settings/mcp-servers/$serverId"
     | "/_authed/settings/mcp-servers/servers"
-    | "/_authed/settings/memory/knowledge-bases"
     | "/_authed/settings/memory/knowledge-graph"
     | "/_authed/settings/memory/records"
     | "/_authed/settings/routines/$routineId"
@@ -1180,7 +1142,6 @@ export interface FileRouteTypes {
     | "/_authed/settings/artifacts/"
     | "/_authed/settings/automations/"
     | "/_authed/settings/evaluations/"
-    | "/_authed/settings/knowledge-bases/"
     | "/_authed/settings/mcp-servers/"
     | "/_authed/settings/routines/"
     | "/_authed/settings/skills/"
@@ -1449,13 +1410,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsMcpServersIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
-    "/_authed/settings/knowledge-bases/": {
-      id: "/_authed/settings/knowledge-bases/";
-      path: "/knowledge-bases";
-      fullPath: "/settings/knowledge-bases/";
-      preLoaderRoute: typeof AuthedSettingsKnowledgeBasesIndexRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
     "/_authed/settings/evaluations/": {
       id: "/_authed/settings/evaluations/";
       path: "/evaluations";
@@ -1603,13 +1557,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsMemoryKnowledgeGraphRouteImport;
       parentRoute: typeof AuthedSettingsMemoryRoute;
     };
-    "/_authed/settings/memory/knowledge-bases": {
-      id: "/_authed/settings/memory/knowledge-bases";
-      path: "/knowledge-bases";
-      fullPath: "/settings/memory/knowledge-bases";
-      preLoaderRoute: typeof AuthedSettingsMemoryKnowledgeBasesRouteImport;
-      parentRoute: typeof AuthedSettingsMemoryRoute;
-    };
     "/_authed/settings/mcp-servers/servers": {
       id: "/_authed/settings/mcp-servers/servers";
       path: "/mcp-servers/servers";
@@ -1622,13 +1569,6 @@ declare module "@tanstack/react-router" {
       path: "/mcp-servers/$serverId";
       fullPath: "/settings/mcp-servers/$serverId";
       preLoaderRoute: typeof AuthedSettingsMcpServersServerIdRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
-    "/_authed/settings/knowledge-bases/$kbId": {
-      id: "/_authed/settings/knowledge-bases/$kbId";
-      path: "/knowledge-bases/$kbId";
-      fullPath: "/settings/knowledge-bases/$kbId";
-      preLoaderRoute: typeof AuthedSettingsKnowledgeBasesKbIdRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/evaluations/profiles": {
@@ -2017,14 +1957,11 @@ const AuthedSettingsArtifactsRouteWithChildren =
   );
 
 interface AuthedSettingsMemoryRouteChildren {
-  AuthedSettingsMemoryKnowledgeBasesRoute: typeof AuthedSettingsMemoryKnowledgeBasesRoute;
   AuthedSettingsMemoryKnowledgeGraphRoute: typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   AuthedSettingsMemoryRecordsRoute: typeof AuthedSettingsMemoryRecordsRoute;
 }
 
 const AuthedSettingsMemoryRouteChildren: AuthedSettingsMemoryRouteChildren = {
-  AuthedSettingsMemoryKnowledgeBasesRoute:
-    AuthedSettingsMemoryKnowledgeBasesRoute,
   AuthedSettingsMemoryKnowledgeGraphRoute:
     AuthedSettingsMemoryKnowledgeGraphRoute,
   AuthedSettingsMemoryRecordsRoute: AuthedSettingsMemoryRecordsRoute,
@@ -2068,7 +2005,6 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsEvaluationsRunIdRoute: typeof AuthedSettingsEvaluationsRunIdRoute;
   AuthedSettingsEvaluationsCompareRoute: typeof AuthedSettingsEvaluationsCompareRoute;
   AuthedSettingsEvaluationsProfilesRoute: typeof AuthedSettingsEvaluationsProfilesRoute;
-  AuthedSettingsKnowledgeBasesKbIdRoute: typeof AuthedSettingsKnowledgeBasesKbIdRoute;
   AuthedSettingsMcpServersServerIdRoute: typeof AuthedSettingsMcpServersServerIdRoute;
   AuthedSettingsMcpServersServersRoute: typeof AuthedSettingsMcpServersServersRoute;
   AuthedSettingsRoutinesRoutineIdRoute: typeof AuthedSettingsRoutinesRoutineIdRoute;
@@ -2082,7 +2018,6 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsAgentsIndexRoute: typeof AuthedSettingsAgentsIndexRoute;
   AuthedSettingsAutomationsIndexRoute: typeof AuthedSettingsAutomationsIndexRoute;
   AuthedSettingsEvaluationsIndexRoute: typeof AuthedSettingsEvaluationsIndexRoute;
-  AuthedSettingsKnowledgeBasesIndexRoute: typeof AuthedSettingsKnowledgeBasesIndexRoute;
   AuthedSettingsMcpServersIndexRoute: typeof AuthedSettingsMcpServersIndexRoute;
   AuthedSettingsRoutinesIndexRoute: typeof AuthedSettingsRoutinesIndexRoute;
   AuthedSettingsSkillsIndexRoute: typeof AuthedSettingsSkillsIndexRoute;
@@ -2126,7 +2061,6 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsEvaluationsCompareRoute: AuthedSettingsEvaluationsCompareRoute,
   AuthedSettingsEvaluationsProfilesRoute:
     AuthedSettingsEvaluationsProfilesRoute,
-  AuthedSettingsKnowledgeBasesKbIdRoute: AuthedSettingsKnowledgeBasesKbIdRoute,
   AuthedSettingsMcpServersServerIdRoute: AuthedSettingsMcpServersServerIdRoute,
   AuthedSettingsMcpServersServersRoute: AuthedSettingsMcpServersServersRoute,
   AuthedSettingsRoutinesRoutineIdRoute: AuthedSettingsRoutinesRoutineIdRoute,
@@ -2141,8 +2075,6 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsAgentsIndexRoute: AuthedSettingsAgentsIndexRoute,
   AuthedSettingsAutomationsIndexRoute: AuthedSettingsAutomationsIndexRoute,
   AuthedSettingsEvaluationsIndexRoute: AuthedSettingsEvaluationsIndexRoute,
-  AuthedSettingsKnowledgeBasesIndexRoute:
-    AuthedSettingsKnowledgeBasesIndexRoute,
   AuthedSettingsMcpServersIndexRoute: AuthedSettingsMcpServersIndexRoute,
   AuthedSettingsRoutinesIndexRoute: AuthedSettingsRoutinesIndexRoute,
   AuthedSettingsSkillsIndexRoute: AuthedSettingsSkillsIndexRoute,

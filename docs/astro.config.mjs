@@ -110,7 +110,6 @@ export default defineConfig({
                           label: "Workspace",
                           slug: "applications/admin/spaces/workspace",
                         },
-                        { label: "KBs", slug: "applications/admin/spaces/kbs" },
                         {
                           label: "Triggers",
                           slug: "applications/admin/spaces/triggers",
@@ -166,10 +165,6 @@ export default defineConfig({
                     {
                       label: "Retained Memory",
                       slug: "applications/admin/memory",
-                    },
-                    {
-                      label: "Knowledge Bases",
-                      slug: "applications/admin/knowledge-bases",
                     },
                     {
                       label: "Analytics",
@@ -375,7 +370,7 @@ export default defineConfig({
               items: [
                 { label: "Overview", slug: "concepts/knowledge" },
                 {
-                  label: "Sources and Knowledge Bases",
+                  label: "Document Sources",
                   slug: "concepts/knowledge/document-knowledge",
                 },
                 {

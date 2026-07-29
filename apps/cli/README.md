@@ -285,7 +285,7 @@ Thinkwork provisions a complete AI agent stack (~250 AWS resources):
 - **Database**: Aurora Serverless PostgreSQL with pgvector
 - **Auth**: Cognito user pool (admin + mobile clients)
 - **API**: API Gateway (REST + GraphQL), AppSync (WebSocket subscriptions)
-- **Storage**: S3 (workspace files, skills, knowledge bases)
+- **Storage**: S3 (workspace files, skills)
 - **Memory**: Managed (built-in) or Hindsight (ECS Fargate with semantic + BM25 + entity graph retrieval)
 
 ## License

@@ -4,11 +4,9 @@ import {
   db,
   eq,
   inArray,
-  knowledgeBases,
   spaceChecklistItems,
   spaceChecklistTemplates,
   spaceIntegrations,
-  spaceKnowledgeBases,
   spaceMembers,
   users,
   snakeToCamel,
@@ -83,38 +81,6 @@ export const spaceTypeResolvers = {
         ),
       );
     return rows.map((row) => toGraphqlSpaceChild(row));
-  },
-  knowledgeBases: async (parent: any) => {
-    const spaceId = parent.id;
-    const tenantId = parent.tenantId ?? parent.tenant_id;
-    const rows = await db
-      .select()
-      .from(spaceKnowledgeBases)
-      .where(
-        and(
-          eq(spaceKnowledgeBases.tenant_id, tenantId),
-          eq(spaceKnowledgeBases.space_id, spaceId),
-        ),
-      );
-    const knowledgeBaseIds = rows.map((row) => row.knowledge_base_id);
-    const kbRows =
-      knowledgeBaseIds.length > 0
-        ? await db
-            .select()
-            .from(knowledgeBases)
-            .where(inArray(knowledgeBases.id, knowledgeBaseIds))
-        : [];
-    const kbById = new Map(
-      kbRows.map((knowledgeBase) => [
-        knowledgeBase.id,
-        snakeToCamel(knowledgeBase),
-      ]),
-    );
-
-    return rows.map((row) => ({
-      ...toGraphqlSpaceChild(row),
-      knowledgeBase: kbById.get(row.knowledge_base_id) ?? null,
-    }));
   },
 };
 

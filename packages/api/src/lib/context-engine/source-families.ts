@@ -17,7 +17,6 @@ export function sourceFamilyForProvider(
   if (provider.family === "brain") return "brain";
   if (provider.family === "wiki") return "pages";
   if (provider.family === "workspace") return "workspace";
-  if (provider.family === "knowledge-base") return "knowledge-base";
   if (isWebProvider(provider)) return "web";
   if (provider.family === "mcp") return "mcp";
   return "source-agent";

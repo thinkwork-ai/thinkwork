@@ -263,7 +263,7 @@ function adapterForSource(
       ok: false,
       result: failed(
         stage,
-        `source family "${source.source_family}" has no registered memory-source adapter (implemented: twenty, firecrawl, bedrock_kb)`,
+        `source family "${source.source_family}" has no registered memory-source adapter (implemented: twenty, firecrawl)`,
       ),
     };
   }
@@ -1119,7 +1119,7 @@ export async function runExtract(
 // Resolve stage: link the claim ledger to canonical identity.
 //
 // Every ACTIVE claim carries a subject_key (`twenty:company:<id>`,
-// `web:page:<url>`, `email:thread:<id>`, `kb:document:<key>`); resolve maps
+// `web:page:<url>`, `email:thread:<id>`); resolve maps
 // each subject to a canonical entity through the U4 matcher and stamps
 // memory_claims.canonical_subject_id on every active claim of that subject.
 // Without it the ledger is never reachable by canonical entity, which is the
@@ -1149,7 +1149,6 @@ const SUBJECT_FAMILY_MAPPINGS: Record<
   twenty: { sourceSystem: "twenty", entityTypeSlug: "customer" },
   web: { sourceSystem: "web", entityTypeSlug: "customer" },
   email: { sourceSystem: "gmail", entityTypeSlug: "email_thread" },
-  kb: { sourceSystem: "bedrock_kb", entityTypeSlug: "document" },
 };
 
 export interface SubjectIdentity {

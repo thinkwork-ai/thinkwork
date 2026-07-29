@@ -69,7 +69,7 @@ export interface RenderTypedPartOptions {
   /** True while rendering a live stream before the assistant message persists. */
   live?: boolean;
   /**
-   * Numbered knowledge-base citations for this turn. Text parts render the
+   * Numbered source citations for this turn. Text parts render the
    * model's `[n]` markers as badges linking to the cited document and page.
    */
   citations?: Map<number, KnowledgeCitation>;

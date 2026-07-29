@@ -146,16 +146,6 @@ performing a deliberate compatibility migration.
 | `ses_configuration_set` | string      | `"thinkwork-{stage}"` | SES configuration set name for email event tracking.                                                                             |
 | `ses_inbound_enabled`   | bool        | `false`               | Whether to configure SES inbound email (creates EMAIL- threads from inbound mail).                                               |
 
-## Legacy Knowledge Base
-
-Hindsight-backed Brain Sources are the default document-memory path. Bedrock
-Knowledge Bases remain available for explicit legacy compatibility and external
-document-retrieval experiments.
-
-ThinkWork provisions an IAM service role that lets Bedrock Knowledge Bases read from the KB S3 bucket, invoke `amazon.titan-embed-text-v2:0` for embeddings, and write vectors into Aurora Postgres via the RDS Data API. There is no OpenSearch Serverless collection — the vector index lives in the same Aurora cluster as the rest of your data (`pgvector`), so there is no separate vector-store cost line.
-
-Legacy Knowledge Base configuration (chunking strategy, data source wiring, sync schedule) is managed at runtime through the Knowledge module, not through terraform variables.
-
 ## AgentCore
 
 | Variable                         | Type   | Default    | Description                                                                                                                       |

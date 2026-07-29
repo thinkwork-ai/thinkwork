@@ -9,7 +9,7 @@ is better-suited than you are.
 
 - The request is clearly inside one sub-workspace's scope (e.g., "expenses",
   "recruiting", "customer support") and you would otherwise be generalist.
-- The sub-workspace has access to tools or knowledge bases you do not.
+- The sub-workspace has access to tools you do not.
 - The human asked for a specialist perspective.
 
 ## When to answer directly
