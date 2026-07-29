@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as XLSX from "xlsx";
 
@@ -22,6 +23,39 @@ function makeXlsx(sheets: Record<string, (string | number)[][]>): Uint8Array {
   return new Uint8Array(
     XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer,
   );
+}
+
+const PPTX_MIME =
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+const DOCX_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+function makePptx(slides: string[][]): Promise<Uint8Array> {
+  const zip = new JSZip();
+  zip.file("[Content_Types].xml", "<Types/>");
+  slides.forEach((paragraphs, i) => {
+    const body = paragraphs
+      .map((p) => `<a:p><a:r><a:t>${p}</a:t></a:r></a:p>`)
+      .join("");
+    zip.file(
+      `ppt/slides/slide${i + 1}.xml`,
+      `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">${body}</p:sld>`,
+    );
+  });
+  return zip.generateAsync({ type: "uint8array" });
+}
+
+function makeDocx(paragraphs: string[]): Promise<Uint8Array> {
+  const zip = new JSZip();
+  zip.file("[Content_Types].xml", "<Types/>");
+  const body = paragraphs
+    .map((p) => `<w:p><w:r><w:t>${p}</w:t></w:r></w:p>`)
+    .join("");
+  zip.file(
+    "word/document.xml",
+    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}</w:body></w:document>`,
+  );
+  return zip.generateAsync({ type: "uint8array" });
 }
 
 /** Minimal single-page PDF with extractable text (no external fixtures). */
@@ -133,6 +167,78 @@ describe("extractAttachmentText", () => {
     expect(out.kind).toBe("pdf");
     expect(out.readable).toBe(true);
     expect(out.text).toContain("Revenue 100 COGS 40");
+  });
+
+  it("extracts slide text from a pptx", async () => {
+    const bytes = await makePptx([
+      ["Q2 Highlights", "Revenue up 12%"],
+      ["Risks &amp; Mitigations"],
+    ]);
+    const out = await extractAttachmentText({
+      name: "deck.pptx",
+      mimeType: PPTX_MIME,
+      bytes,
+    });
+    expect(out.readable).toBe(true);
+    expect(out.kind).toBe("presentation");
+    expect(out.text).toContain("### Slide 1");
+    expect(out.text).toContain("Q2 Highlights");
+    expect(out.text).toContain("Revenue up 12%");
+    expect(out.text).toContain("### Slide 2");
+    expect(out.text).toContain("Risks & Mitigations");
+    expect(out.text).not.toContain("\u0000");
+  });
+
+  it("extracts paragraph text from a docx", async () => {
+    const bytes = await makeDocx(["Executive Summary", "We grew 12%."]);
+    const out = await extractAttachmentText({
+      name: "memo.docx",
+      mimeType: DOCX_MIME,
+      bytes,
+    });
+    expect(out.readable).toBe(true);
+    expect(out.kind).toBe("document");
+    expect(out.text).toContain("Executive Summary");
+    expect(out.text).toContain("We grew 12%.");
+    expect(out.text).not.toContain("\u0000");
+  });
+
+  it("never decodes an OOXML binary as raw text, even when unparseable", async () => {
+    // Regression: PPTX/DOCX MIME types contain the substring "xml"
+    // ("openxmlformats"), which used to trip the text-like MIME check and dump
+    // raw NUL-laden ZIP bytes into the transcript (wedging turn persistence).
+    const garbage = new Uint8Array(64 * 1024);
+    garbage.set([0x50, 0x4b, 0x03, 0x04]); // PK zip magic, but corrupt beyond
+    for (const mime of [PPTX_MIME, DOCX_MIME]) {
+      const out = await extractAttachmentText({
+        name: mime === PPTX_MIME ? "deck.pptx" : "memo.docx",
+        mimeType: mime,
+        bytes: garbage,
+      });
+      expect(out.readable).toBe(false);
+      expect(out.text).toBe("");
+    }
+  });
+
+  it("still treats real XML MIME types as text", async () => {
+    const out = await extractAttachmentText({
+      name: "feed",
+      mimeType: "application/rss+xml",
+      bytes: new TextEncoder().encode("<rss><title>hello</title></rss>"),
+    });
+    expect(out.readable).toBe(true);
+    expect(out.kind).toBe("text");
+  });
+
+  it("strips NUL bytes from text extractions", async () => {
+    const bytes = new Uint8Array([104, 105, 0, 33]); // "hi\0!"
+    const out = await extractAttachmentText({
+      name: "weird.txt",
+      mimeType: "text/plain",
+      bytes,
+    });
+    expect(out.readable).toBe(true);
+    expect(out.text).toBe("hi!");
   });
 
   it("marks unknown binary as not readable", async () => {

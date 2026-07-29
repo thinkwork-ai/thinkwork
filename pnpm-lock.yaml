@@ -1436,6 +1436,9 @@ importers:
       '@thinkwork/thread-json-render':
         specifier: workspace:*
         version: link:../thread-json-render
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
       typebox:
         specifier: ^1.1.38
         version: 1.1.38
