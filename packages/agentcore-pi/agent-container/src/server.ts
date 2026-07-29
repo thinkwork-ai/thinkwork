@@ -2010,7 +2010,7 @@ export async function buildInvocationResources(
       tenantId: args.identity.tenantId,
       threadId: args.identity.threadId,
     });
-  } else if (args.env.memoryEngine === "managed") {
+  } else if (args.env.memoryEngine === "agentcore") {
     if (args.env.agentCoreMemoryId) {
       tools.push(
         ...buildMemoryTools({

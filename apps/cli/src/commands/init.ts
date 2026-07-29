@@ -1019,7 +1019,7 @@ output "agentcore_memory_id" {
           `  ${chalk.bold("Database:")}        ${config.database_engine}`,
         );
         console.log(
-          `  ${chalk.bold("Memory:")}          ${config.enable_hindsight === "true" ? "hindsight" : "agentcore managed"}`,
+          `  ${chalk.bold("Memory:")}          ${config.enable_hindsight === "true" ? "hindsight" : "agentcore"}`,
         );
         console.log(
           `  ${chalk.bold("Google OAuth:")}    ${config.google_oauth_client_id ? "enabled" : "disabled"}`,

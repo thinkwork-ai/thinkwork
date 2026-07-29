@@ -118,7 +118,7 @@ export function registerConfigCommand(program: Command): void {
           `  ${chalk.bold("Database:")}        ${env.databaseEngine}`,
         );
         console.log(
-          `  ${chalk.bold("Memory:")}          ${env.enableHindsight ? "hindsight" : "agentcore managed"}`,
+          `  ${chalk.bold("Memory:")}          ${env.enableHindsight ? "hindsight" : "agentcore"}`,
         );
         console.log(`  ${chalk.bold("Terraform dir:")}   ${env.terraformDir}`);
         console.log(`  ${chalk.bold("Created:")}         ${env.createdAt}`);
@@ -259,7 +259,7 @@ export function registerConfigCommand(program: Command): void {
             value !== "agentcore"
           ) {
             printError(
-              `Invalid memory engine "${value}". Must be 'managed', 'hindsight', or 'agentcore'.`,
+              `Invalid memory engine "${value}". Must be 'agentcore' or 'hindsight' (legacy 'managed' is accepted and stored as 'agentcore').`,
             );
             process.exit(1);
           }

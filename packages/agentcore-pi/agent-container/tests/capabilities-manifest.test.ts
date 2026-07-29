@@ -229,7 +229,7 @@ async function buildBundle(
       awsRegion: "us-east-1",
       agentCoreMemoryId: "",
       hindsightEndpoint: "",
-      memoryEngine: "managed",
+      memoryEngine: "agentcore",
       memoryRetainFnName: "",
       dbClusterArn: "",
       dbSecretArn: "",

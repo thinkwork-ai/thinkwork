@@ -176,7 +176,13 @@ export interface RuntimeEnvSnapshot {
   awsRegion: string;
   agentCoreMemoryId: string;
   hindsightEndpoint: string;
-  memoryEngine: "managed" | "hindsight";
+  /**
+   * Canonical memory engine selection (THINK-401). Exactly two values across
+   * every layer: `"agentcore"` (AgentCore managed memory) or `"hindsight"`.
+   * The legacy input spelling `"managed"` is still accepted at the env parse
+   * boundary and normalized to `"agentcore"`.
+   */
+  memoryEngine: "agentcore" | "hindsight";
   /**
    * Name of the API's `memory-retain` Lambda
    * (`thinkwork-${stage}-api-memory-retain`). Empty string disables
@@ -219,11 +225,14 @@ export function snapshotRuntimeEnv(
   const memoryEngineRaw = (env.MEMORY_ENGINE || "hindsight")
     .toLowerCase()
     .trim();
+  // Canonical values are "agentcore" and "hindsight" (THINK-401). The legacy
+  // input spelling "managed" is still accepted here and normalized to
+  // "agentcore"; anything unrecognized falls back to hindsight.
   const memoryEngine: RuntimeEnvSnapshot["memoryEngine"] =
     memoryEngineRaw === "hindsight"
       ? "hindsight"
       : memoryEngineRaw === "managed" || memoryEngineRaw === "agentcore"
-        ? "managed"
+        ? "agentcore"
         : "hindsight";
 
   return {
