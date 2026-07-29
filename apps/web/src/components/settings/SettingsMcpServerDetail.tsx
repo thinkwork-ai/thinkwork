@@ -36,11 +36,7 @@ import {
   type McpServiceCredentialStatus,
   type RuntimeMcpTool,
 } from "@/lib/mcp-api";
-import {
-  SettingsProvisionAnalystConnectorMutation,
-  SettingsRefreshAnalystDataSourceMutation,
-  SettingsTenantAgentQuery,
-} from "@/lib/settings-queries";
+import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import {
   SettingsPageTitle,
@@ -90,23 +86,6 @@ export function SettingsMcpServerDetail() {
   const [serviceCredentialError, setServiceCredentialError] = useState<
     string | null
   >(null);
-  // THINK-230: analyst connector re-approval.
-  const [reApproveRotate, setReApproveRotate] = useState(false);
-  const [reApproveNotice, setReApproveNotice] = useState<string | null>(null);
-  const [reApproveError, setReApproveError] = useState<string | null>(null);
-  const [reApproving, setReApproving] = useState(false);
-  const [, provisionAnalystConnector] = useMutation(
-    SettingsProvisionAnalystConnectorMutation,
-  );
-  // THINK-283: sourced connector explicit refresh.
-  const [refreshConfirming, setRefreshConfirming] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
-  const [refreshError, setRefreshError] = useState<string | null>(null);
-  const [, refreshAnalystDataSource] = useMutation(
-    SettingsRefreshAnalystDataSourceMutation,
-  );
-
   const [{ data: agentData }] = useQuery({
     query: SettingsTenantAgentQuery,
     variables: { tenantId: tenantId ?? "" },
@@ -379,80 +358,6 @@ export function SettingsMcpServerDetail() {
     }
   }
 
-  // THINK-283: explicit fail-closed refresh of a SOURCED analyst connector.
-  async function runSourceRefresh() {
-    if (refreshing || !server) return;
-    setRefreshing(true);
-    setRefreshError(null);
-    setRefreshNotice(null);
-    try {
-      const response = await refreshAnalystDataSource({ serverId: server.id });
-      if (response.error) {
-        setRefreshError(
-          response.error.graphQLErrors[0]?.message ??
-            response.error.message.replace(/^\[[^\]]*\]\s*/, ""),
-        );
-        return;
-      }
-      const outcome = response.data?.refreshAnalystDataSource;
-      setRefreshNotice(
-        outcome
-          ? `Refreshed — ${outcome.tables} table(s) modeled` +
-              (outcome.addedTables.length
-                ? `; added ${outcome.addedTables.join(", ")}`
-                : "") +
-              (outcome.removedTables.length
-                ? `; removed ${outcome.removedTables.join(", ")}`
-                : "") +
-              "."
-          : "Source refreshed.",
-      );
-      setRefreshConfirming(false);
-      load();
-    } catch (e) {
-      setRefreshError(
-        e instanceof Error ? e.message : "Failed to refresh the source",
-      );
-    } finally {
-      setRefreshing(false);
-    }
-  }
-
-  async function reApproveAnalyst() {
-    if (reApproving) return;
-    setReApproving(true);
-    setReApproveNotice(null);
-    setReApproveError(null);
-    try {
-      const response = await provisionAnalystConnector({
-        reApprove: true,
-        rotateToken: reApproveRotate,
-      });
-      if (response.error) {
-        // Surface the GraphQL error message verbatim.
-        setReApproveError(
-          response.error.graphQLErrors[0]?.message ??
-            response.error.message.replace(/^\[[^\]]*\]\s*/, ""),
-        );
-        return;
-      }
-      const outcome = response.data?.provisionAnalystConnector;
-      setReApproveNotice(
-        outcome
-          ? `Re-approved — connector ${outcome.connectorOutcome}, broker secret ${outcome.brokerSecretOutcome}, ${outcome.foldersWritten} folder(s) written.`
-          : "Connection re-approved.",
-      );
-      setReApproveRotate(false);
-      load();
-    } catch (e) {
-      setReApproveError(
-        e instanceof Error ? e.message : "Failed to re-approve connection",
-      );
-    } finally {
-      setReApproving(false);
-    }
-  }
-
   if (!servers && !error) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -487,11 +392,6 @@ export function SettingsMcpServerDetail() {
   });
   const visibleTools = filteredTools.slice(0, toolLimit);
   const hasMoreTools = filteredTools.length > visibleTools.length;
-  const isAnalystConnector = isAnalystServer(server);
-  // THINK-283: refresh applies ONLY to sourced connectors — the built-in
-  // connector keeps its own provisioning action below.
-  const isSourcedAnalyst = isSourcedAnalystServer(server);
-  const refreshState = server.dataSource?.refresh ?? null;
   const authUnavailableReason = !tenantId
     ? "Tenant identity is still loading."
     : !oauthUserId
@@ -523,32 +423,6 @@ export function SettingsMcpServerDetail() {
             </span>
           </SettingsRow>
           <SettingsRow label="Status">{statusBadge}</SettingsRow>
-          {server.dataSource ? (
-            <>
-              <SettingsRow label="Source type">
-                <Badge variant="outline" className="capitalize">
-                  {server.dataSource.kind}
-                </Badge>
-              </SettingsRow>
-              <SettingsRow label="Cluster">
-                <span className="max-w-md truncate font-mono text-xs">
-                  {server.dataSource.host
-                    ? server.dataSource.host.split(".")[0]
-                    : "workspace cluster"}
-                </span>
-              </SettingsRow>
-              <SettingsRow label="Database">
-                <span className="font-mono text-xs">
-                  {server.dataSource.database}
-                </span>
-              </SettingsRow>
-              <SettingsRow label="Schema">
-                <span className="font-mono text-xs">
-                  {server.dataSource.schema}
-                </span>
-              </SettingsRow>
-            </>
-          ) : null}
           <SettingsRow
             label="Enabled"
             description="Enable this server in the tenant registry. Assign it to the agent in the Composer."
@@ -694,151 +568,6 @@ export function SettingsMcpServerDetail() {
           </SettingsSection>
         ) : null}
 
-        {isSourcedAnalyst ? (
-          <SettingsSection label="Data source">
-            <SettingsRow
-              label="Refresh source"
-              description="Adopt tables created since registration (and drop removed ones) into the source's read surface. The source is unavailable while the refresh runs."
-              layout="stacked"
-            >
-              <div className="w-full space-y-3">
-                {refreshState?.status === "running" ? (
-                  <p className="text-sm text-amber-500" role="status">
-                    A refresh is in progress — the source is withheld until it
-                    completes.
-                  </p>
-                ) : null}
-                {refreshState?.status === "failed" ? (
-                  <p className="text-sm text-destructive" role="alert">
-                    {refreshState.detail ??
-                      "The last refresh failed — the source is withheld until a retry succeeds."}
-                  </p>
-                ) : null}
-                {refreshError ? (
-                  <p className="text-sm text-destructive" role="alert">
-                    {refreshError}
-                  </p>
-                ) : null}
-                {refreshNotice ? (
-                  <p className="text-sm text-emerald-500" role="status">
-                    {refreshNotice}
-                  </p>
-                ) : null}
-                {refreshConfirming ? (
-                  <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      Refresh{" "}
-                      <span className="font-mono">
-                        {server.dataSource?.database}/
-                        {server.dataSource?.schema}
-                      </span>
-                      ? The source is withheld from the agent while grants,
-                      model, and folders reconcile, and previously issued access
-                      is re-authorized against the new surface.
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        disabled={refreshing}
-                        onClick={() => void runSourceRefresh()}
-                        className="gap-2"
-                      >
-                        {refreshing ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-4 w-4" />
-                        )}
-                        Confirm refresh
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={refreshing}
-                        onClick={() => setRefreshConfirming(false)}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex justify-start">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={
-                        refreshing || refreshState?.status === "running"
-                      }
-                      onClick={() => {
-                        setRefreshError(null);
-                        setRefreshNotice(null);
-                        setRefreshConfirming(true);
-                      }}
-                      className="gap-2"
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                      {refreshState?.status === "failed"
-                        ? "Retry refresh"
-                        : "Refresh source"}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </SettingsRow>
-          </SettingsSection>
-        ) : null}
-
-        {isAnalystConnector ? (
-          <SettingsSection label="Analyst connection">
-            <SettingsRow
-              label="Re-approve connection"
-              description="Restamp the approval and re-pin the config hash for the analyst Postgres connector. Optionally rotate the broker token."
-              layout="stacked"
-            >
-              <div className="w-full space-y-3">
-                {reApproveError ? (
-                  <p className="text-sm text-destructive">{reApproveError}</p>
-                ) : null}
-                {reApproveNotice ? (
-                  <p className="text-sm text-emerald-500">{reApproveNotice}</p>
-                ) : null}
-                <label className="flex items-start gap-3 text-sm">
-                  <Checkbox
-                    checked={reApproveRotate}
-                    disabled={reApproving}
-                    onCheckedChange={(v) => setReApproveRotate(v === true)}
-                    aria-label="Rotate broker token"
-                    className="mt-0.5"
-                  />
-                  <span>
-                    <span className="font-medium text-foreground">
-                      Rotate broker token
-                    </span>
-                    <span className="block text-muted-foreground">
-                      Issue a fresh broker secret as part of the re-approval.
-                    </span>
-                  </span>
-                </label>
-                <div className="flex justify-start">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={reApproving}
-                    onClick={() => void reApproveAnalyst()}
-                    className="gap-2"
-                  >
-                    {reApproving ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <ShieldCheck className="h-4 w-4" />
-                    )}
-                    Re-approve connection
-                  </Button>
-                </div>
-              </div>
-            </SettingsRow>
-          </SettingsSection>
-        ) : null}
-
         <SettingsSection
           label={`Tools${tools.length ? ` (${tools.length})` : ""}`}
           action={
@@ -933,29 +662,6 @@ export function SettingsMcpServerDetail() {
       </div>
     </div>
   );
-}
-
-// THINK-230: the analyst Postgres connector is identified by its `postgres-dev`
-// slug, or — more robustly — by a URL whose path ends in `/mcp/analyst`.
-function isAnalystServer(server: McpServer): boolean {
-  if (server.slug === "postgres-dev") return true;
-  try {
-    const pathname = new URL(server.url).pathname.replace(/\/+$/, "");
-    return pathname.endsWith("/mcp/analyst");
-  } catch {
-    return server.url.replace(/\/+$/, "").endsWith("/mcp/analyst");
-  }
-}
-
-// THINK-283: a SOURCED analyst connector rides `/mcp/analyst/<slug>` — the
-// bare `/mcp/analyst` builtin is excluded (it has its own provisioning flow).
-function isSourcedAnalystServer(server: McpServer): boolean {
-  try {
-    const pathname = new URL(server.url).pathname.replace(/\/+$/, "");
-    return /^\/mcp\/analyst\/[a-z0-9][a-z0-9-]{1,38}$/.test(pathname);
-  } catch {
-    return false;
-  }
 }
 
 function runtimeToolMatchesServer(tool: RuntimeMcpTool, server: McpServer) {

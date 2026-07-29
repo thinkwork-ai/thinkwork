@@ -586,7 +586,6 @@ export function buildCanvasDataBinding(input: {
     toolName,
     frozenArgs,
     resultShapeHash: canvasShapeHashForToolResult({
-      toolName,
       raw: shapeSource,
       genericHash: resultShapeHash,
     }),

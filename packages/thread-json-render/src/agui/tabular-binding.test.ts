@@ -1,16 +1,16 @@
 /**
- * Analyst query binding helper tests (THINK-228 U7, KTD2).
+ * Tabular binding helper tests (THINK-228 U7, KTD2).
  */
 
 import { describe, expect, it } from "vitest";
 
 import {
-  analystColumnsShapeHash,
-  analystEnvelopeFromRaw,
+  tabularColumnsShapeHash,
+  tabularEnvelopeFromRaw,
   applyCanvasBoundData,
   canvasShapeHashForToolResult,
-  projectAnalystEnvelopeRows,
-} from "./analyst-binding.js";
+  projectTabularEnvelopeRows,
+} from "./tabular-binding.js";
 import { resultShapeHash } from "./shape-hash.js";
 
 const COLUMNS = [
@@ -40,27 +40,27 @@ function mcpRaw(env: unknown) {
   };
 }
 
-describe("analystEnvelopeFromRaw", () => {
+describe("tabularEnvelopeFromRaw", () => {
   it("parses an envelope from a raw MCP tool result and from a bare object", () => {
-    expect(analystEnvelopeFromRaw(mcpRaw(envelope()))?.columns).toEqual(
+    expect(tabularEnvelopeFromRaw(mcpRaw(envelope()))?.columns).toEqual(
       COLUMNS,
     );
-    expect(analystEnvelopeFromRaw(envelope())?.row_count).toBe(2);
+    expect(tabularEnvelopeFromRaw(envelope())?.row_count).toBe(2);
   });
 
   it("returns null for non-envelope payloads", () => {
     expect(
-      analystEnvelopeFromRaw({ content: [{ type: "text", text: "hi" }] }),
+      tabularEnvelopeFromRaw({ content: [{ type: "text", text: "hi" }] }),
     ).toBeNull();
-    expect(analystEnvelopeFromRaw("nope")).toBeNull();
-    expect(analystEnvelopeFromRaw({ columns: [{ name: 1 }] })).toBeNull();
+    expect(tabularEnvelopeFromRaw("nope")).toBeNull();
+    expect(tabularEnvelopeFromRaw({ columns: [{ name: 1 }] })).toBeNull();
   });
 });
 
 describe("KTD2 — value-invariant descriptor hash", () => {
   it("is identical across data volume, null churn, and staging churn", () => {
-    const small = analystEnvelopeFromRaw(mcpRaw(envelope()))!;
-    const churned = analystEnvelopeFromRaw(
+    const small = tabularEnvelopeFromRaw(mcpRaw(envelope()))!;
+    const churned = tabularEnvelopeFromRaw(
       mcpRaw(
         envelope({
           rows: [
@@ -69,53 +69,47 @@ describe("KTD2 — value-invariant descriptor hash", () => {
           ],
           row_count: 50_000,
           truncated: true,
-          result_file: "s3://bucket/analyst-staging/t/x.csv",
+          result_file: "s3://bucket/staging/t/x.csv",
           stats: { tenant: { nulls: 3, min: null, max: null } },
         }),
       ),
     )!;
-    expect(analystColumnsShapeHash(small.columns)).toEqual(
-      analystColumnsShapeHash(churned.columns),
+    expect(tabularColumnsShapeHash(small.columns)).toEqual(
+      tabularColumnsShapeHash(churned.columns),
     );
     // …while the generic structural hash DOES flip on that churn — the trap
     // this module exists to avoid.
     expect(resultShapeHash(envelope())).not.toEqual(
-      resultShapeHash(
-        envelope({ result_file: "s3://bucket/analyst-staging/t/x.csv" }),
-      ),
+      resultShapeHash(envelope({ result_file: "s3://bucket/staging/t/x.csv" })),
     );
   });
 
   it("changes on a genuine column-set change", () => {
-    const base = analystColumnsShapeHash(COLUMNS);
+    const base = tabularColumnsShapeHash(COLUMNS);
     expect(
-      analystColumnsShapeHash([...COLUMNS, { name: "extra", pg_type: "text" }]),
+      tabularColumnsShapeHash([...COLUMNS, { name: "extra", pg_type: "text" }]),
     ).not.toEqual(base);
     expect(
-      analystColumnsShapeHash([
+      tabularColumnsShapeHash([
         { name: "tenant", pg_type: "text" },
         { name: "n", pg_type: "numeric" }, // type change
       ]),
     ).not.toEqual(base);
   });
 
-  it("canvasShapeHashForToolResult routes query to the descriptor and others to the generic hash", () => {
-    const raw = mcpRaw(envelope());
+  it("canvasShapeHashForToolResult routes a tabular envelope to the descriptor and everything else to the generic hash", () => {
     const generic = (value: unknown) => resultShapeHash(value);
     expect(
       canvasShapeHashForToolResult({
-        toolName: "query",
-        raw,
+        raw: mcpRaw(envelope()),
         genericHash: generic,
       }),
-    ).toBe(analystColumnsShapeHash(COLUMNS));
+    ).toBe(tabularColumnsShapeHash(COLUMNS));
+    // A non-tabular tool result has no columns descriptor to detect.
+    const opaque = mcpRaw({ deals: [{ id: "d-1", amount: 10 }] });
     expect(
-      canvasShapeHashForToolResult({
-        toolName: "list_deals",
-        raw,
-        genericHash: generic,
-      }),
-    ).toBe(resultShapeHash(raw));
+      canvasShapeHashForToolResult({ raw: opaque, genericHash: generic }),
+    ).toBe(resultShapeHash(opaque));
   });
 });
 
@@ -150,15 +144,15 @@ describe("envelope → component projection + bound-data merge (AE3 render half)
   const data = { spec, mobileFallback: { title: "Report" } };
 
   it("projects rows keyed by column name, capped at the component limit", () => {
-    const env = analystEnvelopeFromRaw(envelope())!;
-    expect(projectAnalystEnvelopeRows(env)).toEqual([
+    const env = tabularEnvelopeFromRaw(envelope())!;
+    expect(projectTabularEnvelopeRows(env)).toEqual([
       { tenant: "acme", n: 12 },
       { tenant: "globex", n: 7 },
     ]);
-    const big = analystEnvelopeFromRaw(
+    const big = tabularEnvelopeFromRaw(
       envelope({ rows: Array.from({ length: 80 }, (_, i) => [`t${i}`, i]) }),
     )!;
-    expect(projectAnalystEnvelopeRows(big)).toHaveLength(50);
+    expect(projectTabularEnvelopeRows(big)).toHaveLength(50);
   });
 
   it("merges refreshed bound data into chart data and table rows", () => {

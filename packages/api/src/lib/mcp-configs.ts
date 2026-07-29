@@ -63,21 +63,10 @@ function isAdminOpsUrl(url: string): boolean {
   }
 }
 import {
-  ANALYST_CALLER_CONTEXT_HEADER,
-  analystBrokerSourceSlug,
-  isAnalystBrokerUrl,
-  mintAnalystCallerContextHeader,
-  sourceClaimsFromRuntimeMetadata,
-} from "./analyst/caller-context.js";
-import {
   evaluateConnectionPolicyParity,
   parseConnectionPolicyBlock,
   resolveAnalystPolicySource,
 } from "./capabilities/connection-policy.js";
-import {
-  evaluateAnalystProbeGate,
-  evaluateAnalystRefreshGate,
-} from "./analyst/connection-probe.js";
 import type { CapabilitiesManifest } from "./capabilities/manifest-compile.js";
 import type { PluginDispatchAuthResolver } from "./plugins/activation.js";
 import type { CapabilityDiagnosticsCollector } from "./capability-diagnostics.js";
@@ -361,11 +350,6 @@ export async function buildMcpConfigs(
     reason: Parameters<CapabilityDiagnosticsCollector["add"]>[0]["reason"],
     detail: string,
   ) => {
-    // R8: analyst-broker drops are ALSO surfaced to the model via the
-    // dispatch payload (same human-readable detail as the inspector).
-    if (withheldNotices && mcp.url && isAnalystBrokerUrl(mcp.url)) {
-      withheldNotices.push({ slug: mcp.slug ?? mcp.name, detail });
-    }
     diagnostics?.add({
       capabilityClass: "mcp_server",
       capabilityId: mcp.slug ?? mcp.name,
@@ -541,36 +525,6 @@ export async function buildMcpConfigs(
         "mcp_server_not_resolved",
         "url_hash mismatch with (url, auth_config); re-approval required",
       );
-      continue;
-    }
-
-    // THINK-229 U5 (R7/R8, KTD8): the scheduled connection reconciler stamps
-    // a read-only health verdict onto the analyst row's
-    // runtime_metadata.analyst_probe. A failing OR stale verdict withholds
-    // the connection loudly — a drop reason the inspector renders and the
-    // same detail routed to the model — so the model reports the outage
-    // instead of fabricating. Rows with no verdict key (non-analyst servers
-    // and the pre-first-probe window) are never gated here.
-    const probeGate = evaluateAnalystProbeGate(mcp.runtime_metadata, mcp.url);
-    if (probeGate) {
-      console.warn(`${logPrefix} withholding ${mcp.slug}: ${probeGate.detail}`);
-      dropDiag(mcp, "connection_probe_failed", probeGate.detail);
-      continue;
-    }
-
-    // THINK-283: explicit source-refresh state is a SEPARATE fail-closed
-    // gate. A running or failed refresh withholds the source regardless of
-    // the (possibly fresh-ok) scheduled probe — only the refresh mutation's
-    // own commit clears it.
-    const refreshGate = evaluateAnalystRefreshGate(
-      mcp.runtime_metadata,
-      mcp.url,
-    );
-    if (refreshGate) {
-      console.warn(
-        `${logPrefix} withholding ${mcp.slug}: ${refreshGate.detail}`,
-      );
-      dropDiag(mcp, "source_refresh_pending", refreshGate.detail);
       continue;
     }
 
@@ -801,81 +755,8 @@ export async function buildMcpConfigs(
         );
         continue;
       }
-      // THINK-229 U2 (R5): the analyst broker additionally gets a signed
-      // session caller context alongside the legacy bearer (phase-in —
-      // the broker accepts both until observed bearer traffic hits
-      // zero). Caller contexts are a broker credential; the URL gate
-      // keeps them off every other MCP server. Signing unavailable →
-      // legacy bearer carries alone, loudly.
       let contextHeaders = resolved.headers;
       let sidecarBudgets: McpServerConfig["sidecarBudgets"];
-      if (isAnalystBrokerUrl(mcp.url)) {
-        // THINK-229 U4 (KTD6/KTD7): post-flip, the signed sidecar policy
-        // block attached by the folder-manifest resolution
-        // (assignment_config.sidecarPolicy — only present when
-        // ANALYST_POLICY_SOURCE=sidecar) becomes the policyClaims the
-        // broker enforces AND the per-run cap override for the analyst
-        // profile — one signed source, one read. Pre-flip: claims stay
-        // empty and broker budget enforcement is dormant by design.
-        const assignCfg =
-          (mcp.assignment_config as Record<string, unknown>) || {};
-        const sidecarPolicy = parseConnectionPolicyBlock(
-          assignCfg.sidecarPolicy,
-        );
-        const policyClaims: Record<string, unknown> = {};
-        if (sidecarPolicy) {
-          if (sidecarPolicy.budgets) {
-            policyClaims.budgets = sidecarPolicy.budgets;
-            sidecarBudgets = sidecarPolicy.budgets;
-          }
-          if (sidecarPolicy.retain_sql !== undefined) {
-            policyClaims.retain_sql = sidecarPolicy.retain_sql;
-          }
-        }
-        // THINK-239: a sourced row (`/mcp/analyst/<slug>`) carries the signed
-        // external-source description on runtime_metadata.analyst_source. Mint
-        // it into sourceClaims so the broker connects to the registered source
-        // (and rejects any path/slug mismatch). Builtin rows mint no
-        // sourceClaims (back-compat).
-        const sourceSlug = analystBrokerSourceSlug(mcp.url);
-        const sourceClaims = sourceSlug
-          ? sourceClaimsFromRuntimeMetadata(sourceSlug, mcp.runtime_metadata)
-          : null;
-        if (sourceSlug && !sourceClaims) {
-          console.error(
-            `${logPrefix} analyst sourced row ${mcp.slug} is missing/invalid runtime_metadata.analyst_source — dropping (broker would reject it)`,
-          );
-          dropDiag(
-            mcp,
-            "credential_missing",
-            "analyst source metadata missing or malformed",
-          );
-          continue;
-        }
-        const contextHeader = await mintAnalystCallerContextHeader({
-          actor: "agent",
-          tenantId: agentRow.tenant_id,
-          agentId,
-          policyClaims,
-          ...(sourceClaims ? { sourceClaims } : {}),
-        }).catch((err) => {
-          console.error(
-            `${logPrefix} analyst caller-context mint threw for ${mcp.slug}:`,
-            err,
-          );
-          return null;
-        });
-        if (contextHeader) {
-          contextHeaders = {
-            ...(resolved.headers ?? {}),
-            [ANALYST_CALLER_CONTEXT_HEADER]: contextHeader,
-          };
-        } else {
-          console.error(
-            `${logPrefix} analyst caller-context signing unavailable for ${mcp.slug} — dispatching with legacy bearer only`,
-          );
-        }
-      }
       const directConfig = toMcpServerConfig(
         mcp,
         resolved.token,
@@ -1050,7 +931,6 @@ function resolveAttachedRowsFromFolderConnections(input: {
       .filter((row) => row.slug)
       .map((row) => [row.slug as string, row]),
   );
-  const policySource = resolveAnalystPolicySource();
   const rows: McpJoinedRow[] = [];
   for (const entry of input.manifest.active) {
     // THINK-302 U4c: first-class `mcp` grants (mcp/<slug>/MCP.md). The
@@ -1104,39 +984,11 @@ function resolveAttachedRowsFromFolderConnections(input: {
         )
       : [];
 
-    // THINK-229 U3 (R11, KTD5): shadow-evaluate sidecar-derived policy
-    // against the row-derived view on EVERY build, log structured parity
-    // records loudly, and — only behind the env flip — let the signed
-    // policy block flow into the dispatch output for enforcement (U4
-    // reads it from assignment_config.sidecarPolicy). Manifest entries
-    // are active by construction, so the sidecar-enabled leg is `true`.
-    const sidecarPolicy = parseConnectionPolicyBlock(entry.policy);
-    const parity = evaluateConnectionPolicyParity({
-      slug: entry.slug,
-      sidecar: { enabled: true, operations: permitted, policy: sidecarPolicy },
-      row: {
-        enabled: registry.server_enabled,
-        status: registry.server_status,
-      },
-    });
-    console.log(
-      JSON.stringify({
-        msg: "analyst-policy-shadow",
-        source: policySource,
-        ...parity,
-      }),
-    );
-
     rows.push({
       ...registry,
       assignment_enabled: true,
       assignment_config: {
         ...(permitted.length > 0 ? { toolAllowlist: permitted } : {}),
-        // Enforcement reads the sidecar only post-flip — pre-flip the
-        // block stays shadow-only so a wrong value cannot enforce.
-        ...(policySource === "sidecar" && sidecarPolicy
-          ? { sidecarPolicy }
-          : {}),
       },
     });
   }

@@ -35,7 +35,6 @@ import {
 } from "./entity-identity/index.js";
 import { recipeQueries, recipeMutations } from "./recipes/index.js";
 import { coreMutations } from "./core/index.js";
-import { analystMutations, analystQueries } from "./analyst/index.js";
 import { messageMutations } from "./messages/index.js";
 import {
   messageMentionTypeResolvers,
@@ -165,7 +164,6 @@ export const queryResolvers: Record<string, any> = {
   ...agentProfileQueries,
   ...goalQueries,
   ...coreQueries,
-  ...analystQueries,
   ...threadQueries,
   ...inboxQueries,
   ...triggerQueries,
@@ -221,7 +219,6 @@ export const mutationResolvers: Record<string, any> = {
   ...capabilityMutations,
   ...goalMutations,
   ...coreMutations,
-  ...analystMutations,
   ...messageMutations,
   ...triggerMutations,
   ...threadMutations,

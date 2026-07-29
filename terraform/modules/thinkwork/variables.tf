@@ -133,12 +133,6 @@ variable "platform_operator_emails" {
   default     = ""
 }
 
-variable "analyst_lambda_vpc_egress" {
-  description = "VPC-attach the analyst data-path Lambdas (graphql-http, analyst-query-broker, analyst-connection-reconciler) to the stack's private subnets so their egress rides the NAT gateway's stable EIP. Enables external analyst data sources that sit behind an IP allowlist: the DBA admits the one NAT IP (see the analyst_egress_ip output) instead of opening the database to the world. Requires private (NAT-routed) subnets."
-  type        = bool
-  default     = false
-}
-
 variable "okf_wiki_efs_enabled" {
   description = "Provision the OKF Wiki Navigator EFS current-view substrate and mount it into the okf-efs-refresh Lambda plus Pi."
   type        = bool
@@ -1484,17 +1478,6 @@ variable "compliance_anchor_object_lock_mode" {
   validation {
     condition     = contains(["GOVERNANCE", "COMPLIANCE"], var.compliance_anchor_object_lock_mode)
     error_message = "compliance_anchor_object_lock_mode must be either GOVERNANCE or COMPLIANCE."
-  }
-}
-
-variable "analyst_policy_source" {
-  description = "THINK-229 KTD5 enforcement flip for the analyst connection policy source: 'row' (default — signed sidecar policy is shadow-only) or 'sidecar' (the sidecar block is authoritative). Flip only after clean shadow parity on live traffic."
-  type        = string
-  default     = "row"
-
-  validation {
-    condition     = contains(["row", "sidecar"], var.analyst_policy_source)
-    error_message = "analyst_policy_source must be 'row' or 'sidecar'."
   }
 }
 

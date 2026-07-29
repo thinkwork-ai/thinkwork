@@ -750,113 +750,6 @@ export type AgentWorkspaceWait = {
   waitingRunId: Scalars['ID']['output'];
 };
 
-/**
- * Outcome of refreshAnalystDataSource (THINK-283) — the ONLY product flow that
- * adopts newly eligible tables into a registered source's grant and model
- * surface (and removes dropped ones). Never returns secrets or raw PostgreSQL
- * errors.
- */
-export type AnalystDataSourceRefreshResult = {
-  __typename?: 'AnalystDataSourceRefreshResult';
-  /** Schema-qualified table names this refresh added to the model. */
-  addedTables: Array<Scalars['String']['output']>;
-  /** Schema-qualified table names this refresh removed from the model. */
-  removedTables: Array<Scalars['String']['output']>;
-  serverId: Scalars['ID']['output'];
-  slug: Scalars['String']['output'];
-  /** Modeled table count after the refresh. */
-  tables: Scalars['Int']['output'];
-};
-
-/** Outcome of registering an external analyst data source (THINK-239). */
-export type AnalystDataSourceResult = {
-  __typename?: 'AnalystDataSourceResult';
-  /** Count of agent workspaces skipped (e.g. no workspace prefix). */
-  foldersSkipped: Scalars['Int']['output'];
-  /** Count of agent workspaces the connection folder was written into. */
-  foldersWritten: Scalars['Int']['output'];
-  /** The tenant_mcp_servers row id for the registered source. */
-  serverId: Scalars['ID']['output'];
-  /** The registered slug. */
-  slug: Scalars['String']['output'];
-  /** Number of tables introspected into the stored semantic model. */
-  tables: Scalars['Int']['output'];
-};
-
-/** TLS posture for a registered external analyst data source (THINK-239). */
-export enum AnalystDataSourceTls {
-  /** Encrypt but skip certificate verification (explicit opt-in downgrade). */
-  Required = 'REQUIRED',
-  /** Encrypt and verify the server certificate (default, recommended). */
-  VerifyFull = 'VERIFY_FULL'
-}
-
-/**
- * An internal (environment-owned) RDS cluster the analyst can browse and register
- * a database from with zero credential entry — the backend auto-provisions a
- * hardened read-only role (THINK-239). A cluster with no resolvable admin
- * credential (or an unreachable endpoint) returns an empty `databases` list.
- */
-export type AnalystInternalCluster = {
-  __typename?: 'AnalystInternalCluster';
-  clusterId: Scalars['ID']['output'];
-  databases: Array<AnalystInternalDatabase>;
-  endpoint: Scalars['String']['output'];
-  port: Scalars['Int']['output'];
-};
-
-/**
- * One database on an internal (environment-owned) RDS cluster (THINK-239).
- * `alreadyRegistered` is true when the tenant already has an analyst connector
- * covering this database (the built-in postgres-dev row covers `thinkwork`;
- * sourced rows cover their runtime_metadata.analyst_source.database on a matching
- * cluster endpoint).
- */
-export type AnalystInternalDatabase = {
-  __typename?: 'AnalystInternalDatabase';
-  alreadyRegistered: Scalars['Boolean']['output'];
-  name: Scalars['String']['output'];
-};
-
-/**
- * One schema on an internal database (THINK-283). Zero-count user schemas are
- * returned so an empty `public` is explained rather than silently omitted; the
- * UI disables them. System schemas (pg_*, information_schema) are excluded.
- */
-export type AnalystInternalSchema = {
-  __typename?: 'AnalystInternalSchema';
-  /** True when this exact cluster/database/schema is already registered by the tenant. */
-  alreadyRegistered: Scalars['Boolean']['output'];
-  /** Current count of ordinary base tables eligible for registration. */
-  eligibleTableCount: Scalars['Int']['output'];
-  /** Raw catalog schema name (exact case). */
-  name: Scalars['String']['output'];
-};
-
-/**
- * Outcome of running the analyst connector provisioning ceremony (THINK-230):
- * the operator-facing equivalent of scripts/provision-analyst-connector.mts.
- * Reproduces the script's born-approved + re-approve semantics (KTD4 / SI-5
- * hash pinning).
- */
-export type AnalystProvisionResult = {
-  __typename?: 'AnalystProvisionResult';
-  /** Broker credential secret action: created | unchanged | updated. */
-  brokerSecretOutcome: Scalars['String']['output'];
-  /** The tenant_mcp_servers row id for the analyst connector. */
-  connectorId: Scalars['ID']['output'];
-  /** Registry-row action: created | unchanged | re_approved. */
-  connectorOutcome: Scalars['String']['output'];
-  /** Count of agent workspaces skipped (e.g. no workspace prefix). */
-  foldersSkipped: Scalars['Int']['output'];
-  /** Count of agent workspaces the connection folder was written into. */
-  foldersWritten: Scalars['Int']['output'];
-  /** True once the tenant's analyst profile was refreshed from the built-in seed. */
-  profileRefreshed: Scalars['Boolean']['output'];
-  /** rds_iam credential row action, or null when the IAM env block is not wired. */
-  rdsIamCredentialOutcome?: Maybe<Scalars['String']['output']>;
-};
-
 export type Applet = {
   __typename?: 'Applet';
   agentVersion?: Maybe<Scalars['String']['output']>;
@@ -4746,15 +4639,6 @@ export type Mutation = {
    * the derivation is rejected. Admin callers must supply threadRef.
    */
   proposeMappingCandidates: ProposeMappingCandidatesResult;
-  /**
-   * Run the analyst connector provisioning ceremony for the caller's tenant
-   * (THINK-230) — the operator-facing action that replaces the
-   * scripts/provision-analyst-connector.mts CLI ceremony. Requires tenant
-   * owner/admin. `reApprove` rewrites url/auth_config and restamps approval
-   * after a drift (SI-5); `rotateToken` mints a fresh broker token and forces
-   * re-approval.
-   */
-  provisionAnalystConnector: AnalystProvisionResult;
   publishRoutineVersion: RoutineAslVersion;
   /** Tenant-operator approval that publishes a trust-ready draft to the Skill Library. */
   publishSkillDraft: SkillDraft;
@@ -4773,16 +4657,6 @@ export type Mutation = {
    * persistent tenant entitlement.
    */
   redeemPremiumPluginInstallKey: RedeemPremiumPluginInstallKeyResult;
-  /**
-   * Explicit fail-closed refresh of a registered (sourced) analyst data source
-   * (THINK-283). Requires tenant owner/admin. Withholds the source while
-   * PostgreSQL grants (internal sources only), model artifacts, connection
-   * folders, and health are reconciled; availability is restored only after an
-   * immediate exact-surface probe passes, and a NEW source generation
-   * invalidates previously minted broker claims. On failure the source stays
-   * withheld with a durable, retryable failure state.
-   */
-  refreshAnalystDataSource: AnalystDataSourceRefreshResult;
   refreshCanvasData: CanvasRefreshResult;
   /**
    * Tenant-admin: revalidate the GitHub-backed plugin catalog immediately,
@@ -4794,29 +4668,12 @@ export type Mutation = {
   regenerateApplet: SaveAppletPayload;
   regenerateWebhookToken?: Maybe<Webhook>;
   /**
-   * Register an EXTERNAL Postgres data source as an analyst connector
-   * (THINK-239). Requires tenant owner/admin. Connects with the supplied
-   * read-only credential, verifies zero write privileges, introspects the
-   * granted surface into a stored semantic model, stores a per-source reader
-   * credential, writes model.json + SCHEMA.md to the tenant's S3 prefix, and
-   * registers a born-approved connector at POST /mcp/analyst/<slug>.
-   */
-  registerAnalystDataSource: AnalystDataSourceResult;
-  /**
    * Register a source system as an identity source (THINK-321 U7, KTD-5):
    * validates the connector row and identity rules for every target entity
    * type, writes identity.source_system_connectors, and re-projects the
    * workspace routing map. Operator/service gated.
    */
   registerIdentitySource: RegisterIdentitySourceResult;
-  /**
-   * Register a database on an INTERNAL (environment-owned) RDS cluster as an
-   * analyst connector with ZERO credential entry (THINK-239). Requires tenant
-   * owner/admin. Auto-provisions a hardened read-only role on the cluster+database
-   * (the runbook posture applied programmatically), then runs the same
-   * registration ceremony as registerAnalystDataSource.
-   */
-  registerInternalAnalystDataSource: AnalystDataSourceResult;
   registerPushToken: Scalars['Boolean']['output'];
   rejectConnectionProposal: CapabilityRuntimeMutationResult;
   rejectInboxItem: InboxItem;
@@ -5976,12 +5833,6 @@ export type MutationProposeMappingCandidatesArgs = {
 };
 
 
-export type MutationProvisionAnalystConnectorArgs = {
-  reApprove?: InputMaybe<Scalars['Boolean']['input']>;
-  rotateToken?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
 export type MutationPublishRoutineVersionArgs = {
   input: PublishRoutineVersionInput;
 };
@@ -6019,11 +5870,6 @@ export type MutationRedeemPremiumPluginInstallKeyArgs = {
 };
 
 
-export type MutationRefreshAnalystDataSourceArgs = {
-  serverId: Scalars['ID']['input'];
-};
-
-
 export type MutationRefreshCanvasDataArgs = {
   artifactId: Scalars['ID']['input'];
   partId?: InputMaybe<Scalars['String']['input']>;
@@ -6045,18 +5891,8 @@ export type MutationRegenerateWebhookTokenArgs = {
 };
 
 
-export type MutationRegisterAnalystDataSourceArgs = {
-  input: RegisterAnalystDataSourceInput;
-};
-
-
 export type MutationRegisterIdentitySourceArgs = {
   input: RegisterIdentitySourceInput;
-};
-
-
-export type MutationRegisterInternalAnalystDataSourceArgs = {
-  input: RegisterInternalAnalystDataSourceInput;
 };
 
 
@@ -7883,19 +7719,6 @@ export type Query = {
   agentWorkspaceReview?: Maybe<AgentWorkspaceReview>;
   agentWorkspaceReviews: Array<AgentWorkspaceReview>;
   agentWorkspaceRuns: Array<AgentWorkspaceRun>;
-  /**
-   * List the environment's own RDS clusters and their databases so an operator
-   * can register one as an analyst data source without entering any credential
-   * (THINK-239). Requires tenant owner/admin.
-   */
-  analystInternalClusters: Array<AnalystInternalCluster>;
-  /**
-   * List the selectable (non-system) schemas of ONE internal database with
-   * current eligible-object counts and exact registration coverage, so an
-   * operator can select exactly one schema to register (THINK-283). Invoked
-   * after cluster + database selection. Requires tenant owner/admin.
-   */
-  analystInternalSchemas: Array<AnalystInternalSchema>;
   applet?: Maybe<AppletPayload>;
   appletState?: Maybe<AppletState>;
   applets: AppletConnection;
@@ -8336,12 +8159,6 @@ export type QueryAgentWorkspaceRunsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
   targetPath?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryAnalystInternalSchemasArgs = {
-  clusterId: Scalars['ID']['input'];
-  database: Scalars['String']['input'];
 };
 
 
@@ -9622,35 +9439,6 @@ export type RefreshThreadProgressPayload = {
   threadGoalFiles?: Maybe<ThreadGoalFiles>;
 };
 
-/**
- * Input for registerAnalystDataSource (THINK-239) — an external Postgres data
- * source the analyst can query through the sourced broker route
- * (POST /mcp/analyst/<slug>). The supplied credential must be a read-only
- * (SELECT-only) role; registration connects with it, verifies the posture, and
- * introspects the granted surface before writing anything.
- */
-export type RegisterAnalystDataSourceInput = {
-  database: Scalars['String']['input'];
-  /** Read-only (SELECT-only) database role to connect as. */
-  dbUser: Scalars['String']['input'];
-  host: Scalars['String']['input'];
-  /** Human-readable display name. */
-  name: Scalars['String']['input'];
-  /** Password for the read-only role. Stored in Secrets Manager, never returned. */
-  password: Scalars['String']['input'];
-  port: Scalars['Int']['input'];
-  /**
-   * PostgreSQL schema to register (THINK-283). Exactly one schema per source;
-   * exact catalog case is preserved. Omitted defaults to "public". The supplied
-   * credential is validated against this schema's current base tables.
-   */
-  schema?: InputMaybe<Scalars['String']['input']>;
-  /** URL-safe slug (^[a-z0-9][a-z0-9-]{1,38}$); becomes the broker route segment. */
-  slug: Scalars['String']['input'];
-  /** TLS posture (default VERIFY_FULL). */
-  tls?: InputMaybe<AnalystDataSourceTls>;
-};
-
 export type RegisterIdentitySourceInput = {
   connectorSlug: Scalars['String']['input'];
   entityTypeSlugs: Array<Scalars['String']['input']>;
@@ -9671,30 +9459,6 @@ export type RegisterIdentitySourceResult = {
   routingMapWritten: Scalars['Int']['output'];
   sourceSystem: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
-};
-
-/**
- * Input for registerInternalAnalystDataSource (THINK-239) — register a database
- * on an internal RDS cluster as an analyst connector with zero credential entry.
- * The backend auto-provisions a hardened read-only role on the cluster+database,
- * then runs the same registration ceremony as an external source.
- */
-export type RegisterInternalAnalystDataSourceInput = {
-  /** DBClusterIdentifier of the internal cluster (from analystInternalClusters). */
-  clusterId: Scalars['ID']['input'];
-  /** Database on that cluster to register (must appear in its enumeration). */
-  database: Scalars['String']['input'];
-  /** Human-readable display name. */
-  name: Scalars['String']['input'];
-  /**
-   * PostgreSQL schema to register (THINK-283). Exactly one schema per source;
-   * exact catalog case is preserved; must be an eligible non-system schema on
-   * the selected database. Omitted defaults to "public" (legacy contract — the
-   * operator UI always submits an explicit discovered schema).
-   */
-  schema?: InputMaybe<Scalars['String']['input']>;
-  /** URL-safe slug (^[a-z0-9][a-z0-9-]{1,38}$); becomes the broker route segment. */
-  slug: Scalars['String']['input'];
 };
 
 export type RegisterPushTokenInput = {
@@ -14701,48 +14465,6 @@ export type SettingsWorkspacePreviewFileQueryVariables = Exact<{
 
 export type SettingsWorkspacePreviewFileQuery = { __typename?: 'Query', workspacePreviewFile: { __typename?: 'WorkspacePreviewFilePayload', state: string, stateDetail?: string | null, content?: string | null, file?: { __typename?: 'WorkspacePreviewEntry', path: string, owner: string, generated: boolean, size?: number | null } | null } };
 
-export type SettingsProvisionAnalystConnectorMutationVariables = Exact<{
-  reApprove?: InputMaybe<Scalars['Boolean']['input']>;
-  rotateToken?: InputMaybe<Scalars['Boolean']['input']>;
-}>;
-
-
-export type SettingsProvisionAnalystConnectorMutation = { __typename?: 'Mutation', provisionAnalystConnector: { __typename?: 'AnalystProvisionResult', connectorId: string, connectorOutcome: string, brokerSecretOutcome: string, rdsIamCredentialOutcome?: string | null, profileRefreshed: boolean, foldersWritten: number, foldersSkipped: number } };
-
-export type SettingsRegisterAnalystDataSourceMutationVariables = Exact<{
-  input: RegisterAnalystDataSourceInput;
-}>;
-
-
-export type SettingsRegisterAnalystDataSourceMutation = { __typename?: 'Mutation', registerAnalystDataSource: { __typename?: 'AnalystDataSourceResult', serverId: string, slug: string, tables: number, foldersWritten: number, foldersSkipped: number } };
-
-export type SettingsAnalystInternalClustersQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type SettingsAnalystInternalClustersQuery = { __typename?: 'Query', analystInternalClusters: Array<{ __typename?: 'AnalystInternalCluster', clusterId: string, endpoint: string, port: number, databases: Array<{ __typename?: 'AnalystInternalDatabase', name: string, alreadyRegistered: boolean }> }> };
-
-export type SettingsRegisterInternalAnalystDataSourceMutationVariables = Exact<{
-  input: RegisterInternalAnalystDataSourceInput;
-}>;
-
-
-export type SettingsRegisterInternalAnalystDataSourceMutation = { __typename?: 'Mutation', registerInternalAnalystDataSource: { __typename?: 'AnalystDataSourceResult', serverId: string, slug: string, tables: number, foldersWritten: number, foldersSkipped: number } };
-
-export type SettingsAnalystInternalSchemasQueryVariables = Exact<{
-  clusterId: Scalars['ID']['input'];
-  database: Scalars['String']['input'];
-}>;
-
-
-export type SettingsAnalystInternalSchemasQuery = { __typename?: 'Query', analystInternalSchemas: Array<{ __typename?: 'AnalystInternalSchema', name: string, eligibleTableCount: number, alreadyRegistered: boolean }> };
-
-export type SettingsRefreshAnalystDataSourceMutationVariables = Exact<{
-  serverId: Scalars['ID']['input'];
-}>;
-
-
-export type SettingsRefreshAnalystDataSourceMutation = { __typename?: 'Mutation', refreshAnalystDataSource: { __typename?: 'AnalystDataSourceRefreshResult', serverId: string, slug: string, addedTables: Array<string>, removedTables: Array<string>, tables: number } };
-
 export type SettingsCanonicalEntitiesQueryVariables = Exact<{
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   entityTypeSlug?: InputMaybe<Scalars['String']['input']>;
@@ -15109,12 +14831,6 @@ export const SettingsDetachCapabilityDocument = {"kind":"Document","definitions"
 export const SettingsCapabilityInspectorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsCapabilityInspector"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"spaceId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentProfileId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"perspectiveUserId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"capabilityInspector"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"spaceId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"spaceId"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentProfileId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentProfileId"}}},{"kind":"Argument","name":{"kind":"Name","value":"perspectiveUserId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"perspectiveUserId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"stateDetail"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"spaceId"}},{"kind":"Field","name":{"kind":"Name","value":"agentProfileId"}},{"kind":"Field","name":{"kind":"Name","value":"perspectiveUserId"}},{"kind":"Field","name":{"kind":"Name","value":"noUserBaseline"}},{"kind":"Field","name":{"kind":"Name","value":"predicted"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"variant"}},{"kind":"Field","name":{"kind":"Name","value":"computedAt"}},{"kind":"Field","name":{"kind":"Name","value":"configFingerprint"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"capabilityClass"}},{"kind":"Field","name":{"kind":"Name","value":"capabilityId"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"active"}},{"kind":"Field","name":{"kind":"Name","value":"provenance"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"detail"}},{"kind":"Field","name":{"kind":"Name","value":"tokenStatus"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"observed"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"variant"}},{"kind":"Field","name":{"kind":"Name","value":"computedAt"}},{"kind":"Field","name":{"kind":"Name","value":"configFingerprint"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"capabilityClass"}},{"kind":"Field","name":{"kind":"Name","value":"capabilityId"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"active"}},{"kind":"Field","name":{"kind":"Name","value":"provenance"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"detail"}},{"kind":"Field","name":{"kind":"Name","value":"tokenStatus"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"divergence"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"manifestId"}},{"kind":"Field","name":{"kind":"Name","value":"manifestCreatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"manifestFingerprint"}},{"kind":"Field","name":{"kind":"Name","value":"deltas"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"capabilityClass"}},{"kind":"Field","name":{"kind":"Name","value":"capabilityId"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}}]}}]}}]}}]}}]} as unknown as DocumentNode<SettingsCapabilityInspectorQuery, SettingsCapabilityInspectorQueryVariables>;
 export const SettingsWorkspacePreviewDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsWorkspacePreview"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"spaceId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"perspectiveUserId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"workspacePreview"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"spaceId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"spaceId"}}},{"kind":"Argument","name":{"kind":"Name","value":"perspectiveUserId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"perspectiveUserId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"stateDetail"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"spaceId"}},{"kind":"Field","name":{"kind":"Name","value":"perspectiveUserId"}},{"kind":"Field","name":{"kind":"Name","value":"noUserBaseline"}},{"kind":"Field","name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"owner"}},{"kind":"Field","name":{"kind":"Name","value":"generated"}},{"kind":"Field","name":{"kind":"Name","value":"size"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsWorkspacePreviewQuery, SettingsWorkspacePreviewQueryVariables>;
 export const SettingsWorkspacePreviewFileDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsWorkspacePreviewFile"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"spaceId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"perspectiveUserId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"path"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"workspacePreviewFile"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"spaceId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"spaceId"}}},{"kind":"Argument","name":{"kind":"Name","value":"perspectiveUserId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"perspectiveUserId"}}},{"kind":"Argument","name":{"kind":"Name","value":"path"},"value":{"kind":"Variable","name":{"kind":"Name","value":"path"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"state"}},{"kind":"Field","name":{"kind":"Name","value":"stateDetail"}},{"kind":"Field","name":{"kind":"Name","value":"file"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"owner"}},{"kind":"Field","name":{"kind":"Name","value":"generated"}},{"kind":"Field","name":{"kind":"Name","value":"size"}}]}},{"kind":"Field","name":{"kind":"Name","value":"content"}}]}}]}}]} as unknown as DocumentNode<SettingsWorkspacePreviewFileQuery, SettingsWorkspacePreviewFileQueryVariables>;
-export const SettingsProvisionAnalystConnectorDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsProvisionAnalystConnector"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"reApprove"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"rotateToken"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"provisionAnalystConnector"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"reApprove"},"value":{"kind":"Variable","name":{"kind":"Name","value":"reApprove"}}},{"kind":"Argument","name":{"kind":"Name","value":"rotateToken"},"value":{"kind":"Variable","name":{"kind":"Name","value":"rotateToken"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connectorId"}},{"kind":"Field","name":{"kind":"Name","value":"connectorOutcome"}},{"kind":"Field","name":{"kind":"Name","value":"brokerSecretOutcome"}},{"kind":"Field","name":{"kind":"Name","value":"rdsIamCredentialOutcome"}},{"kind":"Field","name":{"kind":"Name","value":"profileRefreshed"}},{"kind":"Field","name":{"kind":"Name","value":"foldersWritten"}},{"kind":"Field","name":{"kind":"Name","value":"foldersSkipped"}}]}}]}}]} as unknown as DocumentNode<SettingsProvisionAnalystConnectorMutation, SettingsProvisionAnalystConnectorMutationVariables>;
-export const SettingsRegisterAnalystDataSourceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsRegisterAnalystDataSource"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RegisterAnalystDataSourceInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"registerAnalystDataSource"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"tables"}},{"kind":"Field","name":{"kind":"Name","value":"foldersWritten"}},{"kind":"Field","name":{"kind":"Name","value":"foldersSkipped"}}]}}]}}]} as unknown as DocumentNode<SettingsRegisterAnalystDataSourceMutation, SettingsRegisterAnalystDataSourceMutationVariables>;
-export const SettingsAnalystInternalClustersDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsAnalystInternalClusters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"analystInternalClusters"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"clusterId"}},{"kind":"Field","name":{"kind":"Name","value":"endpoint"}},{"kind":"Field","name":{"kind":"Name","value":"port"}},{"kind":"Field","name":{"kind":"Name","value":"databases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"alreadyRegistered"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsAnalystInternalClustersQuery, SettingsAnalystInternalClustersQueryVariables>;
-export const SettingsRegisterInternalAnalystDataSourceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsRegisterInternalAnalystDataSource"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RegisterInternalAnalystDataSourceInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"registerInternalAnalystDataSource"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"tables"}},{"kind":"Field","name":{"kind":"Name","value":"foldersWritten"}},{"kind":"Field","name":{"kind":"Name","value":"foldersSkipped"}}]}}]}}]} as unknown as DocumentNode<SettingsRegisterInternalAnalystDataSourceMutation, SettingsRegisterInternalAnalystDataSourceMutationVariables>;
-export const SettingsAnalystInternalSchemasDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsAnalystInternalSchemas"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"clusterId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"database"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"analystInternalSchemas"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"clusterId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"clusterId"}}},{"kind":"Argument","name":{"kind":"Name","value":"database"},"value":{"kind":"Variable","name":{"kind":"Name","value":"database"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"eligibleTableCount"}},{"kind":"Field","name":{"kind":"Name","value":"alreadyRegistered"}}]}}]}}]} as unknown as DocumentNode<SettingsAnalystInternalSchemasQuery, SettingsAnalystInternalSchemasQueryVariables>;
-export const SettingsRefreshAnalystDataSourceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsRefreshAnalystDataSource"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"serverId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"refreshAnalystDataSource"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"serverId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"serverId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"serverId"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"addedTables"}},{"kind":"Field","name":{"kind":"Name","value":"removedTables"}},{"kind":"Field","name":{"kind":"Name","value":"tables"}}]}}]}}]} as unknown as DocumentNode<SettingsRefreshAnalystDataSourceMutation, SettingsRefreshAnalystDataSourceMutationVariables>;
 export const SettingsCanonicalEntitiesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsCanonicalEntities"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"entityTypeSlug"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"search"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"canonicalEntities"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"entityTypeSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"entityTypeSlug"}}},{"kind":"Argument","name":{"kind":"Name","value":"search"},"value":{"kind":"Variable","name":{"kind":"Name","value":"search"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"entityTypeSlug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"normalizedName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"mergedIntoId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"sourceMappings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"sourceSystem"}},{"kind":"Field","name":{"kind":"Name","value":"namespace"}},{"kind":"Field","name":{"kind":"Name","value":"externalId"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"createdThreadRef"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsCanonicalEntitiesQuery, SettingsCanonicalEntitiesQueryVariables>;
 export const SettingsEntityResolutionCasesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsEntityResolutionCases"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"entityResolutionCases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"entityTypeSlug"}},{"kind":"Field","name":{"kind":"Name","value":"displayHint"}},{"kind":"Field","name":{"kind":"Name","value":"candidates"}},{"kind":"Field","name":{"kind":"Name","value":"conflictingClaims"}},{"kind":"Field","name":{"kind":"Name","value":"impactSummary"}},{"kind":"Field","name":{"kind":"Name","value":"itemCount"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"decision"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsEntityResolutionCasesQuery, SettingsEntityResolutionCasesQueryVariables>;
 export const SettingsResolveEntityResolutionCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsResolveEntityResolutionCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"caseId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"decision"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EntityResolutionDecision"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"canonicalEntityId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"displayName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"resolveEntityResolutionCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"caseId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"caseId"}}},{"kind":"Argument","name":{"kind":"Name","value":"decision"},"value":{"kind":"Variable","name":{"kind":"Name","value":"decision"}}},{"kind":"Argument","name":{"kind":"Name","value":"canonicalEntityId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"canonicalEntityId"}}},{"kind":"Argument","name":{"kind":"Name","value":"displayName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"displayName"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"decision"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedCanonicalEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsResolveEntityResolutionCaseMutation, SettingsResolveEntityResolutionCaseMutationVariables>;

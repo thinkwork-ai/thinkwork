@@ -9,11 +9,15 @@ describe("built-in agent profile seeds (U15 — R20)", () => {
     }
   });
 
-  it("the analyst seed points at connectors/<slug>/SCHEMA.md", () => {
+  it("the analyst seed no longer references a registered data source", () => {
     const analyst = BUILT_IN_PROFILE_SEEDS.find(
       (seed) => seed.built_in_key === "analyst",
     );
     expect(analyst).toBeDefined();
-    expect(JSON.stringify(analyst)).toContain("connectors/<slug>/SCHEMA.md");
+    // The analyst data-source subsystem is retired (Company Brain replaces
+    // it); the profile works from uploaded files and tool results instead.
+    const text = JSON.stringify(analyst);
+    expect(text).not.toContain("SCHEMA.md");
+    expect(text).not.toContain("postgres-dev");
   });
 });

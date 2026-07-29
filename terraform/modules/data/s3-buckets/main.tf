@@ -109,11 +109,10 @@ output "bucket_arn" {
   value       = aws_s3_bucket.main.arn
 }
 
-# Analyst query-broker result staging (THINK-228 U3). Results larger than
-# the inline envelope cap land as CSVs under analyst-staging/<tenantId>/
-# with SSE; they are scratch data consumed by the agent sandbox within the
-# same delegation, so a short TTL bounds both storage cost and the window
-# in which a leaked object key is useful.
+# Janitor for the RETIRED analyst query broker's staged results. The broker
+# is gone, but stages that ran it still hold CSVs under analyst-staging/.
+# Keeping the expiry rule drains them; deleting it would strand that data
+# with no TTL. Safe to remove once every stage's prefix is empty.
 resource "aws_s3_bucket_lifecycle_configuration" "analyst_staging" {
   bucket = aws_s3_bucket.main.id
 

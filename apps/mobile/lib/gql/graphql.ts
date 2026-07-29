@@ -750,113 +750,6 @@ export type AgentWorkspaceWait = {
   waitingRunId: Scalars['ID']['output'];
 };
 
-/**
- * Outcome of refreshAnalystDataSource (THINK-283) — the ONLY product flow that
- * adopts newly eligible tables into a registered source's grant and model
- * surface (and removes dropped ones). Never returns secrets or raw PostgreSQL
- * errors.
- */
-export type AnalystDataSourceRefreshResult = {
-  __typename?: 'AnalystDataSourceRefreshResult';
-  /** Schema-qualified table names this refresh added to the model. */
-  addedTables: Array<Scalars['String']['output']>;
-  /** Schema-qualified table names this refresh removed from the model. */
-  removedTables: Array<Scalars['String']['output']>;
-  serverId: Scalars['ID']['output'];
-  slug: Scalars['String']['output'];
-  /** Modeled table count after the refresh. */
-  tables: Scalars['Int']['output'];
-};
-
-/** Outcome of registering an external analyst data source (THINK-239). */
-export type AnalystDataSourceResult = {
-  __typename?: 'AnalystDataSourceResult';
-  /** Count of agent workspaces skipped (e.g. no workspace prefix). */
-  foldersSkipped: Scalars['Int']['output'];
-  /** Count of agent workspaces the connection folder was written into. */
-  foldersWritten: Scalars['Int']['output'];
-  /** The tenant_mcp_servers row id for the registered source. */
-  serverId: Scalars['ID']['output'];
-  /** The registered slug. */
-  slug: Scalars['String']['output'];
-  /** Number of tables introspected into the stored semantic model. */
-  tables: Scalars['Int']['output'];
-};
-
-/** TLS posture for a registered external analyst data source (THINK-239). */
-export enum AnalystDataSourceTls {
-  /** Encrypt but skip certificate verification (explicit opt-in downgrade). */
-  Required = 'REQUIRED',
-  /** Encrypt and verify the server certificate (default, recommended). */
-  VerifyFull = 'VERIFY_FULL'
-}
-
-/**
- * An internal (environment-owned) RDS cluster the analyst can browse and register
- * a database from with zero credential entry — the backend auto-provisions a
- * hardened read-only role (THINK-239). A cluster with no resolvable admin
- * credential (or an unreachable endpoint) returns an empty `databases` list.
- */
-export type AnalystInternalCluster = {
-  __typename?: 'AnalystInternalCluster';
-  clusterId: Scalars['ID']['output'];
-  databases: Array<AnalystInternalDatabase>;
-  endpoint: Scalars['String']['output'];
-  port: Scalars['Int']['output'];
-};
-
-/**
- * One database on an internal (environment-owned) RDS cluster (THINK-239).
- * `alreadyRegistered` is true when the tenant already has an analyst connector
- * covering this database (the built-in postgres-dev row covers `thinkwork`;
- * sourced rows cover their runtime_metadata.analyst_source.database on a matching
- * cluster endpoint).
- */
-export type AnalystInternalDatabase = {
-  __typename?: 'AnalystInternalDatabase';
-  alreadyRegistered: Scalars['Boolean']['output'];
-  name: Scalars['String']['output'];
-};
-
-/**
- * One schema on an internal database (THINK-283). Zero-count user schemas are
- * returned so an empty `public` is explained rather than silently omitted; the
- * UI disables them. System schemas (pg_*, information_schema) are excluded.
- */
-export type AnalystInternalSchema = {
-  __typename?: 'AnalystInternalSchema';
-  /** True when this exact cluster/database/schema is already registered by the tenant. */
-  alreadyRegistered: Scalars['Boolean']['output'];
-  /** Current count of ordinary base tables eligible for registration. */
-  eligibleTableCount: Scalars['Int']['output'];
-  /** Raw catalog schema name (exact case). */
-  name: Scalars['String']['output'];
-};
-
-/**
- * Outcome of running the analyst connector provisioning ceremony (THINK-230):
- * the operator-facing equivalent of scripts/provision-analyst-connector.mts.
- * Reproduces the script's born-approved + re-approve semantics (KTD4 / SI-5
- * hash pinning).
- */
-export type AnalystProvisionResult = {
-  __typename?: 'AnalystProvisionResult';
-  /** Broker credential secret action: created | unchanged | updated. */
-  brokerSecretOutcome: Scalars['String']['output'];
-  /** The tenant_mcp_servers row id for the analyst connector. */
-  connectorId: Scalars['ID']['output'];
-  /** Registry-row action: created | unchanged | re_approved. */
-  connectorOutcome: Scalars['String']['output'];
-  /** Count of agent workspaces skipped (e.g. no workspace prefix). */
-  foldersSkipped: Scalars['Int']['output'];
-  /** Count of agent workspaces the connection folder was written into. */
-  foldersWritten: Scalars['Int']['output'];
-  /** True once the tenant's analyst profile was refreshed from the built-in seed. */
-  profileRefreshed: Scalars['Boolean']['output'];
-  /** rds_iam credential row action, or null when the IAM env block is not wired. */
-  rdsIamCredentialOutcome?: Maybe<Scalars['String']['output']>;
-};
-
 export type Applet = {
   __typename?: 'Applet';
   agentVersion?: Maybe<Scalars['String']['output']>;
@@ -4746,15 +4639,6 @@ export type Mutation = {
    * the derivation is rejected. Admin callers must supply threadRef.
    */
   proposeMappingCandidates: ProposeMappingCandidatesResult;
-  /**
-   * Run the analyst connector provisioning ceremony for the caller's tenant
-   * (THINK-230) — the operator-facing action that replaces the
-   * scripts/provision-analyst-connector.mts CLI ceremony. Requires tenant
-   * owner/admin. `reApprove` rewrites url/auth_config and restamps approval
-   * after a drift (SI-5); `rotateToken` mints a fresh broker token and forces
-   * re-approval.
-   */
-  provisionAnalystConnector: AnalystProvisionResult;
   publishRoutineVersion: RoutineAslVersion;
   /** Tenant-operator approval that publishes a trust-ready draft to the Skill Library. */
   publishSkillDraft: SkillDraft;
@@ -4773,16 +4657,6 @@ export type Mutation = {
    * persistent tenant entitlement.
    */
   redeemPremiumPluginInstallKey: RedeemPremiumPluginInstallKeyResult;
-  /**
-   * Explicit fail-closed refresh of a registered (sourced) analyst data source
-   * (THINK-283). Requires tenant owner/admin. Withholds the source while
-   * PostgreSQL grants (internal sources only), model artifacts, connection
-   * folders, and health are reconciled; availability is restored only after an
-   * immediate exact-surface probe passes, and a NEW source generation
-   * invalidates previously minted broker claims. On failure the source stays
-   * withheld with a durable, retryable failure state.
-   */
-  refreshAnalystDataSource: AnalystDataSourceRefreshResult;
   refreshCanvasData: CanvasRefreshResult;
   /**
    * Tenant-admin: revalidate the GitHub-backed plugin catalog immediately,
@@ -4794,29 +4668,12 @@ export type Mutation = {
   regenerateApplet: SaveAppletPayload;
   regenerateWebhookToken?: Maybe<Webhook>;
   /**
-   * Register an EXTERNAL Postgres data source as an analyst connector
-   * (THINK-239). Requires tenant owner/admin. Connects with the supplied
-   * read-only credential, verifies zero write privileges, introspects the
-   * granted surface into a stored semantic model, stores a per-source reader
-   * credential, writes model.json + SCHEMA.md to the tenant's S3 prefix, and
-   * registers a born-approved connector at POST /mcp/analyst/<slug>.
-   */
-  registerAnalystDataSource: AnalystDataSourceResult;
-  /**
    * Register a source system as an identity source (THINK-321 U7, KTD-5):
    * validates the connector row and identity rules for every target entity
    * type, writes identity.source_system_connectors, and re-projects the
    * workspace routing map. Operator/service gated.
    */
   registerIdentitySource: RegisterIdentitySourceResult;
-  /**
-   * Register a database on an INTERNAL (environment-owned) RDS cluster as an
-   * analyst connector with ZERO credential entry (THINK-239). Requires tenant
-   * owner/admin. Auto-provisions a hardened read-only role on the cluster+database
-   * (the runbook posture applied programmatically), then runs the same
-   * registration ceremony as registerAnalystDataSource.
-   */
-  registerInternalAnalystDataSource: AnalystDataSourceResult;
   registerPushToken: Scalars['Boolean']['output'];
   rejectConnectionProposal: CapabilityRuntimeMutationResult;
   rejectInboxItem: InboxItem;
@@ -5976,12 +5833,6 @@ export type MutationProposeMappingCandidatesArgs = {
 };
 
 
-export type MutationProvisionAnalystConnectorArgs = {
-  reApprove?: InputMaybe<Scalars['Boolean']['input']>;
-  rotateToken?: InputMaybe<Scalars['Boolean']['input']>;
-};
-
-
 export type MutationPublishRoutineVersionArgs = {
   input: PublishRoutineVersionInput;
 };
@@ -6019,11 +5870,6 @@ export type MutationRedeemPremiumPluginInstallKeyArgs = {
 };
 
 
-export type MutationRefreshAnalystDataSourceArgs = {
-  serverId: Scalars['ID']['input'];
-};
-
-
 export type MutationRefreshCanvasDataArgs = {
   artifactId: Scalars['ID']['input'];
   partId?: InputMaybe<Scalars['String']['input']>;
@@ -6045,18 +5891,8 @@ export type MutationRegenerateWebhookTokenArgs = {
 };
 
 
-export type MutationRegisterAnalystDataSourceArgs = {
-  input: RegisterAnalystDataSourceInput;
-};
-
-
 export type MutationRegisterIdentitySourceArgs = {
   input: RegisterIdentitySourceInput;
-};
-
-
-export type MutationRegisterInternalAnalystDataSourceArgs = {
-  input: RegisterInternalAnalystDataSourceInput;
 };
 
 
@@ -7883,19 +7719,6 @@ export type Query = {
   agentWorkspaceReview?: Maybe<AgentWorkspaceReview>;
   agentWorkspaceReviews: Array<AgentWorkspaceReview>;
   agentWorkspaceRuns: Array<AgentWorkspaceRun>;
-  /**
-   * List the environment's own RDS clusters and their databases so an operator
-   * can register one as an analyst data source without entering any credential
-   * (THINK-239). Requires tenant owner/admin.
-   */
-  analystInternalClusters: Array<AnalystInternalCluster>;
-  /**
-   * List the selectable (non-system) schemas of ONE internal database with
-   * current eligible-object counts and exact registration coverage, so an
-   * operator can select exactly one schema to register (THINK-283). Invoked
-   * after cluster + database selection. Requires tenant owner/admin.
-   */
-  analystInternalSchemas: Array<AnalystInternalSchema>;
   applet?: Maybe<AppletPayload>;
   appletState?: Maybe<AppletState>;
   applets: AppletConnection;
@@ -8336,12 +8159,6 @@ export type QueryAgentWorkspaceRunsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   status?: InputMaybe<Scalars['String']['input']>;
   targetPath?: InputMaybe<Scalars['String']['input']>;
-};
-
-
-export type QueryAnalystInternalSchemasArgs = {
-  clusterId: Scalars['ID']['input'];
-  database: Scalars['String']['input'];
 };
 
 
@@ -9622,35 +9439,6 @@ export type RefreshThreadProgressPayload = {
   threadGoalFiles?: Maybe<ThreadGoalFiles>;
 };
 
-/**
- * Input for registerAnalystDataSource (THINK-239) — an external Postgres data
- * source the analyst can query through the sourced broker route
- * (POST /mcp/analyst/<slug>). The supplied credential must be a read-only
- * (SELECT-only) role; registration connects with it, verifies the posture, and
- * introspects the granted surface before writing anything.
- */
-export type RegisterAnalystDataSourceInput = {
-  database: Scalars['String']['input'];
-  /** Read-only (SELECT-only) database role to connect as. */
-  dbUser: Scalars['String']['input'];
-  host: Scalars['String']['input'];
-  /** Human-readable display name. */
-  name: Scalars['String']['input'];
-  /** Password for the read-only role. Stored in Secrets Manager, never returned. */
-  password: Scalars['String']['input'];
-  port: Scalars['Int']['input'];
-  /**
-   * PostgreSQL schema to register (THINK-283). Exactly one schema per source;
-   * exact catalog case is preserved. Omitted defaults to "public". The supplied
-   * credential is validated against this schema's current base tables.
-   */
-  schema?: InputMaybe<Scalars['String']['input']>;
-  /** URL-safe slug (^[a-z0-9][a-z0-9-]{1,38}$); becomes the broker route segment. */
-  slug: Scalars['String']['input'];
-  /** TLS posture (default VERIFY_FULL). */
-  tls?: InputMaybe<AnalystDataSourceTls>;
-};
-
 export type RegisterIdentitySourceInput = {
   connectorSlug: Scalars['String']['input'];
   entityTypeSlugs: Array<Scalars['String']['input']>;
@@ -9671,30 +9459,6 @@ export type RegisterIdentitySourceResult = {
   routingMapWritten: Scalars['Int']['output'];
   sourceSystem: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
-};
-
-/**
- * Input for registerInternalAnalystDataSource (THINK-239) — register a database
- * on an internal RDS cluster as an analyst connector with zero credential entry.
- * The backend auto-provisions a hardened read-only role on the cluster+database,
- * then runs the same registration ceremony as an external source.
- */
-export type RegisterInternalAnalystDataSourceInput = {
-  /** DBClusterIdentifier of the internal cluster (from analystInternalClusters). */
-  clusterId: Scalars['ID']['input'];
-  /** Database on that cluster to register (must appear in its enumeration). */
-  database: Scalars['String']['input'];
-  /** Human-readable display name. */
-  name: Scalars['String']['input'];
-  /**
-   * PostgreSQL schema to register (THINK-283). Exactly one schema per source;
-   * exact catalog case is preserved; must be an eligible non-system schema on
-   * the selected database. Omitted defaults to "public" (legacy contract — the
-   * operator UI always submits an explicit discovered schema).
-   */
-  schema?: InputMaybe<Scalars['String']['input']>;
-  /** URL-safe slug (^[a-z0-9][a-z0-9-]{1,38}$); becomes the broker route segment. */
-  slug: Scalars['String']['input'];
 };
 
 export type RegisterPushTokenInput = {

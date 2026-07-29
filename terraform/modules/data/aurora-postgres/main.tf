@@ -117,15 +117,11 @@ resource "aws_rds_cluster" "main" {
   deletion_protection  = local.deletion_protection
   storage_encrypted    = true
 
-  # THINK-229 U1 (R1): the analyst-query-broker Lambda authenticates as
-  # analyst_reader with per-connect RDS IAM auth tokens instead of a
-  # stored password. Cluster-level flag; applies without downtime.
-  # apply_immediately is required: the provider default defers cluster
-  # modifications to the maintenance window, and if the GRANT rds_iam
-  # migration (0229) landed inside that pending window the role would
-  # refuse BOTH password (grant applied) and IAM (flag still pending)
-  # login. Deploys on this platform are CLI/CI-driven and expect
-  # immediate semantics.
+  # RDS IAM database authentication: roles granted rds_iam log in with
+  # per-connect auth tokens instead of a stored password. Cluster-level
+  # flag; applies without downtime. apply_immediately is required — the
+  # provider default defers cluster modifications to the maintenance
+  # window, which can strand a role between the GRANT and the flag.
   iam_database_authentication_enabled = true
   apply_immediately                   = true
 
@@ -192,9 +188,8 @@ resource "aws_db_instance" "main" {
   skip_final_snapshot = true
   deletion_protection = local.deletion_protection
 
-  # THINK-229 U1 (R1): keep the rds-postgres dev/test engine at parity
-  # with the Aurora cluster — analyst_reader logs in with IAM tokens.
-  # apply_immediately for the same both-paths-stranded reason as the
+  # Keep the rds-postgres dev/test engine at IAM-auth parity with the
+  # Aurora cluster. apply_immediately for the same stranding reason as the
   # Aurora cluster block above.
   iam_database_authentication_enabled = true
   apply_immediately                   = true
@@ -375,41 +370,5 @@ resource "aws_secretsmanager_secret" "compliance_reader" {
   tags = {
     Name = "thinkwork-${var.stage}-compliance-reader-credentials"
     Role = "compliance_reader"
-  }
-}
-
-################################################################################
-# Secrets Manager — Analyst Reader Role Credentials (THINK-228 U2)
-#
-# Container for the analyst_reader Aurora role used by the analyst
-# query-broker Lambda. Terraform owns the SECRET CONTAINER; the operator
-# owns the SECRET VALUE (populated by scripts/bootstrap-analyst-roles.sh,
-# which also applies drizzle/0227_analyst_reader_role.sql to create the
-# matching hardened read-only role).
-################################################################################
-
-resource "aws_secretsmanager_secret" "analyst_reader" {
-  count = local.create ? 1 : 0
-  name  = "thinkwork/${var.stage}/analyst/reader-credentials"
-
-  tags = {
-    Name = "thinkwork-${var.stage}-analyst-reader-credentials"
-    Role = "analyst_reader"
-  }
-}
-
-# Broker caller credential for the analyst query broker (THINK-228 U3).
-# The connector row (tenant_mcp_servers, seeded by
-# scripts/provision-analyst-connector.mts) references this ARN as its
-# auth_config.secretRef; the broker Lambda validates incoming Bearer
-# tokens against it. Value shape: JSON {token, tenantId} — populated by
-# the provisioning script, never by Terraform.
-resource "aws_secretsmanager_secret" "analyst_broker" {
-  count = local.create ? 1 : 0
-  name  = "thinkwork/${var.stage}/analyst/broker-credential"
-
-  tags = {
-    Name = "thinkwork-${var.stage}-analyst-broker-credential"
-    Role = "analyst_query_broker"
   }
 }

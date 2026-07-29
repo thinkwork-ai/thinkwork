@@ -183,12 +183,6 @@ variable "neptune_loader_role_arn" {
   description = "Company Brain twin: IAM role the Neptune cluster assumes to read the load bucket"
 }
 
-variable "analyst_lambda_vpc_egress" {
-  description = "VPC-attach the analyst data-path Lambdas so their egress rides the NAT gateway's stable EIP — required when an external analyst data source sits behind an IP allowlist. See the thinkwork module's analyst_egress_ip output for the IP to allowlist."
-  type        = bool
-  default     = false
-}
-
 variable "memory_engine" {
   description = "Active long-term memory engine. Empty selects Hindsight when enable_hindsight = true. Use 'agentcore' only for explicit low-cost/development managed-memory deployments."
   type        = string
@@ -618,17 +612,6 @@ variable "wiki_source" {
   }
 }
 
-variable "analyst_policy_source" {
-  description = "THINK-229 KTD5 enforcement flip for the analyst connection policy source: 'row' (default — signed sidecar policy is shadow-only) or 'sidecar' (the sidecar block is authoritative). Flip only after clean shadow parity on live traffic."
-  type        = string
-  default     = "row"
-
-  validation {
-    condition     = contains(["row", "sidecar"], var.analyst_policy_source)
-    error_message = "analyst_policy_source must be 'row' or 'sidecar'."
-  }
-}
-
 variable "wiki_aggregation_pass_enabled" {
   description = <<-EOT
     Feature flag for the wiki aggregation pass — the second LLM call
@@ -920,7 +903,6 @@ module "thinkwork" {
   agentcore_multiplayer_proof_owner_allowlist = var.agentcore_multiplayer_proof_owner_allowlist
   agentcore_turn_assertion_key_versions       = var.agentcore_turn_assertion_key_versions
   agentcore_turn_assertion_active_key_version = var.agentcore_turn_assertion_active_key_version
-  analyst_lambda_vpc_egress                   = var.analyst_lambda_vpc_egress
   neptune_endpoint                            = var.neptune_endpoint
   brain_mcp_url                               = var.brain_mcp_url
   neptune_cluster_resource_id                 = var.neptune_cluster_resource_id
@@ -1017,7 +999,6 @@ module "thinkwork" {
   brain_source_agent_model_id                   = var.brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
-  analyst_policy_source                         = var.analyst_policy_source
   knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled
   ontology_scan_sweep_enabled                   = var.ontology_scan_sweep_enabled
   identity_drift_match_enabled                  = var.identity_drift_match_enabled
@@ -1520,11 +1501,6 @@ output "mcp_custom_domain_target" {
 output "customer_domain_name_servers" {
   description = "The four Route53 name servers for the customer-domain zone — publish these via the claim tool's `claim --set-targets` to delegate (empty when no customer domain is configured)."
   value       = module.thinkwork.customer_domain_name_servers
-}
-
-output "analyst_egress_ip" {
-  description = "Stable NAT egress IP of the VPC-attached analyst data-path Lambdas (null unless analyst_lambda_vpc_egress is set)"
-  value       = module.thinkwork.analyst_egress_ip
 }
 
 # The original AgentCore Twenty reconciliation marker never owned external

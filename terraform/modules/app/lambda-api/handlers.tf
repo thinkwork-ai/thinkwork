@@ -66,11 +66,6 @@ locals {
     SUBSCRIPTION_TICKET_PUBLIC_KEYS        = var.subscription_ticket_public_keys
     SUBSCRIPTION_TICKET_PRIVATE_KEY_SECRET = var.subscription_ticket_private_key_secret
     APPSYNC_API_ID                         = var.appsync_api_id
-    # THINK-229 U3/KTD5 — the analyst policy-source enforcement flip.
-    # "row" (default) keeps sidecar policy shadow-only; "sidecar" makes the
-    # signed sidecar block authoritative (budgets/policyClaims flow). Flip
-    # ONLY after clean shadow parity on live traffic.
-    ANALYST_POLICY_SOURCE = var.analyst_policy_source
     # Neptune endpoint for the
     # identity-graph-projector's nudge gate (THINK-339 U15: the twin READ
     # Lambdas retired to the platform service; the write/projection lane
@@ -88,22 +83,9 @@ locals {
     # Document-served so every api handler resolves it via getConfig; the
     # handlers that already carry it as env keep winning.
     BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
-    # THINK-230 — the operator-facing provisionAnalystConnector mutation runs
-    # the analyst connector provisioning ceremony inside graphql-http, so the
-    # shared api handlers read the same broker-secret ARN + rds_iam connect
-    # config the analyst-query-broker handler carries per-handler. Read via
-    # getConfig() (env-wins), never process.env (runtime-config fixture gate).
-    # ANALYST_DB_CLUSTER_ENDPOINT gates on the resource id so a stage without
-    # the IAM grant leaves rds_iam provisioning off (resolveAnalystRdsIamConfig
-    # returns null) instead of half-seeding a credential row.
-    ANALYST_BROKER_SECRET_ARN      = var.analyst_broker_secret_arn
-    ANALYST_DB_CLUSTER_ENDPOINT    = var.analyst_db_cluster_resource_id != "" ? var.db_cluster_endpoint : ""
-    ANALYST_DB_CLUSTER_RESOURCE_ID = var.analyst_db_cluster_resource_id
-    ANALYST_DB_NAME                = var.database_name
-    ANALYST_DB_USER                = "analyst_reader"
-    DATABASE_SECRET_ARN            = var.graphql_db_secret_arn
-    DATABASE_HOST                  = var.db_cluster_endpoint
-    DATABASE_NAME                  = var.database_name
+    DATABASE_SECRET_ARN    = var.graphql_db_secret_arn
+    DATABASE_HOST          = var.db_cluster_endpoint
+    DATABASE_NAME          = var.database_name
     # THINK-280 U8: the LAST rollout gate. External capability search + the
     # Inspector governed-runtime operation layer stay inert until the broker is
     # enabled for the stage. Off by default — read via getConfig() (env-wins).
@@ -304,40 +286,6 @@ locals {
     }
     "auth-enrollment" = {
       AUTH_MIGRATION_RECOVERY_DEADLINE = var.auth_migration_recovery_deadline
-    }
-    # Analyst query broker (THINK-228 U3). Reader role + caller credential
-    # secrets, and the workspace bucket's analyst-staging/ prefix for
-    # large-result CSVs (lifecycle TTL lives on the bucket module). The
-    # shared writer DATABASE_SECRET_ARN also lands in this handler's env
-    # via common_env, but the broker code never uses it — SQL runs only as
-    # analyst_reader.
-    "analyst-query-broker" = {
-      ANALYST_READER_SECRET_ARN = var.analyst_reader_secret_arn
-      ANALYST_BROKER_SECRET_ARN = var.analyst_broker_secret_arn
-      ANALYST_STAGING_BUCKET    = var.bucket_name
-      ANALYST_STAGING_PREFIX    = "analyst-staging"
-      # THINK-229 U1: RDS IAM connect config. Endpoint presence switches
-      # analyst-reader-db.ts to the IAM-token path (password secret above
-      # is the pre-GRANT-rds_iam fallback, retired once IAM is proven).
-      # Gated on the resource ID so a stage without the IAM grant keeps
-      # the password path instead of failing into the fallback every cold
-      # start.
-      ANALYST_DB_CLUSTER_ENDPOINT    = var.analyst_db_cluster_resource_id != "" ? var.db_cluster_endpoint : ""
-      ANALYST_DB_CLUSTER_RESOURCE_ID = var.analyst_db_cluster_resource_id
-      ANALYST_DB_NAME                = var.database_name
-      ANALYST_DB_USER                = "analyst_reader"
-    }
-    # THINK-229 U5 — the connection reconciler probes the analyst_reader
-    # connection EXACTLY as the broker does (getAnalystReaderClient), so it
-    # needs the same IAM-connect config + the password-fallback secret. The
-    # shared lambda execution role already holds rds-db:connect on the
-    # analyst_reader dbuser (iam-grouped.tf, granted in U1), so no extra IAM.
-    "analyst-connection-reconciler" = {
-      ANALYST_READER_SECRET_ARN      = var.analyst_reader_secret_arn
-      ANALYST_DB_CLUSTER_ENDPOINT    = var.analyst_db_cluster_resource_id != "" ? var.db_cluster_endpoint : ""
-      ANALYST_DB_CLUSTER_RESOURCE_ID = var.analyst_db_cluster_resource_id
-      ANALYST_DB_NAME                = var.database_name
-      ANALYST_DB_USER                = "analyst_reader"
     }
     # THINK-246: customer stages cannot send as the dev fallback domain
     # (noreply@agents.thinkwork.ai is only verified in the dev account) —
@@ -775,11 +723,6 @@ resource "aws_lambda_function" "handler" {
     "webhooks-admin",
     "webhook-deliveries-cleanup",
     "skill-runs-reconciler",
-    # THINK-229 U5 — probes the analyst_reader connection (reachability, IAM
-    # auth, SELECT-grant introspection, schema drift; all read-only) every 30
-    # min and stamps the verdict onto runtime_metadata.analyst_probe so
-    # dispatch can withhold a failing/stale connection loudly.
-    "analyst-connection-reconciler",
     "cron-stall-monitor",
     "webhook-crm-opportunity",
     "webhook-task-event",
@@ -922,12 +865,6 @@ resource "aws_lambda_function" "handler" {
     # Admin-Ops MCP — JSON-RPC endpoint at POST /mcp/admin, exposes the
     # @thinkwork/admin-ops package as MCP tools for managed agents.
     "admin-ops-mcp",
-    # Analyst query broker — first-party MCP server at POST /mcp/analyst
-    # (THINK-228 U3). One tool, query: EXPLAIN-gated, extended-protocol
-    # single-statement SQL as the analyst_reader role; large results stage
-    # to S3 under analyst-staging/; every query emits a data.query_executed
-    # compliance audit event via POST /api/compliance/events.
-    "analyst-query-broker",
     # MCP admin key management — per-tenant Bearer tokens for admin-ops.
     # Admin-ops-mcp authenticates incoming tokens by sha256-hash lookup
     # against tenant_mcp_admin_keys, populated by this handler's routes.
@@ -1066,14 +1003,8 @@ resource "aws_lambda_function" "handler" {
   # document-conformance-judge is also a single-writer: direct
   # process-and-complete with no in-flight claim status depends on never
   # having two sweepers race the same pending rows (THINK-189 KTD4).
-  # analyst-query-broker is capped low: each concurrent execution holds a
-  # dedicated analyst_reader Postgres connection and runs model-authored
-  # SQL — the cap bounds both connection pressure and the blast radius of
-  # a runaway delegation (THINK-228 U3).
-  # analyst-connection-reconciler is capped at 1: the probe holds one
-  # analyst_reader connection and overlapping probes are pointless (the
-  # cluster-global reader has one grant surface / one live schema).
-  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : each.key == "analyst-query-broker" ? 4 : each.key == "analyst-connection-reconciler" ? 1 : each.key == "kb-source-reconciler" ? 1 : each.key == "kb-transcribe" ? var.kb_transcribe_reserved_concurrency : -1
+  # kb-source-reconciler is capped at 1 for the same single-writer reason.
+  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : each.key == "kb-source-reconciler" ? 1 : each.key == "kb-transcribe" ? var.kb_transcribe_reserved_concurrency : -1
 
   environment {
     variables = merge(
@@ -1081,19 +1012,6 @@ resource "aws_lambda_function" "handler" {
       { FUNCTION_NAME = each.key },
       lookup(local.handler_extra_env, each.key, {}),
     )
-  }
-
-  # Analyst data-path handlers get a stable NAT egress IP when
-  # analyst_egress_subnet_ids is set — external Postgres sources behind an IP
-  # allowlist admit that one EIP. Disjoint from the Neptune block below (a
-  # function takes at most one vpc_config).
-  dynamic "vpc_config" {
-    for_each = contains(local.analyst_vpc_handlers, each.key) && local.analyst_vpc_enabled ? [1] : []
-
-    content {
-      subnet_ids         = var.analyst_egress_subnet_ids
-      security_group_ids = var.analyst_egress_security_group_ids
-    }
   }
 
   # Company Brain U5: the identity-graph-projector reaches Neptune inside
@@ -1818,20 +1736,6 @@ locals {
       # retained as a break-glass superuser path for bootstrap/debug.
       "POST /mcp/admin" = "admin-ops-mcp"
 
-      # Analyst query broker — first-party MCP server exposing query
-      # (THINK-228 U3). Callers present the tenant-wide broker service
-      # credential as Bearer; SQL executes as the hardened analyst_reader
-      # role. The seeded postgres-dev connector row points at this route.
-      "POST /mcp/analyst" = "analyst-query-broker"
-
-      # Sourced analyst broker route (THINK-239) — the same handler serves a
-      # registered EXTERNAL Postgres source at /mcp/analyst/<slug>. The broker
-      # requires a signed caller context whose sourceClaims.slug matches the
-      # path (the legacy bearer is never accepted here) and connects using the
-      # per-source reader credential (thinkwork/<stage>/analyst/*, covered by
-      # the shared secretsmanager:GetSecretValue on thinkwork/*).
-      "POST /mcp/analyst/{sourceSlug}" = "analyst-query-broker"
-
       # MCP admin key management — per-tenant Bearer token CRUD. Tokens
       # are shown ONCE at creation (POST returns raw value); server stores
       # sha256 hash only. These specific routes take precedence over the
@@ -2183,64 +2087,6 @@ resource "aws_scheduler_schedule" "skill_runs_reconciler" {
   target {
     arn      = aws_lambda_function.handler["skill-runs-reconciler"].arn
     role_arn = aws_iam_role.scheduler.arn
-  }
-}
-
-# ---------------------------------------------------------------------------
-# analyst_connection_reconciler — probes the analyst_reader connection every
-# 30 min (reachability, IAM auth, SELECT-grant introspection, zero-write
-# assertion, schema-drift hash; all read-only) and stamps the verdict onto
-# tenant_mcp_servers.runtime_metadata.analyst_probe. Dispatch withholds a
-# failing/stale connection loudly (THINK-229 U5, R7/R8, KTD8).
-#
-# retry-0 + DLQ (project_async_retry_idempotency_lessons): the probe is
-# cheap and idempotent — the next 30-minute tick IS the retry, so stacking
-# scheduler retries only adds redundant connections. A failure lands in the
-# DLQ for operator visibility instead.
-# ---------------------------------------------------------------------------
-
-resource "aws_sqs_queue" "analyst_connection_reconciler_dlq" {
-  count                     = local.deploy_lambda_handlers ? 1 : 0
-  name                      = "thinkwork-${var.stage}-analyst-connection-reconciler-dlq"
-  message_retention_seconds = 1209600 # 14 days
-
-  tags = {
-    Name = "thinkwork-${var.stage}-analyst-connection-reconciler-dlq"
-  }
-}
-
-resource "aws_lambda_function_event_invoke_config" "analyst_connection_reconciler" {
-  count                        = local.deploy_lambda_handlers ? 1 : 0
-  function_name                = aws_lambda_function.handler["analyst-connection-reconciler"].function_name
-  maximum_retry_attempts       = 0
-  maximum_event_age_in_seconds = 3600
-
-  destination_config {
-    on_failure {
-      destination = aws_sqs_queue.analyst_connection_reconciler_dlq[0].arn
-    }
-  }
-}
-
-resource "aws_scheduler_schedule" "analyst_connection_reconciler" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-analyst-connection-reconciler"
-  group_name          = "default"
-  schedule_expression = "rate(30 minutes)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["analyst-connection-reconciler"].arn
-    role_arn = aws_iam_role.scheduler.arn
-
-    retry_policy {
-      maximum_retry_attempts = 0
-    }
   }
 }
 
