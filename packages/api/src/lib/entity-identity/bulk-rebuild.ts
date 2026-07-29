@@ -30,6 +30,16 @@
  * the load. Timestamps never round-trip through a JS Date (microsecond
  * truncation re-matches bulk-inserted events forever — live incident,
  * 2026-07-22).
+ *
+ * Memory (THINK-409): the extract is keyset-paginated and the CSVs are
+ * streamed to S3 as multipart uploads, so Lambda RSS is flat regardless of
+ * tenant size. The previous shape read ALL canonicals + ALL mappings into
+ * arrays, built a mappings-by-canonical Map over the whole tenant, and
+ * `join("\n")`ed three whole files before uploading them — ~800k canonicals
+ * peaked north of 4.5GB, and the McPherson account caps Lambda memory at
+ * 3008MB while the tenant heads for many millions of canonicals. Nothing
+ * bigger than one page (canonicals + their mappings) plus one ~8MB upload
+ * part is ever resident.
  */
 
 import { randomUUID } from "node:crypto";
@@ -41,12 +51,16 @@ import {
   type S3BucketRegion,
 } from "@aws-sdk/client-neptunedata";
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from "@aws-sdk/client-s3";
 import { getConfig } from "@thinkwork/runtime-config";
-import { eq, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 import {
   canonicalEntities,
   entityResolutionEvents,
@@ -111,52 +125,87 @@ function csvField(value: string): string {
   return value;
 }
 
-const ENTITY_NODES_HEADER =
-  ":ID,:LABEL,tenantId:String,canonicalId:String,displayName:String,state:String,mergedInto:String";
-const SYSTEM_NODES_HEADER = ":ID,:LABEL,tenantId:String,systemSlug:String";
-const EDGES_HEADER =
-  ":ID,:START_ID,:END_ID,:TYPE,tenantId:String,externalId:String,namespace:String";
+/** The three staged files, keyed the same way as BULK_CSV_FILE_NAMES. */
+export type BulkCsvKind = keyof typeof BULK_CSV_FILE_NAMES;
+
+/** Emission order — node files before the edge file (R3 reads better with
+ * the vertex CSVs first, though the loader sorts this out itself). */
+const BULK_CSV_KINDS = ["entityNodes", "systemNodes", "edges"] as const;
+
+export const BULK_CSV_HEADERS: Record<BulkCsvKind, string> = {
+  entityNodes:
+    ":ID,:LABEL,tenantId:String,canonicalId:String,displayName:String,state:String,mergedInto:String",
+  systemNodes: ":ID,:LABEL,tenantId:String,systemSlug:String",
+  edges:
+    ":ID,:START_ID,:END_ID,:TYPE,tenantId:String,externalId:String,namespace:String",
+};
+
+/** One CSV data row, tagged with the file it belongs in. */
+export interface BulkCsvRow {
+  kind: BulkCsvKind;
+  line: string;
+}
 
 /**
- * Build the node and edge CSV file contents for a tenant's full extract.
- * Byte-compatible with the nudge lane: node/edge ~ids, labels, and
- * property names exactly match what `buildCanonicalResyncOps` MERGEs, so
- * interleaved resyncs and re-runs converge instead of duplicating.
- *
- * Mirrored rules: merged losers are SKIPPED — they exist only relationally
- * (merged_into_id chains in Postgres resolve lineage; nothing traverses the
- * graph for it), and projecting them surfaced raw-uuid ghost nodes in the
- * tenant graph view. The resync lane deletes them on merge for the same
- * reason. Only tenant-visible mappings with a valid source-system slug
- * produce edges and ExternalSystem nodes; a malformed entity_type_slug
- * falls back to the generic `Entity` label.
+ * Cross-canonical accumulator for the row builder: the ExternalSystem dedup
+ * set and the running counts. Shared by the whole-file builder and the
+ * streaming stager so both see one `seenSystems` for the entire run.
  */
-export function buildBulkLoadCsvFiles(args: {
+export interface BulkRowBuilderState {
+  seenSystems: Set<string>;
+  counts: BulkLoadCounts;
+}
+
+export function createBulkRowBuilderState(): BulkRowBuilderState {
+  return {
+    seenSystems: new Set<string>(),
+    counts: {
+      canonicals: 0,
+      entityNodes: 0,
+      systemNodes: 0,
+      externalIdentityEdges: 0,
+      mergedLosersSkipped: 0,
+    },
+  };
+}
+
+/**
+ * The single source of CSV row format — every rule the bulk lane projects
+ * lives here, and both the whole-file builder and the streaming stager go
+ * through it so the two can never drift.
+ *
+ * Rules: merged losers are SKIPPED (counted, no node, no edges) — they exist
+ * only relationally (merged_into_id chains in Postgres resolve lineage;
+ * nothing traverses the graph for it), and projecting them surfaced raw-uuid
+ * ghost nodes in the tenant graph view. Only tenant-visible mappings with a
+ * valid source-system slug produce edges and ExternalSystem nodes; a
+ * malformed entity_type_slug falls back to the generic `Entity` label. Rows
+ * for one canonical are bounded by its mapping count, so the return array is
+ * safe to materialize at any tenant size.
+ */
+export function bulkCsvRowsForCanonical(args: {
   tenantId: string;
-  canonicals: CanonicalRowForSync[];
-  mappingsByCanonical: Map<string, MappingRowForSync[]>;
-}): BulkLoadCsvFiles {
-  const { tenantId } = args;
-  const entityRows: string[] = [];
-  const systemRows: string[] = [];
-  const edgeRows: string[] = [];
-  const seenSystems = new Set<string>();
-  let externalIdentityEdges = 0;
-  let mergedLosersSkipped = 0;
+  canonical: CanonicalRowForSync;
+  mappings: MappingRowForSync[];
+  state: BulkRowBuilderState;
+}): BulkCsvRow[] {
+  const { tenantId, canonical, state } = args;
+  const counts = state.counts;
+  counts.canonicals += 1;
 
-  for (const canonical of args.canonicals) {
-    const nodeId = entityNodeId(tenantId, canonical.id);
-    const label = safeLabel(canonical.entity_type_slug);
+  if (canonical.status === "merged") {
+    // Loser: not projected. Merge lineage lives in Postgres
+    // (merged_into_id); the graph carries only surviving entities.
+    counts.mergedLosersSkipped += 1;
+    return [];
+  }
 
-    if (canonical.status === "merged") {
-      // Loser: not projected. Merge lineage lives in Postgres
-      // (merged_into_id); the graph carries only surviving entities.
-      mergedLosersSkipped += 1;
-      continue;
-    }
-
-    entityRows.push(
-      [
+  const nodeId = entityNodeId(tenantId, canonical.id);
+  const label = safeLabel(canonical.entity_type_slug);
+  const rows: BulkCsvRow[] = [
+    {
+      kind: "entityNodes",
+      line: [
         csvField(nodeId),
         csvField(label),
         csvField(tenantId),
@@ -165,71 +214,242 @@ export function buildBulkLoadCsvFiles(args: {
         csvField(canonical.status),
         "", // mergedInto — only merged losers carry it
       ].join(","),
-    );
+    },
+  ];
+  counts.entityNodes += 1;
 
-    for (const mapping of args.mappingsByCanonical.get(canonical.id) ?? []) {
-      if (mapping.visibility !== "tenant") continue;
-      const system = mapping.source_system;
-      if (!SLUG_RE.test(system)) continue;
-      const sysId = systemNodeId(tenantId, system);
-      if (!seenSystems.has(sysId)) {
-        seenSystems.add(sysId);
-        systemRows.push(
-          [
-            csvField(sysId),
-            "ExternalSystem",
-            csvField(tenantId),
-            csvField(system),
-          ].join(","),
-        );
-      }
-      edgeRows.push(
-        [
-          csvField(
-            systemEdgeId(tenantId, canonical.id, system, mapping.namespace),
-          ),
-          csvField(nodeId),
+  for (const mapping of args.mappings) {
+    if (mapping.visibility !== "tenant") continue;
+    const system = mapping.source_system;
+    if (!SLUG_RE.test(system)) continue;
+    const sysId = systemNodeId(tenantId, system);
+    if (!state.seenSystems.has(sysId)) {
+      state.seenSystems.add(sysId);
+      rows.push({
+        kind: "systemNodes",
+        line: [
           csvField(sysId),
-          "external_identity",
+          "ExternalSystem",
           csvField(tenantId),
-          csvField(mapping.external_id),
-          csvField(mapping.namespace),
+          csvField(system),
         ].join(","),
-      );
-      externalIdentityEdges += 1;
+      });
+      counts.systemNodes += 1;
+    }
+    rows.push({
+      kind: "edges",
+      line: [
+        csvField(
+          systemEdgeId(tenantId, canonical.id, system, mapping.namespace),
+        ),
+        csvField(nodeId),
+        csvField(sysId),
+        "external_identity",
+        csvField(tenantId),
+        csvField(mapping.external_id),
+        csvField(mapping.namespace),
+      ].join(","),
+    });
+    counts.externalIdentityEdges += 1;
+  }
+
+  return rows;
+}
+
+/**
+ * Build the node and edge CSV file contents for a tenant's full extract.
+ * Byte-compatible with the nudge lane: node/edge ~ids, labels, and
+ * property names exactly match what `buildCanonicalResyncOps` MERGEs, so
+ * interleaved resyncs and re-runs converge instead of duplicating.
+ *
+ * Whole-tenant, in-memory form: fine for tests and small extracts, but the
+ * bulk-rebuild orchestrator streams through `bulkCsvRowsForCanonical`
+ * instead (see the module doc on memory). Both share the row builder, so
+ * this file's bytes and the streamed object's bytes are identical.
+ */
+export function buildBulkLoadCsvFiles(args: {
+  tenantId: string;
+  canonicals: CanonicalRowForSync[];
+  mappingsByCanonical: Map<string, MappingRowForSync[]>;
+}): BulkLoadCsvFiles {
+  const state = createBulkRowBuilderState();
+  const rowsByKind: Record<BulkCsvKind, string[]> = {
+    entityNodes: [],
+    systemNodes: [],
+    edges: [],
+  };
+
+  for (const canonical of args.canonicals) {
+    const rows = bulkCsvRowsForCanonical({
+      tenantId: args.tenantId,
+      canonical,
+      mappings: args.mappingsByCanonical.get(canonical.id) ?? [],
+      state,
+    });
+    for (const row of rows) {
+      rowsByKind[row.kind].push(row.line);
     }
   }
 
   const files: BulkCsvFile[] = [];
-  if (entityRows.length > 0) {
+  for (const kind of BULK_CSV_KINDS) {
+    const rows = rowsByKind[kind];
+    if (rows.length === 0) continue;
     files.push({
-      name: BULK_CSV_FILE_NAMES.entityNodes,
-      content: [ENTITY_NODES_HEADER, ...entityRows].join("\n") + "\n",
-    });
-  }
-  if (systemRows.length > 0) {
-    files.push({
-      name: BULK_CSV_FILE_NAMES.systemNodes,
-      content: [SYSTEM_NODES_HEADER, ...systemRows].join("\n") + "\n",
-    });
-  }
-  if (edgeRows.length > 0) {
-    files.push({
-      name: BULK_CSV_FILE_NAMES.edges,
-      content: [EDGES_HEADER, ...edgeRows].join("\n") + "\n",
+      name: BULK_CSV_FILE_NAMES[kind],
+      content: [BULK_CSV_HEADERS[kind], ...rows].join("\n") + "\n",
     });
   }
 
-  return {
-    files,
-    counts: {
-      canonicals: args.canonicals.length,
-      entityNodes: entityRows.length,
-      systemNodes: systemRows.length,
-      externalIdentityEdges,
-      mergedLosersSkipped,
+  return { files, counts: state.counts };
+}
+
+// ---------------------------------------------------------------------------
+// Streaming CSV stager (THINK-409) — one object, bounded memory
+// ---------------------------------------------------------------------------
+
+/** S3 multipart minimum part size is 5MB (the last part is exempt); 8MB
+ * keeps part counts low without meaningfully moving Lambda RSS. */
+const MULTIPART_PART_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Writes one CSV to S3 without ever holding the whole file: rows accumulate
+ * into a ~8MB buffer that is flushed as a multipart part. A file small
+ * enough to never fill a part is written with a plain PutObject — no
+ * multipart bookkeeping for the (always tiny) ExternalSystem node file, and
+ * one round trip instead of three for small tenants.
+ *
+ * Byte-compatible with `buildBulkLoadCsvFiles`: header line, rows joined by
+ * "\n", trailing "\n". A stager that never saw a row stages NOTHING — the
+ * loader must not see an empty file, and the orchestrator's empty-tenant
+ * path keys off the staged count.
+ */
+export class StreamingCsvStager {
+  private buffer: string[] = [];
+  private bufferBytes = 0;
+  private uploadId: string | null = null;
+  private parts: Array<{ ETag: string; PartNumber: number }> = [];
+  private rows = 0;
+
+  constructor(
+    private readonly opts: {
+      s3: StagingS3Client;
+      bucket: string;
+      key: string;
+      header: string;
+      partBytes?: number;
     },
-  };
+  ) {}
+
+  get rowCount(): number {
+    return this.rows;
+  }
+
+  /** True once a multipart upload exists and must be completed or aborted. */
+  get isMultipart(): boolean {
+    return this.uploadId !== null;
+  }
+
+  async writeRow(line: string): Promise<void> {
+    if (this.rows === 0) this.append(`${this.opts.header}\n`);
+    this.rows += 1;
+    this.append(`${line}\n`);
+    if (this.bufferBytes >= (this.opts.partBytes ?? MULTIPART_PART_BYTES)) {
+      await this.flushPart();
+    }
+  }
+
+  /** Finish the object. Returns whether anything was staged at all. */
+  async finish(): Promise<boolean> {
+    if (this.rows === 0) return false;
+    if (this.uploadId === null) {
+      const body = this.takeBuffer();
+      await this.opts.s3.send(
+        new PutObjectCommand({
+          Bucket: this.opts.bucket,
+          Key: this.opts.key,
+          Body: body,
+          ContentType: "text/csv",
+        }),
+      );
+      return true;
+    }
+    if (this.bufferBytes > 0) await this.flushPart();
+    await this.opts.s3.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: this.opts.bucket,
+        Key: this.opts.key,
+        UploadId: this.uploadId,
+        MultipartUpload: { Parts: this.parts },
+      }),
+    );
+    return true;
+  }
+
+  /** Best-effort teardown of an in-flight multipart upload — an abandoned
+   * upload keeps billable parts around until the bucket lifecycle reaps it. */
+  async abort(): Promise<void> {
+    if (this.uploadId === null) return;
+    const uploadId = this.uploadId;
+    this.uploadId = null;
+    this.buffer = [];
+    this.bufferBytes = 0;
+    try {
+      await this.opts.s3.send(
+        new AbortMultipartUploadCommand({
+          Bucket: this.opts.bucket,
+          Key: this.opts.key,
+          UploadId: uploadId,
+        }),
+      );
+    } catch (err) {
+      console.warn("[bulk-rebuild] multipart abort failed (harmless)", {
+        key: this.opts.key,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  private append(chunk: string): void {
+    this.buffer.push(chunk);
+    this.bufferBytes += Buffer.byteLength(chunk);
+  }
+
+  private takeBuffer(): string {
+    const body = this.buffer.join("");
+    this.buffer = [];
+    this.bufferBytes = 0;
+    return body;
+  }
+
+  private async flushPart(): Promise<void> {
+    if (this.uploadId === null) {
+      const created = (await this.opts.s3.send(
+        new CreateMultipartUploadCommand({
+          Bucket: this.opts.bucket,
+          Key: this.opts.key,
+          ContentType: "text/csv",
+        }),
+      )) as { UploadId?: string };
+      if (!created.UploadId) {
+        throw new Error(
+          `CreateMultipartUpload returned no UploadId for ${this.opts.key}`,
+        );
+      }
+      this.uploadId = created.UploadId;
+    }
+    const partNumber = this.parts.length + 1;
+    const uploaded = (await this.opts.s3.send(
+      new UploadPartCommand({
+        Bucket: this.opts.bucket,
+        Key: this.opts.key,
+        UploadId: this.uploadId,
+        PartNumber: partNumber,
+        Body: this.takeBuffer(),
+      }),
+    )) as { ETag?: string };
+    this.parts.push({ ETag: uploaded.ETag ?? "", PartNumber: partNumber });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -380,6 +600,10 @@ export interface BulkRebuildArgs {
   loadBucket?: string;
   loaderRoleArn?: string;
   region?: string;
+  /** Canonicals per keyset page during extract (tests use tiny pages). */
+  extractPageSize?: number;
+  /** Bytes buffered before a multipart part is flushed (tests use tiny parts). */
+  uploadPartBytes?: number;
   /** Lambda's context.getRemainingTimeInMillis; defaults to no deadline. */
   getRemainingTimeMs?: () => number;
   deadlineMarginMs?: number;
@@ -392,6 +616,10 @@ export interface BulkRebuildArgs {
 const DEFAULT_DEADLINE_MARGIN_MS = 90_000;
 const DEFAULT_STALE_FENCE_MS = 30 * 60_000;
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
+/** Keyset page size for the canonical extract. Big enough that the page
+ * round trips don't dominate a multi-million-row tenant, small enough that
+ * a page plus its mappings is a rounding error against Lambda memory. */
+const DEFAULT_EXTRACT_PAGE_SIZE = 5_000;
 
 const STAGE_PREFIX_ROOT = "thinkwork-identity";
 
@@ -767,60 +995,115 @@ export async function bulkRebuildTenantGraph(
       }
     }
 
+    // Extract + stage as one streaming pass (THINK-409): canonicals are read
+    // a keyset page at a time, each page's mappings are fetched and grouped
+    // for that page only, and rows go straight into the S3 stagers. Peak
+    // residency is one page plus one upload part — flat at any tenant size.
     phase = "extract";
     if (deadlineNear()) throw new Error("deadline reached before extract");
-    const canonicals = (await db
-      .select({
-        id: canonicalEntities.id,
-        entity_type_slug: canonicalEntities.entity_type_slug,
-        display_name: canonicalEntities.display_name,
-        status: canonicalEntities.status,
-        merged_into_id: canonicalEntities.merged_into_id,
-      })
-      .from(canonicalEntities)
-      .where(
-        eq(canonicalEntities.tenant_id, tenantId),
-      )) as CanonicalRowForSync[];
-    const mappingRows = await db
-      .select({
-        canonical_entity_id: entitySourceMappings.canonical_entity_id,
-        source_system: entitySourceMappings.source_system,
-        namespace: entitySourceMappings.namespace,
-        external_id: entitySourceMappings.external_id,
-        visibility: entitySourceMappings.visibility,
-      })
-      .from(entitySourceMappings)
-      .where(eq(entitySourceMappings.tenant_id, tenantId));
-    const mappingsByCanonical = new Map<string, MappingRowForSync[]>();
-    for (const row of mappingRows) {
-      const list = mappingsByCanonical.get(row.canonical_entity_id) ?? [];
-      list.push(row);
-      mappingsByCanonical.set(row.canonical_entity_id, list);
-    }
-
-    const { files, counts } = buildBulkLoadCsvFiles({
-      tenantId,
-      canonicals,
-      mappingsByCanonical,
-    });
-
-    if (files.length === 0) {
-      // Empty tenant: nothing to load — success tail without a loader job.
-      return await finalizeSuccess(null, null, counts);
-    }
-
-    phase = "upload";
+    const pageSize = args.extractPageSize ?? DEFAULT_EXTRACT_PAGE_SIZE;
     const prefix = stagingPrefix(tenantId, randomUUID());
-    for (const file of files) {
-      if (deadlineNear()) throw new Error("deadline reached during upload");
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: loadBucket,
-          Key: `${prefix}${file.name}`,
-          Body: file.content,
-          ContentType: "text/csv",
+    const stagers = Object.fromEntries(
+      BULK_CSV_KINDS.map((kind) => [
+        kind,
+        new StreamingCsvStager({
+          s3,
+          bucket: loadBucket,
+          key: `${prefix}${BULK_CSV_FILE_NAMES[kind]}`,
+          header: BULK_CSV_HEADERS[kind],
+          partBytes: args.uploadPartBytes,
         }),
-      );
+      ]),
+    ) as Record<BulkCsvKind, StreamingCsvStager>;
+    const rowState = createBulkRowBuilderState();
+    const counts = rowState.counts;
+    let stagedFiles = 0;
+
+    try {
+      let afterId: string | null = null;
+      for (;;) {
+        const page = (await db
+          .select({
+            id: canonicalEntities.id,
+            entity_type_slug: canonicalEntities.entity_type_slug,
+            display_name: canonicalEntities.display_name,
+            status: canonicalEntities.status,
+            merged_into_id: canonicalEntities.merged_into_id,
+          })
+          .from(canonicalEntities)
+          .where(
+            afterId === null
+              ? eq(canonicalEntities.tenant_id, tenantId)
+              : and(
+                  eq(canonicalEntities.tenant_id, tenantId),
+                  gt(canonicalEntities.id, afterId),
+                ),
+          )
+          .orderBy(asc(canonicalEntities.id))
+          .limit(pageSize)) as CanonicalRowForSync[];
+        if (page.length === 0) break;
+        afterId = page[page.length - 1].id;
+
+        // Mappings for THIS page only. `seenSystems` lives in rowState, so
+        // ExternalSystem dedup still spans the whole run.
+        const mappingRows = await db
+          .select({
+            canonical_entity_id: entitySourceMappings.canonical_entity_id,
+            source_system: entitySourceMappings.source_system,
+            namespace: entitySourceMappings.namespace,
+            external_id: entitySourceMappings.external_id,
+            visibility: entitySourceMappings.visibility,
+          })
+          .from(entitySourceMappings)
+          .where(
+            and(
+              eq(entitySourceMappings.tenant_id, tenantId),
+              inArray(
+                entitySourceMappings.canonical_entity_id,
+                page.map((row) => row.id),
+              ),
+            ),
+          );
+        const mappingsByCanonical = new Map<string, MappingRowForSync[]>();
+        for (const row of mappingRows) {
+          const list = mappingsByCanonical.get(row.canonical_entity_id) ?? [];
+          list.push(row);
+          mappingsByCanonical.set(row.canonical_entity_id, list);
+        }
+
+        for (const canonical of page) {
+          const rows = bulkCsvRowsForCanonical({
+            tenantId,
+            canonical,
+            mappings: mappingsByCanonical.get(canonical.id) ?? [],
+            state: rowState,
+          });
+          for (const row of rows) {
+            await stagers[row.kind].writeRow(row.line);
+          }
+        }
+
+        if (page.length < pageSize) break;
+        // Between pages only — a trip here throws so the catch below aborts
+        // the in-flight multipart uploads and the outer catch releases the
+        // fence (nothing has started on the loader side yet).
+        if (deadlineNear()) throw new Error("deadline reached during extract");
+      }
+
+      phase = "upload";
+      for (const kind of BULK_CSV_KINDS) {
+        if (deadlineNear()) throw new Error("deadline reached during upload");
+        if (await stagers[kind].finish()) stagedFiles += 1;
+      }
+    } catch (err) {
+      await Promise.all(BULK_CSV_KINDS.map((kind) => stagers[kind].abort()));
+      throw err;
+    }
+
+    if (stagedFiles === 0) {
+      // Empty tenant: nothing staged, nothing to load — success tail
+      // without a loader job.
+      return await finalizeSuccess(null, null, counts);
     }
 
     phase = "start";

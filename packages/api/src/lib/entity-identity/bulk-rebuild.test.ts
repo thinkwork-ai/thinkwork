@@ -13,7 +13,14 @@ afterAll(() => {
   }
 });
 
-import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
+  DeleteObjectCommand,
+  PutObjectCommand,
+  UploadPartCommand,
+} from "@aws-sdk/client-s3";
 import { identityGraphProjectionCursors } from "@thinkwork/database-pg/schema";
 import { createFakeIdentityDb } from "./fake-db.test-helper.js";
 import {
@@ -73,19 +80,87 @@ class FakeLoader implements NeptuneLoaderClient {
   }
 }
 
-function makeFakeS3(timeline?: string[]) {
+/**
+ * Fake S3 covering both staging shapes: a plain PutObject (small files) and
+ * the multipart streaming path. `objects` holds the assembled body of every
+ * finished object, so tests can compare staged bytes against the in-memory
+ * builder's output byte-for-byte.
+ */
+function makeFakeS3(
+  timeline?: string[],
+  hooks?: { onUploadPart?: (partNumber: number) => void },
+) {
   const puts: Array<{ Bucket?: string; Key?: string; Body?: unknown }> = [];
   const deletes: Array<{ Bucket?: string; Key?: string }> = [];
+  const aborts: Array<{ Key?: string; UploadId?: string }> = [];
+  const objects = new Map<string, string>();
+  const partsByUpload = new Map<string, Map<number, string>>();
+  const partCounts = new Map<string, number>();
+  let uploadSeq = 0;
+
   const send = vi.fn(async (command: unknown) => {
     if (command instanceof PutObjectCommand) {
+      const input = command.input as { Key?: string; Body?: unknown };
       puts.push(command.input as never);
-      timeline?.push(`put:${(command.input as { Key?: string }).Key}`);
-    } else if (command instanceof DeleteObjectCommand) {
+      objects.set(input.Key!, String(input.Body ?? ""));
+      timeline?.push(`put:${input.Key}`);
+      return {};
+    }
+    if (command instanceof CreateMultipartUploadCommand) {
+      const input = command.input as { Key?: string };
+      const uploadId = `upload-${(uploadSeq += 1)}`;
+      partsByUpload.set(uploadId, new Map());
+      timeline?.push(`mpu-create:${input.Key}`);
+      return { UploadId: uploadId };
+    }
+    if (command instanceof UploadPartCommand) {
+      const input = command.input as {
+        Key?: string;
+        UploadId?: string;
+        PartNumber?: number;
+        Body?: unknown;
+      };
+      hooks?.onUploadPart?.(input.PartNumber!);
+      partsByUpload
+        .get(input.UploadId!)!
+        .set(input.PartNumber!, String(input.Body ?? ""));
+      partCounts.set(input.Key!, (partCounts.get(input.Key!) ?? 0) + 1);
+      timeline?.push(`mpu-part:${input.Key}:${input.PartNumber}`);
+      return { ETag: `etag-${input.UploadId}-${input.PartNumber}` };
+    }
+    if (command instanceof CompleteMultipartUploadCommand) {
+      const input = command.input as {
+        Key?: string;
+        UploadId?: string;
+        MultipartUpload?: { Parts?: Array<{ PartNumber?: number }> };
+      };
+      const parts = partsByUpload.get(input.UploadId!)!;
+      const ordered = [...(input.MultipartUpload?.Parts ?? [])]
+        .sort((a, b) => a.PartNumber! - b.PartNumber!)
+        .map((p) => parts.get(p.PartNumber!) ?? "");
+      objects.set(input.Key!, ordered.join(""));
+      timeline?.push(`put:${input.Key}`);
+      return {};
+    }
+    if (command instanceof AbortMultipartUploadCommand) {
+      aborts.push(command.input as never);
+      return {};
+    }
+    if (command instanceof DeleteObjectCommand) {
       deletes.push(command.input as never);
+      return {};
     }
     return {};
   });
-  return { s3: { send } as never, puts, deletes };
+  return {
+    s3: { send } as never,
+    puts,
+    deletes,
+    aborts,
+    objects,
+    partCounts,
+    send,
+  };
 }
 
 const activeCanonical = {
@@ -866,8 +941,7 @@ describe("bulkRebuildTenantGraph", () => {
     fake.selectQueue.push(
       [], // fence read
       [], // no events → no watermark
-      [], // canonicals
-      [], // mappings
+      [], // canonicals page 1 — empty, so no mappings query is issued
       [fenceRow()], // finalize fence re-read (no watermark)
       [], // snapshot mappings
       [], // snapshot redirects
@@ -895,6 +969,222 @@ describe("bulkRebuildTenantGraph", () => {
       bulk_load_started_at: null,
     });
     expect("last_event_id" in finalWrite!.values).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // THINK-409 — streaming extract/staging: flat memory, identical bytes
+  // -------------------------------------------------------------------------
+
+  describe("streaming extract + multipart staging", () => {
+    /** Four canonicals across two pages; page 2 reuses page 1's "twenty"
+     * system (dedup must span pages) and carries a merged loser. */
+    const pagedCanonicals = [
+      { ...activeCanonical, id: "can-001", display_name: "Alpha, Inc." },
+      {
+        ...activeCanonical,
+        id: "can-002",
+        display_name: 'Beta "Bee"',
+        entity_type_slug: "bad) DELETE (n",
+      },
+      { ...mergedLoser, id: "can-003" },
+      { ...activeCanonical, id: "can-004", display_name: "Delta\nDivision" },
+    ];
+    const mappingsById: Record<string, MappingRowForSync[]> = {
+      "can-001": twoMappings,
+      "can-002": [
+        {
+          source_system: "gmail",
+          namespace: "user-1",
+          external_id: "nope@example.com",
+          visibility: "private",
+        },
+      ],
+      "can-003": twoMappings, // loser: repointed rows must emit nothing
+      "can-004": [
+        // "twenty" again — the ExternalSystem node was already emitted on
+        // page 1, so no second system row may appear.
+        {
+          source_system: "twenty",
+          namespace: "",
+          external_id: "cmp_999",
+          visibility: "tenant",
+        },
+        {
+          source_system: "not a slug!",
+          namespace: "",
+          external_id: "x",
+          visibility: "tenant",
+        },
+      ],
+    };
+
+    const withMappingKey = (id: string) =>
+      mappingsById[id].map((m) => ({ ...m, canonical_entity_id: id }));
+
+    /** Queue the paged extract selects for pageSize 2 over the fixture. */
+    function queuePagedExtract(fake: ReturnType<typeof createFakeIdentityDb>) {
+      fake.selectQueue.push(
+        [], // fence read
+        [{ id: "evt-9", created_at: WATERMARK_AT }], // watermark
+        pagedCanonicals.slice(0, 2), // page 1
+        [...withMappingKey("can-001"), ...withMappingKey("can-002")],
+        pagedCanonicals.slice(2, 4), // page 2
+        [...withMappingKey("can-003"), ...withMappingKey("can-004")],
+        [], // page 3 — empty, extract stops
+        [
+          fenceRow({
+            bulk_load_id: "load-1",
+            bulk_load_started_at: NOW,
+            bulk_watermark_created_at: WATERMARK_AT,
+            bulk_watermark_event_id: "evt-9",
+          }),
+        ], // finalize fence re-read
+        [], // snapshot mappings
+        [], // snapshot redirects
+      );
+      fake.insertReturningQueue.push([{ tenant_id: "tenant-1" }]);
+    }
+
+    const golden = () =>
+      buildBulkLoadCsvFiles({
+        tenantId: "tenant-1",
+        canonicals: pagedCanonicals,
+        mappingsByCanonical: mapOf(
+          Object.entries(mappingsById) as Array<[string, MappingRowForSync[]]>,
+        ),
+      });
+
+    it("multi-page extract stages bytes identical to the whole-file builder (and counts to match)", async () => {
+      const fake = createFakeIdentityDb();
+      const loader = new FakeLoader();
+      const { s3, objects, partCounts } = makeFakeS3();
+      queuePagedExtract(fake);
+      loader.statusQueue.push({ status: "LOAD_COMPLETED" });
+
+      const result = await bulkRebuildTenantGraph(
+        baseArgs({
+          db: fake.db,
+          s3,
+          loader,
+          extractPageSize: 2,
+          // Force real multipart: every row overflows the part buffer.
+          uploadPartBytes: 1,
+        }) as never,
+      );
+
+      expect(result.ok).toBe(true);
+      const expected = golden();
+      expect((result as { counts: unknown }).counts).toEqual(expected.counts);
+      // Sanity: the fixture exercises every rule (loser skipped, private
+      // mapping dropped, bad slug dropped, system dedup across the page
+      // boundary, quoted fields).
+      expect(expected.counts).toEqual({
+        canonicals: 4,
+        entityNodes: 3,
+        systemNodes: 2,
+        externalIdentityEdges: 3,
+        mergedLosersSkipped: 1,
+      });
+
+      const prefix = [...objects.keys()][0].replace(/[^/]+$/, "");
+      for (const file of expected.files) {
+        expect(objects.get(`${prefix}${file.name}`)).toBe(file.content);
+      }
+      const stagedKeys = [...objects.keys()].filter((k) =>
+        k.startsWith(prefix),
+      );
+      expect(stagedKeys.sort()).toEqual(
+        expected.files.map((f) => `${prefix}${f.name}`).sort(),
+      );
+      // Multipart actually ran (one part per row + header, not one PutObject).
+      expect(
+        partCounts.get(`${prefix}${BULK_CSV_FILE_NAMES.entityNodes}`) ?? 0,
+      ).toBeGreaterThan(1);
+    });
+
+    it("small files take the single PutObject path but stage identical bytes", async () => {
+      const fake = createFakeIdentityDb();
+      const loader = new FakeLoader();
+      const { s3, objects, puts, partCounts } = makeFakeS3();
+      queuePagedExtract(fake);
+      loader.statusQueue.push({ status: "LOAD_COMPLETED" });
+
+      const result = await bulkRebuildTenantGraph(
+        baseArgs({ db: fake.db, s3, loader, extractPageSize: 2 }) as never,
+      );
+
+      expect(result.ok).toBe(true);
+      expect(partCounts.size).toBe(0); // no multipart at all
+      expect(puts.filter((p) => p.Bucket === "load-bucket")).toHaveLength(3);
+      const prefix = [...objects.keys()][0].replace(/[^/]+$/, "");
+      for (const file of golden().files) {
+        expect(objects.get(`${prefix}${file.name}`)).toBe(file.content);
+      }
+    });
+
+    it("staging failure aborts the in-flight multipart uploads and releases the fence", async () => {
+      const fake = createFakeIdentityDb();
+      const loader = new FakeLoader();
+      const { s3, aborts } = makeFakeS3(undefined, {
+        onUploadPart: (partNumber) => {
+          if (partNumber === 3) throw new Error("s3 exploded");
+        },
+      });
+      queuePagedExtract(fake);
+
+      const result = await bulkRebuildTenantGraph(
+        baseArgs({
+          db: fake.db,
+          s3,
+          loader,
+          extractPageSize: 2,
+          uploadPartBytes: 1,
+        }) as never,
+      );
+
+      expect(result).toMatchObject({ ok: false, status: "failed" });
+      expect((result as { error: string }).error).toContain("s3 exploded");
+      expect(loader.started).toEqual([]);
+      // The entity-node upload was in flight — it must be aborted, not left
+      // to accrue orphaned parts.
+      expect(aborts.length).toBeGreaterThan(0);
+      expect(aborts.every((a) => a.UploadId !== undefined)).toBe(true);
+      const release = fake.updates.find(
+        (w) =>
+          (w.values as { bulk_load_started_at?: unknown })
+            .bulk_load_started_at === null,
+      );
+      expect(release).toBeDefined();
+    });
+
+    it("deadline trip between pages fails in the extract phase and stages no load", async () => {
+      const fake = createFakeIdentityDb();
+      const loader = new FakeLoader();
+      const { s3, aborts } = makeFakeS3();
+      queuePagedExtract(fake);
+      // Plenty of time for the pre-extract check, none after page 1.
+      let calls = 0;
+      const getRemainingTimeMs = () => {
+        calls += 1;
+        return calls > 1 ? 0 : 10 * 60_000;
+      };
+
+      const result = await bulkRebuildTenantGraph(
+        baseArgs({
+          db: fake.db,
+          s3,
+          loader,
+          extractPageSize: 2,
+          uploadPartBytes: 1,
+          getRemainingTimeMs,
+        }) as never,
+      );
+
+      expect(result).toMatchObject({ ok: false, status: "failed" });
+      expect((result as { error: string }).error).toContain("extract");
+      expect(loader.started).toEqual([]);
+      expect(aborts.length).toBeGreaterThan(0);
+    });
   });
 
   it("unconfigured (no load bucket / loader role): structured failure, nothing touched", async () => {
