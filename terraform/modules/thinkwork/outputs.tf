@@ -660,11 +660,6 @@ output "capability_private_interpreter_security_group_id" {
   value       = module.capability_broker.capability_private_interpreter_security_group_id
 }
 
-output "analyst_egress_ip" {
-  description = "Stable NAT egress IP of the VPC-attached analyst data-path Lambdas — the address an external database's IP allowlist must admit. Null unless analyst_lambda_vpc_egress is set (and the stack has a NAT gateway)."
-  value       = var.analyst_lambda_vpc_egress ? module.vpc.nat_gateway_public_ip : null
-}
-
 # AgentCore Harness managed runtime outputs. Rollout-era `*_proof_*` aliases
 # remain below so existing automation can migrate without replacing resources.
 output "agentcore_multiplayer_proof_workload_identity_arn" {

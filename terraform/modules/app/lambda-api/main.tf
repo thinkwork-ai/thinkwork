@@ -19,21 +19,10 @@
 data "aws_caller_identity" "current" {}
 
 locals {
-  # Handlers that open direct Postgres connections to registered analyst data
-  # sources. VPC-attaching them (analyst_egress_subnet_ids) gives their egress
-  # the NAT gateway's stable EIP, which external databases behind an IP
-  # allowlist can admit — a non-VPC Lambda egresses from the shared AWS pool
-  # and can never satisfy such an allowlist.
-  analyst_vpc_enabled = length(var.analyst_egress_subnet_ids) > 0 && length(var.analyst_egress_security_group_ids) > 0
   # Company Brain U5: the identity-graph-projector attaches to the VPC only
   # when both Neptune network inputs are present (disjoint from the two
-  # blocks above — a function takes at most one vpc_config).
+  # block above — a function takes at most one vpc_config).
   neptune_vpc_enabled = length(var.neptune_subnet_ids) > 0 && length(var.neptune_security_group_ids) > 0
-  analyst_vpc_handlers = toset([
-    "graphql-http",
-    "analyst-query-broker",
-    "analyst-connection-reconciler",
-  ])
   # Constructed rather than read from aws_apigatewayv2_stage.default.invoke_url
   # (the two are identical for an HTTP API's $default stage). Reading it off
   # the stage made every Lambda's env depend on the stage, which forbids the
@@ -200,12 +189,12 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
 # Every VPC-attached handler on the shared Lambda role needs the ENI
 # create/describe/delete grant, or its invocations fail before the handler
 # runs. This was gated on the OKF EFS mount alone, which was true by accident:
-# okf-efs-refresh was simply the first VPC-attached handler. The analyst
-# data-path handlers and the Neptune-attached identity-graph-projector share
-# this role and had been riding that gate. Gate on the surviving VPC consumers
-# instead — the OKF mount is gone as of the wiki-removal arc U3.
+# okf-efs-refresh was simply the first VPC-attached handler. The
+# Neptune-attached identity-graph-projector shares this role and had been
+# riding that gate. Gate on the surviving VPC consumer instead — the OKF
+# mount is gone as of the wiki-removal arc U3.
 resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
-  count = local.analyst_vpc_enabled || local.neptune_vpc_enabled ? 1 : 0
+  count = local.neptune_vpc_enabled ? 1 : 0
 
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"

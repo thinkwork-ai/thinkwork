@@ -41,8 +41,6 @@ ESBUILD_FLAGS=(
 # InvokeModel callers) that aren't in the default
 # Lambda Node 20 runtime's built-in SDK, or are newer than what ships there.
 # Bundle them inline so the pinned node_modules version is used.
-# analyst-query-broker is here for @aws-sdk/rds-signer (THINK-229 U1 IAM
-# token minting) — not guaranteed in the runtime's built-in SDK set.
 BUNDLED_AGENTCORE_ESBUILD_FLAGS=(
   --bundle
   --platform=node
@@ -88,7 +86,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "chat-agent-invoke" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wakeup-processor" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "analyst-query-broker" ] || [ "$name" = "analyst-connection-reconciler" ] || [ "$name" = "knowledge-base-manager" ] || [ "$name" = "skills" ] || [ "$name" = "identity-graph-projector" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "chat-agent-invoke" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wakeup-processor" ] || [ "$name" = "ontology-scan" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "knowledge-graph-observations-ingest" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "knowledge-base-manager" ] || [ "$name" = "skills" ] || [ "$name" = "identity-graph-projector" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -555,10 +553,6 @@ build_handler "webhook-deliveries-cleanup" \
 build_handler "skill-runs-reconciler" \
   "$REPO_ROOT/packages/api/src/handlers/skill-runs-reconciler.ts"
 
-# THINK-229 U5 — bundled (see BUNDLED_AGENTCORE_ESBUILD_FLAGS above) for
-# @aws-sdk/rds-signer + pg, pulled in via @thinkwork/lambda/analyst-reader-db.
-build_handler "analyst-connection-reconciler" \
-  "$REPO_ROOT/packages/api/src/handlers/analyst-connection-reconciler.ts"
 
 # External S3 KB source U6 — hourly as-role access probe + daily sync
 # dispatch for s3-connect sources (paired with its handlers.tf entry).
@@ -629,9 +623,9 @@ build_handler "ontology-reprocess" \
   "$REPO_ROOT/packages/api/src/handlers/ontology-reprocess.ts"
 
 # THINK-321 U7 — bootstrap/drift identity matching. No Bedrock/AgentCore
-# SDK imports (source rows ride the analyst broker's HTTP route + the
-# Twenty REST client), so the standard externalized @aws-sdk/* build is
-# correct — do NOT add BUNDLED_AGENTCORE_ESBUILD_FLAGS here.
+# SDK imports (source rows ride the Twenty REST client), so the standard
+# externalized @aws-sdk/* build is correct — do NOT add
+# BUNDLED_AGENTCORE_ESBUILD_FLAGS here.
 build_handler "identity-match" \
   "$REPO_ROOT/packages/api/src/handlers/identity-match.ts"
 
@@ -650,11 +644,6 @@ build_handler "agentcore-admin" \
 build_handler "admin-ops-mcp" \
   "$REPO_ROOT/packages/lambda/admin-ops-mcp.ts"
 
-# Analyst query broker — first-party MCP server at POST /mcp/analyst
-# (THINK-228 U3). Executes model-authored SQL as the hardened
-# analyst_reader role; standard externalized @aws-sdk/* build.
-build_handler "analyst-query-broker" \
-  "$REPO_ROOT/packages/lambda/analyst-query-broker.ts"
 
 # Capability broker (THINK-280 U3) — action-time policy + replay-safe PoP
 # sessions behind a private REST API. Ship-inert: deployed only when the

@@ -118,7 +118,6 @@ TF_VAR_ARGS=(
   -var "agentcore_memory_id=${AGENTCORE_MEMORY_ID:-}"
   -var "mcp_custom_domain=${MCP_CUSTOM_DOMAIN}"
   -var "mcp_custom_domain_ready=${MCP_CUSTOM_DOMAIN_READY:-false}"
-  -var "analyst_policy_source=${ANALYST_POLICY_SOURCE:-row}"
   # Company Brain twin (plan 2026-07-21-001 U5): Neptune wiring for
   # the identity-graph-projector. Values come from the etl-platform
   # neptune stack's outputs (repo vars; empty = twin disabled).

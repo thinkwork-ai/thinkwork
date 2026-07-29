@@ -401,7 +401,7 @@ probe_trigger() {
 }
 
 probe_role_membership() {
-  # Accepts <granted_role>:<member_role> (e.g. rds_iam:analyst_reader) —
+  # Accepts <granted_role>:<member_role> (e.g. rds_iam:compliance_reader) —
   # verifies GRANT <granted_role> TO <member_role> has been applied.
   # Memberships are cluster-global like roles.
   local spec="$1"

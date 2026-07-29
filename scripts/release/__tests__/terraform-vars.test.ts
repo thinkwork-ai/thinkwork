@@ -149,7 +149,6 @@ test("defaults match the inline block they replaced", async () => {
   assert.equal(vars.get("stripe_price_ids_json"), "{}");
   assert.equal(vars.get("wiki_source"), "planner");
   assert.equal(vars.get("memory_engine"), "hindsight");
-  assert.equal(vars.get("analyst_policy_source"), "row");
 });
 
 test("the coexistence auth phase still demands an RFC3339 deadline", async () => {
@@ -184,5 +183,5 @@ test("produces the full variable set", async () => {
   // 64 -var flags: 65 at extraction, minus capability_self_extension_tenants
   // when self-extension was removed. A change here is fine — an unnoticed
   // change is not.
-  assert.equal(vars.size, 64);
+  assert.equal(vars.size, 63);
 });

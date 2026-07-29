@@ -47,15 +47,6 @@ import {
 } from "../lib/mcp-configs.js";
 import { mcpCallTool, type McpServerTarget } from "../lib/mcp-client-call.js";
 import {
-  ANALYST_CALLER_CONTEXT_HEADER,
-  analystBrokerSourceSlug,
-  hashAnalystRequestBody,
-  isAnalystBrokerUrl,
-  mintAnalystCallerContextHeader,
-  sourceClaimsFromRuntimeMetadata,
-  type AnalystSourceClaims,
-} from "../lib/analyst/caller-context.js";
-import {
   loadCanvasHeadContent,
   type CanvasArtifactRow,
 } from "../lib/artifacts/canvas-lifecycle.js";
@@ -485,63 +476,6 @@ export async function handler(
       }),
     callTool: async ({ target, toolName, args }) => {
       let callTarget = target as McpServerTarget;
-      // THINK-229 U2 (R15): the analyst broker gets a request-bound
-      // system_refresh caller context per POST — threadless by design
-      // (headless refresh has no thread), bodyHash pins the exact
-      // JSON-RPC body so a captured context replays nothing else.
-      // Signing unavailable → the legacy bearer on the target carries
-      // alone (phase-in).
-      if (isAnalystBrokerUrl(callTarget.url)) {
-        // THINK-239: a sourced broker URL needs signed sourceClaims so the
-        // broker connects to the registered external source. Resolve the
-        // row's analyst_source metadata once (not per POST). A sourced row
-        // with missing/invalid metadata is refused rather than dispatched
-        // with a bare context the broker would 401.
-        const sourceSlug = analystBrokerSourceSlug(callTarget.url);
-        let sourceClaims: AnalystSourceClaims | null = null;
-        if (sourceSlug) {
-          const [row] = await db
-            .select({ runtime_metadata: tenantMcpServers.runtime_metadata })
-            .from(tenantMcpServers)
-            .where(
-              and(
-                eq(tenantMcpServers.tenant_id, tenantId),
-                eq(tenantMcpServers.slug, sourceSlug),
-              ),
-            )
-            .limit(1);
-          sourceClaims = sourceClaimsFromRuntimeMetadata(
-            sourceSlug,
-            row?.runtime_metadata,
-          );
-          if (!sourceClaims) {
-            throw new Error(
-              `analyst source "${sourceSlug}" has missing/invalid runtime_metadata.analyst_source — cannot refresh`,
-            );
-          }
-        }
-        callTarget = {
-          ...callTarget,
-          perRequestHeaders: async (body) => {
-            const header = await mintAnalystCallerContextHeader({
-              actor: "system_refresh",
-              tenantId,
-              refreshId: artifactId,
-              bodyHash: hashAnalystRequestBody(body),
-              ...(sourceClaims ? { sourceClaims } : {}),
-            }).catch((err) => {
-              console.error(
-                `${LOG_PREFIX} analyst caller-context mint threw:`,
-                err,
-              );
-              return null;
-            });
-            const extra: Record<string, string> = {};
-            if (header) extra[ANALYST_CALLER_CONTEXT_HEADER] = header;
-            return extra;
-          },
-        };
-      }
       const result = await mcpCallTool(callTarget, toolName, args);
       return { isError: result.isError, raw: result.raw };
     },

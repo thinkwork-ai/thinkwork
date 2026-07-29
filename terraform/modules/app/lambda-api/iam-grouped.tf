@@ -59,16 +59,6 @@ locals {
         Action   = ["secretsmanager:GetSecretValue"]
         Resource = var.graphql_db_secret_arn
       },
-      # THINK-239 — analystInternalClusters enumerates the environment's own
-      # RDS clusters (filtered to thinkwork-<stage>-* in code) so operators can
-      # register a database with zero credential entry. Describe-only; the
-      # admin credential read is covered by graphql_db_secret_arn above.
-      {
-        Sid      = "AnalystInternalClustersDescribe"
-        Effect   = "Allow"
-        Action   = ["rds:DescribeDBClusters"]
-        Resource = "*"
-      },
       {
         Effect = "Allow"
         Action = [
@@ -76,14 +66,6 @@ locals {
           "secretsmanager:UpdateSecret",
           "secretsmanager:DeleteSecret",
           "secretsmanager:GetSecretValue",
-          # THINK-230 — provisionAnalystConnector writes the broker credential
-          # secret value (thinkwork/<stage>/analyst/broker-credential, under
-          # this thinkwork/* prefix) via ensureAnalystBrokerSecret's
-          # PutSecretValue. GetSecretValue above already covers the read; this
-          # role already holds Create/Update/Delete on the same prefix, so
-          # PutSecretValue grants no capability beyond the existing delete +
-          # recreate. Kept on the existing statement to stay under the 6,144
-          # rendered-char managed-policy cap.
           "secretsmanager:PutSecretValue"
         ]
         Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork/*"
@@ -315,19 +297,6 @@ locals {
         Effect   = "Allow"
         Action   = ["secretsmanager:GetSecretValue"]
         Resource = var.plugin_catalog_github_token_secret_arn
-      },
-    ] : [],
-    # THINK-229 U1 — analyst-query-broker mints RDS IAM auth tokens for the
-    # analyst_reader role. The rds-db ARN keys on the immutable cluster
-    # RESOURCE ID (cluster-XXXX), never the cluster ARN, and the dbuser
-    # segment is the exact-case Postgres role name. aws:SourceIp /
-    # aws:SourceVpc conditions are unsupported on rds-db:connect, so the
-    # narrow Resource IS the control surface.
-    var.analyst_db_cluster_resource_id != "" ? [
-      {
-        Effect   = "Allow"
-        Action   = ["rds-db:connect"]
-        Resource = "arn:aws:rds-db:${var.region}:${var.account_id}:dbuser:${var.analyst_db_cluster_resource_id}/analyst_reader"
       },
     ] : [],
     # (was standalone managed policy "lambda_deployment_evidence_read")
@@ -945,11 +914,9 @@ locals {
   # ---------------------------------------------------------------------------
   # Group 4: observability — CloudWatch Logs reads, ECS/ALB health reads.
   # ---------------------------------------------------------------------------
-  # Handler-gated SQS grants moved HERE from the data-plane group
-  # (THINK-229 U5 follow-up): data-plane hit IAM's 6,144-char rendered cap
-  # when the analyst-connection-reconciler DLQ grant landed (live size was
-  # 6,018 before it). Queue plumbing is operational surface; observability
-  # has ~5k headroom. Same statements, different envelope.
+  # Handler-gated SQS grants live HERE rather than in the data-plane group:
+  # data-plane sits near IAM's 6,144-char rendered cap. Queue plumbing is
+  # operational surface; observability has ~5k headroom.
   api_observability_sqs_statements = concat(
     # SQS grants live here rather than in the orchestration group purely for
     # size balance: with every conditional on, orchestration's rendered JSON
@@ -984,13 +951,6 @@ locals {
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.compliance_drainer_dlq[0].arn
-      },
-      # THINK-229 U5 — analyst-connection-reconciler async on_failure DLQ.
-      {
-        Sid      = "AnalystConnectionReconcilerDlqSend"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.analyst_connection_reconciler_dlq[0].arn
       },
       # External S3 KB source U6 — kb-source-reconciler async on_failure DLQ.
       {

@@ -487,9 +487,6 @@ resource "terraform_data" "n8n_runtime_state_guardrails" {
     }
   }
 }
-# Egress-only SG for the VPC-attached analyst data-path Lambdas
-# (analyst_lambda_vpc_egress). Their whole point is a stable NAT egress IP for
-# external database allowlists; they accept no inbound traffic.
 # Company Brain U5: general egress for the VPC-attached identity-graph-
 # projector (twin-query retired to the platform service — THINK-339 U15).
 # Pairs with the etl neptune stack's
@@ -507,31 +504,6 @@ resource "aws_security_group" "twin_lambda_egress" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-resource "aws_security_group" "analyst_egress_lambda" {
-  count = var.analyst_lambda_vpc_egress ? 1 : 0
-
-  name_prefix = "thinkwork-${var.stage}-analyst-egress-"
-  description = "Egress for VPC-attached analyst data-path Lambdas"
-  vpc_id      = module.vpc.vpc_id
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = { Name = "thinkwork-${var.stage}-analyst-egress-lambda-sg" }
-
-  lifecycle {
-    create_before_destroy = true
-    precondition {
-      condition     = length(module.vpc.private_subnet_ids) > 0
-      error_message = "analyst_lambda_vpc_egress requires private (NAT-routed) subnets — a Lambda in a public subnet has no internet egress."
-    }
   }
 }
 
@@ -1128,19 +1100,10 @@ module "api" {
   compliance_reader_secret_arn                 = module.database.compliance_reader_secret_arn
   compliance_anchor_object_lock_retention_days = var.compliance_anchor_retention_days
 
-  # THINK-228 — analyst query broker: hardened reader role credentials +
-  # the broker caller credential the seeded connector row references.
   # THINK-246 — artifact email delivery sender: customer stages send from
   # their own verified domain (noreply@<customer_domain>); dev keeps the
   # code fallback via the empty default.
   artifact_delivery_from_email = var.customer_domain != "" ? "noreply@${var.customer_domain}" : ""
-
-  analyst_reader_secret_arn = module.database.analyst_reader_secret_arn
-  analyst_broker_secret_arn = module.database.analyst_broker_secret_arn
-  # THINK-229 U1 — keys the broker's rds-db:connect grant and switches the
-  # reader connection to per-connect RDS IAM auth tokens.
-  analyst_db_cluster_resource_id = module.database.cluster_resource_id
-  analyst_policy_source          = var.analyst_policy_source
 
   # Governed autonomy — per-tenant self-extension opt-in allowlist (default off).
 
@@ -1202,8 +1165,6 @@ module "api" {
   memory_engine                         = local.resolved_memory_engine
   okf_efs_subnet_ids                    = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
   okf_efs_security_group_ids            = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
-  analyst_egress_subnet_ids             = var.analyst_lambda_vpc_egress ? module.vpc.private_subnet_ids : []
-  analyst_egress_security_group_ids     = var.analyst_lambda_vpc_egress ? [aws_security_group.analyst_egress_lambda[0].id] : []
   # Company Brain U5: projector VPC attach only when the neptune-client SG
   # is configured (the twin's Neptune cluster lives in this same VPC). The
   # client SG only opens 8182→Neptune, so twin Lambdas ALSO attach the

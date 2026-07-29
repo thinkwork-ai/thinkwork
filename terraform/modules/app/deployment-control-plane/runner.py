@@ -4440,16 +4440,6 @@ def write_runner_files(payload, runner_secrets):
             "enableHindsight",
             default=False,
         ),
-        # Analyst data-path Lambda VPC egress (stable NAT EIP for external
-        # database IP allowlists). Per-environment infra posture, so the
-        # durable home is the runner-secrets document; a payload boolean
-        # can override per-deploy.
-        "analyst_lambda_vpc_egress": safe_get_bool(
-            runner_secrets,
-            reviewed_payload,
-            "analystLambdaVpcEgress",
-            default=False,
-        ),
         # THINK-220: dedicated Hindsight database on the stage cluster.
         # Empty keeps the legacy hindsight-schema layout; set (e.g.
         # "thinkwork_hindsight") points the Hindsight service and platform
@@ -4806,11 +4796,6 @@ variable "database_engine" {{
 
 variable "enable_hindsight" {{
   type = bool
-}}
-
-variable "analyst_lambda_vpc_egress" {{
-  type    = bool
-  default = false
 }}
 
 variable "hindsight_database_name" {{
@@ -5305,7 +5290,6 @@ module "thinkwork" {{
 
   enable_hindsight               = var.enable_hindsight
   external_kb_source_arns        = var.external_kb_source_arns
-  analyst_lambda_vpc_egress      = var.analyst_lambda_vpc_egress
   hindsight_database_name        = var.hindsight_database_name
   lambda_max_memory_mb             = var.lambda_max_memory_mb
   neptune_endpoint                 = var.neptune_endpoint

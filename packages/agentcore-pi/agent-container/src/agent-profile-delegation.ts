@@ -25,17 +25,10 @@ import {
   type ProfileChildRunner,
 } from "./agent-profile-adapter.js";
 import {
-  AnalystQueryCapError,
-  createAnalystQueryCapState,
-  wrapAnalystQueryTools,
-  DEFAULT_MAX_QUERIES_PER_RUN,
-} from "./analyst-query-cap.js";
-import {
-  AnalystCostBudgetError,
-  analystPricingForModel,
-  createAnalystCostBudgetState,
-  type AnalystCostBudgetState,
-} from "./analyst-cost-budget.js";
+  createDelegationCostBudgetState,
+  delegationPricingForModel,
+  type DelegationCostBudgetState,
+} from "./delegation-cost-budget.js";
 import { getMcpAgentToolIdentity } from "./mcp.js";
 import type { McpToolRegistry } from "./mcp-registry.js";
 import type { WorkspaceSkill } from "./runtime/workspace-skills.js";
@@ -434,53 +427,15 @@ export function createProfileChildRunner(
       });
       const profileExtensionFactories =
         options.profileExtensionFactoriesById?.get(request.profileId) ?? [];
-      // THINK-228 U6 (KTD3/R9 + KTD2 file facet): the delegation loop owns
-      // the per-run query cap in memory, and staged results land in the
-      // child session's data dir so execute_code can read them.
-      const queryCapState = createAnalystQueryCapState(
-        request.execution.maxQueriesPerRun ?? DEFAULT_MAX_QUERIES_PER_RUN,
-      );
       // THINK-232: per-run dollar budget accumulator. Inert unless the
-      // profile's execution controls carry a costBudgetUsd. DB query cost is
-      // charged fast-fail at the tool seam; token cost is charged post-hoc
-      // at run end (runAgentLoop exposes no per-turn usage).
-      const costBudgetState = createAnalystCostBudgetState(
+      // profile's execution controls carry a costBudgetUsd. Token cost is
+      // charged post-hoc at run end (runAgentLoop exposes no per-turn usage).
+      const costBudgetState = createDelegationCostBudgetState(
         request.execution.costBudgetUsd,
       );
-      const childTools = wrapAnalystQueryTools({
-        tools: childSurface.tools,
-        state: queryCapState,
-        costBudget: costBudgetState,
-        landing: {
-          dataDir: path.join(
-            options.agentDir,
-            "profiles",
-            request.profileRunId,
-            "data",
-          ),
-        },
-      });
-      const queryCapFailResult = (): ProfileChildRunResult => {
-        const summary =
-          `Delegation stopped: the query cap (${queryCapState.cap} queries per ` +
-          "delegated run) was exceeded. Failed attempts count toward the cap.";
-        return {
-          content: summary,
-          status: "failed",
-          error: "QUERY_CAP_EXCEEDED",
-          handoff: {
-            verdict: "fail",
-            summary,
-            confidence: "high",
-            feedback:
-              "Re-delegate with a narrower question or fewer exploratory queries; " +
-              `the analyst may run at most ${queryCapState.cap} queries per run.`,
-          },
-        };
-      };
-      // THINK-232: mirrors queryCapFailResult. Names spent vs budget so the
-      // parent handoff is honest whether the overage tripped mid-run (query
-      // cost fast-fail) or was detected at run end (token cost, post-hoc).
+      const childTools = childSurface.tools;
+      // THINK-232: names spent vs budget so the parent handoff is honest
+      // about the post-hoc token-cost overage detected at run end.
       const costBudgetFailResult = (): ProfileChildRunResult => {
         const budget = costBudgetState.budgetUsd ?? 0;
         const summary =
@@ -496,8 +451,8 @@ export function createProfileChildRunner(
             summary,
             confidence: "high",
             feedback:
-              "Re-delegate with a narrower question, fewer queries, or smaller " +
-              `result sets; the analyst may spend at most $${budget.toFixed(2)} per run.`,
+              "Re-delegate with a narrower question or a smaller scope; " +
+              `this profile may spend at most $${budget.toFixed(2)} per run.`,
           },
         };
       };
@@ -555,44 +510,10 @@ export function createProfileChildRunner(
             emitActivity: profileActivityEmitter(options, request),
           },
         );
-        if (queryCapState.exceeded) {
-          const failResult = queryCapFailResult();
-          options.emitActivity?.({
-            eventType: "agent_profile_run_failed",
-            message: request.profileName,
-            stream: "step",
-            payload: agentProfileActivityPayload(request, {
-              status: "failed",
-              task: request.task,
-              error: failResult.error,
-              query_cap: queryCapState.cap,
-              query_count: queryCapState.count,
-            }),
-          });
-          return failResult;
-        }
-        // THINK-232: DB query cost may already have crossed the budget
-        // mid-run (fast-fail path). Detect it before pricing tokens.
-        if (costBudgetState.exceeded) {
-          const failResult = costBudgetFailResult();
-          options.emitActivity?.({
-            eventType: "agent_profile_run_failed",
-            message: request.profileName,
-            stream: "step",
-            payload: agentProfileActivityPayload(request, {
-              status: "failed",
-              task: request.task,
-              error: failResult.error,
-              cost_budget_usd: costBudgetState.budgetUsd,
-              spent_usd: costBudgetState.spentUsd,
-            }),
-          });
-          return failResult;
-        }
         // THINK-232: charge the run's token cost from the FINAL usage
-        // (runAgentLoop exposes no per-turn usage). If queries + tokens now
-        // exceed the budget, the run already happened but the verdict is
-        // corrected to a BUDGET_EXCEEDED fail so the handoff stays honest.
+        // (runAgentLoop exposes no per-turn usage). If the tokens exceed the
+        // budget, the run already happened but the verdict is corrected to a
+        // BUDGET_EXCEEDED fail so the handoff stays honest.
         const childResult = childResultFromRunLoop(result, {
           costBudget: costBudgetState,
           modelId: request.model,
@@ -624,31 +545,9 @@ export function createProfileChildRunner(
         });
         return childResult;
       } catch (error) {
-        if (queryCapState.exceeded || error instanceof AnalystQueryCapError) {
-          // The loop, not the model, owns the count: whether the SDK
-          // surfaced the cap throw as a tool error or propagated it, the
-          // delegation ends with a structured Verdict: fail (AE5).
-          const failResult = queryCapFailResult();
-          options.emitActivity?.({
-            eventType: "agent_profile_run_failed",
-            message: request.profileName,
-            stream: "step",
-            payload: agentProfileActivityPayload(request, {
-              status: "failed",
-              task: request.task,
-              error: failResult.error,
-              query_cap: queryCapState.cap,
-              query_count: queryCapState.count,
-            }),
-          });
-          return failResult;
-        }
-        // THINK-232: same treatment for the cost-budget fast-fail throw —
-        // a structured BUDGET_EXCEEDED fail, never a crash.
-        if (
-          costBudgetState.exceeded ||
-          error instanceof AnalystCostBudgetError
-        ) {
+        // THINK-232: a tripped budget ends the delegation with a
+        // structured BUDGET_EXCEEDED fail, never a crash.
+        if (costBudgetState.exceeded) {
           const failResult = costBudgetFailResult();
           options.emitActivity?.({
             eventType: "agent_profile_run_failed",
@@ -715,7 +614,7 @@ function agentProfileActivityPayload(
 
 function childResultFromRunLoop(
   result: RunAgentLoopResult,
-  costCharge?: { costBudget: AnalystCostBudgetState; modelId: string },
+  costCharge?: { costBudget: DelegationCostBudgetState; modelId: string },
 ): ProfileChildRunResult {
   const usage = recordValue(result.usage);
   const inputTokens = numberField(
@@ -737,7 +636,7 @@ function childResultFromRunLoop(
   if (costCharge) {
     costCharge.costBudget.addTokenCost(
       { inputTokens, outputTokens },
-      analystPricingForModel(costCharge.modelId),
+      delegationPricingForModel(costCharge.modelId),
     );
   }
   return {

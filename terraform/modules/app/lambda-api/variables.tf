@@ -399,18 +399,6 @@ variable "memory_engine" {
   }
 }
 
-variable "analyst_egress_subnet_ids" {
-  description = "Private (NAT-routed) subnet IDs for VPC-attaching the analyst data-path handlers (graphql-http, analyst-query-broker, analyst-connection-reconciler) so external Postgres sources can allowlist the stack's stable NAT egress IP. Leave empty to keep the handlers outside any VPC."
-  type        = list(string)
-  default     = []
-}
-
-variable "analyst_egress_security_group_ids" {
-  description = "Security group IDs for the VPC-attached analyst data-path handlers. Leave empty to keep the handlers outside any VPC."
-  type        = list(string)
-  default     = []
-}
-
 variable "okf_efs_subnet_ids" {
   description = "Subnet IDs for the OKF EFS hydrator Lambda VPC attachment. Leave empty to deploy the hydrator without an EFS mount."
   type        = list(string)
@@ -934,38 +922,6 @@ variable "subscription_ticket_public_keys" {
 
 variable "subscription_ticket_private_key_secret" {
   description = "Secrets Manager name holding the isolated subscription-ticket Ed25519 private key."
-  type        = string
-  default     = ""
-}
-
-# ---------------------------------------------------------------------------
-# THINK-228 U3 — analyst query broker runtime config
-# ---------------------------------------------------------------------------
-
-variable "analyst_reader_secret_arn" {
-  description = "ARN of the Secrets Manager secret holding the `analyst_reader` Aurora role credentials (THINK-228 U2). Wired from `module.database.analyst_reader_secret_arn`. The analyst-query-broker Lambda executes model-authored SQL exclusively under this role."
-  type        = string
-  default     = ""
-}
-
-variable "analyst_broker_secret_arn" {
-  description = "ARN of the Secrets Manager secret holding the analyst query-broker caller credential (JSON {token, tenantId}; THINK-228 U3). Wired from `module.database.analyst_broker_secret_arn`. The broker validates incoming Bearer tokens against it; the seeded connector row references it as auth_config.secretRef."
-  type        = string
-  default     = ""
-}
-
-variable "analyst_policy_source" {
-  description = "THINK-229 KTD5 enforcement flip: 'row' (default — sidecar policy is shadow-only) or 'sidecar' (the signed sidecar policy block is authoritative: budgets + retain_sql flow into dispatch and the broker). Flip only after clean analyst-policy-shadow parity on live traffic AND a provision refresh so every connection sidecar carries a policy block."
-  type        = string
-  default     = "row"
-  validation {
-    condition     = contains(["row", "sidecar"], var.analyst_policy_source)
-    error_message = "analyst_policy_source must be 'row' or 'sidecar'."
-  }
-}
-
-variable "analyst_db_cluster_resource_id" {
-  description = "Immutable RDS cluster resource ID (cluster-XXXX / db-XXXX) for the stage database (THINK-229 U1). Wired from `module.database.cluster_resource_id`. Keys the broker's `rds-db:connect` IAM grant — the rds-db ARN format requires the resource ID, not the cluster ARN — and gates the IAM connect env on the broker Lambda: when empty, the broker stays on the password path."
   type        = string
   default     = ""
 }

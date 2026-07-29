@@ -21,24 +21,6 @@ export type McpServer = {
   managedApplicationKey?: string | null;
   runtimeAssigned?: boolean;
   runtimeEnabled?: boolean;
-  /**
-   * THINK-239: analyst data-source coordinates — present only on analyst
-   * connector rows. `host` is null for the builtin workspace connector;
-   * `kind` says whether the database lives on an environment-owned cluster.
-   */
-  dataSource?: {
-    kind: "internal" | "external";
-    host: string | null;
-    database: string;
-    /** THINK-283: the source's ONE schema (legacy rows project "public"). */
-    schema: string;
-    /** THINK-283: durable explicit-refresh state; null = never refreshed. */
-    refresh: {
-      status: "running" | "failed" | "ok";
-      detail?: string | null;
-      updatedAt?: string | null;
-    } | null;
-  } | null;
 };
 
 export type McpServiceCredentialStatus = {
