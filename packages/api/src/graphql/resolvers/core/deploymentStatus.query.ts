@@ -20,7 +20,7 @@ import { and, db, eq, tenants } from "../../utils.js";
  * environment variables plus read-only tenant MCP registry state.
  *
  * Operator-only: the payload includes account ID, DB endpoint, ECR URL, and
- * AppSync/Hindsight endpoints. Frontend hiding is not a security boundary, so
+ * AppSync endpoints. Frontend hiding is not a security boundary, so
  * the gate lives here — a member who hand-issues this query must be refused.
  * Service callers (trusted backends) pass through.
  */
@@ -83,11 +83,9 @@ export const deploymentStatus = async (
     apiEndpoint: process.env.API_ENDPOINT || null,
     appsyncUrl: getConfig("APPSYNC_ENDPOINT") || null,
     appsyncRealtimeUrl: getConfig("APPSYNC_REALTIME_URL") || null,
-    hindsightEndpoint: getConfig("HINDSIGHT_ENDPOINT") || null,
     agentcoreStatus: getConfig("AGENTCORE_PI_FUNCTION_NAME")
       ? "managed (always on)"
       : "not deployed",
-    hindsightEnabled: !!getConfig("HINDSIGHT_ENDPOINT"),
     managedMemoryEnabled: !!getConfig("AGENTCORE_MEMORY_ID"),
     twentyProvisioned: twenty.provisioned,
     twentyRuntimeEnabled: twenty.runtimeEnabled,

@@ -966,26 +966,6 @@ export type BootstrapResult = {
   user: User;
 };
 
-/**
- * Dream-state run ledger row (THINK-133 U4). One row per (tenant, bank) dream
- * run; per-action detail is summarized in plannedCounts/appliedCounts.
- */
-export type BrainDreamRun = {
-  __typename?: 'BrainDreamRun';
-  appliedCounts?: Maybe<Scalars['AWSJSON']['output']>;
-  bankId: Scalars['String']['output'];
-  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  dedupeKey: Scalars['String']['output'];
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  plannedCounts?: Maybe<Scalars['AWSJSON']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-};
-
 export type BudgetPolicy = {
   __typename?: 'BudgetPolicy';
   actionOnExceed: Scalars['String']['output'];
@@ -2143,8 +2123,6 @@ export type DeploymentStatus = {
   deploymentRunnerProjectName?: Maybe<Scalars['String']['output']>;
   docsUrl?: Maybe<Scalars['String']['output']>;
   ecrUrl?: Maybe<Scalars['String']['output']>;
-  hindsightEnabled: Scalars['Boolean']['output'];
-  hindsightEndpoint?: Maybe<Scalars['String']['output']>;
   managedApplications: Array<ManagedApplicationDeployment>;
   managedMemoryEnabled: Scalars['Boolean']['output'];
   region: Scalars['String']['output'];
@@ -2985,38 +2963,6 @@ export type InboxItemStatusEvent = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
-export type IngestSpaceMemoryDocumentInput = {
-  content: Scalars['String']['input'];
-  contentType?: InputMaybe<Scalars['String']['input']>;
-  /**
-   * Stable caller document identity. When omitted, `path` is used. The resolver
-   * prefixes the final Hindsight document id with the Space id to avoid
-   * collisions inside the Space bank.
-   */
-  documentId?: InputMaybe<Scalars['String']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Stable document path/name from the source system. Required when `documentId`
-   * is omitted.
-   */
-  path?: InputMaybe<Scalars['String']['input']>;
-  /**
-   * Process through Hindsight async retain. Defaults to true for document-sized
-   * ingest so user-facing flows are not held open by extraction work.
-   */
-  processAsync?: InputMaybe<Scalars['Boolean']['input']>;
-  sourceUrl?: InputMaybe<Scalars['AWSURL']['input']>;
-  spaceId: Scalars['ID']['input'];
-  tags?: InputMaybe<Array<Scalars['String']['input']>>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  /**
-   * Event timestamp for temporal extraction. Omit for timeless reference
-   * material; the resolver sends Hindsight `timestamp: "unset"`.
-   */
-  timestamp?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  title?: InputMaybe<Scalars['String']['input']>;
-};
-
 export type InstallPluginInput = {
   idempotencyKey: Scalars['String']['input'];
   /** ThinkWork-provided one-time key for premium plugins when no entitlement exists. */
@@ -3371,7 +3317,7 @@ export type MemoryContent = {
   text?: Maybe<Scalars['String']['output']>;
 };
 
-/** Evidence → Hindsight projection lineage row. */
+/** Evidence → memory-document projection lineage row. */
 export type MemoryDerivation = {
   __typename?: 'MemoryDerivation';
   currentVersion: Scalars['String']['output'];
@@ -3399,52 +3345,6 @@ export type MemoryEvidenceItemSummary = {
   sourceConfigId: Scalars['ID']['output'];
   sourceItemId: Scalars['String']['output'];
   sourceVersion: Scalars['String']['output'];
-};
-
-export type MemoryGraph = {
-  __typename?: 'MemoryGraph';
-  /**
-   * All banks in scope for this graph (tenant-enumerated in allTenantBanks
-   * mode), including banks with no visible nodes.
-   */
-  banks: Array<MemoryGraphBank>;
-  edges: Array<MemoryGraphEdge>;
-  nodes: Array<MemoryGraphNode>;
-};
-
-/**
- * A Hindsight bank enumerated from tenant tables (user / space / agent),
- * independent of whether any of its entities appear in the returned graph.
- * The Bank filter facet builds from this list, never from node data.
- */
-export type MemoryGraphBank = {
-  __typename?: 'MemoryGraphBank';
-  id: Scalars['String']['output'];
-  name: Scalars['String']['output'];
-};
-
-export type MemoryGraphEdge = {
-  __typename?: 'MemoryGraphEdge';
-  label?: Maybe<Scalars['String']['output']>;
-  source: Scalars['String']['output'];
-  target: Scalars['String']['output'];
-  type: Scalars['String']['output'];
-  weight: Scalars['Float']['output'];
-};
-
-export type MemoryGraphNode = {
-  __typename?: 'MemoryGraphNode';
-  /** Hindsight bank the entity belongs to (populated when allTenantBanks is set). */
-  bankId?: Maybe<Scalars['String']['output']>;
-  /** Human label for the bank (space/user/agent name), for the Bank facet. */
-  bankName?: Maybe<Scalars['String']['output']>;
-  edgeCount: Scalars['Int']['output'];
-  entityType?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  latestThreadId?: Maybe<Scalars['String']['output']>;
-  strategy?: Maybe<Scalars['String']['output']>;
-  type: Scalars['String']['output'];
 };
 
 /**
@@ -3556,8 +3456,8 @@ export enum MemoryRecordScope {
 }
 
 /**
- * ThinkWork-owned ledger row for a Hindsight retain attempt.
- * The retained memory record itself remains in Hindsight; this type exposes
+ * ThinkWork-owned ledger row for a memory retain attempt.
+ * The retained memory record itself lives in the memory engine; this type exposes
  * retry, timeout, and dead-letter state for diagnostics.
  */
 export type MemoryRetainAttempt = {
@@ -3704,23 +3604,13 @@ export enum MemoryStrategy {
  */
 export type MemorySystemConfig = {
   __typename?: 'MemorySystemConfig';
-  /** Active long-term memory engine selected by MEMORY_ENGINE. */
+  /** Active long-term memory engine. Always "agentcore" (THINK-406). */
   activeEngine: Scalars['String']['output'];
   /**
    * ThinkWork Brain distillation is intentionally deferred from this memory
    * provider pivot.
    */
   companyDistillationEnabled: Scalars['Boolean']['output'];
-  /**
-   * True when Hindsight is the active long-term memory engine for canonical
-   * user and Space memory.
-   */
-  hindsightEnabled: Scalars['Boolean']['output'];
-  /**
-   * True when a Hindsight endpoint is configured while another engine is
-   * active. Operators should treat it as non-canonical diagnostic evidence.
-   */
-  legacyHindsightAvailable: Scalars['Boolean']['output'];
   /**
    * True when managed AgentCore Memory is provisioned and wired into the
    * agent container. This is the always-on baseline — when false, memory
@@ -3836,7 +3726,7 @@ export type MintArtifactShareLinkResult = {
 
 /**
  * Fact-type picker values exposed to the mobile quick-capture footer. Maps to
- * Hindsight's native fact_type via the resolver. FACT is the default when the
+ * the engine's native fact type via the resolver. FACT is the default when the
  * user doesn't override.
  */
 export enum MobileCaptureFactType {
@@ -3954,7 +3844,6 @@ export type Mutation = {
   cancelSkillRun: SkillRun;
   cancelThreadTurn: ThreadTurn;
   captureMobileMemory: MobileMemoryCapture;
-  captureSpaceMemory: MemoryRecord;
   checkoutCanvas: Artifact;
   checkoutThread: Thread;
   claimNextOpenEngineWorkItem?: Maybe<WorkItem>;
@@ -4090,7 +3979,6 @@ export type Mutation = {
   handleJsonRenderAction: Message;
   importPiExtensionFromGitHub: PiExtension;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
-  ingestSpaceMemoryDocument: SpaceMemoryDocumentIngest;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
   /**
    * Install a catalog plugin tenant-wide (tenant admin). Idempotent per
@@ -4131,7 +4019,6 @@ export type Mutation = {
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
-  promoteSpaceMemoriesToTenant: TenantMemoryPromotionResult;
   /**
    * Rank candidate matches for one entity's unmapped target system and persist
    * the set for the consent echo check (THINK-321 KTD-2). Turn-bound service
@@ -4208,7 +4095,7 @@ export type Mutation = {
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
   /**
-   * Enqueue a retraction for one derivation's Hindsight document and process
+   * Enqueue a retraction for one derivation's memory document and process
    * it inline once (RequestResponse semantics — errors surface to the caller).
    */
   retractMemoryDerivation: MemoryRetractionAttempt;
@@ -4602,15 +4489,6 @@ export type MutationCaptureMobileMemoryArgs = {
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   userId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type MutationCaptureSpaceMemoryArgs = {
-  clientCaptureId?: InputMaybe<Scalars['ID']['input']>;
-  content: Scalars['String']['input'];
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  spaceId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -5034,11 +4912,6 @@ export type MutationImportTenantBedrockModelsArgs = {
 };
 
 
-export type MutationIngestSpaceMemoryDocumentArgs = {
-  input: IngestSpaceMemoryDocumentInput;
-};
-
-
 export type MutationInstallManagedApplicationMcpServerArgs = {
   key: Scalars['String']['input'];
 };
@@ -5239,14 +5112,6 @@ export type MutationPlanRoutineDraftArgs = {
 
 export type MutationPromoteDraftAppletArgs = {
   input: PromoteDraftAppletInput;
-};
-
-
-export type MutationPromoteSpaceMemoriesToTenantArgs = {
-  justification: Scalars['String']['input'];
-  memoryIds: Array<Scalars['ID']['input']>;
-  spaceId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -6624,7 +6489,6 @@ export type Query = {
   artifactShares: Array<ArtifactShare>;
   artifacts: Array<Artifact>;
   bedrockModelImportCandidates: Array<BedrockModelImportCandidate>;
-  brainDreamRuns: Array<BrainDreamRun>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
   canonicalEntities: Array<CanonicalEntity>;
@@ -6740,7 +6604,6 @@ export type Query = {
    */
   memoryEpisodicRecords: Array<MemoryRecord>;
   memoryEvidenceItems: Array<MemoryEvidenceItemSummary>;
-  memoryGraph: MemoryGraph;
   memoryProcessorConfigs: Array<MemoryProcessorConfig>;
   memoryRecords: Array<MemoryRecord>;
   memoryRecordsByIds: Array<MemoryRecord>;
@@ -6753,8 +6616,8 @@ export type Query = {
   messages: MessageConnection;
   mobileMemoryCaptures: Array<MobileMemoryCapture>;
   /**
-   * Free-text search across the full Hindsight bank for the given user.
-   * Hits Hindsight's recall endpoint (semantic + rerank) and normalizes results
+   * Free-text search across the full memory bank for the given user.
+   * Hits the engine's recall endpoint (semantic + rerank) and normalizes results
    * back to MobileMemoryCapture so the Memories list can render search results
    * with the same rows it uses for captures. Not filtered by capture_source —
    * search is meant to answer "what does this user know?", including chat-
@@ -6840,13 +6703,11 @@ export type Query = {
   skillRuns: Array<SkillRun>;
   slackWorkspaces: Array<SlackWorkspace>;
   space?: Maybe<Space>;
-  spaceMemorySearch: MemorySearchResult;
   spaces: Array<Space>;
   tenant?: Maybe<Tenant>;
   tenantAgent: Agent;
   tenantAgentSummary: TenantAgentSummary;
   tenantArtifactShares: Array<ArtifactShare>;
-  tenantBankMemories: Array<TenantBankMemory>;
   tenantBySlug?: Maybe<Tenant>;
   tenantCredentials: Array<TenantCredential>;
   tenantDocumentPalette: TenantDocumentPalette;
@@ -7081,14 +6942,6 @@ export type QueryArtifactsArgs = {
 
 export type QueryBedrockModelImportCandidatesArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryBrainDreamRunsArgs = {
-  bankId?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -7430,14 +7283,6 @@ export type QueryMemoryEvidenceItemsArgs = {
 };
 
 
-export type QueryMemoryGraphArgs = {
-  allTenantBanks?: InputMaybe<Scalars['Boolean']['input']>;
-  assistantId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
 export type QueryMemoryProcessorConfigsArgs = {
   tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
@@ -7763,14 +7608,6 @@ export type QuerySpaceArgs = {
 };
 
 
-export type QuerySpaceMemorySearchArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  query: Scalars['String']['input'];
-  spaceId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
 export type QuerySpacesArgs = {
   includeAllForAdmin?: InputMaybe<Scalars['Boolean']['input']>;
   status?: InputMaybe<SpaceStatus>;
@@ -7795,12 +7632,6 @@ export type QueryTenantAgentSummaryArgs = {
 
 export type QueryTenantArtifactSharesArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryTenantBankMemoriesArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -9413,17 +9244,6 @@ export enum SpaceMemberRole {
   Viewer = 'VIEWER'
 }
 
-export type SpaceMemoryDocumentIngest = {
-  __typename?: 'SpaceMemoryDocumentIngest';
-  contentBytes: Scalars['Int']['output'];
-  context: Scalars['String']['output'];
-  documentId: Scalars['String']['output'];
-  path: Scalars['String']['output'];
-  processAsync: Scalars['Boolean']['output'];
-  spaceId: Scalars['ID']['output'];
-  status: Scalars['String']['output'];
-};
-
 export enum SpaceNotificationPreference {
   Mentions = 'MENTIONS',
   Muted = 'MUTED',
@@ -9767,25 +9587,6 @@ export type TenantAgentSummary = {
   type: AgentType;
 };
 
-/**
- * One Tenant Bank memory with its Governed Promotion provenance and consumption
- * signal (company-brain plan U11 — provenance queryable in one step).
- */
-export type TenantBankMemory = {
-  __typename?: 'TenantBankMemory';
-  accessCount?: Maybe<Scalars['Int']['output']>;
-  content: Scalars['String']['output'];
-  createdAt?: Maybe<Scalars['String']['output']>;
-  factType?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  justification?: Maybe<Scalars['String']['output']>;
-  promotedAt?: Maybe<Scalars['String']['output']>;
-  promotedBy?: Maybe<Scalars['String']['output']>;
-  sourceBankId?: Maybe<Scalars['String']['output']>;
-  sourceMemoryId?: Maybe<Scalars['ID']['output']>;
-  sourceTimestamp?: Maybe<Scalars['String']['output']>;
-};
-
 export type TenantCredential = {
   __typename?: 'TenantCredential';
   createdAt: Scalars['AWSDateTime']['output'];
@@ -9841,18 +9642,6 @@ export type TenantMember = {
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   user?: Maybe<User>;
-};
-
-/**
- * Governed Promotion (company-brain plan U10): explicitly selected space-bank
- * memories copied into the Tenant Bank with provenance intact. Idempotent per
- * source memory; the source rows are untouched.
- */
-export type TenantMemoryPromotionResult = {
-  __typename?: 'TenantMemoryPromotionResult';
-  alreadyPromoted: Array<Scalars['ID']['output']>;
-  missing: Array<Scalars['ID']['output']>;
-  promoted: Array<Scalars['ID']['output']>;
 };
 
 export type TenantModelCatalogEntry = {
@@ -10155,8 +9944,6 @@ export type ThreadIdleLearningChangedFile = {
   afterHash?: Maybe<Scalars['String']['output']>;
   beforeBytes?: Maybe<Scalars['Int']['output']>;
   beforeHash?: Maybe<Scalars['String']['output']>;
-  hindsightDocumentId?: Maybe<Scalars['String']['output']>;
-  hindsightStatus?: Maybe<Scalars['String']['output']>;
   key?: Maybe<Scalars['String']['output']>;
   path: Scalars['String']['output'];
   snapshotKey?: Maybe<Scalars['String']['output']>;
@@ -12455,7 +12242,7 @@ export type SidebarDeployedReleaseQuery = { __typename?: 'Query', deploymentStat
 export type SettingsDeploymentStatusQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type SettingsDeploymentStatusQuery = { __typename?: 'Query', deploymentStatus: { __typename?: 'DeploymentStatus', stage: string, source: string, region: string, accountId?: string | null, releaseVersion?: string | null, releaseManifestUrl?: string | null, releaseManifestSha256?: string | null, deploymentControllerArn?: string | null, deploymentRunnerProjectName?: string | null, deploymentEvidenceBucket?: string | null, bucketName?: string | null, databaseEndpoint?: string | null, ecrUrl?: string | null, adminUrl?: string | null, docsUrl?: string | null, apiEndpoint?: string | null, appsyncUrl?: string | null, appsyncRealtimeUrl?: string | null, hindsightEndpoint?: string | null, agentcoreStatus?: string | null, hindsightEnabled: boolean, managedMemoryEnabled: boolean } };
+export type SettingsDeploymentStatusQuery = { __typename?: 'Query', deploymentStatus: { __typename?: 'DeploymentStatus', stage: string, source: string, region: string, accountId?: string | null, releaseVersion?: string | null, releaseManifestUrl?: string | null, releaseManifestSha256?: string | null, deploymentControllerArn?: string | null, deploymentRunnerProjectName?: string | null, deploymentEvidenceBucket?: string | null, bucketName?: string | null, databaseEndpoint?: string | null, ecrUrl?: string | null, adminUrl?: string | null, docsUrl?: string | null, apiEndpoint?: string | null, appsyncUrl?: string | null, appsyncRealtimeUrl?: string | null, agentcoreStatus?: string | null, managedMemoryEnabled: boolean } };
 
 export type SettingsEmailChannelQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -13207,7 +12994,7 @@ export const RoutineRepairEventsDocument = {"kind":"Document","definitions":[{"k
 export const UpdateRoutineStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateRoutineStatus"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateRoutineInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateRoutine"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"disabledReason"}}]}}]}}]} as unknown as DocumentNode<UpdateRoutineStatusMutation, UpdateRoutineStatusMutationVariables>;
 export const SettingsTenantDetailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsTenantDetail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"plan"}},{"kind":"Field","name":{"kind":"Name","value":"issuePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"issueCounter"}},{"kind":"Field","name":{"kind":"Name","value":"settings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"defaultModel"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<SettingsTenantDetailQuery, SettingsTenantDetailQueryVariables>;
 export const SidebarDeployedReleaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SidebarDeployedRelease"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deploymentStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"releaseVersion"}}]}}]}}]} as unknown as DocumentNode<SidebarDeployedReleaseQuery, SidebarDeployedReleaseQueryVariables>;
-export const SettingsDeploymentStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsDeploymentStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deploymentStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"region"}},{"kind":"Field","name":{"kind":"Name","value":"accountId"}},{"kind":"Field","name":{"kind":"Name","value":"releaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"releaseManifestUrl"}},{"kind":"Field","name":{"kind":"Name","value":"releaseManifestSha256"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentControllerArn"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentRunnerProjectName"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentEvidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"bucketName"}},{"kind":"Field","name":{"kind":"Name","value":"databaseEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"ecrUrl"}},{"kind":"Field","name":{"kind":"Name","value":"adminUrl"}},{"kind":"Field","name":{"kind":"Name","value":"docsUrl"}},{"kind":"Field","name":{"kind":"Name","value":"apiEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"appsyncUrl"}},{"kind":"Field","name":{"kind":"Name","value":"appsyncRealtimeUrl"}},{"kind":"Field","name":{"kind":"Name","value":"hindsightEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreStatus"}},{"kind":"Field","name":{"kind":"Name","value":"hindsightEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"managedMemoryEnabled"}}]}}]}}]} as unknown as DocumentNode<SettingsDeploymentStatusQuery, SettingsDeploymentStatusQueryVariables>;
+export const SettingsDeploymentStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsDeploymentStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deploymentStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"region"}},{"kind":"Field","name":{"kind":"Name","value":"accountId"}},{"kind":"Field","name":{"kind":"Name","value":"releaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"releaseManifestUrl"}},{"kind":"Field","name":{"kind":"Name","value":"releaseManifestSha256"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentControllerArn"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentRunnerProjectName"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentEvidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"bucketName"}},{"kind":"Field","name":{"kind":"Name","value":"databaseEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"ecrUrl"}},{"kind":"Field","name":{"kind":"Name","value":"adminUrl"}},{"kind":"Field","name":{"kind":"Name","value":"docsUrl"}},{"kind":"Field","name":{"kind":"Name","value":"apiEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"appsyncUrl"}},{"kind":"Field","name":{"kind":"Name","value":"appsyncRealtimeUrl"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreStatus"}},{"kind":"Field","name":{"kind":"Name","value":"managedMemoryEnabled"}}]}}]}}]} as unknown as DocumentNode<SettingsDeploymentStatusQuery, SettingsDeploymentStatusQueryVariables>;
 export const SettingsEmailChannelDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsEmailChannel"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"emailChannelSummary"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"productionReady"}},{"kind":"Field","name":{"kind":"Name","value":"ledgerEventCount"}},{"kind":"Field","name":{"kind":"Name","value":"providers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"activeForProduction"}},{"kind":"Field","name":{"kind":"Name","value":"credentialConfigured"}},{"kind":"Field","name":{"kind":"Name","value":"webhookSecretConfigured"}},{"kind":"Field","name":{"kind":"Name","value":"defaultFromEmail"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"domains"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"providerInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"domain"}},{"kind":"Field","name":{"kind":"Name","value":"ownershipType"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"sendingVerifiedAt"}},{"kind":"Field","name":{"kind":"Name","value":"inboundVerifiedAt"}},{"kind":"Field","name":{"kind":"Name","value":"dnsRecords"}},{"kind":"Field","name":{"kind":"Name","value":"providerMetadata"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"readinessChecks"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"providerInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"domainId"}},{"kind":"Field","name":{"kind":"Name","value":"checkKey"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"lastCheckedAt"}},{"kind":"Field","name":{"kind":"Name","value":"failureCode"}},{"kind":"Field","name":{"kind":"Name","value":"failureMessage"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"blockingReadinessChecks"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"providerInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"domainId"}},{"kind":"Field","name":{"kind":"Name","value":"checkKey"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"failureCode"}},{"kind":"Field","name":{"kind":"Name","value":"failureMessage"}}]}},{"kind":"Field","name":{"kind":"Name","value":"spacePolicies"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"spaceId"}},{"kind":"Field","name":{"kind":"Name","value":"providerInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"registeredUsersAllowed"}},{"kind":"Field","name":{"kind":"Name","value":"privateSpaceMembershipRequired"}},{"kind":"Field","name":{"kind":"Name","value":"outsideSenderDefault"}},{"kind":"Field","name":{"kind":"Name","value":"firstSendReviewRequired"}},{"kind":"Field","name":{"kind":"Name","value":"policy"}},{"kind":"Field","name":{"kind":"Name","value":"allowlists"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsEmailChannelQuery, SettingsEmailChannelQueryVariables>;
 export const SettingsSaveEmailProviderCredentialDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsSaveEmailProviderCredential"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SaveEmailProviderCredentialInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"saveEmailProviderCredential"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"activeForProduction"}},{"kind":"Field","name":{"kind":"Name","value":"credentialConfigured"}},{"kind":"Field","name":{"kind":"Name","value":"webhookSecretConfigured"}},{"kind":"Field","name":{"kind":"Name","value":"defaultFromEmail"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsSaveEmailProviderCredentialMutation, SettingsSaveEmailProviderCredentialMutationVariables>;
 export const SettingsConfigureEmailProviderDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsConfigureEmailProvider"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ConfigureEmailProviderInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"configureEmailProvider"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"activeForProduction"}},{"kind":"Field","name":{"kind":"Name","value":"credentialConfigured"}},{"kind":"Field","name":{"kind":"Name","value":"defaultFromEmail"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsConfigureEmailProviderMutation, SettingsConfigureEmailProviderMutationVariables>;

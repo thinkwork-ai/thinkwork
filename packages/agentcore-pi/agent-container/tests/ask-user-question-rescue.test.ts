@@ -541,7 +541,6 @@ describe("handleInvocation — leaked ask_user_question rescue wiring", () => {
   beforeEach(async () => {
     delete process.env.MEMORY_ENGINE;
     delete process.env.AGENTCORE_MEMORY_ID;
-    delete process.env.HINDSIGHT_ENDPOINT;
     delete process.env.MEMORY_RETAIN_FN_NAME;
     delete process.env.WORKSPACE_BUCKET;
     delete process.env.WORKSPACE_DIR;

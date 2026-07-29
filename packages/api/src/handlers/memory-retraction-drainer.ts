@@ -24,7 +24,7 @@
 
 import { randomUUID } from "node:crypto";
 import { getDb } from "@thinkwork/database-pg";
-import type { MemoryAdapter } from "../lib/memory/adapter.js";
+import type { RetractionCapableAdapter } from "../lib/memory-sources/engine-capabilities.js";
 import {
   createDrizzleSourceEraseStore,
   deadLetterExhaustedAttempts,
@@ -66,7 +66,7 @@ export type MemoryRetractionDrainerSummary = {
 
 export interface MemoryRetractionDrainerOptions {
   db?: DbHandle;
-  adapter?: Pick<MemoryAdapter, "deleteDocument" | "consolidateBankById">;
+  adapter?: RetractionCapableAdapter;
   /** Test seam; defaults to {@link listDueRetractionAttempts}. */
   list?: (
     db: DbHandle,
@@ -248,11 +248,9 @@ export async function runMemoryRetractionDrainer(
 }
 
 /** Lazy adapter resolution so unit tests never touch memory config/env. */
-async function resolveAdapter(): Promise<
-  Pick<MemoryAdapter, "deleteDocument" | "consolidateBankById">
-> {
+async function resolveAdapter(): Promise<RetractionCapableAdapter> {
   const { getMemoryServices } = await import("../lib/memory/index.js");
-  return getMemoryServices().adapter;
+  return getMemoryServices().adapter as RetractionCapableAdapter;
 }
 
 export async function handler(

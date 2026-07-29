@@ -10,6 +10,7 @@
 
 import type { GraphQLContext } from "../../context.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
+import type { DocumentCapableMemoryAdapter } from "../../../lib/memory-sources/engine-capabilities.js";
 import {
   enqueueDerivationRetraction,
   processRetractionAttempt,
@@ -28,7 +29,8 @@ export async function retractMemoryDerivation(
   if (!tenantId) throw new Error("Tenant context required");
   await requireTenantAdmin(ctx, tenantId);
 
-  const { adapter, config } = getMemoryServices();
+  const { adapter: baseAdapter, config } = getMemoryServices();
+  const adapter = baseAdapter as DocumentCapableMemoryAdapter;
   if (!adapter.deleteDocument) {
     throw new Error(
       `Memory retraction is not supported on engine "${config.engine}"`,

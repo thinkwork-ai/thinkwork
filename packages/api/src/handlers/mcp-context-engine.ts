@@ -28,7 +28,7 @@ export const TOOLS = [
   {
     name: "query_context",
     description:
-      "Search permissioned Thinkwork context across fast default providers: Brain facets, workspace files, and approved context-safe MCP tools. Use query_memory_context for Hindsight user-carried or current-space long-term memory.",
+      "Search permissioned Thinkwork context across fast default providers: Brain facets, workspace files, and approved context-safe MCP tools. Use query_memory_context for user-carried or current-space long-term memory.",
     inputSchema: {
       type: "object",
       properties: {

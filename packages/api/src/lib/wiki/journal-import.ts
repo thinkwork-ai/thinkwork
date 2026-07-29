@@ -1,5 +1,5 @@
 /**
- * Bulk import of an external "journal" dataset into Hindsight as normalized
+ * Bulk import of an external "journal" dataset into memory as normalized
  * memory records, scoped to one (tenant, user) pair.
  *
  * v1 use case: seed the Compounding Memory pipeline with a user's
@@ -24,7 +24,6 @@
 import { sql } from "drizzle-orm";
 import type { MemoryAdapter } from "../memory/adapter.js";
 import { getMemoryServices } from "../memory/index.js";
-import { buildJournalImportRetainOptions } from "../memory/hindsight-retain-params.js";
 import { db } from "../db.js";
 import { enqueueCompileJob } from "./repository.js";
 
@@ -232,9 +231,6 @@ export function buildRetainPayload(
     ownerId: owner.userId,
     sourceType: "import" as const,
     content: text,
-    hindsight: buildJournalImportRetainOptions({
-      timestamp: row.date_created ?? row.created,
-    }),
     metadata,
   };
 }

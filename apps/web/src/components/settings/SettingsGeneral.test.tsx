@@ -398,7 +398,6 @@ function releaseJob(overrides: Record<string, unknown> = {}) {
         platformOperatorEmails: "ops@example.com",
         googleOauthClientIdConfigured: true,
         optionalApps: {
-          hindsight: true,
           twenty: false,
         },
       },
@@ -438,7 +437,6 @@ const deployment = {
   deploymentRunnerProjectName: "thinkwork-dev-deployment-runner",
   deploymentEvidenceBucket: "thinkwork-dev-evidence",
   agentcoreStatus: "ready",
-  hindsightEnabled: false,
   managedMemoryEnabled: true,
   bucketName: "bucket",
   databaseEndpoint: "db.example.com",
@@ -448,7 +446,6 @@ const deployment = {
   apiEndpoint: "https://api.example.com",
   appsyncUrl: "https://appsync.example.com/graphql",
   appsyncRealtimeUrl: "wss://appsync.example.com/graphql",
-  hindsightEndpoint: null,
   twentyProvisioned: false,
   twentyRuntimeEnabled: false,
   twentyUrl: null,

@@ -56,7 +56,6 @@ function baseArgs(
     env: {
       awsRegion: "us-east-1",
       agentCoreMemoryId: "",
-      hindsightEndpoint: "",
       memoryEngine: "agentcore" as const,
       memoryRetainFnName: "",
       dbClusterArn: "",

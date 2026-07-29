@@ -15,7 +15,6 @@
 import type { MemoryAdapter } from "./adapter.js";
 import { getMemoryConfig, type MemoryConfig } from "./config.js";
 import { AgentCoreAdapter } from "./adapters/agentcore-adapter.js";
-import { HindsightAdapter } from "./adapters/hindsight-adapter.js";
 import {
   createExportService,
   type NormalizedExportService,
@@ -58,35 +57,15 @@ export function resetMemoryServicesCache(): void {
 }
 
 function buildAdapter(config: MemoryConfig): MemoryAdapter {
-  if (config.engine === "hindsight") {
-    if (!config.backends.hindsightEndpoint) {
-      throw new Error(
-        "Hindsight engine selected but HINDSIGHT_ENDPOINT is empty",
-      );
-    }
-    return new HindsightAdapter({
-      endpoint: config.backends.hindsightEndpoint,
-      timeoutMs: parsePositiveInt(process.env.HINDSIGHT_TIMEOUT_MS),
-    });
+  if (!config.backends.agentcoreMemoryId) {
+    throw new Error(
+      "AgentCore memory selected but AGENTCORE_MEMORY_ID is empty",
+    );
   }
-  if (config.engine === "agentcore") {
-    if (!config.backends.agentcoreMemoryId) {
-      throw new Error(
-        "AgentCore engine selected but AGENTCORE_MEMORY_ID is empty",
-      );
-    }
-    return new AgentCoreAdapter({
-      memoryId: config.backends.agentcoreMemoryId,
-      region: config.backends.awsRegion,
-    });
-  }
-  throw new Error(`Unknown MEMORY_ENGINE: ${String(config.engine)}`);
-}
-
-function parsePositiveInt(raw: string | undefined): number | undefined {
-  if (!raw) return undefined;
-  const value = Number.parseInt(raw, 10);
-  return Number.isFinite(value) && value > 0 ? value : undefined;
+  return new AgentCoreAdapter({
+    memoryId: config.backends.agentcoreMemoryId,
+    region: config.backends.awsRegion,
+  });
 }
 
 export * from "./types.js";

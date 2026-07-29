@@ -114,7 +114,7 @@ const OPTIONAL_SOURCE_CATALOG = [
 
 /**
  * Product-level source nodes. Threads are the always-on baseline: completed
- * turns are retained into Hindsight independently of external acquisition.
+ * turns are retained into memory independently of external acquisition.
  * Database source configs represent optional enrichments and therefore render
  * as skipped/off instead of making the whole workflow not-ready.
  */
@@ -126,7 +126,7 @@ export function memoryPipelineSourceNodes(
     family: "threads",
     label: "Threads",
     description:
-      "Thread conversations are retained into Hindsight after each completed turn and compounded into this memory bank.",
+      "Thread conversations are retained into memory after each completed turn and compounded into this memory bank.",
     optional: false,
     configured: true,
     enabled: true,
@@ -218,7 +218,7 @@ export function buildMemoryPipelineFlowGraph(
             : source.configured
               ? "Disabled · skipped"
               : "Not configured · skipped"
-          : "Always on · Hindsight",
+          : "Always on · Memory",
         kind: "memory_source",
         status: source.enabled ? undefined : "skipped",
       },

@@ -37,10 +37,6 @@ function workspaceBucket(): string {
 function thinkworkApiUrl(): string {
   return getConfig("THINKWORK_API_URL") || process.env.MCP_BASE_URL || "";
 }
-function hindsightEndpoint(): string {
-  return getConfig("HINDSIGHT_ENDPOINT", "");
-}
-
 export function evalModelId(model: string | null | undefined): string {
   return model?.trim() || DEFAULT_EVAL_MODEL_ID;
 }
@@ -310,7 +306,6 @@ export function buildEvalAgentCorePayload(input: {
     workspace_bucket: workspaceBucket() || undefined,
     thinkwork_api_url: thinkworkApiUrl() || undefined,
     thinkwork_api_secret: getApiAuthSecret() || undefined,
-    hindsight_endpoint: hindsightEndpoint() || undefined,
     // Side-effect kill list (U8 replay KTD, layer 1 of 2): eval
     // invocations must never carry outbound side-effect tool configs —
     // replaying a real flagged thread could otherwise send real email

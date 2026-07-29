@@ -482,7 +482,7 @@ export class AgentCoreAdapter implements MemoryAdapter {
    * (ListMemoryRecords returns a flat listing keyed by createdAt only), so
    * the compile pipeline can't safely drive an incremental cursor against it
    * in v1. The memory-retain compile-enqueue path checks the adapter kind and
-   * skips enqueue when it isn't Hindsight, so this method should never be
+   * skips enqueue when the engine can't produce them, so this should never be
    * called at runtime — but we throw explicitly to make any misconfiguration
    * fail loudly rather than produce silent zero-row compiles.
    */
@@ -491,7 +491,7 @@ export class AgentCoreAdapter implements MemoryAdapter {
   ): Promise<ListRecordsUpdatedSinceResult> {
     throw new Error(
       "[agentcore-adapter] listRecordsUpdatedSince is not implemented in v1. " +
-        "The Compounding Memory compile pipeline is Hindsight-only — see " +
+        "The Compounding Memory compile pipeline requires monotonic change records — see " +
         ".prds/compounding-memory-v1-build-plan.md.",
     );
   }

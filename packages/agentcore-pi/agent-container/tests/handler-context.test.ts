@@ -175,7 +175,7 @@ describe("snapshotRuntimeEnv", () => {
     const env = snapshotRuntimeEnv({} as NodeJS.ProcessEnv);
     expect(env).toMatchObject({
       awsRegion: "us-east-1",
-      memoryEngine: "hindsight",
+      memoryEngine: "agentcore",
       dbName: "thinkwork",
       workspaceDir: "/workspace",
       piAgentDir: "/tmp/thinkwork-pi-agent",
@@ -183,26 +183,25 @@ describe("snapshotRuntimeEnv", () => {
     });
   });
 
-  it("selects hindsight when MEMORY_ENGINE=hindsight (case-insensitive)", () => {
+  it("normalizes the legacy hindsight spelling to agentcore", () => {
     expect(
       snapshotRuntimeEnv({ MEMORY_ENGINE: "Hindsight" } as NodeJS.ProcessEnv)
         .memoryEngine,
-    ).toBe("hindsight");
+    ).toBe("agentcore");
   });
 
-  it("falls back to hindsight when MEMORY_ENGINE is retired", () => {
+  it("normalizes the legacy managed spelling to agentcore", () => {
     expect(
-      snapshotRuntimeEnv({
-        MEMORY_ENGINE: "retired_graph",
-      } as NodeJS.ProcessEnv).memoryEngine,
-    ).toBe("hindsight");
+      snapshotRuntimeEnv({ MEMORY_ENGINE: "managed" } as NodeJS.ProcessEnv)
+        .memoryEngine,
+    ).toBe("agentcore");
   });
 
-  it("falls back to hindsight for any other MEMORY_ENGINE value", () => {
+  it("normalizes any unrecognized MEMORY_ENGINE value to agentcore", () => {
     expect(
       snapshotRuntimeEnv({ MEMORY_ENGINE: "weirdvalue" } as NodeJS.ProcessEnv)
         .memoryEngine,
-    ).toBe("hindsight");
+    ).toBe("agentcore");
   });
 
   it("keeps explicit agentcore memory engine canonical", () => {

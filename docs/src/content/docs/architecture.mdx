@@ -95,16 +95,14 @@ See [Threads](/concepts/threads/).
 
 ### Memory
 
-Memory is the context layer. Hindsight is the hosted durable Brain substrate for user memory, Space memory, retained Brain Sources, recall/reflect, and evidence. Context Engine remains the lazy-loaded external context layer for workspace files, compiled pages, approved MCP tools, and compatibility providers.
+Memory is the context layer. **Bedrock AgentCore Memory** is the durable substrate and the only memory engine: the runtime hands each completed turn to the `memory-retain` Lambda and AgentCore extracts semantic facts, preferences, summaries, and episodes in the background. Context Engine remains the lazy-loaded external context layer for workspace files, compiled pages, and approved MCP tools.
 
 In the current open source app, that mainly means:
 
 - thread history selected for the context window
-- Space document retention through Hindsight Brain Sources
-- long-term user and Space memory recall/reflect through Hindsight by default
+- authored documents mounted as workspace files
+- long-term memory recall through AgentCore Memory
 - context assembly before model invocation
-
-AgentCore managed memory remains available as an explicit compatibility mode for low-cost/development deployments, not as the hosted default.
 
 See [Memory](/concepts/knowledge/).
 
@@ -186,8 +184,7 @@ The app tier is where computation happens. It depends on both lower tiers.
 | Integration Lambdas      | One per integration (GitHub, Google) — handles inbound events                |
 | Step Functions           | Workflow execution adapter                                                   |
 | EventBridge              | Trigger plumbing for scheduled AgentLoops, Workflows, and internal cron jobs |
-| Bedrock AgentCore Memory | Explicit compatibility mode for low-cost/development managed memory          |
-| ECS Fargate              | Hindsight Brain memory service (`enable_hindsight = true` by default)        |
+| Bedrock AgentCore Memory | Durable agent memory — retain, recall, episodes (the only memory engine)     |
 | CloudFront               | CDN for web app static files                                                 |
 | SES (sending)            | Outbound email from agent responses                                          |
 
@@ -209,10 +206,10 @@ A full round trip from user message to agent response:
 3. Selected AgentCore runtime receives event
    └─ Reads thread history from Aurora
    └─ Downloads assigned skill packs from S3
-   └─ Uses direct Hindsight recall/reflect for durable user and Space memory
-   └─ Uses Context Engine for compiled pages, workspace files, approved MCP tools, and explicit compatibility providers
-   └─ After the turn completes, the platform retains learned context into Hindsight
-   └─ Builds context: system prompt + selected history + Hindsight memory + lazy-loaded context + tool config
+   └─ Uses the `recall` tool for durable memory
+   └─ Uses Context Engine for compiled pages, workspace files, and approved MCP tools
+   └─ After the turn completes, the platform hands the turn to AgentCore Memory for background extraction
+   └─ Builds context: system prompt + selected history + recalled memory + lazy-loaded context + tool config
 
 4. Bedrock inference
    └─ Selected runtime sends context + message to Bedrock
@@ -304,8 +301,7 @@ This split is useful to keep in mind:
 | Skill packs               | S3 (skill catalog bucket)                   | S3 versioning enabled                          |
 | Knowledge documents       | S3 (knowledge bucket)                       | S3 versioning enabled                          |
 | Audit logs                | S3 (audit log bucket)                       | S3 versioning + lifecycle to Glacier after 90d |
-| Memories (managed)        | Aurora Postgres                             | Same as above                                  |
-| Memories (Hindsight)      | Aurora Postgres + ECS in-flight processing  | Same as above                                  |
+| Memories                  | Bedrock AgentCore Memory                    | AWS-managed encryption at rest                 |
 | OAuth tokens / API keys   | SSM Parameter Store (SecureString, KMS)     | SSM-managed                                    |
 | Terraform state           | S3 (tfstate bucket) + DynamoDB (lock table) | S3 versioning enabled                          |
 | Vector index              | Aurora Postgres (`pgvector`)                | Same as Aurora above                           |

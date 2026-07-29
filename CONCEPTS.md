@@ -205,19 +205,19 @@ The four-way taxonomy for workspace-defined tools (`tools/<slug>/TOOL.md`): `bin
 
 ### Tenant Brain
 
-The single tenant-level consolidated memory layer: the wiki pages materialized from consolidated memory. Sits above the raw Hindsight user and Space banks. There is no separate team tier — Spaces are the team construct and Space banks are the team-scope memory store. At the company scope the Brain is anchored by the Tenant Bank (see below), which supersedes the earlier "team and space are scope attributes, not separate stores" framing at the tenant tier only.
+The single tenant-level consolidated memory layer: the wiki pages materialized from consolidated memory. It sits above per-requester AgentCore memory, which is the only raw memory store — there is no separate team tier and no company-scope bank. Requester scope is where facts land; the Brain is where they are consolidated for humans.
 
-### Tenant Bank
+### Tenant Bank — retired
 
-The single company-scope Hindsight bank per tenant — the only bank class beyond the existing user and Space banks. It holds evidence brought up from Space banks via Governed Promotion; distillation over that evidence stays vendor-native (Hindsight consolidation and mental models) rather than reimplemented. Piloted behind the mental-models spike gate.
+Retired with the Hindsight removal (THINK-406). A company-scope bank class distinct from requester memory no longer exists; AgentCore managed memory is the only store, scoped per requester. Historical plans and brainstorms that describe Tenant Banks describe a shipped-and-removed design.
 
-### Governed Promotion
+### Governed Promotion — retired
 
-Copying explicitly selected memories into a higher-scope bank as evidence, carrying source bank id, source memory id, and original timestamp in metadata — never re-summarizing on the way up, and never hollowing out the source bank (the source row stays put). Promotion is idempotent per source memory and audited with actor + justification. Higher scopes therefore stay auditable and re-derivable from their sources, avoiding lossy summary-of-summaries compounding. In the pilot, the only path is Space bank → Tenant Bank, manually initiated by a tenant operator.
+Retired with the Tenant Bank (THINK-406). There is no promotion path between memory scopes; the surviving consolidation path is the nightly dreaming pass writing requester-scope markdown, plus wiki compile over consolidated memory.
 
 ### Dream State
 
-The recurring background consolidation pass over memory banks. It does two jobs: hygiene on the banks in place (merge duplicates, resolve contradictions, decay or forget stale and junk memories, quarantine eval-test residue — real deletion, not view filtering) and distillation of consolidated facts into the Tenant Brain as evidence. It is the only ingestion path into the Brain.
+The recurring nightly background pass over a requester's memory. It reads the requester's AgentCore memory records plus the idle learner's accumulated notes and rewrites the requester's markdown memory files in S3 under `memory/` — consolidating repeats, dropping stale notes, and sharpening what the agent should carry into the next session. It does not mutate AgentCore's own namespaces (semantic / preferences / summaries / episodes); AgentCore runs its own extraction and hygiene behind `retainTurn`.
 
 ### Evidence-Threshold Promotion
 
@@ -225,7 +225,7 @@ The mechanical rule deciding which entities earn wiki pages: an entity is promot
 
 ### Progressive Discovery
 
-The agent's Brain-first memory read path: consult the compiled wiki first, then drill down into raw Hindsight bank recall only when underlying detail is needed.
+The agent's Brain-first memory read path: consult the compiled wiki first, then drill down into raw AgentCore memory recall (`recall` / `memorySearch`) only when underlying detail is needed.
 
 ### External Research Loop
 
@@ -249,7 +249,7 @@ The two-mode split of memory processors: `personal` (one per user, target scope 
 
 ### Claims / Evidence / Derivations
 
-The three-ledger provenance spine of external memory. **Evidence** (`memory_evidence_items`) is one acquired item edition — source id + content-sensitive version in a unique slot, bounded snapshot, lifecycle. **Claims** (`memory_claims`) are structured facts (subject key, predicate, value + hash, effective interval, status active/superseded/retracted) supported by claim-evidence edges; single-valued predicates supersede, zero-support claims sweep closed. **Derivations** (`memory_derivations`) record evidence → Hindsight-document lineage so retraction can find and delete exactly what a source projected.
+The three-ledger provenance spine of external memory. **Evidence** (`memory_evidence_items`) is one acquired item edition — source id + content-sensitive version in a unique slot, bounded snapshot, lifecycle. **Claims** (`memory_claims`) are structured facts (subject key, predicate, value + hash, effective interval, status active/superseded/retracted) supported by claim-evidence edges; single-valued predicates supersede, zero-support claims sweep closed. **Derivations** (`memory_derivations`) record evidence → provider-document lineage so retraction can find and delete exactly what a source projected.
 
 ### Erase Epoch
 

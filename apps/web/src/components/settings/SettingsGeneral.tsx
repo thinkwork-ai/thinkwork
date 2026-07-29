@@ -988,10 +988,9 @@ function sesSenderText(fields: Record<string, unknown>): string {
 }
 
 function optionalAppsText(optionalApps: Record<string, unknown>): string {
-  const enabled = [
-    optionalApps.hindsight === true ? "hindsight" : null,
-    optionalApps.twenty === true ? "twenty" : null,
-  ].filter(Boolean);
+  const enabled = [optionalApps.twenty === true ? "twenty" : null].filter(
+    Boolean,
+  );
   return enabled.length ? enabled.join(", ") : "none";
 }
 

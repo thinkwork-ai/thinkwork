@@ -27,7 +27,7 @@ Every page is one of three types. The type shapes what kind of page it is.
 
 **Topic** pages are collections under a theme. "Austin kids activities, April 2026." "Portuguese restaurants I've tried." "Open questions about the backend migration."
 
-**Decision** pages record choices — what was decided, why, and what followed. "Decision: use Hindsight as the primary memory engine." "Decision: book the hotel in Bairro Alto instead of Chiado."
+**Decision** pages record choices — what was decided, why, and what followed. "Decision: standardize on AgentCore Memory." "Decision: book the hotel in Bairro Alto instead of Chiado."
 
 ## What's inside a page
 
@@ -80,7 +80,7 @@ Beyond conversations, compounding memory can ingest **external memory sources** 
 
 - **Acquire (evidence).** An adapter reads inside an explicitly granted boundary and records each item edition as an evidence row: source id, content-sensitive version, bounded snapshot (raw payloads live in encrypted S3 with a 7–90 day TTL, default 30). Replays are no-ops; the source stays authoritative — evidence is never a shadow mailbox or CRM.
 - **Extract (claims).** Deterministic extraction reduces the snapshot to **claims** (subject, predicate, value, effective interval) supported by claim-evidence edges. New editions supersede stale single-valued claims; facts removed at the source lose support and close their interval.
-- **Project + retain (bank).** Active claims render into a deterministic markdown projection with per-line claim provenance and retain into the right Hindsight bank — the user's private bank for personal processors, the Space/Tenant bank for shared ones. **Derivations** record exactly which evidence produced which document so retraction can undo it.
+- **Project + retain.** Active claims render into a deterministic markdown projection with per-line claim provenance and retain into the requester's memory. **Derivations** record exactly which evidence produced which document so retraction can undo it.
 - **Resolve (canonical identity).** Subjects resolve to **canonical entities** (exact source mappings win; strong natural keys like domains corroborate; ambiguity defers to the operator Resolution Queue instead of guessing).
 - **Compile (Wiki).** Tenant-scope Entity pages materialize one canonical entity each — canonical ID is the key, title and slug are presentation — so Twenty, a scraped website, a shared email thread, and a policy PDF that all describe "Acme" land on ONE page with cross-source citations.
 
@@ -100,7 +100,7 @@ Two modes run this pipeline: a **personal** processor per user (opt-in sources, 
 
 ### What's really happening
 
-Raw long-term memory (Hindsight or AgentCore) stays the canonical record. The wiki is a derived, rebuildable view — every page can be reconstructed by replaying the compile pipeline over the same memory records.
+Raw long-term memory in AgentCore stays the canonical record. The wiki is a derived, rebuildable view — every page can be reconstructed by replaying the compile pipeline over the same memory records.
 
 The OKF filesystem view adds one more derived layer. S3 holds versioned OKF
 bundles and current manifests for audit; EFS holds the currently mounted,
@@ -112,7 +112,7 @@ Every `wiki_*` table row carries both `tenant_id` and `owner_id`, both `NOT NULL
 
 ### Which adapter drives compiles
 
-Only Hindsight implements the `listRecordsUpdatedSince` cursor method. Tenants on AgentCore Memory won't run compiles in v1 — the enqueue path short-circuits with `skipped_adapter`.
+The compile pipeline is cursor-driven: it needs a memory adapter that implements `listRecordsUpdatedSince`. Only the removed Hindsight adapter did. The AgentCore adapter does not, so automatic compiles do not run — the enqueue path short-circuits with `skipped_adapter`. Restoring compiles means implementing a cursor read over AgentCore memory records.
 
 ### Design intent references
 

@@ -161,10 +161,10 @@ function buildTfvars(config: Record<string, string>): string {
     `db_password     = "${config.db_password}"`,
     ``,
     `# ── Memory ────────────────────────────────────────────────────────`,
-    `# Hindsight is the canonical user and Space memory provider for full installs.`,
-    `# Set memory_engine = "agentcore" only for explicit low-cost/development mode.`,
-    `enable_hindsight = ${config.enable_hindsight === "true"}`,
-    `memory_engine    = ""`,
+    `# AgentCore managed memory is the only memory engine.`,
+    `# The Hindsight add-on is retired; new stacks never provision it.`,
+    `enable_hindsight = false`,
+    `memory_engine    = "agentcore"`,
     ``,
     `# ── Managed Applications ──────────────────────────────────────────`,
     `# Twenty CRM is optional and disabled by default. Enabling it requires`,
@@ -391,7 +391,7 @@ export function registerInitCommand(program: Command): void {
             existing?.region ??
             (identity.region !== "unknown" ? identity.region : "us-east-1");
           config.database_engine = "aurora-serverless";
-          config.enable_hindsight = "true";
+          config.enable_hindsight = "false";
           config.google_oauth_client_id = "";
           config.google_oauth_client_secret = "";
           config.admin_url = "http://localhost:5174";
@@ -477,22 +477,7 @@ export function registerInitCommand(program: Command): void {
           );
 
           console.log("");
-          console.log(chalk.dim("  ── Memory ──"));
-          console.log(
-            chalk.dim(
-              "  Hindsight is the canonical user and Space memory provider.",
-            ),
-          );
-          console.log(
-            chalk.dim("  AgentCore managed memory is available as an explicit"),
-          );
-          console.log(chalk.dim("  low-cost/development opt-out."));
-          const hindsightAnswer = await ask(
-            "Enable Hindsight long-term memory? (Y/n)",
-            "Y",
-          );
-          config.enable_hindsight =
-            hindsightAnswer.toLowerCase() === "n" ? "false" : "true";
+          config.enable_hindsight = "false";
 
           console.log("");
           console.log(chalk.dim("  ── Auth ──"));
@@ -1018,9 +1003,7 @@ output "agentcore_memory_id" {
         console.log(
           `  ${chalk.bold("Database:")}        ${config.database_engine}`,
         );
-        console.log(
-          `  ${chalk.bold("Memory:")}          ${config.enable_hindsight === "true" ? "hindsight" : "agentcore"}`,
-        );
+        console.log(`  ${chalk.bold("Memory:")}          agentcore`);
         console.log(
           `  ${chalk.bold("Google OAuth:")}    ${config.google_oauth_client_id ? "enabled" : "disabled"}`,
         );

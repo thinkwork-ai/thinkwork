@@ -71,7 +71,6 @@ type Facet = (typeof FACETS)[number]["value"];
 
 function engineLabel(activeEngine: string | null | undefined): string {
   if (activeEngine === "agentcore") return "AgentCore managed memory";
-  if (activeEngine === "hindsight") return "Hindsight";
   if (!activeEngine || activeEngine === "unavailable") {
     return "No memory engine configured";
   }

@@ -90,13 +90,13 @@ db_password = "change-me-before-deploy"
 
 # Optional — defaults shown
 database_engine = "aurora-serverless"   # or "rds-postgres"
-# enable_hindsight = true                # default Hindsight Brain memory
 ```
 
-Hindsight is the default hosted Brain memory substrate. It provides durable
-user memory, Space memory, retained Brain Sources, recall/reflect, and evidence.
-Set `memory_engine = "agentcore"` only for an explicit low-cost/development
-managed-memory compatibility deployment.
+Memory needs no configuration. Bedrock AgentCore Memory is the only memory
+engine: the runtime hands each completed turn to AgentCore, which extracts
+semantic facts, preferences, summaries, and episodes in the background. New
+stacks should leave `enable_hindsight` and `memory_engine` unset — both are
+deprecated no-op inputs kept only for older customer stages.
 
 <Aside type="caution">
   Do not commit `db_password` to source control. Use a secrets manager or

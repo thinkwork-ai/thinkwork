@@ -345,7 +345,7 @@ export async function applyMigrations(options: {
         "CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations " +
         "(id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint);",
     );
-    // Hindsight shares this database and races the replay on a fresh stack —
+    // Other services share this database and race the replay on a fresh stack —
     // whoever creates pg_trgm/vector first wins, and if that happens inside a
     // session whose search_path points elsewhere, the operator classes become
     // invisible to every migration (harness cycle-8: "gin_trgm_ops does not

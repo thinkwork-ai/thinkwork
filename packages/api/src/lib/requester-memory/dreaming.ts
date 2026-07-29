@@ -14,11 +14,6 @@ import {
   extractLearningCandidates,
   type LearningCandidate,
 } from "./learner.js";
-import {
-  syncRequesterMemoryToHindsight,
-  type RequesterMemoryHindsightSyncResult,
-  type SyncRequesterMemoryToHindsightInput,
-} from "./hindsight-sync.js";
 import { invokeClaude } from "../wiki/bedrock.js";
 import {
   dreamingReportPath,
@@ -56,7 +51,6 @@ export type RequesterMemoryDreamingUserResult = {
   reason?: string;
   changedFiles: ChangedRequesterMemoryFile[];
   phaseSummary?: Record<DreamingPhase, unknown>;
-  hindsightSync?: RequesterMemoryHindsightSyncResult;
   error?: string;
 };
 
@@ -133,9 +127,6 @@ type DreamingDeps = {
     content: string;
   }) => Promise<unknown>;
   reflect?: (input: ReflectionInput) => Promise<string>;
-  syncHindsight?: (
-    input: SyncRequesterMemoryToHindsightInput,
-  ) => Promise<RequesterMemoryHindsightSyncResult>;
 };
 
 type ReflectionInput = {
@@ -245,7 +236,6 @@ export async function runRequesterMemoryDreamForUser(
         rem: { reflected: false, fallback: false },
         deep: { promoted: 0, compacted: false },
       },
-      hindsightSync: { status: "skipped", files: [] },
     };
   }
   const reflection = await runRemPhase(
@@ -325,18 +315,6 @@ export async function runRequesterMemoryDreamForUser(
     );
   }
 
-  const hindsightSync = input.dryRun
-    ? { status: "skipped" as const, files: [] }
-    : await (deps.syncHindsight ?? syncRequesterMemoryToHindsight)({
-        tenantId: target.tenantId,
-        userId: target.userId,
-        runId,
-        threadId: "requester-memory-dreaming",
-        changedFiles,
-      });
-
-  annotateChangedFilesWithHindsight(changedFiles, hindsightSync);
-
   return {
     ...target,
     status: changedFiles.length > 0 ? "changed" : "no_change",
@@ -356,7 +334,6 @@ export async function runRequesterMemoryDreamForUser(
         compacted: deep.compacted,
       },
     },
-    hindsightSync,
   };
 }
 
@@ -814,18 +791,4 @@ async function writeInternal(
     userId: target.userId,
     ...input,
   });
-}
-
-function annotateChangedFilesWithHindsight(
-  changedFiles: ChangedRequesterMemoryFile[],
-  hindsightSync: RequesterMemoryHindsightSyncResult,
-): void {
-  for (const syncFile of hindsightSync.files) {
-    const changedFile = changedFiles.find(
-      (file) => file.path === syncFile.path,
-    );
-    if (!changedFile) continue;
-    changedFile.hindsightDocumentId = syncFile.documentId;
-    changedFile.hindsightStatus = syncFile.status;
-  }
 }

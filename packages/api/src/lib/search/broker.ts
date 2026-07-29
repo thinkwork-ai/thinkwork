@@ -75,7 +75,7 @@ export type SearchBrokerResult = {
 };
 
 // FTS legs answer in tens of milliseconds; their budget only bounds the
-// pathological case. The memory leg rides Hindsight (30s transport ceiling)
+// pathological case. The memory leg rides the memory engine (30s transport ceiling)
 // and gets a wider allowance because its callers (ask/research) are not
 // keystroke-bound.
 const DEFAULT_TIMEOUT_MS: Record<SearchSource, number> = {

@@ -9,7 +9,7 @@ import type { ContextProviderDescriptor } from "../types.js";
 const provider: ContextProviderDescriptor = {
   id: "memory",
   family: "memory",
-  displayName: "Hindsight Memory",
+  displayName: "Long-term Memory",
   defaultEnabled: false,
   query: async () => ({ hits: [] }),
 };
@@ -56,7 +56,7 @@ describe("Context Engine admin config", () => {
     });
   });
 
-  it("normalizes Hindsight operator controls", () => {
+  it("normalizes memory operator controls", () => {
     expect(
       normalizeMemoryProviderConfig({
         queryMode: "reflect",

@@ -31,7 +31,6 @@ describe("buildVerifyChecks", () => {
     expect(names).toContain("Authenticated API call");
     expect(names).toContain("Web app loads");
     expect(names).toContain("Database schema applied");
-    expect(names).toContain("Hindsight health");
     expect(names).toContain("Workspace seeded");
     expect(names).toContain("Deployed artifact evidence");
   });
@@ -44,7 +43,7 @@ describe("buildVerifyChecks", () => {
     });
     const blocking = checks.filter((c) => c.blocking !== false);
     const pending = checks.filter((c) => c.blocking === false);
-    expect(blocking.length).toBeGreaterThanOrEqual(7);
+    expect(blocking.length).toBeGreaterThanOrEqual(6);
     expect(pending.map((c) => c.name)).toEqual([
       "SES production access",
       "Domain DNS delegation (acme.example.com)",

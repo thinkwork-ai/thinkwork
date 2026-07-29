@@ -378,7 +378,7 @@ describe("U7 capability extensions", () => {
     });
   });
 
-  it("context-engine can omit memory search so direct memory tools own Hindsight recall", async () => {
+  it("context-engine can omit memory search so direct memory tools own recall", async () => {
     const { api, tools } = makeFakeApi();
     const extension = createContextEngineExtension({
       enabled: true,

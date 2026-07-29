@@ -28,14 +28,14 @@ describe("captureMobileMemory", () => {
         id: "memory-1",
         content: { text: "Prefer concise summaries." },
       },
-      backend: "hindsight",
+      backend: "agentcore",
     });
     getMemoryServicesMock.mockReturnValue({
       adapter: { retain: retainMock },
     } as any);
   });
 
-  it("sends mobile quick captures with first-class Hindsight retain params", async () => {
+  it("sends mobile quick captures through the memory adapter retain", async () => {
     const result = await captureMobileMemory(
       null,
       {
@@ -55,20 +55,6 @@ describe("captureMobileMemory", () => {
         sourceType: "explicit_remember",
         content: "Prefer concise summaries.",
         role: "user",
-        hindsight: expect.objectContaining({
-          tags: [
-            "source:mobile-capture",
-            "surface:mobile",
-            "surface:graphql",
-            "scope:personal",
-            "scope:explicit-memory",
-          ],
-          documentTags: ["source:mobile-capture", "scope:explicit-memory"],
-          observationScopes: [
-            ["source:mobile-capture"],
-            ["scope:explicit-memory"],
-          ],
-        }),
         metadata: expect.objectContaining({
           topic: "style",
           capture_source: "mobile_quick_capture",
@@ -78,8 +64,6 @@ describe("captureMobileMemory", () => {
         }),
       }),
     );
-    const call = retainMock.mock.calls[0]?.[0];
-    expect(call.hindsight.timestamp).toBe(call.metadata.captured_at);
     expect(result).toMatchObject({
       id: "memory-1",
       userId: "user-1",

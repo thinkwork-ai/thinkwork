@@ -21,10 +21,10 @@
  *    on every call. Verified by the `Sandbox factory freshness`
  *    describe-block — repeated calls return distinct objects.
  *
- * 4. PASS — Memory tools (U6) + Hindsight tools (U6): both build* helpers
- *    fail closed when `tenantId` is missing or empty. Verified by
- *    `Memory tool tenant scope` and `Hindsight tool tenant scope`
- *    describe-blocks. There is no agent-supplied override path — `tenantId`
+ * 4. PASS — Memory tools (U6): the build* helper fails closed when
+ *    `tenantId` is missing or empty. Verified by the
+ *    `Memory tool tenant scope` describe-block.
+ *    There is no agent-supplied override path — `tenantId`
  *    is bound on the context struct and consulted by `requireScope` on
  *    every tool invocation.
  *
@@ -77,10 +77,6 @@ import {
 } from "../../src/mcp.js";
 import { resolveSandboxFactory } from "../../src/runtime/sandbox-factory.js";
 import { buildMemoryTools, MemoryToolError } from "../../src/tools/memory.js";
-import {
-  buildHindsightTools,
-  HindsightToolError,
-} from "../../src/tools/hindsight.js";
 
 const REPO_ROOT = path.resolve(__dirname, "../../../../..");
 const PI_SRC = path.resolve(__dirname, "../../src");
@@ -371,7 +367,7 @@ describe("Sandbox factory freshness (audit item #3)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Memory + Hindsight tool tenant scope (audit item #4).
+// Memory tool tenant scope (audit item #4).
 // ---------------------------------------------------------------------------
 
 describe("Memory tool tenant scope (audit item #4)", () => {
@@ -404,31 +400,6 @@ describe("Memory tool tenant scope (audit item #4)", () => {
     // Distinct AgentTool instances per invocation (no module cache).
     expect(a[0]).not.toBe(b[0]);
     expect(a[1]).not.toBe(b[1]);
-  });
-});
-
-describe("Hindsight tool tenant scope (audit item #4)", () => {
-  it("buildHindsightTools throws at execute() when tenantId is empty", async () => {
-    const tools = buildHindsightTools({
-      endpoint: "https://hindsight.dev.example.com",
-      tenantId: "",
-      userId: "user-A",
-    });
-    expect(tools).toHaveLength(2);
-    await expect(tools[0]!.execute("call-1", { query: "x" })).rejects.toThrow(
-      HindsightToolError,
-    );
-  });
-
-  it("buildHindsightTools throws at execute() when endpoint is empty", async () => {
-    const tools = buildHindsightTools({
-      endpoint: "",
-      tenantId: "tenant-A",
-      userId: "user-A",
-    });
-    await expect(tools[0]!.execute("call-1", { query: "x" })).rejects.toThrow(
-      HindsightToolError,
-    );
   });
 });
 

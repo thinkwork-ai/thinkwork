@@ -417,7 +417,7 @@ describe("SettingsMemory contract", () => {
       "utf8",
     );
     expect(source).not.toContain("updateMemoryRecord");
-    // No Hindsight-era graph view, raw/curated toggle, or space pickers.
+    // No legacy graph view, raw/curated toggle, or space pickers.
     expect(source).not.toContain("MemoryGraph");
     expect(source).not.toContain("isCuratedMemory");
     expect(source).not.toContain("SpacesQuery");

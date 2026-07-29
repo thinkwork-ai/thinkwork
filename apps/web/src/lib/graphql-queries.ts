@@ -2610,10 +2610,8 @@ export const ComputerMemorySystemConfigQuery = gql`
     memorySystemConfig {
       activeEngine
       managedMemoryEnabled
-      hindsightEnabled
       userMemoryEnabled
       spaceMemoryEnabled
-      legacyHindsightAvailable
       companyDistillationEnabled
     }
   }

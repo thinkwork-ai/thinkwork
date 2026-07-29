@@ -11,8 +11,8 @@ This page documents all Terraform variables for the `thinkwork-ai/thinkwork/aws`
 
 A short orientation before the tables:
 
-- **Dev stacks** favor cost and speed. Aurora Serverless v2 at the minimum capacity, single NAT gateway, hosted Hindsight Brain memory, and Claude Haiku as the default model. You can stand up and tear down these stacks in minutes.
-- **Production stacks** favor availability and safety. HA across AZs, reserved concurrency on AgentCore, domain + ACM, Google OAuth enabled, and Hindsight sized for tenant memory load. Expect the first deploy to take 15–20 minutes.
+- **Dev stacks** favor cost and speed. Aurora Serverless v2 at the minimum capacity, single NAT gateway, and Claude Haiku as the default model. You can stand up and tear down these stacks in minutes.
+- **Production stacks** favor availability and safety. HA across AZs, reserved concurrency on AgentCore, domain + ACM, and Google OAuth enabled. Expect the first deploy to take 15–20 minutes.
 - **Shared-infrastructure stacks** use the `create_*` boolean flags to adopt an existing VPC, database, or Cognito pool instead of creating new ones. Every `existing_*` field is required if its corresponding `create_*` is `false`. See [BYO Infrastructure](/deploy/byo/) for the full story.
 - **Enterprise customer stacks** should use a customer-owned [Enterprise Deployment Repo](/deploy/enterprise-deployment-repo/) rather than forking the ThinkWork source repository. Bootstrap creates the repo, state backend, artifact bucket, GitHub OIDC trust, and per-stage CI environment; after that, GitHub Actions deploys pinned releases and applies [customer overlays](/deploy/customer-overlay-contract/).
 
@@ -45,8 +45,8 @@ These must be set in every deployment. There are no defaults.
 | Variable                         | Type   | Default                                       | Description                                                                                                                                                                                |
 | -------------------------------- | ------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `database_engine`                | string | `"aurora-serverless"`                         | `aurora-serverless` (Aurora Serverless v2) or `rds-postgres` (provisioned RDS). Use `aurora-serverless` for dev/staging and variable workloads.                                            |
-| `enable_hindsight`               | bool   | `true`                                        | Deploy the Hindsight ECS service used as the hosted Brain memory substrate for user memory, Space memory, retained documents, recall/reflect, and evidence.                                |
-| `memory_engine`                  | string | `""`                                          | Active memory engine. Empty selects Hindsight. Use `"agentcore"` only for explicit low-cost/development compatibility.                                                                     |
+| `enable_hindsight`               | bool   | `false`                                       | **Deprecated no-op.** Retained only for customer stages still running an older release. Set `false` on new stacks; scheduled for removal.                                                  |
+| `memory_engine`                  | string | `"agentcore"`                                 | **Deprecated no-op.** AgentCore is the only memory engine; any other value is normalized to `agentcore`. Scheduled for removal.                                                            |
 | `enable_workspace_orchestration` | bool   | `false`                                       | Deploy S3 EventBridge/SQS routing and the workspace event dispatcher for async folder-native agent work. Also enable `tenants.workspace_orchestration_enabled` per tenant after migration. |
 | `default_model_id`               | string | `"anthropic.claude-3-5-sonnet-20241022-v2:0"` | Bedrock model ID for the default Agent Template created on first deploy.                                                                                                                   |
 | `log_retention_days`             | number | `30`                                          | CloudWatch log group retention in days. Set to `0` for never expire (not recommended for production).                                                                                      |
@@ -114,26 +114,27 @@ These must be set in every deployment. There are no defaults.
 
 ## Memory
 
-Hosted ThinkWork uses Hindsight as the canonical Brain memory substrate. The
-runtime retains learned context into Hindsight after turns and uses direct
-Hindsight recall/reflect for user and Space memory. AgentCore managed memory can
-still be provisioned as an explicit compatibility path, but it is not the
-hosted default.
+**Bedrock AgentCore Memory is the only memory engine.** There is nothing to
+choose. The runtime hands each completed turn to the `memory-retain` Lambda,
+which calls `retainTurn`; AgentCore then runs its own background extraction into
+the semantic, preferences, summaries, and episodes namespaces.
 
-| Variable                           | Type   | Default   | Description                                                                                                 |
-| ---------------------------------- | ------ | --------- | ----------------------------------------------------------------------------------------------------------- |
-| `agentcore_memory_id`              | string | `""`      | Optional pre-existing AgentCore Memory resource ID to reuse for explicit managed-memory compatibility mode. |
-| `enable_hindsight`                 | bool   | `true`    | Deploy the Hindsight ECS service used by hosted Brain memory.                                               |
-| `hindsight_image_tag`              | string | `"0.5.0"` | Hindsight Docker image tag. Only used when `enable_hindsight = true`.                                       |
-| `hindsight_retain_interval_hours`  | number | `1`       | How often (hours) Hindsight runs the retain step. Only used when `enable_hindsight = true`.                 |
-| `hindsight_reflect_interval_hours` | number | `24`      | How often (hours) Hindsight runs the reflect/synthesis step.                                                |
-| `hindsight_task_cpu`               | number | `512`     | ECS Fargate CPU units for Hindsight tasks.                                                                  |
-| `hindsight_task_memory`            | number | `1024`    | ECS Fargate memory (MB) for Hindsight tasks.                                                                |
+| Variable              | Type   | Default | Description                                                                       |
+| --------------------- | ------ | ------- | --------------------------------------------------------------------------------- |
+| `agentcore_memory_id` | string | `""`    | Optional pre-existing AgentCore Memory resource ID to reuse instead of creating one. |
 
-When Hindsight is active, the agent runtime uses Hindsight recall/reflect for
-durable memory and the post-turn retain pipeline writes learned context back to
-Hindsight. Do not configure dual default memory products unless you are
-performing a deliberate compatibility migration.
+### Deprecated memory inputs
+
+These variables no longer select anything. They survive only because customer
+stages still run an older release that reads them, and they are scheduled for
+removal. New stacks should set `enable_hindsight = false` and either omit
+`memory_engine` or set it to `"agentcore"`.
+
+| Variable                                                                                   | Status                                                                    |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `enable_hindsight`                                                                         | Deprecated no-op on current releases. Set `false`.                        |
+| `memory_engine`                                                                            | Deprecated no-op. Any legacy value is normalized to `agentcore`.          |
+| `hindsight_image_tag`, `hindsight_retain_interval_hours`, `hindsight_reflect_interval_hours`, `hindsight_task_cpu`, `hindsight_task_memory` | Deprecated. Ignored unless a stage is pinned to a pre-removal release. |
 
 ## Email (SES)
 
@@ -202,8 +203,6 @@ hosted_zone_id = "Z1234567890ABC"
 database_engine   = "aurora-serverless"
 aurora_min_capacity = 1
 aurora_max_capacity = 32
-
-enable_hindsight = true      # hosted Hindsight Brain memory
 
 single_nat_gateway = false   # HA: one NAT per AZ
 

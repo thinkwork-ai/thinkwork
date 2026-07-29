@@ -268,47 +268,6 @@ export function buildVerifyChecks(ctx: VerifyContext): Check[] {
   });
 
   checks.push({
-    name: "Hindsight health",
-    run: () => {
-      const counts = awsText(
-        `ecs describe-services --cluster thinkwork-${ctx.stage}-cluster --services thinkwork-${ctx.stage}-hindsight --region ${ctx.region} --query "services[0].[runningCount,desiredCount]" --output text`,
-      );
-      if (!counts) {
-        return { pass: true, detail: "Hindsight not enabled — skipped" };
-      }
-      const [running, desired] = counts.split(/\s+/);
-      // A provisioned service with zero running tasks is a FAILURE, not
-      // "not enabled" — cycle-7's stack sat at desired=1/running=0 (tasks
-      // could not reach CloudWatch) and the probe reported it as skipped.
-      if (running === "0" && desired !== "0") {
-        return {
-          pass: false,
-          detail: `Hindsight service desired=${desired} but running=0 — tasks are failing to start (check stopped-task reasons).`,
-        };
-      }
-      if (running === "0") {
-        return { pass: true, detail: "Hindsight not enabled — skipped" };
-      }
-      const alb = awsText(
-        `elbv2 describe-load-balancers --region ${ctx.region} --query "LoadBalancers[?contains(LoadBalancerName, 'tw-${ctx.stage}-hindsight')].DNSName|[0]" --output text`,
-      );
-      if (!alb) {
-        return {
-          pass: false,
-          detail: "Hindsight service running but no ALB found.",
-        };
-      }
-      const res = httpProbe(`http://${alb}/health`);
-      return res.status === 200 && res.body.includes("healthy")
-        ? { pass: true, detail: `ECS running, /health healthy` }
-        : {
-            pass: false,
-            detail: `/health → ${res.status || "unreachable"}`,
-          };
-    },
-  });
-
-  checks.push({
     name: "Workspace seeded",
     run: () => {
       // A fresh stack has zero tenants until first signup — deploy-time
@@ -408,7 +367,7 @@ export function registerVerifyCommand(program: Command): void {
   program
     .command("verify")
     .description(
-      "Prove a deployed stage works: GraphQL, auth, web, database schema, Hindsight, seeding, deployed-artifact evidence.",
+      "Prove a deployed stage works: GraphQL, auth, web, database schema, seeding, deployed-artifact evidence.",
     )
     .option("-p, --profile <name>", "AWS profile")
     .option("-s, --stage <name>", "Deployment stage")

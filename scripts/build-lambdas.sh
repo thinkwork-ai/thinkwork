@@ -82,7 +82,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "chat-agent-invoke" ] || [ "$name" = "memory-retain" ] || [ "$name" = "brain-dream-state" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wakeup-processor" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "skills" ] || [ "$name" = "identity-graph-projector" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "chat-agent-invoke" ] || [ "$name" = "memory-retain" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wakeup-processor" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "skills" ] || [ "$name" = "identity-graph-projector" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -256,8 +256,6 @@ build_handler "thread-idle-memory-learning" \
   "$REPO_ROOT/packages/api/src/handlers/thread-idle-memory-learning.ts"
 build_handler "requester-memory-dreaming" \
   "$REPO_ROOT/packages/api/src/handlers/requester-memory-dreaming.ts"
-build_handler "brain-dream-state" \
-  "$REPO_ROOT/packages/api/src/handlers/brain-dream-state.ts"
 build_handler "memory-stage-worker" \
   "$REPO_ROOT/packages/api/src/handlers/memory-stage-worker.ts"
 # THINK-193 U2: scheduled retraction-saga retry drainer. Bundled flags —
@@ -577,8 +575,6 @@ build_handler "workspace-fetch-source" \
 build_handler "agent-skills-list" \
   "$REPO_ROOT/packages/api/agent-skills-list.ts"
 
-build_handler "memory" \
-  "$REPO_ROOT/packages/api/memory.ts"
 
 build_handler "memory-retain" \
   "$REPO_ROOT/packages/api/src/handlers/memory-retain.ts"

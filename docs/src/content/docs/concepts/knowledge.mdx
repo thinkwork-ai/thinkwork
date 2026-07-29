@@ -1,6 +1,6 @@
 ---
 title: Memory
-description: "The harness-owned context layer for ThinkWork agents: Hindsight memory, Brain Sources, compiled pages, workspace files, and approved tools behind one inspectable contract."
+description: "The harness-owned context layer for ThinkWork agents: AgentCore memory, compiled pages, workspace files, and approved tools behind one inspectable contract."
 ---
 
 import { Card, CardGrid, Aside } from "@astrojs/starlight/components";
@@ -23,20 +23,16 @@ That distinction matters. Threads answer "what happened?" Memory answers "what s
 
 ## What It Contains
 
-Memory is an umbrella over durable Hindsight memory plus source families that can be inspected or lazy-loaded. Operators see them together in Admin because they all affect what an agent can know, but each source keeps its own contract and provenance.
+Memory is an umbrella over durable AgentCore memory plus source families that can be inspected or lazy-loaded. Operators see them together in Admin because they all affect what an agent can know, but each source keeps its own contract and provenance.
 
 <CardGrid>
   <Card title="Retained Memory" icon="seti:bookmark">
-    Durable facts, preferences, and observations retained from prior work.
-    Hosted ThinkWork stores user and Space Brain memory in Hindsight.
+    Durable facts, preferences, summaries, and episodes extracted from prior
+    work by Bedrock AgentCore Memory — the only memory engine.
   </Card>
   <Card title="Pages" icon="graph">
     Compiled pages: entity, topic, and decision pages distilled from memory
     records and source citations.
-  </Card>
-  <Card title="Brain Sources" icon="open-book">
-    Operator-curated Space documents retained into Hindsight with stable
-    document ids, tags, observation scopes, and source evidence.
   </Card>
   <Card title="Workspace Files" icon="file">
     Permissioned files from an agent workspace, template workspace, or tenant
@@ -59,13 +55,13 @@ Most agent systems expose memory, RAG, workspace search, and external search as 
 Memory puts those sources behind one operator boundary:
 
 - operators can inspect and test the sources together;
-- agents can use direct Hindsight memory plus external context without hard-coding every backend;
+- agents can use durable memory plus external context without hard-coding every backend;
 - every hit carries provenance, source family, rank, freshness, and provider status;
 - backend choices can change without changing the product story.
 
 ## How a Turn Uses Memory
 
-At turn time, the runtime combines recent thread history, direct Hindsight memory recall/reflect, compiled pages, Brain Sources, workspace files, and approved external context tools. Context Engine ranks and budgets lazy-loaded external results before the model sees them.
+At turn time, the runtime combines recent thread history, AgentCore memory recall, compiled pages, workspace files, and approved external context tools. Context Engine ranks and budgets lazy-loaded external results before the model sees them.
 
 ```
 User message arrives in a thread
@@ -74,9 +70,8 @@ User message arrives in a thread
   Turn context assembly
         │
         ├─ Recent thread history
-        ├─ Hindsight recall/reflect
+        ├─ AgentCore memory recall
         ├─ Compiled pages
-        ├─ Brain Sources
         ├─ Workspace files
         └─ Approved MCP search tools
         │
@@ -87,14 +82,14 @@ User message arrives in a thread
   Response + tool calls → thread
 ```
 
-Every external source is optional. A focused support bot may only need Space Brain Sources. A long-running sales agent may use Hindsight memory, compiled customer pages, workspace files, and approved operational search tools.
+Every external source is optional. A focused support bot may only need its Space workspace files. A long-running sales agent may use retained memory, compiled customer pages, workspace files, and approved operational search tools.
 
 ## Trust and Provenance
 
 Memory treats source trust as a product concern, not a prompt afterthought.
 
-- **Authored knowledge** comes from Hindsight-retained Brain Sources and keeps document/source citations.
-- **Memory** comes from prior work and keeps Hindsight bank/source references.
+- **Authored knowledge** comes from workspace files and keeps path/version citations.
+- **Memory** comes from prior work and keeps namespace and record references.
 - **Compiled pages** summarize many source facts and keep page-section provenance.
 - **External MCP hits** are transient unless a separate workflow promotes them.
 - **Operational facets** can be live and fresh, but should not be silently converted into durable narrative facts.
@@ -108,14 +103,12 @@ Memory treats source trust as a product concern, not a prompt afterthought.
 
 ## Admin Surface
 
-In Admin, the operator Memory surface lives at `/settings/memory` and has three
-views:
+In Admin, the operator Memory surface lives at `/settings/memory`:
 
 | View            | Purpose                                                                        |
 | --------------- | ------------------------------------------------------------------------------ |
-| Memory          | Browse and search operator-visible Hindsight memory records with bank evidence |
-| Wiki            | Inspect compiled pages and page search output                                  |
-| Sources         | Manage Hindsight Brain Sources and document ingest                             |
+| Memory          | Browse, search, and edit operator-visible AgentCore memory records             |
+| Wiki            | Inspect compiled pages and page search output                                 |
 
 Older paths and implementation names may still use `knowledge` for
 compatibility, but the canonical operator route for this pass is
@@ -123,8 +116,8 @@ compatibility, but the canonical operator route for this pass is
 
 ## Related Pages
 
-- [Brain Sources](/concepts/knowledge/document-knowledge/) — authored document sources
-- [Retained Memory](/concepts/knowledge/memory/) — Hindsight-backed retained facts and Space memory
+- [Document Sources](/concepts/knowledge/document-knowledge/) — where authored documents live
+- [Retained Memory](/concepts/knowledge/memory/) — the AgentCore-backed retained-memory layer
 - [Compiled Pages](/concepts/knowledge/compounding-memory/) — durable page distillation
 - [Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how memories become pages
 - [Page Model](/concepts/knowledge/compounding-memory-pages/) — sections, aliases, links, mentions, and sources

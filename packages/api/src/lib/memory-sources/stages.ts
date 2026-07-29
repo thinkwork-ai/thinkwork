@@ -23,7 +23,7 @@ import {
   type MemoryStageWorkerResult,
 } from "@thinkwork/agent-loops-core";
 import { getMemoryServices } from "../memory/index.js";
-import { runBrainDreamState } from "../brain/dream/runner.js";
+import type { DocumentCapableMemoryAdapter } from "./engine-capabilities.js";
 import { resolveTargetBankId } from "./repository.js";
 import {
   listEvidenceForProjection,
@@ -142,7 +142,6 @@ export interface StageContext {
   /** Injected S3 client for snapshot IO; defaults to the lazy module client. */
   s3?: S3Client;
 }
-
 
 /**
  * Approved-plan override carried in options.override (THINK-193 U3). The
@@ -763,11 +762,12 @@ async function runRetainInner(
   ctx: StageContext,
 ): Promise<MemoryStageWorkerResult> {
   const { db, event, processor } = ctx;
-  const { adapter, config } = getMemoryServices();
-  if (config.engine !== "hindsight" || !adapter.upsertMarkdownMemoryDocument) {
+  const { adapter: baseAdapter, config } = getMemoryServices();
+  const adapter = baseAdapter as DocumentCapableMemoryAdapter;
+  if (!adapter.upsertMarkdownMemoryDocument) {
     return failed(
       event.stage,
-      `memory engine "${config.engine}" has no document upsert — Hindsight required`,
+      `memory engine "${config.engine}" has no markdown document store — external-source retain is unsupported`,
     );
   }
   const sourceById = new Map(ctx.sources.map((source) => [source.id, source]));
@@ -921,7 +921,7 @@ async function runRetainInner(
             });
           } catch (compensationErr) {
             console.error(
-              `[memory-sources] Hindsight write compensation failed for ${documentId} — recording derivation + reopening erase marker: ${(compensationErr as Error)?.message}`,
+              `[memory-sources] document write compensation failed for ${documentId} — recording derivation + reopening erase marker: ${(compensationErr as Error)?.message}`,
             );
             await recordDerivation(db, {
               tenantId: processor.tenant_id,
@@ -943,7 +943,7 @@ async function runRetainInner(
     }
 
     // F8: derivation + run item commit in ONE transaction after the
-    // (idempotent) Hindsight write. Separate commits let a crash strand the
+    // (idempotent) memory write. Separate commits let a crash strand the
     // evidence: the derivation alone marks it "done" for the staleness
     // work list, so a retry would skip it forever.
     await recordDerivationWithRunItem(db, {
@@ -1008,62 +1008,18 @@ export async function runCompound(
       },
     };
   }
-  const { adapter, config } = getMemoryServices();
-  if (config.engine !== "hindsight" || !adapter.consolidateBankById) {
+  const { adapter: baseAdapter, config } = getMemoryServices();
+  const adapter = baseAdapter as DocumentCapableMemoryAdapter;
+  if (!adapter.consolidateBankById) {
     return failed(
       event.stage,
-      `memory engine "${config.engine}" has no targeted consolidation — Hindsight required`,
+      `memory engine "${config.engine}" has no targeted bank consolidation — compound is unsupported`,
     );
   }
 
-  const bankId = resolveTargetBankId(processor);
-  const result = await runBrainDreamState({
-    db,
-    consolidator: {
-      consolidateBankById: (id: string) => adapter.consolidateBankById!(id),
-    },
-    input: { tenantId: processor.tenant_id, bankId, dryRun: false },
-  });
-
-  const bank = result.banks[0];
-  const applied =
-    bank?.status === "applied" ||
-    bank?.status === "resumed_applied" ||
-    bank?.status === "skipped_dedupe";
-  if (!bank || !applied) {
-    return failed(
-      event.stage,
-      `targeted consolidation of ${bankId} did not settle: ${bank?.status ?? "no bank result"}${bank?.error ? ` (${bank.error})` : ""}`,
-    );
-  }
-
-  const sourceConfigId = ctx.sources[0]?.id;
-  if (sourceConfigId) {
-    await recordRunItem(db, {
-      tenantId: processor.tenant_id,
-      workflowRunId: event.workflowRunId,
-      sourceConfigId,
-      sourceItemId: bankId,
-      stage: "compound",
-      result: "changed",
-      detail: {
-        dreamRunId: bank.runId,
-        status: bank.status,
-        applied: bank.applied ?? null,
-      },
-    });
-  }
-
-  return {
-    status: "succeeded",
-    stage: event.stage,
-    counts: { compounded: 1 },
-    output: {
-      bankId,
-      dreamRunId: bank.runId,
-      dreamStatus: bank.status,
-    },
-  };
+  // Unreachable today: no engine implements `consolidateBankById` since
+  // Hindsight was retired (THINK-406). The guard above is the live path.
+  return failed(event.stage, "targeted consolidation is unavailable");
 }
 
 // ---------------------------------------------------------------------------

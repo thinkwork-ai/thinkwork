@@ -146,9 +146,6 @@ function workspaceBucket(): string {
 function thinkworkApiUrl(): string {
   return getConfig("THINKWORK_API_URL") || process.env.MCP_BASE_URL || "";
 }
-function hindsightEndpoint(): string {
-  return getConfig("HINDSIGHT_ENDPOINT", "");
-}
 // Company Brain twin tool seam (plan 2026-07-21-001 U7) — same rollout
 // posture: stage env flag, per-agent tool policy can still block.
 // THINK-321 U5 — stage-level seam flag for the agent-facing identity
@@ -1693,7 +1690,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       computer_id: event.computerId || undefined,
       computer_task_id: event.computerTaskId || undefined,
       computer_response_mode: "thread_turn",
-      hindsight_endpoint: hindsightEndpoint() || undefined,
       web_search_config: isAnyToolAllowed(...toolPolicyAliases("web-search"))
         ? runtimeConfig.webSearchConfig
         : undefined,

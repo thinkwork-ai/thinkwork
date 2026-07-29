@@ -56,9 +56,7 @@ export const SettingsDeploymentStatusQuery = graphql(`
       apiEndpoint
       appsyncUrl
       appsyncRealtimeUrl
-      hindsightEndpoint
       agentcoreStatus
-      hindsightEnabled
       managedMemoryEnabled
     }
   }

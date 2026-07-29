@@ -16,16 +16,6 @@ import {
   upsertThreadJournalSection,
 } from "./markdown.js";
 import {
-  retainRequesterThreadMemoryDigest,
-  type RequesterThreadDigestRetainResult,
-  type RetainRequesterThreadMemoryDigestInput,
-} from "./hindsight-primary.js";
-import {
-  syncRequesterMemoryToHindsight,
-  type RequesterMemoryHindsightSyncResult,
-  type SyncRequesterMemoryToHindsightInput,
-} from "./hindsight-sync.js";
-import {
   classifyMemoryCandidateSafety,
   type MemoryCandidateRejectReason,
 } from "./safety.js";
@@ -98,12 +88,6 @@ export type ThreadIdleMemoryLearningWorkerResult = {
 
 type LearnerDeps = {
   db?: Database;
-  retainThreadDigest?: (
-    input: RetainRequesterThreadMemoryDigestInput,
-  ) => Promise<RequesterThreadDigestRetainResult>;
-  syncHindsight?: (
-    input: SyncRequesterMemoryToHindsightInput,
-  ) => Promise<RequesterMemoryHindsightSyncResult>;
 };
 
 type TranscriptMessage = {
@@ -180,32 +164,6 @@ export async function runRequesterIdleMemoryLearning(
     promoted,
     staged,
     rejectedCandidates: rejected,
-  });
-  const digestMarkdown = [
-    "# Requester Thread Memory Digest",
-    "",
-    digestSection.trimEnd(),
-    "",
-  ].join("\n");
-  const primaryHindsightRetain = await (
-    deps.retainThreadDigest ?? retainRequesterThreadMemoryDigest
-  )({
-    tenantId: input.tenantId,
-    userId: input.requesterUserId,
-    runId: input.runId,
-    threadId: input.threadId,
-    digestMarkdown,
-    evidenceMessageIds: uniqueStrings([
-      ...transcript.map((message) => message.id),
-      ...uniqueMessageIds(accepted),
-    ]),
-    metadata: {
-      scheduledFor: input.scheduledFor,
-      lastActivityAt: input.lastActivityAt,
-      candidateSummary,
-      promotedCategories: promoted.map((candidate) => candidate.category),
-      stagedCategories: staged.map((candidate) => candidate.category),
-    },
   });
   const workingPath = workingFilePath(input.scheduledFor);
   const existingWorkingMemory = await readRequesterMemoryFile({
@@ -285,17 +243,6 @@ export async function runRequesterIdleMemoryLearning(
     });
   }
 
-  const hindsightSync = await (
-    deps.syncHindsight ?? syncRequesterMemoryToHindsight
-  )({
-    tenantId: input.tenantId,
-    userId: input.requesterUserId,
-    runId: input.runId,
-    threadId: input.threadId,
-    changedFiles,
-  });
-  annotateChangedFilesWithHindsight(changedFiles, hindsightSync);
-
   const reportMarkdown = renderIdleLearningReport({
     runId: input.runId,
     tenantId: input.tenantId,
@@ -311,8 +258,6 @@ export async function runRequesterIdleMemoryLearning(
     changedPaths: changedFiles.map((file) => file.path),
     transcriptMessageCount: transcript.length,
     attachmentCount: attachments.length,
-    primaryHindsightRetain,
-    hindsightSync,
   });
   const report = await writeIdleLearningReport({
     tenantId: input.tenantId,
@@ -332,16 +277,12 @@ export async function runRequesterIdleMemoryLearning(
       llmCalls: 0,
       memoryWrites: changedFiles.length,
       reportWrites: 1,
-      primaryHindsightStatus: primaryHindsightRetain.status,
-      hindsightStatus: hindsightSync.status,
     },
     metadata: {
       runId: input.runId,
       scheduledJobId: input.scheduledJobId,
       activitySequence: input.activitySequence,
       durablePromotionEnabled: true,
-      primaryHindsightRetain,
-      hindsightSync,
       currentMemoryBytes: currentMemory
         ? Buffer.byteLength(currentMemory, "utf8")
         : 0,
@@ -645,22 +586,4 @@ function uniqueMessageIds(candidates: LearningCandidate[]): string[] {
   return [
     ...new Set(candidates.flatMap((candidate) => candidate.evidenceMessageIds)),
   ];
-}
-
-function uniqueStrings(values: string[]): string[] {
-  return [...new Set(values.filter((value) => value.trim().length > 0))];
-}
-
-function annotateChangedFilesWithHindsight(
-  changedFiles: ChangedRequesterMemoryFile[],
-  hindsightSync: RequesterMemoryHindsightSyncResult,
-): void {
-  for (const syncFile of hindsightSync.files) {
-    const changedFile = changedFiles.find(
-      (file) => file.path === syncFile.path,
-    );
-    if (!changedFile) continue;
-    changedFile.hindsightDocumentId = syncFile.documentId;
-    changedFile.hindsightStatus = syncFile.status;
-  }
 }
