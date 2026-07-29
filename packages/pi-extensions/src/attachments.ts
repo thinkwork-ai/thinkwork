@@ -57,7 +57,7 @@ export interface ExtractedAttachmentText {
   /** Whether `text` carries usable content the model can reason over. */
   readable: boolean;
   /** Coarse format classification, for logging/diagnostics. */
-  kind: "text" | "spreadsheet" | "pdf" | "binary";
+  kind: "text" | "spreadsheet" | "pdf" | "presentation" | "document" | "binary";
 }
 
 const TEXT_PREVIEW_BYTES = 24 * 1024;
@@ -105,17 +105,37 @@ export async function extractAttachmentText(input: {
     return { text, readable: text.length > 0, kind: "spreadsheet" };
   }
 
+  if (isPresentation(ext, mime)) {
+    const text = await pptxToText(input.bytes);
+    return { text, readable: text.length > 0, kind: "presentation" };
+  }
+
+  if (isWordDocument(ext, mime)) {
+    const text = await docxToText(input.bytes);
+    return { text, readable: text.length > 0, kind: "document" };
+  }
+
   if (isPdf(ext, mime)) {
     const text = await pdfToText(input.bytes);
     return { text, readable: text.trim().length > 0, kind: "pdf" };
   }
 
   if (isTextLike(ext, mime, input.bytes)) {
-    const text = new TextDecoder("utf-8", { fatal: false }).decode(input.bytes);
+    const text = stripNul(
+      new TextDecoder("utf-8", { fatal: false }).decode(input.bytes),
+    );
     return { text, readable: text.trim().length > 0, kind: "text" };
   }
 
   return { text: "", readable: false, kind: "binary" };
+}
+
+/**
+ * Postgres rejects U+0000 in text/jsonb, so a NUL that leaks into a tool
+ * result later fails the whole turn's persistence. Strip them at the source.
+ */
+function stripNul(text: string): string {
+  return text.replaceAll("\u0000", "");
 }
 
 function isPdf(ext: string, mime: string): boolean {
@@ -147,11 +167,28 @@ function isSpreadsheet(ext: string, mime: string): boolean {
   );
 }
 
+function isPresentation(ext: string, mime: string): boolean {
+  return ext === ".pptx" || mime.includes("presentationml");
+}
+
+function isWordDocument(ext: string, mime: string): boolean {
+  return ext === ".docx" || mime.includes("wordprocessingml");
+}
+
+function isXmlMime(mime: string): boolean {
+  // Exact/suffix matches only. A substring test ("xml") would also match the
+  // OOXML MIME types ("openxmlformats-officedocument...") and decode binary
+  // ZIP containers as text.
+  return (
+    mime === "application/xml" || mime === "text/xml" || mime.endsWith("+xml")
+  );
+}
+
 function isTextLike(ext: string, mime: string, bytes: Uint8Array): boolean {
   if (
     mime.startsWith("text/") ||
     mime.includes("json") ||
-    mime.includes("xml") ||
+    isXmlMime(mime) ||
     mime.includes("csv") ||
     TEXT_EXTENSIONS.has(ext)
   ) {
@@ -204,6 +241,104 @@ function spreadsheetToText(bytes: Uint8Array): string {
     blocks.push(`### Sheet: ${sheetName}\n${csv}`);
   }
   return blocks.join("\n\n").trim();
+}
+
+/**
+ * PPTX/DOCX are ZIP containers of XML parts. We pull the visible text runs
+ * (`<a:t>` per slide, `<w:t>` per paragraph) in pure TypeScript so the
+ * contract holds on runtimes with no Python, same as spreadsheets above.
+ * jszip is loaded lazily like unpdf: a missing install degrades Office reads
+ * (readable: false → "use a specialist parser") instead of crashing the host.
+ */
+async function pptxToText(bytes: Uint8Array): Promise<string> {
+  const zip = await openZip(bytes);
+  if (!zip) return "";
+  const slides = Object.keys(zip.files)
+    .map((name) => {
+      const match = /^ppt\/slides\/slide(\d+)\.xml$/.exec(name);
+      return match ? { name, index: Number(match[1]) } : null;
+    })
+    .filter((entry): entry is { name: string; index: number } => entry !== null)
+    .sort((a, b) => a.index - b.index);
+
+  const blocks: string[] = [];
+  for (const slide of slides) {
+    const xml = await zip.files[slide.name]!.async("string");
+    const lines = collectXmlRuns(
+      xml,
+      /<a:p[\s>]/,
+      /<a:t[^>]*>([\s\S]*?)<\/a:t>/g,
+    );
+    if (lines.length === 0) continue;
+    blocks.push(`### Slide ${slide.index}\n${lines.join("\n")}`);
+  }
+  return blocks.join("\n\n").trim();
+}
+
+async function docxToText(bytes: Uint8Array): Promise<string> {
+  const zip = await openZip(bytes);
+  if (!zip) return "";
+  const doc = zip.files["word/document.xml"];
+  if (!doc) return "";
+  const xml = await doc.async("string");
+  return collectXmlRuns(xml, /<w:p[\s>]/, /<w:t[^>]*>([\s\S]*?)<\/w:t>/g)
+    .join("\n")
+    .trim();
+}
+
+async function openZip(bytes: Uint8Array): Promise<import("jszip") | null> {
+  try {
+    const { default: JSZip } = await import("jszip");
+    return await JSZip.loadAsync(bytes);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Split `xml` into paragraphs on `paragraphStart`, then concatenate the text
+ * runs matched by `runPattern` within each paragraph into one output line.
+ */
+function collectXmlRuns(
+  xml: string,
+  paragraphStart: RegExp,
+  runPattern: RegExp,
+): string[] {
+  const paragraphs = xml.split(
+    new RegExp(paragraphStart.source, paragraphStart.flags),
+  );
+  const lines: string[] = [];
+  for (const paragraph of paragraphs) {
+    const runs: string[] = [];
+    for (const match of paragraph.matchAll(runPattern)) {
+      runs.push(decodeXmlEntities(match[1] ?? ""));
+    }
+    const line = runs.join("").trim();
+    if (line) lines.push(line);
+  }
+  return lines;
+}
+
+function decodeXmlEntities(text: string): string {
+  return text
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) =>
+      safeCodePoint(parseInt(hex, 16)),
+    )
+    .replace(/&#(\d+);/g, (_, dec: string) => safeCodePoint(parseInt(dec, 10)))
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&amp;", "&");
+}
+
+function safeCodePoint(code: number): string {
+  if (!Number.isFinite(code) || code <= 0 || code > 0x10ffff) return "";
+  try {
+    return String.fromCodePoint(code);
+  } catch {
+    return "";
+  }
 }
 
 export function normalizeAttachmentRef(

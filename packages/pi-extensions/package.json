@@ -21,6 +21,7 @@
     "@earendil-works/pi-coding-agent": "0.76.0",
     "@thinkwork/pi-runtime-core": "workspace:*",
     "@thinkwork/thread-json-render": "workspace:*",
+    "jszip": "^3.10.1",
     "typebox": "^1.1.38",
     "unpdf": "^0.12.1",
     "xlsx": "^0.18.5"
