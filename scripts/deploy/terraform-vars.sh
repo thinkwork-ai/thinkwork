@@ -40,9 +40,13 @@ export TF_VAR_microsoft_oauth_client_id="${MICROSOFT_OAUTH_CLIENT_ID}"
 export TF_VAR_microsoft_oauth_client_secret="${MICROSOFT_OAUTH_CLIENT_SECRET}"
 export TF_VAR_microsoft_oauth_tenant="${MICROSOFT_OAUTH_TENANT}"
 export TF_VAR_mapbox_public_token="${MAPBOX_PUBLIC_TOKEN:-}"
-# The deprecated graph memory path is disabled for all deploys.
-# Hindsight is the authoritative user and Space memory engine.
-MEMORY_ENGINE="hindsight"
+# AgentCore managed memory is the active engine (THINK-404). Hindsight
+# infrastructure stays provisioned (`enable_hindsight=true`) through the
+# migration window so the ECS service and its data survive until the
+# teardown issue lands, but `memory_engine=agentcore` wins engine
+# selection — see the `resolved_memory_engine` local in
+# terraform/modules/thinkwork/main.tf.
+MEMORY_ENGINE="agentcore"
 AUTH_RETIREMENT_PHASE="${AUTH_RETIREMENT_PHASE:-retired}"
 AUTH_MIGRATION_RECOVERY_DEADLINE="${AUTH_MIGRATION_RECOVERY_DEADLINE:-}"
 if [ "$AUTH_RETIREMENT_PHASE" = "coexistence" ]; then

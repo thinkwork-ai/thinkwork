@@ -1,8 +1,23 @@
 # Memory
 
-Memory is platform-owned and Hindsight-backed. During a turn, use the lookup
-tools below. After the turn, the platform retains learned context automatically;
-do not journal turns yourself.
+Memory is platform-owned and backed by AgentCore managed memory. During a turn,
+use the lookup tools below. After the turn, the platform extracts what it
+learned automatically; do not journal turns yourself.
+
+## What the platform remembers on its own
+
+Every conversation is fed to background extractors. You do not call anything to
+make this happen, and there is nothing to compact or consolidate:
+
+- **Facts** — durable statements about the requester and their world.
+- **Preferences** — how the requester likes things done.
+- **Session summaries** — a rolling summary of each thread.
+- **Episodes** — what happened in past threads, plus reflections drawn across
+  them.
+
+Extraction is asynchronous. A fact from the current turn may not be recallable
+for a minute or two; answer from the conversation you are already in rather
+than waiting on it.
 
 ## Progressive discovery — consult the Brain first
 
@@ -18,26 +33,29 @@ answers the question:
    - the knowledge graph via `knowledge_graph_search`, then
      `knowledge_graph_get_entity` / `knowledge_graph_neighbors` to traverse
      entities and relationships.
-3. **Raw bank recall (drill-down)** — `recall` + `reflect` for the user's own
-   episodic memory, Space memory, and for underlying detail when consolidated
-   Brain content is not specific enough (e.g. a Brain answer cites supporting
+3. **Raw recall (drill-down)** — `recall` for the requester's own extracted
+   facts and preferences, and for underlying detail when consolidated Brain
+   content is not specific enough (e.g. a Brain answer cites supporting
    observations and the user asks for the specifics behind one).
 
-Brain first, banks for drill-down: consolidated Brain content is deduplicated
-and evidence-weighted; raw bank scans are noisier and personal-scope only.
+Brain first, recall for drill-down: consolidated Brain content is deduplicated
+and evidence-weighted; raw recall is noisier and personal-scope only.
 
 ## Lookup tools
 
 - **`knowledge_graph_search(query)`**, **`knowledge_graph_get_entity(entity_id)`**,
   **`knowledge_graph_neighbors(entity_id, depth)`** — the tenant Brain's entity
   graph. Use first for shared institutional questions.
-- **`recall(query, scope, strategy)`** — Hindsight bank lookup. Use for the
-  user's own prior conversations, preferences, and Space memory, and to drill
-  into detail behind consolidated Brain content.
-- **`reflect(query)`** or **`hindsight_reflect(query)`** — Hindsight synthesis
-  across many memories. Use for "brief me on X" / "summarize the history of Y"
-  prompts after checking the current prompt and mounted files. Always pair
-  with a preceding `recall` on the same query.
+- **`recall(query)`** — the requester's long-term memory. Searches both what the
+  platform extracted automatically and anything stored with `remember`. Use for
+  prior conversations, stated preferences, and durable personal facts.
+- **`remember(fact)`** — store one durable fact immediately. Use only when the
+  requester asks you to remember something, or when you learn a fact that would
+  be expensive to lose and is not obvious from the conversation. Automatic
+  extraction covers the ordinary case.
+
+There is no reflect, compact, or consolidate verb. If you want a synthesis
+across many memories, `recall` the topic and synthesize in your answer.
 
 Do not use Context Engine queries as a memory backend. If direct memory tools are
 not available, say that memory lookup is unavailable for the turn instead of
@@ -49,13 +67,13 @@ If the answer is present there, answer directly and do not call memory tools.
 
 Use `query_context` for external or lazy-loaded context such as compiled pages,
 workspace files, approved MCP tools, source agents, or web/search providers. Do
-not use it as a substitute for direct Hindsight recall/reflect when the task is
-about durable user or Space memory.
+not use it as a substitute for direct `recall` when the task is about durable
+memory.
 
 ## Don't
 
-- Don't call `remember()`, `retain()`, or `hindsight_retain()` on every turn.
-  Auto-retention already captures the conversation.
+- Don't call `remember()` on every turn, or to log what just happened.
+  Automatic extraction already captures the conversation.
 - Don't call memory tools to re-fetch profile, preference, or family facts
   already present in `USER.md`.
 - Don't copy recall results into workspace files as a permanent store.
@@ -63,14 +81,15 @@ about durable user or Space memory.
   or guardrails.
 
 If the user says "remember this," acknowledge naturally and answer the request.
-The post-turn retain pipeline captures it. If it's a structured profile change
-(name, preferences, family), use the profile-update tools instead.
+One `remember()` call is appropriate for an explicit request; the extractors
+capture the rest. If it's a structured profile change (name, preferences,
+family), use the profile-update tools instead.
 
 ## Workspace notes vs. memory
 
 The `memory/` folder is editable workspace notes: procedures, contact lists,
 lessons, and scratch context. Write only to paths under `memory/`. Long-term
-facts belong in post-turn Hindsight retention, not in workspace files.
+facts belong in platform memory, not in workspace files.
 
 ### Sub-agent path prefix
 

@@ -2,7 +2,8 @@
  * AgentCore Memory adapter.
  *
  * Maps ThinkWork owner refs to AgentCore namespaces keyed on the user
- * UUID (which the agent container sets as `actorId` via `USER_ID`)
+ * UUID (which the agent container sets as `actorId` via `USER_ID`, and
+ * which `memory-retain` passes as `ownerId` for `ownerType: "user"`)
  * and normalizes AgentCore `MemoryRecordSummary` shapes into
  * {@link ThinkWorkMemoryRecord}. Honest about capability gaps: no graph
  * inspection, no reflect, no compact, no forget (AgentCore Memory has
@@ -50,16 +51,98 @@ export type AgentCoreAdapterOptions = {
 
 const DEFAULT_PER_NAMESPACE_LIMIT = 50;
 
-const NAMESPACE_PREFIXES: Array<{
+/**
+ * Actor-scoped namespaces that default recall/inspect fans out over.
+ *
+ * These MUST match the strategy namespace templates provisioned by
+ * `terraform/modules/app/agentcore-memory/scripts/create_or_find_memory.sh`:
+ *
+ *   semantic     -> assistant_{actorId}
+ *   preferences  -> preferences_{actorId}
+ *   summaries    -> session_{sessionId}            (session-scoped, not here)
+ *   episodes     -> episodes_{actorId}/{sessionId} (session-scoped, not here)
+ *                   + reflections under episodes_{actorId}/
+ *
+ * `user_{actorId}` is not an extraction namespace: it's where the
+ * `remember` tool and this adapter's own `retain()` write direct records
+ * via BatchCreateMemoryRecords. It's read here so operator-visible memory
+ * includes explicitly-remembered facts alongside extracted ones.
+ *
+ * Session-scoped namespaces stay OUT of the default fan-out (they're
+ * per-thread and would swamp cross-thread recall); {@link
+ * AgentCoreAdapter.listEpisodicRecords} exposes them for the UI.
+ */
+const ACTOR_NAMESPACES: Array<{
   prefix: (actorId: string) => string;
   strategy: MemoryStrategy;
 }> = [
+  { prefix: (actorId) => `assistant_${actorId}`, strategy: "semantic" },
+  { prefix: (actorId) => `preferences_${actorId}`, strategy: "preferences" },
   { prefix: (actorId) => `user_${actorId}`, strategy: "semantic" },
-  {
-    prefix: (actorId) => `preferences_user_${actorId}`,
-    strategy: "preferences",
-  },
 ];
+
+/**
+ * Derive the ThinkWork strategy label from the namespace a record was
+ * actually filed under, rather than the namespace we happened to query.
+ * A record can carry several namespaces; callers pass the first one.
+ *
+ * Reflection records land under the episodic strategy's
+ * `reflectionConfiguration` namespace (`episodes_{actorId}/`), which has no
+ * session segment — that absence is the only signal distinguishing them
+ * from per-session episodes (`episodes_{actorId}/{sessionId}`).
+ */
+export function strategyForNamespace(
+  namespace: string,
+  fallback: MemoryStrategy = "semantic",
+): MemoryStrategy {
+  if (namespace.startsWith("assistant_")) return "semantic";
+  if (namespace.startsWith("preferences_")) return "preferences";
+  if (namespace.startsWith("session_")) return "summaries";
+  if (namespace.startsWith("episodes_")) {
+    const rest = namespace.slice("episodes_".length);
+    const slash = rest.indexOf("/");
+    const sessionSegment = slash === -1 ? "" : rest.slice(slash + 1);
+    return sessionSegment.trim().length > 0 ? "episodes" : "reflections";
+  }
+  if (namespace.startsWith("user_")) return "semantic";
+  return fallback;
+}
+
+/**
+ * Merge per-namespace fan-out results, keeping the highest-scoring copy of
+ * any record that appears in more than one namespace. Records without an
+ * id can't be deduped, so they pass through untouched.
+ */
+function dedupeRecords(
+  records: ThinkWorkMemoryRecord[],
+): ThinkWorkMemoryRecord[] {
+  const byId = new Map<string, ThinkWorkMemoryRecord>();
+  const out: ThinkWorkMemoryRecord[] = [];
+  for (const record of records) {
+    const id = record.backendRefs?.[0]?.ref || "";
+    if (!id) {
+      out.push(record);
+      continue;
+    }
+    if (!byId.has(id)) byId.set(id, record);
+  }
+  return [...out, ...byId.values()];
+}
+
+function dedupeResults(results: RecallResult[]): RecallResult[] {
+  const byId = new Map<string, RecallResult>();
+  const out: RecallResult[] = [];
+  for (const result of results) {
+    const id = result.record.backendRefs?.[0]?.ref || "";
+    if (!id) {
+      out.push(result);
+      continue;
+    }
+    const existing = byId.get(id);
+    if (!existing || result.score > existing.score) byId.set(id, result);
+  }
+  return [...out, ...byId.values()].sort((a, b) => b.score - a.score);
+}
 
 const AGENTCORE_CAPABILITIES: MemoryCapabilities = {
   retain: true,
@@ -100,7 +183,10 @@ export class AgentCoreAdapter implements MemoryAdapter {
     const actorId = req.ownerId;
     const limit = req.limit ?? 10;
 
-    const calls = NAMESPACE_PREFIXES.map(async ({ prefix, strategy }) => {
+    // Fan out over every actor-scoped namespace. Each call fails
+    // independently — a namespace that doesn't exist yet (no extraction
+    // has run) must not blank out the namespaces that do.
+    const calls = ACTOR_NAMESPACES.map(async ({ prefix, strategy }) => {
       try {
         const resp = await client.send(
           new RetrieveMemoryRecordsCommand({
@@ -126,7 +212,7 @@ export class AgentCoreAdapter implements MemoryAdapter {
       }
     });
     const results = await Promise.all(calls);
-    return results.flat();
+    return dedupeResults(results.flat()).slice(0, limit);
   }
 
   async retain(req: RetainRequest): Promise<RetainResult> {
@@ -224,7 +310,7 @@ export class AgentCoreAdapter implements MemoryAdapter {
     const actorId = req.ownerId;
     const out: ThinkWorkMemoryRecord[] = [];
 
-    const calls = NAMESPACE_PREFIXES.map(async ({ prefix, strategy }) => {
+    const calls = ACTOR_NAMESPACES.map(async ({ prefix, strategy }) => {
       try {
         const resp = await client.send(
           new ListMemoryRecordsCommand({
@@ -246,7 +332,49 @@ export class AgentCoreAdapter implements MemoryAdapter {
     });
     const results = await Promise.all(calls);
     for (const arr of results) out.push(...arr);
-    return out;
+    return dedupeRecords(out);
+  }
+
+  /**
+   * List the actor's session-scoped episodic records (and the cross-session
+   * reflections filed alongside them) for UI surfaces that want to show
+   * "what happened in past threads".
+   *
+   * These are deliberately excluded from {@link recall} and {@link inspect}:
+   * episodes are per-thread and would drown cross-thread lookups.
+   *
+   * ListMemoryRecords supports prefix listing via `namespacePath` (verified
+   * against @aws-sdk/client-bedrock-agentcore's `ListMemoryRecordsInput`,
+   * which declares both `namespace` and `namespacePath`), so a single call
+   * covers `episodes_{actorId}/{sessionId}` for every session plus the
+   * `episodes_{actorId}/` reflection namespace. Strategy is derived
+   * per-record from the namespace it came back under.
+   */
+  async listEpisodicRecords(
+    req: InspectRequest,
+  ): Promise<ThinkWorkMemoryRecord[]> {
+    const client = this.getClient();
+    const namespacePath = `episodes_${req.ownerId}/`;
+    try {
+      const resp = await client.send(
+        new ListMemoryRecordsCommand({
+          memoryId: this.memoryId,
+          namespacePath,
+          maxResults: req.limit ?? this.perNamespaceLimit,
+        }),
+      );
+      return dedupeRecords(
+        (resp.memoryRecordSummaries || []).map((r) =>
+          this.mapSummary(r, req, "episodes", namespacePath),
+        ),
+      );
+    } catch (err) {
+      console.debug(
+        `[agentcore-adapter] episodic list failed path=${namespacePath}:`,
+        (err as Error)?.message,
+      );
+      return [];
+    }
   }
 
   async forget(recordId: string): Promise<void> {
@@ -310,7 +438,7 @@ export class AgentCoreAdapter implements MemoryAdapter {
       ownerId: string;
       threadId?: string;
     },
-    strategy: MemoryStrategy,
+    fallbackStrategy: MemoryStrategy,
     fallbackNamespace: string,
   ): ThinkWorkMemoryRecord {
     const text =
@@ -324,6 +452,10 @@ export class AgentCoreAdapter implements MemoryAdapter {
     const createdAt = r.createdAt
       ? r.createdAt.toISOString()
       : new Date().toISOString();
+    // Trust the namespace the record actually carries over the namespace we
+    // queried: extraction can file one record under several namespaces, and
+    // prefix listings return records from many namespaces at once.
+    const strategy = strategyForNamespace(ns, fallbackStrategy);
     return {
       id: r.memoryRecordId || `agentcore-${ns}-${createdAt}`,
       tenantId: owner.tenantId,

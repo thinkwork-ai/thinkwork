@@ -277,8 +277,12 @@ jobs:
             fi
           fi
 
-          # Hindsight is the authoritative user and Space memory engine.
-          memory_engine="hindsight"
+          # AgentCore managed memory is the active engine (THINK-404).
+          # Hindsight infra stays provisioned during the migration window
+          # (enable_hindsight=true below) but no longer wins selection.
+          # Must match scripts/deploy/terraform-vars.sh or plan drifts
+          # from apply.
+          memory_engine="agentcore"
 
           set +e
           terraform plan \

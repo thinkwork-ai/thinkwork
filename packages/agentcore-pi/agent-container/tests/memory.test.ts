@@ -176,14 +176,87 @@ describe("recall — happy path", () => {
     expect(text).toContain("User likes hot tea");
     expect(text).toContain("Lives in Brooklyn");
 
-    expect(ACClient.commandCalls(RetrieveMemoryRecordsCommand)).toHaveLength(1);
+    // One call per actor-scoped namespace: the two managed extraction
+    // namespaces plus the explicit-`remember` namespace.
+    expect(ACClient.commandCalls(RetrieveMemoryRecordsCommand)).toHaveLength(3);
     expect(ACClient.commandCalls(ListMemoryRecordsCommand)).toHaveLength(0);
 
+    const namespaces = ACClient.commandCalls(RetrieveMemoryRecordsCommand).map(
+      (c) => c.args[0].input.namespace,
+    );
+    expect(namespaces).toEqual([
+      "assistant_user-xyz",
+      "preferences_user-xyz",
+      "user_user-xyz",
+    ]);
     const retrieveInput = ACClient.commandCalls(
       RetrieveMemoryRecordsCommand,
     )[0]!.args[0].input;
-    expect(retrieveInput.namespace).toBe("user_user-xyz");
     expect(retrieveInput.searchCriteria?.searchQuery).toBe("preferences");
+  });
+
+  it("merges hits across namespaces and dedupes repeated records", async () => {
+    ACClient.on(RetrieveMemoryRecordsCommand, {
+      namespace: "assistant_user-xyz",
+    }).resolves({
+      memoryRecordSummaries: [
+        { memoryRecordId: "rec-1", content: { text: "Extracted fact" } } as any,
+        { memoryRecordId: "rec-2", content: { text: "Shared" } } as any,
+      ],
+    });
+    ACClient.on(RetrieveMemoryRecordsCommand, {
+      namespace: "preferences_user-xyz",
+    }).resolves({
+      memoryRecordSummaries: [
+        {
+          memoryRecordId: "rec-3",
+          content: { text: "Prefers dark mode" },
+          score: 0.95,
+        } as any,
+      ],
+    });
+    ACClient.on(RetrieveMemoryRecordsCommand, {
+      namespace: "user_user-xyz",
+    }).resolves({
+      // Same record id as the assistant namespace hit — must appear once.
+      memoryRecordSummaries: [
+        { memoryRecordId: "rec-2", content: { text: "Shared" } } as any,
+      ],
+    });
+
+    const tool = buildRecallTool(makeContext());
+    const result = await tool.execute("call-8b", { query: "x" } as any);
+    const text = (result.content[0]! as { text: string }).text;
+    const lines = text.split("\n").filter(Boolean);
+    expect(lines).toHaveLength(3);
+    // Highest score first, then insertion order among the unscored.
+    expect(lines[0]).toContain("Prefers dark mode");
+    expect(text).toContain("Extracted fact");
+    expect(text.match(/Shared/g)).toHaveLength(1);
+    expect((result.details as { recordCount: number }).recordCount).toBe(3);
+  });
+
+  it("one failing namespace does not blank out the others", async () => {
+    ACClient.on(RetrieveMemoryRecordsCommand, {
+      namespace: "assistant_user-xyz",
+    }).rejects(new Error("ResourceNotFoundException: namespace not found"));
+    ACClient.on(RetrieveMemoryRecordsCommand, {
+      namespace: "preferences_user-xyz",
+    }).resolves({
+      memoryRecordSummaries: [
+        { content: { text: "Prefers oat milk" }, score: 0.8 } as any,
+      ],
+    });
+    ACClient.on(RetrieveMemoryRecordsCommand, {
+      namespace: "user_user-xyz",
+    }).resolves({ memoryRecordSummaries: [] });
+
+    const tool = buildRecallTool(makeContext());
+    const result = await tool.execute("call-8c", { query: "x" } as any);
+    expect((result.content[0]! as { text: string }).text).toContain(
+      "Prefers oat milk",
+    );
+    expect(ACClient.commandCalls(ListMemoryRecordsCommand)).toHaveLength(0);
   });
 
   it("falls back to ListMemoryRecords when semantic returns empty", async () => {
@@ -198,7 +271,8 @@ describe("recall — happy path", () => {
     const result = await tool.execute("call-9", { query: "x" } as any);
     const text = (result.content[0]! as { text: string }).text;
     expect(text).toContain("Old fact");
-    expect(ACClient.commandCalls(ListMemoryRecordsCommand)).toHaveLength(1);
+    // The list fallback fans out over the same namespaces as the search.
+    expect(ACClient.commandCalls(ListMemoryRecordsCommand)).toHaveLength(3);
   });
 
   it("falls back to ListMemoryRecords when semantic search throws", async () => {
@@ -288,11 +362,17 @@ describe("recall — namespace + tenant isolation", () => {
     );
     await tool.execute("call-16", { query: "x" } as any);
 
-    const retrieveInput = ACClient.commandCalls(
-      RetrieveMemoryRecordsCommand,
-    )[0]!.args[0].input;
-    expect(retrieveInput.namespace).toBe("user_user-1");
-    expect(retrieveInput.namespace).not.toContain("tenant-A");
+    const namespaces = ACClient.commandCalls(RetrieveMemoryRecordsCommand).map(
+      (c) => c.args[0].input.namespace,
+    );
+    expect(namespaces).toEqual([
+      "assistant_user-1",
+      "preferences_user-1",
+      "user_user-1",
+    ]);
+    for (const ns of namespaces) {
+      expect(ns).not.toContain("tenant-A");
+    }
   });
 });
 

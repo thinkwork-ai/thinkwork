@@ -16,15 +16,17 @@ import { Type } from "typebox";
  * `init({ tools })`. Writes flow through
  * `BatchCreateMemoryRecords` + `CreateEvent` so the conversational
  * extraction strategies process the new fact in the background;
- * `recall()` first tries semantic `RetrieveMemoryRecords`, then falls
- * back to listing if the semantic search returns nothing.
+ * `recall()` first tries semantic `RetrieveMemoryRecords` across every
+ * actor-scoped namespace, then falls back to listing those same
+ * namespaces if the semantic search returns nothing.
  *
  * Multi-tenant invariants (FR-4a):
  * - `tenantId` and `userId` come from the trusted-handler invocation
  *   scope. There is no agent-supplied override; missing values throw
  *   before any AWS call.
- * - The namespace key is `user_<userId>` to preserve existing memory-store
- *   continuity.
+ * - Writes go to `user_<userId>`. Reads fan out over that namespace plus
+ *   the managed extraction namespaces `assistant_<userId>` (semantic) and
+ *   `preferences_<userId>` — all keyed on the user id, never the tenant.
  *
  * Async semantics (per `feedback_hindsight_async_tools` — the same
  * principle applies to AgentCore Memory even though the SDK is sync):
@@ -93,8 +95,49 @@ function requireScope(context: MemoryToolsContext): void {
   }
 }
 
+/**
+ * Namespace the `remember` tool writes direct records into. AgentCore's
+ * extraction strategies never write here — this is ThinkWork's own
+ * "the user explicitly asked me to remember this" shelf.
+ */
 function namespaceFor(userId: string): string {
   return `user_${userId}`;
+}
+
+/**
+ * Namespaces `recall` reads. The first two are where AgentCore's managed
+ * extraction strategies file what they learn from conversations — see
+ * terraform/modules/app/agentcore-memory/scripts/create_or_find_memory.sh:
+ *
+ *   semantic    -> assistant_{actorId}
+ *   preferences -> preferences_{actorId}
+ *
+ * Reading only `user_{userId}` (as this tool did before THINK-404) meant
+ * recall never saw a single automatically-extracted fact. Session-scoped
+ * namespaces (`session_{sessionId}`, `episodes_{actorId}/{sessionId}`) are
+ * deliberately excluded: they're per-thread and would drown cross-thread
+ * lookups.
+ */
+function recallNamespaces(userId: string): string[] {
+  return [`assistant_${userId}`, `preferences_${userId}`, namespaceFor(userId)];
+}
+
+/**
+ * Merge fan-out results, keeping the highest-scoring copy of each record.
+ * Extraction can file the same fact under more than one namespace, and the
+ * SDK omits `memoryRecordId` on some shapes — fall back to the text so the
+ * user never sees the same sentence twice.
+ */
+function mergeRecords(records: NormalisedRecord[]): NormalisedRecord[] {
+  const byKey = new Map<string, NormalisedRecord>();
+  for (const record of records) {
+    const key = record.memoryRecordId ?? record.text;
+    const existing = byKey.get(key);
+    if (!existing || (record.score ?? 0) > (existing.score ?? 0)) {
+      byKey.set(key, record);
+    }
+  }
+  return [...byKey.values()].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 }
 
 function extractText(value: unknown): string {
@@ -249,9 +292,11 @@ export function buildRememberTool(context: MemoryToolsContext): AgentTool<any> {
 }
 
 /**
- * Build the `recall` ToolDef. Searches the user's AgentCore Memory
- * namespace via `RetrieveMemoryRecords` (semantic search) and falls
- * back to `ListMemoryRecords` if the semantic call yields no results.
+ * Build the `recall` ToolDef. Searches every actor-scoped AgentCore Memory
+ * namespace via `RetrieveMemoryRecords` (semantic search) — the managed
+ * extraction namespaces plus the explicit-`remember` namespace — merges
+ * and dedupes the hits, and falls back to `ListMemoryRecords` over the
+ * same namespaces if semantic search yields nothing.
  */
 export function buildRecallTool(context: MemoryToolsContext): AgentTool<any> {
   return {
@@ -259,8 +304,11 @@ export function buildRecallTool(context: MemoryToolsContext): AgentTool<any> {
     label: "Recall",
     description:
       "Search long-term memory for relevant information about the current user. " +
-      "Use when checking what the agent already knows about the user, recalling " +
-      "past conversations, or finding previously stored facts. Returns up to " +
+      "Covers both facts the platform extracted automatically from past " +
+      "conversations (facts and preferences) and facts stored explicitly with " +
+      "`remember`. Use when checking what the agent already knows about the " +
+      "user, recalling past conversations, or finding previously stored " +
+      "facts. Returns up to " +
       `${MAX_RECALL_RECORDS} matching memories or a 'no memories found' message.`,
     parameters: Type.Object({
       query: Type.String({
@@ -288,60 +336,80 @@ export function buildRecallTool(context: MemoryToolsContext): AgentTool<any> {
         1,
         Math.min(top_k ?? MAX_RECALL_RECORDS, MAX_RECALL_RECORDS),
       );
-      const namespace = namespaceFor(context.userId);
+      const namespaces = recallNamespaces(context.userId);
 
-      let records: NormalisedRecord[] = [];
+      // Each namespace is queried independently: a namespace that has no
+      // records yet (extraction hasn't run) must not blank out the ones
+      // that do. Only a total failure is an error.
       let semanticErr: unknown;
-      try {
-        const semantic = await context.client.send(
-          new RetrieveMemoryRecordsCommand({
-            memoryId: context.memoryId,
-            namespace,
-            searchCriteria: {
-              searchQuery: trimmed,
-              topK,
-            },
-          }),
-        );
-        const summaries = semantic.memoryRecordSummaries ?? [];
-        records = summaries
-          .map((r) => normalise(r))
-          .filter((r): r is NormalisedRecord => r !== null);
-      } catch (err) {
-        // Capture the error so the list-fallback path can re-raise if the
-        // list call also fails, preserving the original cause.
-        semanticErr = err;
-        records = [];
-      }
+      const semanticHits = await Promise.all(
+        namespaces.map(async (namespace) => {
+          try {
+            const semantic = await context.client.send(
+              new RetrieveMemoryRecordsCommand({
+                memoryId: context.memoryId,
+                namespace,
+                searchCriteria: {
+                  searchQuery: trimmed,
+                  topK,
+                },
+              }),
+            );
+            const summaries = semantic.memoryRecordSummaries ?? [];
+            return summaries
+              .map((r) => normalise(r))
+              .filter((r): r is NormalisedRecord => r !== null);
+          } catch (err) {
+            // Capture the error so the list-fallback path can re-raise if
+            // every list call also fails, preserving the original cause.
+            semanticErr ??= err;
+            return null;
+          }
+        }),
+      );
+      let records = mergeRecords(
+        semanticHits.flatMap((hits) => hits ?? []),
+      ).slice(0, topK);
 
       if (records.length === 0) {
-        try {
-          const list = await context.client.send(
-            new ListMemoryRecordsCommand({
-              memoryId: context.memoryId,
-              namespace,
-              maxResults: topK,
-            }),
-          );
-          const summaries = list.memoryRecordSummaries ?? [];
-          records = summaries
-            .map((r) => normalise(r))
-            .filter((r): r is NormalisedRecord => r !== null);
-          // List responses don't populate `score`; sort is defensive in
-          // case a future SDK revision adds it. Otherwise the stable
-          // server order survives.
-          records.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-        } catch (listErr) {
-          // Both calls failed. Prefer surfacing the original semantic
-          // error — that's the call the caller actually intended.
+        const listHits = await Promise.all(
+          namespaces.map(async (namespace) => {
+            try {
+              const list = await context.client.send(
+                new ListMemoryRecordsCommand({
+                  memoryId: context.memoryId,
+                  namespace,
+                  maxResults: topK,
+                }),
+              );
+              const summaries = list.memoryRecordSummaries ?? [];
+              return summaries
+                .map((r) => normalise(r))
+                .filter((r): r is NormalisedRecord => r !== null);
+            } catch (listErr) {
+              void listErr;
+              return null;
+            }
+          }),
+        );
+        if (listHits.every((hits) => hits === null)) {
+          // Every namespace failed on both calls. Prefer surfacing the
+          // original semantic error — that's the call the caller intended.
           throw new MemoryToolError(
             `recall failed against memory id '${context.memoryId}': ${
               semanticErr instanceof Error
                 ? semanticErr.message
-                : String(semanticErr ?? listErr)
+                : String(semanticErr ?? "all namespaces failed")
             }`,
           );
         }
+        // List responses don't populate `score`; mergeRecords' sort is
+        // defensive in case a future SDK revision adds it. Otherwise the
+        // stable server order survives.
+        records = mergeRecords(listHits.flatMap((hits) => hits ?? [])).slice(
+          0,
+          topK,
+        );
       }
 
       const top = records.slice(0, topK);
@@ -350,7 +418,7 @@ export function buildRecallTool(context: MemoryToolsContext): AgentTool<any> {
         details: {
           tenantId: context.tenantId,
           userId: context.userId,
-          namespace,
+          namespaces,
           query: trimmed,
           recordCount: top.length,
         },
