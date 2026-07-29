@@ -1699,6 +1699,10 @@ async function mcpRegisterServer(
         oauth_provider: oauthProvider || null,
       },
     );
+    // Re-registering an approved+enabled row must leave it attached to the
+    // tenant's default agent(s) — the helper no-ops when the update
+    // reverted the row to pending.
+    await autoAttachMcpServer(tenantId, existing.id);
     return json({ id: existing.id, slug, updated: true, revertedToPending });
   }
 
@@ -1747,7 +1751,39 @@ async function mcpRegisterServer(
     return [row];
   });
 
+  // Settings → Connectors contract: registering a server that lands
+  // approved+enabled (the schema default for admin registration) makes it
+  // usable without a separate Composer assignment step.
+  await autoAttachMcpServer(tenantId, inserted.id);
+
   return json({ id: inserted.id, slug, created: true });
+}
+
+/**
+ * Best-effort auto-attach of a registry server to the tenant's
+ * platform-default agent(s). Safe on every register/update transition: the
+ * underlying writer skips rows that are not approved+enabled, and a failure
+ * never fails the registry write it rides — the next reconcile converges.
+ */
+async function autoAttachMcpServer(
+  tenantId: string,
+  serverId: string,
+): Promise<void> {
+  try {
+    const { attachServerToPlatformDefaultAgents } = await import(
+      "../lib/capabilities/reconcile-connection-folders.js"
+    );
+    await attachServerToPlatformDefaultAgents({
+      tenantId,
+      registryServerId: serverId,
+      signedBy: "plugin-reconciler",
+    });
+  } catch (err) {
+    console.warn(
+      "[skills] MCP default-agent auto-attach failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 /**
@@ -1801,6 +1837,10 @@ async function mcpUpdateServer(
     auth_config: body.auth_config,
     enabled: body.enabled,
   });
+
+  // Re-enabling (or renaming) an approved server keeps it attached to the
+  // tenant's default agent(s); no-op when the update reverted to pending.
+  await autoAttachMcpServer(tenantId, serverId);
 
   return json({ ok: true, id: serverId, revertedToPending });
 }

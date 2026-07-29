@@ -425,7 +425,7 @@ export function SettingsMcpServerDetail() {
           <SettingsRow label="Status">{statusBadge}</SettingsRow>
           <SettingsRow
             label="Enabled"
-            description="Enable this server in the tenant registry. Assign it to the agent in the Composer."
+            description="Enable this server in the tenant registry. Enabled servers attach to the tenant's default agent automatically; use the Composer for per-agent overrides."
           >
             <Switch
               checked={server.enabled}

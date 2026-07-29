@@ -34,7 +34,7 @@
 
 import { getConfig } from "@thinkwork/runtime-config";
 import { db, eq, and } from "../../graphql/utils.js";
-import { tenantMcpServers } from "@thinkwork/database-pg/schema";
+import { agents, tenantMcpServers } from "@thinkwork/database-pg/schema";
 import { resolveAgentWorkspacePrefix } from "../skills/assignment-state.js";
 import {
   connectionDefinitionFromRegistryRow,
@@ -195,6 +195,66 @@ export async function writeConnectionFoldersForAgents(input: {
     }
   }
   await refreshRoutingMapBestEffort(input.tenantId);
+}
+
+/**
+ * Attach a registry server to the tenant's platform-default agent(s) —
+ * the Settings → Connectors contract: an approved+enabled registry row IS
+ * the intent to use the server, with no separate Composer assignment step.
+ * Same shape as the managed-application provisioner's default-agent
+ * assignment. Rides writeConnectionFoldersForAgents' approved+enabled
+ * guard, so calling this on a pending/disabled row is a no-op — callers on
+ * the register/enable/approve transitions can invoke it unconditionally.
+ * Never throws.
+ */
+export async function attachServerToPlatformDefaultAgents(input: {
+  tenantId: string;
+  registryServerId: string;
+  signedBy: CapabilitySignedBy;
+  deps?: CapabilityFolderWriteDeps;
+}): Promise<void> {
+  if (!input.deps?.bucket && !workspaceBucketConfigured()) return;
+  let agentIds: string[];
+  try {
+    const rows = await db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(
+        and(
+          eq(agents.tenant_id, input.tenantId),
+          eq(agents.is_platform_default, true),
+        ),
+      );
+    agentIds = rows.map((row) => row.id);
+  } catch (err) {
+    console.warn(
+      `${LOG_PREFIX} platform-agent read failed tenant=${input.tenantId}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return;
+  }
+  if (agentIds.length === 0) return;
+  try {
+    const { materializeMcpAssignmentFoldersForAgents } =
+      await import("../mcp/assignment-state.js");
+    await materializeMcpAssignmentFoldersForAgents({
+      agentIds,
+      tenantId: input.tenantId,
+      registryServerId: input.registryServerId,
+    });
+  } catch (err) {
+    console.warn(
+      `${LOG_PREFIX} legacy assignment materialization failed server=${input.registryServerId}:`,
+      err instanceof Error ? err.message : err,
+    );
+  }
+  await writeConnectionFoldersForAgents({
+    agentIds,
+    tenantId: input.tenantId,
+    registryServerId: input.registryServerId,
+    signedBy: input.signedBy,
+    deps: input.deps,
+  });
 }
 
 /** Explicit removal for detach/uninstall paths that know the registry row. */
