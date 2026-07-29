@@ -940,7 +940,13 @@ locals {
     # Bulk-rebuild lane (THINK-331 U4): the projector stages openCypher CSVs
     # under the tenant-scoped thinkwork-identity/ prefix of the etl-platform
     # load bucket (Put for upload, Delete for the terminal-state cleanup)
-    # and drives the loader job API. A NEW statement group — the existing
+    # and drives the loader job API. The CSVs are streamed as S3 multipart
+    # uploads for large tenants (THINK-409): CreateMultipartUpload /
+    # UploadPart / CompleteMultipartUpload all authorize as s3:PutObject, and
+    # the failure path's AbortMultipartUpload is the action below — no
+    # s3:ListMultipartUploadParts needed, the stager tracks its own parts
+    # (this policy is near IAM's 6,144-char cap; see below). A NEW statement
+    # group — the existing
     # TwinNeptuneData statement is condition-pinned to QueryLanguage=
     # OpenCypher, which the loader actions don't satisfy. Gated on the
     # bulk-loader variables so stages without the twin stack ship inert
