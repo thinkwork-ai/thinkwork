@@ -35,7 +35,6 @@ import {
   uniqueIndex,
   index,
   check,
-  foreignKey,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
@@ -44,7 +43,6 @@ import {
   managedApplicationDeploymentJobs,
   managedApplications,
 } from "./deployments";
-import { kgIngestRuns } from "./knowledge-graph";
 
 // ---------------------------------------------------------------------------
 // Schema handle
@@ -158,11 +156,11 @@ export const brainArtifactManifests = brain.table(
       .default(sql`now()`),
   },
   (table) => [
-    foreignKey({
-      name: "artifact_manifests_ingest_run_id_fk",
-      columns: [table.ingest_run_id],
-      foreignColumns: [kgIngestRuns.id],
-    }).onDelete("set null"),
+    // THINK-408: the knowledge-graph subsystem was removed. The physical
+    // artifact_manifests_ingest_run_id_fk constraint (-> kg.ingest_runs) is
+    // still applied in the DB and disappears with the deferred kg.* DROP;
+    // there is no Drizzle mirror for it because kg.ingest_runs no longer has
+    // a schema definition here.
     uniqueIndex("brain_artifact_manifests_manifest_uri_uidx").on(
       table.manifest_uri,
     ),

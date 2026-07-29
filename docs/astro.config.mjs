@@ -159,10 +159,6 @@ export default defineConfig({
                       slug: "applications/admin/knowledge",
                     },
                     {
-                      label: "Ontology",
-                      slug: "applications/admin/ontology",
-                    },
-                    {
                       label: "Retained Memory",
                       slug: "applications/admin/memory",
                     },
@@ -382,10 +378,6 @@ export default defineConfig({
                   slug: "concepts/knowledge/compounding-memory",
                 },
                 {
-                  label: "Business Ontology",
-                  slug: "concepts/knowledge/business-ontology",
-                },
-                {
                   label: "Compile Pipeline",
                   slug: "concepts/knowledge/compounding-memory-pipeline",
                 },
@@ -396,10 +388,6 @@ export default defineConfig({
                 {
                   label: "Source Routing",
                   slug: "concepts/knowledge/retrieval-and-context",
-                },
-                {
-                  label: "Graph Direction",
-                  slug: "concepts/knowledge/knowledge-graph",
                 },
               ],
             },
@@ -538,10 +526,6 @@ export default defineConfig({
                 {
                   label: "Operating Compiled Pages",
                   slug: "guides/compounding-memory-operations",
-                },
-                {
-                  label: "Operating Business Ontology",
-                  slug: "guides/business-ontology-operations",
                 },
               ],
             },

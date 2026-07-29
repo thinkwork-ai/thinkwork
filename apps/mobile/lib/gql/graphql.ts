@@ -785,17 +785,6 @@ export type ApproveManagedApplicationDeploymentInput = {
   planDigest: Scalars['String']['input'];
 };
 
-export type ApproveOntologyChangeSetInput = {
-  changeSetId: Scalars['ID']['input'];
-  excludedDisposition?: InputMaybe<OntologyExcludedItemDisposition>;
-  /**
-   * Per-item approval (THINK-320 R15): items to leave out of this approval.
-   * Excluded items get the excludedDisposition status instead of approved.
-   */
-  excludedItemIds?: InputMaybe<Array<Scalars['ID']['input']>>;
-  tenantId: Scalars['ID']['input'];
-};
-
 export type ApprovePiExtensionVersionInput = {
   tenantId: Scalars['ID']['input'];
   versionId: Scalars['ID']['input'];
@@ -1029,7 +1018,7 @@ export type BudgetStatus = {
 };
 
 /**
- * A stable canonical entity instance ("Acme"), distinct from the ontology type
+ * A stable canonical entity instance ("Acme"), distinct from its entity type
  * definition ("Customer"). Merged entities persist as redirects.
  */
 export type CanonicalEntity = {
@@ -1052,14 +1041,12 @@ export type CanonicalEntity = {
  */
 export type CanonicalEntityMergeImpact = {
   __typename?: 'CanonicalEntityMergeImpact';
-  graphEntityCount: Scalars['Int']['output'];
   identityClaimCount: Scalars['Int']['output'];
   memoryClaimCount: Scalars['Int']['output'];
   sourceMappingCount: Scalars['Int']['output'];
 };
 
 export type CanonicalEntityMergeImpactInput = {
-  graphEntityCount: Scalars['Int']['input'];
   identityClaimCount: Scalars['Int']['input'];
   memoryClaimCount: Scalars['Int']['input'];
   sourceMappingCount: Scalars['Int']['input'];
@@ -1082,7 +1069,6 @@ export type CanonicalEntitySplitImpact = {
   __typename?: 'CanonicalEntitySplitImpact';
   claimCountFollowingB: Scalars['Int']['output'];
   claimCountRemainingA: Scalars['Int']['output'];
-  graphEntityCount: Scalars['Int']['output'];
   mappingCountA: Scalars['Int']['output'];
   mappingCountB: Scalars['Int']['output'];
   memoryClaimCount: Scalars['Int']['output'];
@@ -1091,7 +1077,6 @@ export type CanonicalEntitySplitImpact = {
 export type CanonicalEntitySplitImpactInput = {
   claimCountFollowingB: Scalars['Int']['input'];
   claimCountRemainingA: Scalars['Int']['input'];
-  graphEntityCount: Scalars['Int']['input'];
   mappingCountA: Scalars['Int']['input'];
   mappingCountB: Scalars['Int']['input'];
   memoryClaimCount: Scalars['Int']['input'];
@@ -1764,45 +1749,6 @@ export type CreateInboxItemInput = {
   type: Scalars['String']['input'];
 };
 
-/**
- * Manual authoring entry point (THINK-320 U2, KTD-5): creates or appends to
- * the caller's open manual draft change set. Each item runs the R14
- * slug-collision check server-side — colliding pending slugs merge into the
- * existing item, colliding approved slugs come back as conflicts.
- */
-export type CreateOntologyChangeSetInput = {
-  items: Array<CreateOntologyChangeSetItemInput>;
-  summary?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-  title?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type CreateOntologyChangeSetItemInput = {
-  action?: InputMaybe<OntologyChangeAction>;
-  confidence?: InputMaybe<Scalars['Float']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  evidence?: InputMaybe<Array<OntologyChangeSetItemEvidenceInput>>;
-  itemType: OntologyChangeItemType;
-  proposedValue: Scalars['AWSJSON']['input'];
-  slug: Scalars['String']['input'];
-  title?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type CreateOntologyChangeSetPayload = {
-  __typename?: 'CreateOntologyChangeSetPayload';
-  /**
-   * Null when every submitted item merged into other pending items or
-   * conflicted with approved definitions (no draft was created or touched).
-   */
-  changeSet?: Maybe<OntologyChangeSet>;
-  conflicts: Array<OntologyChangeSetSlugConflict>;
-  /**
-   * Items whose slug matched an existing pending item — evidence was
-   * unioned onto that item and its proposal updated in place.
-   */
-  mergedItemIds: Array<Scalars['ID']['output']>;
-};
-
 export type CreateQuickActionInput = {
   prompt: Scalars['String']['input'];
   scope?: InputMaybe<QuickActionScope>;
@@ -2289,15 +2235,6 @@ export type DocumentPlatePreview = {
   html?: Maybe<Scalars['String']['output']>;
 };
 
-/** An artifact produced in an accessible thread linked to the entity. */
-export type DossierArtifact = {
-  __typename?: 'DossierArtifact';
-  id: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-  title?: Maybe<Scalars['String']['output']>;
-  type?: Maybe<Scalars['String']['output']>;
-};
-
 export type EffectiveCapabilitySet = {
   __typename?: 'EffectiveCapabilitySet';
   computedAt: Scalars['AWSDateTime']['output'];
@@ -2568,46 +2505,6 @@ export type EnableWorkflowInput = {
 export type EnableWorkflowTemplateInput = {
   agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
-};
-
-/** Everything the tenant brain knows about one grounded entity. */
-export type EntityDossier = {
-  __typename?: 'EntityDossier';
-  aliases?: Maybe<Array<Scalars['String']['output']>>;
-  artifacts: Array<DossierArtifact>;
-  /**
-   * Canonical identity for twin routing (THINK-327 U7): consumers link to the
-   * Explorer entity detail with these. Null when the matched entity has no
-   * canonical identity yet.
-   */
-  canonicalEntityId?: Maybe<Scalars['ID']['output']>;
-  entityId: Scalars['ID']['output'];
-  /** Ontology entity-type slug of the canonical identity (pairs with canonicalEntityId). */
-  entityType?: Maybe<Scalars['String']['output']>;
-  label: Scalars['String']['output'];
-  memories: Array<SearchMemoryHit>;
-  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
-  summary?: Maybe<Scalars['String']['output']>;
-  threads: Array<SearchThreadHit>;
-  /**
-   * Dual-read gate verdict (Company Brain U9 / AE8): true when this entity's
-   * tenant/type has flipped to the projected twin page, so search consumers
-   * can route to the living render.
-   */
-  twinProjected: Scalars['Boolean']['output'];
-};
-
-/**
- * Two-part dossier result: exactly one of `match` (resolved) or a non-empty
- * `disambiguation` (>1 grounded candidate) is populated. Both are empty/null
- * when there is no grounded match.
- */
-export type EntityDossierResult = {
-  __typename?: 'EntityDossierResult';
-  /** Grounded candidates when >1 matched and no `entityId` was supplied. */
-  disambiguation: Array<SearchEntityHit>;
-  /** The assembled dossier, or null when ambiguous or no grounded match. */
-  match?: Maybe<EntityDossier>;
 };
 
 /**
@@ -2972,7 +2869,7 @@ export type HeartbeatActivityEvent = {
 
 /**
  * Bootstrap/drift identity match job (THINK-321 U7, KTD-7). Mirrors the
- * ontology suggestion-scan job: dedupe-key insert-or-load, async Event invoke,
+ * durable job: dedupe-key insert-or-load, async Event invoke,
  * invoke failure marked on the row. Metrics report scanned / autoLinked /
  * casesFiled / casesExpired so the open-case budget interaction is visible.
  */
@@ -3120,31 +3017,6 @@ export type IngestSpaceMemoryDocumentInput = {
   title?: InputMaybe<Scalars['String']['input']>;
 };
 
-export type InstallOntologyPackInput = {
-  packSlug: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-};
-
-export type InstallOntologyPackPayload = {
-  __typename?: 'InstallOntologyPackPayload';
-  /**
-   * The staged (or re-surfaced) change set. Null when every pack item merged
-   * into other pending items, conflicted, or was skipped as rejected.
-   */
-  changeSet?: Maybe<OntologyChangeSet>;
-  conflicts: Array<OntologyChangeSetSlugConflict>;
-  /**
-   * Items whose slug matched an existing pending item — merged in place
-   * instead of duplicating (R14/AE6).
-   */
-  mergedItemIds: Array<Scalars['ID']['output']>;
-  /**
-   * Pack slugs skipped because the operator previously rejected them
-   * (R13 fingerprints) — re-install never resurrects a rejection.
-   */
-  skippedRejectedSlugs: Array<Scalars['String']['output']>;
-};
-
 export type InstallPluginInput = {
   idempotencyKey: Scalars['String']['input'];
   /** ThinkWork-provided one-time key for premium plugins when no entitlement exists. */
@@ -3224,252 +3096,6 @@ export type IssuePremiumPluginInstallKeyResult = {
   pluginKey: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
 };
-
-export enum KnowledgeGraphArtifactManifestKind {
-  Export = 'EXPORT',
-  IngestionManifest = 'INGESTION_MANIFEST',
-  MigrationSnapshot = 'MIGRATION_SNAPSHOT',
-  SourceArtifact = 'SOURCE_ARTIFACT',
-  VaultProjection = 'VAULT_PROJECTION'
-}
-
-export enum KnowledgeGraphArtifactManifestStatus {
-  Active = 'ACTIVE',
-  Deleted = 'DELETED',
-  Failed = 'FAILED',
-  Superseded = 'SUPERSEDED'
-}
-
-export type KnowledgeGraphArtifactManifestSummary = {
-  __typename?: 'KnowledgeGraphArtifactManifestSummary';
-  artifactKind: KnowledgeGraphArtifactManifestKind;
-  byteLength?: Maybe<Scalars['Int']['output']>;
-  checksumSha256?: Maybe<Scalars['String']['output']>;
-  contentEncoding?: Maybe<Scalars['String']['output']>;
-  contentType?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  embeddingModel?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  objectCount: Scalars['Int']['output'];
-  objectRef: Scalars['String']['output'];
-  ontologyMechanism?: Maybe<Scalars['String']['output']>;
-  ontologyVersion?: Maybe<Scalars['String']['output']>;
-  sourceCount: Scalars['Int']['output'];
-  sourceKind?: Maybe<KnowledgeGraphSourceKind>;
-  sourceType?: Maybe<Scalars['String']['output']>;
-  status: KnowledgeGraphArtifactManifestStatus;
-  updatedAt: Scalars['AWSDateTime']['output'];
-  vectorDimension?: Maybe<Scalars['Int']['output']>;
-};
-
-export type KnowledgeGraphEntity = {
-  __typename?: 'KnowledgeGraphEntity';
-  aliases: Array<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  diagnostics: Scalars['AWSJSON']['output'];
-  evidence: Array<KnowledgeGraphEvidence>;
-  evidenceCount: Scalars['Int']['output'];
-  graphNodeId: Scalars['String']['output'];
-  groundingStatus: KnowledgeGraphGroundingStatus;
-  id: Scalars['ID']['output'];
-  ingestRunId: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  lastSeenAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  normalizedLabel: Scalars['String']['output'];
-  ontologyEntityTypeId?: Maybe<Scalars['ID']['output']>;
-  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
-  properties: Scalars['AWSJSON']['output'];
-  provenanceStatus: KnowledgeGraphProvenanceStatus;
-  relationshipCount: Scalars['Int']['output'];
-  relationships: Array<KnowledgeGraphRelationship>;
-  sourceKind: KnowledgeGraphSourceKind;
-  sourceRef: Scalars['String']['output'];
-  summary?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-  typeLabel?: Maybe<Scalars['String']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type KnowledgeGraphEvidence = {
-  __typename?: 'KnowledgeGraphEvidence';
-  charEnd?: Maybe<Scalars['Int']['output']>;
-  charStart?: Maybe<Scalars['Int']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  entityId?: Maybe<Scalars['ID']['output']>;
-  evidenceSourceKind: KnowledgeGraphEvidenceSourceKind;
-  evidenceSourceRef?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  ingestRunId: Scalars['ID']['output'];
-  messageCreatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  messageId?: Maybe<Scalars['ID']['output']>;
-  messageRole?: Maybe<Scalars['String']['output']>;
-  metadata: Scalars['AWSJSON']['output'];
-  observedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  relationshipId?: Maybe<Scalars['ID']['output']>;
-  snippet: Scalars['String']['output'];
-  sourceKind: KnowledgeGraphSourceKind;
-  sourceRef: Scalars['String']['output'];
-  speakerLabel?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-};
-
-export enum KnowledgeGraphEvidenceSourceKind {
-  BrainPage = 'BRAIN_PAGE',
-  BrainSection = 'BRAIN_SECTION',
-  GraphPayload = 'GRAPH_PAYLOAD',
-  HindsightObservation = 'HINDSIGHT_OBSERVATION',
-  Normalizer = 'NORMALIZER',
-  ThreadMessage = 'THREAD_MESSAGE',
-  WikiPage = 'WIKI_PAGE',
-  WikiSection = 'WIKI_SECTION'
-}
-
-export type KnowledgeGraphGraph = {
-  __typename?: 'KnowledgeGraphGraph';
-  edges: Array<KnowledgeGraphGraphEdge>;
-  nodes: Array<KnowledgeGraphGraphNode>;
-};
-
-export type KnowledgeGraphGraphEdge = {
-  __typename?: 'KnowledgeGraphGraphEdge';
-  evidenceCount: Scalars['Int']['output'];
-  groundingStatus: KnowledgeGraphGroundingStatus;
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
-  provenanceStatus: KnowledgeGraphProvenanceStatus;
-  relationshipId: Scalars['ID']['output'];
-  source: Scalars['ID']['output'];
-  target: Scalars['ID']['output'];
-};
-
-export type KnowledgeGraphGraphNode = {
-  __typename?: 'KnowledgeGraphGraphNode';
-  entityId: Scalars['ID']['output'];
-  evidenceCount: Scalars['Int']['output'];
-  groundingStatus: KnowledgeGraphGroundingStatus;
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
-  provenanceStatus: KnowledgeGraphProvenanceStatus;
-  relationshipCount: Scalars['Int']['output'];
-  typeLabel?: Maybe<Scalars['String']['output']>;
-};
-
-export enum KnowledgeGraphGroundingStatus {
-  Conflict = 'CONFLICT',
-  Grounded = 'GROUNDED',
-  UnapprovedType = 'UNAPPROVED_TYPE',
-  Ungrounded = 'UNGROUNDED',
-  Unknown = 'UNKNOWN'
-}
-
-export type KnowledgeGraphIngestRun = {
-  __typename?: 'KnowledgeGraphIngestRun';
-  artifactManifests: Array<KnowledgeGraphArtifactManifestSummary>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  diagnosticCount: Scalars['Int']['output'];
-  durationMs?: Maybe<Scalars['Int']['output']>;
-  entityCount: Scalars['Int']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  evidenceCount: Scalars['Int']['output'];
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  input: Scalars['AWSJSON']['output'];
-  messageCount: Scalars['Int']['output'];
-  metadata: Scalars['AWSJSON']['output'];
-  metrics: Scalars['AWSJSON']['output'];
-  relationshipCount: Scalars['Int']['output'];
-  requestedByUserId?: Maybe<Scalars['ID']['output']>;
-  sourceDatasetId?: Maybe<Scalars['String']['output']>;
-  sourceDatasetName: Scalars['String']['output'];
-  sourceKind: KnowledgeGraphSourceKind;
-  sourceLabel?: Maybe<Scalars['String']['output']>;
-  sourceRef: Scalars['String']['output'];
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: KnowledgeGraphIngestStatus;
-  tenantId: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-  trigger: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export enum KnowledgeGraphIngestStatus {
-  Canceled = 'CANCELED',
-  Failed = 'FAILED',
-  Queued = 'QUEUED',
-  Running = 'RUNNING',
-  StaleNoop = 'STALE_NOOP',
-  Succeeded = 'SUCCEEDED'
-}
-
-export enum KnowledgeGraphProvenanceStatus {
-  Missing = 'MISSING',
-  Strong = 'STRONG',
-  Weak = 'WEAK'
-}
-
-export type KnowledgeGraphRelationship = {
-  __typename?: 'KnowledgeGraphRelationship';
-  confidence?: Maybe<Scalars['Float']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  diagnostics: Scalars['AWSJSON']['output'];
-  evidence: Array<KnowledgeGraphEvidence>;
-  evidenceCount: Scalars['Int']['output'];
-  graphEdgeId?: Maybe<Scalars['String']['output']>;
-  groundingStatus: KnowledgeGraphGroundingStatus;
-  id: Scalars['ID']['output'];
-  ingestRunId: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  lastSeenAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  ontologyRelationshipTypeId?: Maybe<Scalars['ID']['output']>;
-  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
-  properties: Scalars['AWSJSON']['output'];
-  provenanceStatus: KnowledgeGraphProvenanceStatus;
-  sourceEntityId: Scalars['ID']['output'];
-  sourceKind: KnowledgeGraphSourceKind;
-  sourceRef: Scalars['String']['output'];
-  targetEntityId: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type KnowledgeGraphSearchEntity = {
-  __typename?: 'KnowledgeGraphSearchEntity';
-  aliases: Array<Scalars['String']['output']>;
-  evidenceCount: Scalars['Int']['output'];
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  observationIds: Array<Scalars['String']['output']>;
-  relationshipCount: Scalars['Int']['output'];
-  summary?: Maybe<Scalars['String']['output']>;
-  typeSlug?: Maybe<Scalars['String']['output']>;
-};
-
-export type KnowledgeGraphSearchRelationship = {
-  __typename?: 'KnowledgeGraphSearchRelationship';
-  fromLabel: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  toLabel: Scalars['String']['output'];
-  typeSlug?: Maybe<Scalars['String']['output']>;
-};
-
-export type KnowledgeGraphSearchResult = {
-  __typename?: 'KnowledgeGraphSearchResult';
-  entities: Array<KnowledgeGraphSearchEntity>;
-  relationships: Array<KnowledgeGraphSearchRelationship>;
-};
-
-export enum KnowledgeGraphSourceKind {
-  Brain = 'BRAIN',
-  Observations = 'OBSERVATIONS',
-  Thread = 'THREAD',
-  Wiki = 'WIKI'
-}
 
 export type LinkedTask = {
   __typename?: 'LinkedTask';
@@ -3721,7 +3347,7 @@ export type MarkThreadsReadResult = {
 };
 
 /**
- * Durable ontology-shaped claim. supportCount is the number of ACTIVE
+ * Durable structured claim. supportCount is the number of ACTIVE
  * evidence support edges (memory_claim_evidence status = 'active').
  */
 export type MemoryClaim = {
@@ -3875,7 +3501,7 @@ export type MemoryPipelineStage = {
 /**
  * External Memory Compounding (THINK-193 U2). Operator-only inspection and
  * control surface for external memory sources: processor configs, source
- * bindings, authorization grants, the evidence ledger, ontology claims, and
+ * bindings, authorization grants, the evidence ledger, durable claims, and
  * the retraction ledger. Queries and mutations below require tenant admin,
  * with one exception (THINK-193 U6): grantMemorySourceAuthorization and
  * setMemorySourceConfig on a PERSONAL processor are owner self-service,
@@ -4074,8 +3700,7 @@ export enum MemoryStrategy {
 
 /**
  * Runtime memory system configuration exposed to the admin UI.
- * Lets the UI decide which views to render (e.g. Knowledge Graph toggle is
- * only meaningful when the active engine supports graph inspection).
+ * Lets the UI decide which views to render based on the active engine.
  */
 export type MemorySystemConfig = {
   __typename?: 'MemorySystemConfig';
@@ -4310,7 +3935,6 @@ export type Mutation = {
   applySkillUpdate: SkillUpdateApplyResult;
   approveInboxItem: InboxItem;
   approveManagedApplicationDeployment: ManagedApplicationDeploymentJob;
-  approveOntologyChangeSet: OntologyChangeSet;
   approvePiExtensionVersion: PiExtension;
   archiveEvalDataset: EvalDataset;
   archiveEvalProfile: EvalProfile;
@@ -4368,7 +3992,6 @@ export type Mutation = {
   createEvalTestCase: EvalTestCase;
   createExternalCapabilityClient: CapabilityRuntimeMutationResult;
   createInboxItem: InboxItem;
-  createOntologyChangeSet: CreateOntologyChangeSetPayload;
   createQuickAction: UserQuickAction;
   createRecipe: Recipe;
   createRoutine: Routine;
@@ -4470,12 +4093,6 @@ export type Mutation = {
   ingestSpaceMemoryDocument: SpaceMemoryDocumentIngest;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
   /**
-   * Stage a seed-template pack as a pre-staged change set (THINK-320 U3/R11).
-   * Existing hand-authored slugs merge or surface as conflicts (R14); rejected
-   * fingerprints are skipped and deferred items re-surface (R13).
-   */
-  installOntologyPack: InstallOntologyPackPayload;
-  /**
    * Install a catalog plugin tenant-wide (tenant admin). Idempotent per
    * (tenant, plugin): a concurrent call returns the in-flight install; a
    * stuck-installing install past the staleness threshold re-drives the
@@ -4561,8 +4178,6 @@ export type Mutation = {
   rejectConnectionProposal: CapabilityRuntimeMutationResult;
   rejectInboxItem: InboxItem;
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
-  rejectOntologyChangeSet: OntologyChangeSet;
-  rejectOntologyChangeSetItem: OntologyChangeSet;
   rejectPiExtensionVersion: PiExtension;
   /** Tenant-operator rejection with rationale. */
   rejectSkillDraft: SkillDraft;
@@ -4685,39 +4300,6 @@ export type Mutation = {
    */
   setMemorySourceConfig: MemorySourceConfig;
   /**
-   * Replace an entity type's identity rules (THINK-193 U4). Bumps
-   * identityRulesVersion. Tenant-admin gated.
-   */
-  setOntologyEntityTypeIdentityRules: OntologyEntityType;
-  /**
-   * Stage an entity-page section-declaration edit (Company Brain U3 / R10,
-   * R14): creates or merges a DRAFT page_section change-set item carrying
-   * { entityTypeSlug, sections }. Tenant-admin gated.
-   */
-  setOntologyEntityTypePageSections: CreateOntologyChangeSetPayload;
-  /**
-   * Stage a type-level system-map edit (THINK-321 U3 / R6): creates or
-   * updates a DRAFT identity_map change-set item carrying
-   * { entityTypeSlug, systemMap: [{ facet, sourceSystem, note? }] }. Never a
-   * direct write — entity_types.system_map only changes when the change set
-   * is approved and applied. Tenant-admin gated.
-   */
-  setOntologyEntityTypeSystemMap: CreateOntologyChangeSetPayload;
-  /**
-   * Stage a twin facet-declaration edit (Company Brain U3 / R2, R4): creates
-   * or merges a DRAFT facet_declaration change-set item carrying
-   * { entityTypeSlug, facets }. Never a direct write — declarations land on
-   * approval/apply, which also regenerates the compiled twin mapping export.
-   * Tenant-admin gated.
-   */
-  setOntologyEntityTypeTwinFacets: CreateOntologyChangeSetPayload;
-  /**
-   * Stage a twin edge source-binding edit (Company Brain U3 / R3): creates or
-   * merges a DRAFT relationship_binding change-set item carrying
-   * { relationshipTypeSlug, binding }. Tenant-admin gated.
-   */
-  setOntologyRelationshipTypeSourceBinding: CreateOntologyChangeSetPayload;
-  /**
    * Owner-only: set/clear the caller's personal memory automation schedule.
    * enabled=true requires a rate(...)/cron(...) scheduleExpression; false
    * disables the scheduled trigger (manual runs stay available).
@@ -4757,9 +4339,7 @@ export type Mutation = {
    * gated.
    */
   startIdentityMatchJob: IdentityMatchJob;
-  startKnowledgeGraphObservationsIngest: KnowledgeGraphIngestRun;
   startManagedApplicationPlan: ManagedApplicationDeploymentJob;
-  startOntologySuggestionScan: OntologySuggestionScanJob;
   startReleaseUpdatePreflight: ReleaseUpdateJob;
   startSkillRun: SkillRun;
   startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
@@ -4806,9 +4386,6 @@ export type Mutation = {
   updateN8nPluginApiCredential: UpdateN8nPluginApiCredentialResult;
   /** Update n8n custom package desired config and create/reuse an UPGRADE plan job. */
   updateN8nPluginPackageSettings: UpdateN8nPluginPackageSettingsResult;
-  updateOntologyChangeSet: OntologyChangeSet;
-  updateOntologyEntityType: OntologyEntityType;
-  updateOntologyRelationshipType: OntologyRelationshipType;
   updatePiExtensionAssignment: PiExtension;
   updateQuickAction: UserQuickAction;
   updateRecipe: Recipe;
@@ -4957,11 +4534,6 @@ export type MutationApproveInboxItemArgs = {
 
 export type MutationApproveManagedApplicationDeploymentArgs = {
   input: ApproveManagedApplicationDeploymentInput;
-};
-
-
-export type MutationApproveOntologyChangeSetArgs = {
-  input: ApproveOntologyChangeSetInput;
 };
 
 
@@ -5137,11 +4709,6 @@ export type MutationCreateExternalCapabilityClientArgs = {
 
 export type MutationCreateInboxItemArgs = {
   input: CreateInboxItemInput;
-};
-
-
-export type MutationCreateOntologyChangeSetArgs = {
-  input: CreateOntologyChangeSetInput;
 };
 
 
@@ -5477,11 +5044,6 @@ export type MutationInstallManagedApplicationMcpServerArgs = {
 };
 
 
-export type MutationInstallOntologyPackArgs = {
-  input: InstallOntologyPackInput;
-};
-
-
 export type MutationInstallPluginArgs = {
   input: InstallPluginInput;
 };
@@ -5779,16 +5341,6 @@ export type MutationRejectInboxItemArgs = {
 
 export type MutationRejectManagedApplicationDeploymentArgs = {
   input: RejectManagedApplicationDeploymentInput;
-};
-
-
-export type MutationRejectOntologyChangeSetArgs = {
-  input: RejectOntologyChangeSetInput;
-};
-
-
-export type MutationRejectOntologyChangeSetItemArgs = {
-  input: RejectOntologyChangeSetItemInput;
 };
 
 
@@ -6118,41 +5670,6 @@ export type MutationSetMemorySourceConfigArgs = {
 };
 
 
-export type MutationSetOntologyEntityTypeIdentityRulesArgs = {
-  entityTypeId: Scalars['ID']['input'];
-  rules: Scalars['AWSJSON']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type MutationSetOntologyEntityTypePageSectionsArgs = {
-  entityTypeSlug: Scalars['String']['input'];
-  sections: Scalars['AWSJSON']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type MutationSetOntologyEntityTypeSystemMapArgs = {
-  entityTypeSlug: Scalars['String']['input'];
-  systemMap: Scalars['AWSJSON']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type MutationSetOntologyEntityTypeTwinFacetsArgs = {
-  entityTypeSlug: Scalars['String']['input'];
-  facets: Scalars['AWSJSON']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type MutationSetOntologyRelationshipTypeSourceBindingArgs = {
-  binding: Scalars['AWSJSON']['input'];
-  relationshipTypeSlug: Scalars['String']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
 export type MutationSetPersonalMemoryAutomationScheduleArgs = {
   enabled: Scalars['Boolean']['input'];
   scheduleExpression?: InputMaybe<Scalars['String']['input']>;
@@ -6244,18 +5761,8 @@ export type MutationStartIdentityMatchJobArgs = {
 };
 
 
-export type MutationStartKnowledgeGraphObservationsIngestArgs = {
-  input?: InputMaybe<StartKnowledgeGraphObservationsIngestInput>;
-};
-
-
 export type MutationStartManagedApplicationPlanArgs = {
   input: StartManagedApplicationPlanInput;
-};
-
-
-export type MutationStartOntologySuggestionScanArgs = {
-  input: StartOntologySuggestionScanInput;
 };
 
 
@@ -6414,21 +5921,6 @@ export type MutationUpdateN8nPluginApiCredentialArgs = {
 
 export type MutationUpdateN8nPluginPackageSettingsArgs = {
   input: UpdateN8nPluginPackageSettingsInput;
-};
-
-
-export type MutationUpdateOntologyChangeSetArgs = {
-  input: UpdateOntologyChangeSetInput;
-};
-
-
-export type MutationUpdateOntologyEntityTypeArgs = {
-  input: UpdateOntologyEntityTypeInput;
-};
-
-
-export type MutationUpdateOntologyRelationshipTypeArgs = {
-  input: UpdateOntologyRelationshipTypeInput;
 };
 
 
@@ -6697,436 +6189,6 @@ export type NewMessageEvent = {
   senderType?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   threadId: Scalars['ID']['output'];
-};
-
-export enum OntologyChangeAction {
-  Create = 'CREATE',
-  Deprecate = 'DEPRECATE',
-  Reject = 'REJECT',
-  Update = 'UPDATE'
-}
-
-/**
- * IDENTITY_MAP (THINK-321 U3): a type-level system-map edit — value carries
- * { entityTypeSlug, systemMap: [{ facet, sourceSystem, note? }] }. Operator
- * authored only; the suggestion pipeline never proposes it.
- *
- * Twin declaration items (Company Brain U3 — operator authored only, never
- * LLM-proposed):
- * FACET_DECLARATION — value carries { entityTypeSlug, facets: [{ slug,
- * clonePolicy, cadence?, sourceSystem, sourceDataset?, attributes?, note? }] }.
- * RELATIONSHIP_BINDING — value carries { relationshipTypeSlug, binding:
- * { sourceSystem, sourceDataset, sourceKeyFields, targetKeyFields, note? } }.
- * PAGE_SECTION — value carries { entityTypeSlug, sections: [{ slug, heading,
- * kind, facetSlug?, sourceSystem?, visibility, position }] }.
- */
-export enum OntologyChangeItemType {
-  EntityType = 'ENTITY_TYPE',
-  ExternalMapping = 'EXTERNAL_MAPPING',
-  FacetDeclaration = 'FACET_DECLARATION',
-  FacetTemplate = 'FACET_TEMPLATE',
-  IdentityMap = 'IDENTITY_MAP',
-  PageSection = 'PAGE_SECTION',
-  RelationshipBinding = 'RELATIONSHIP_BINDING',
-  RelationshipType = 'RELATIONSHIP_TYPE'
-}
-
-export type OntologyChangeSet = {
-  __typename?: 'OntologyChangeSet';
-  appliedVersionId?: Maybe<Scalars['ID']['output']>;
-  approvedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  approvedByUserId?: Maybe<Scalars['ID']['output']>;
-  confidence?: Maybe<Scalars['Float']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  evidenceExamples: Array<OntologyEvidenceExample>;
-  expectedImpact: Scalars['AWSJSON']['output'];
-  id: Scalars['ID']['output'];
-  items: Array<OntologyChangeSetItem>;
-  observedFrequency: Scalars['Int']['output'];
-  proposedBy: Scalars['String']['output'];
-  proposedByUserId?: Maybe<Scalars['ID']['output']>;
-  rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  rejectedByUserId?: Maybe<Scalars['ID']['output']>;
-  status: OntologyChangeSetStatus;
-  summary?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  title: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type OntologyChangeSetItem = {
-  __typename?: 'OntologyChangeSetItem';
-  action: OntologyChangeAction;
-  changeSetId: Scalars['ID']['output'];
-  confidence?: Maybe<Scalars['Float']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  editedValue?: Maybe<Scalars['AWSJSON']['output']>;
-  evidenceExamples: Array<OntologyEvidenceExample>;
-  id: Scalars['ID']['output'];
-  itemType: OntologyChangeItemType;
-  position: Scalars['Int']['output'];
-  proposedValue: Scalars['AWSJSON']['output'];
-  status: OntologyChangeSetStatus;
-  targetKind?: Maybe<Scalars['String']['output']>;
-  targetSlug?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  title: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type OntologyChangeSetItemEvidenceInput = {
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  observedAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  quote: Scalars['String']['input'];
-  sourceKind: Scalars['String']['input'];
-  sourceLabel?: InputMaybe<Scalars['String']['input']>;
-  sourceRef?: InputMaybe<Scalars['String']['input']>;
-};
-
-/**
- * R14 collision that could not be staged: the slug already exists as an
- * approved definition, so no duplicate row was created.
- */
-export type OntologyChangeSetSlugConflict = {
-  __typename?: 'OntologyChangeSetSlugConflict';
-  itemType: OntologyChangeItemType;
-  reason: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-};
-
-/**
- * Shared status vocabulary for change sets and their items. DEFERRED is
- * item-only (an item excluded from an approval that stays re-reviewable,
- * THINK-320 R15) — passing it as a change-set status is rejected.
- */
-export enum OntologyChangeSetStatus {
-  Applied = 'APPLIED',
-  Approved = 'APPROVED',
-  Deferred = 'DEFERRED',
-  Draft = 'DRAFT',
-  PendingReview = 'PENDING_REVIEW',
-  Rejected = 'REJECTED'
-}
-
-export type OntologyDefinitions = {
-  __typename?: 'OntologyDefinitions';
-  activeVersion?: Maybe<OntologyVersion>;
-  entityTypes: Array<OntologyEntityType>;
-  externalMappings: Array<OntologyExternalMapping>;
-  facetTemplates: Array<OntologyFacetTemplate>;
-  relationshipTypes: Array<OntologyRelationshipType>;
-  tenantId: Scalars['ID']['output'];
-};
-
-export type OntologyEntityType = {
-  __typename?: 'OntologyEntityType';
-  aliases: Array<Scalars['String']['output']>;
-  approvedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  broadType: Scalars['String']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  deprecatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  externalMappings: Array<OntologyExternalMapping>;
-  facetTemplates: Array<OntologyFacetTemplate>;
-  guidanceNotes?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  /**
-   * Versioned identity rules (THINK-193 U4): array of
-   * { slug, keyKind, normalization, unique, uniquenessScope,
-   *   sourcePrecedence, autoLink, version }. Rules govern how instances of
-   * this type resolve to canonical entities; the instances live in the
-   * identity registry, never in ontology tables.
-   */
-  identityRules: Scalars['AWSJSON']['output'];
-  identityRulesVersion: Scalars['Int']['output'];
-  lifecycleStatus: OntologyLifecycleStatus;
-  name: Scalars['String']['output'];
-  /**
-   * Entity-page section declarations (Company Brain U3 / R10, R14): array of
-   * { slug, heading, kind, facetSlug?, sourceSystem?, visibility, position }.
-   * Edited only through page_section change-set items.
-   */
-  pageSections: Scalars['AWSJSON']['output'];
-  pageSectionsVersion: Scalars['Int']['output'];
-  propertiesSchema: Scalars['AWSJSON']['output'];
-  rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  slug: Scalars['String']['output'];
-  /**
-   * Type-level system map (THINK-321 U3 / R6): array of
-   * { facet, sourceSystem, note? } entries declaring which attached system
-   * holds which facets for this type. Edited only through identity_map
-   * change-set items — never a direct write.
-   */
-  systemMap: Scalars['AWSJSON']['output'];
-  systemMapVersion: Scalars['Int']['output'];
-  tenantId: Scalars['ID']['output'];
-  /**
-   * Twin facet declarations (Company Brain U3 / R2, R4): array of
-   * { slug, clonePolicy, cadence?, sourceSystem, sourceDataset?,
-   *   attributes?, note? }. Edited only through facet_declaration
-   * change-set items; the ETL projection consumes the compiled export.
-   */
-  twinFacets: Scalars['AWSJSON']['output'];
-  twinFacetsVersion: Scalars['Int']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  versionId?: Maybe<Scalars['ID']['output']>;
-};
-
-export type OntologyEvidenceExample = {
-  __typename?: 'OntologyEvidenceExample';
-  changeSetId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  itemId?: Maybe<Scalars['ID']['output']>;
-  metadata: Scalars['AWSJSON']['output'];
-  observedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  quote: Scalars['String']['output'];
-  sourceKind: Scalars['String']['output'];
-  sourceLabel?: Maybe<Scalars['String']['output']>;
-  sourceRef?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-};
-
-/**
- * What happens to items excluded from a per-item approval (THINK-320 R15):
- * DEFERRED keeps them re-reviewable; REJECTED fingerprints them so scans
- * never re-propose the candidate (R13).
- */
-export enum OntologyExcludedItemDisposition {
-  Deferred = 'DEFERRED',
-  Rejected = 'REJECTED'
-}
-
-export type OntologyExternalMapping = {
-  __typename?: 'OntologyExternalMapping';
-  createdAt: Scalars['AWSDateTime']['output'];
-  externalLabel?: Maybe<Scalars['String']['output']>;
-  externalUri: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  mappingKind: OntologyMappingKind;
-  notes?: Maybe<Scalars['String']['output']>;
-  subjectId: Scalars['ID']['output'];
-  subjectKind: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  vocabulary: Scalars['String']['output'];
-};
-
-export type OntologyFacetTemplate = {
-  __typename?: 'OntologyFacetTemplate';
-  createdAt: Scalars['AWSDateTime']['output'];
-  entityTypeId: Scalars['ID']['output'];
-  facetType: Scalars['String']['output'];
-  guidanceNotes?: Maybe<Scalars['String']['output']>;
-  heading: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  lifecycleStatus: OntologyLifecycleStatus;
-  position: Scalars['Int']['output'];
-  prompt?: Maybe<Scalars['String']['output']>;
-  slug: Scalars['String']['output'];
-  sourcePriority: Scalars['AWSJSON']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export enum OntologyJobStatus {
-  Canceled = 'CANCELED',
-  Failed = 'FAILED',
-  Pending = 'PENDING',
-  Running = 'RUNNING',
-  Succeeded = 'SUCCEEDED'
-}
-
-export enum OntologyLifecycleStatus {
-  Approved = 'APPROVED',
-  Deprecated = 'DEPRECATED',
-  Proposed = 'PROPOSED',
-  Rejected = 'REJECTED'
-}
-
-export enum OntologyMappingKind {
-  Broad = 'BROAD',
-  Close = 'CLOSE',
-  Exact = 'EXACT',
-  Narrow = 'NARROW',
-  Related = 'RELATED'
-}
-
-/**
- * Named bundle of dormant seed templates (THINK-320 U3/R11), browsable in the
- * Ontology tab. Install stages the pack as a pre-staged change set for
- * one-click admin approval — nothing applies without review.
- */
-export type OntologyPack = {
-  __typename?: 'OntologyPack';
-  description: Scalars['String']['output'];
-  name: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  types: Array<OntologyPackType>;
-};
-
-export type OntologyPackType = {
-  __typename?: 'OntologyPackType';
-  description?: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  state: OntologyPackTypeState;
-};
-
-/**
- * Per-type install state inside a pack (THINK-320 U3/R11): APPROVED — the
- * type is an approved definition; PENDING — a change-set item for the type is
- * awaiting review; AVAILABLE — installable.
- */
-export enum OntologyPackTypeState {
-  Approved = 'APPROVED',
-  Available = 'AVAILABLE',
-  Pending = 'PENDING'
-}
-
-export type OntologyRelationshipType = {
-  __typename?: 'OntologyRelationshipType';
-  aliases: Array<Scalars['String']['output']>;
-  approvedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  deprecatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  externalMappings: Array<OntologyExternalMapping>;
-  guidanceNotes?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  inverseName?: Maybe<Scalars['String']['output']>;
-  lifecycleStatus: OntologyLifecycleStatus;
-  name: Scalars['String']['output'];
-  rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  slug: Scalars['String']['output'];
-  /**
-   * Twin edge source binding (Company Brain U3 / R3):
-   * { sourceSystem, sourceDataset, sourceKeyFields, targetKeyFields, note? }
-   * or {} when unbound. Edge instances populate deterministically from these
-   * source foreign keys — never LLM-inferred. Edited only through
-   * relationship_binding change-set items.
-   */
-  sourceBinding: Scalars['AWSJSON']['output'];
-  sourceBindingVersion: Scalars['Int']['output'];
-  sourceEntityTypeId?: Maybe<Scalars['ID']['output']>;
-  sourceTypeSlugs: Array<Scalars['String']['output']>;
-  targetEntityTypeId?: Maybe<Scalars['ID']['output']>;
-  targetTypeSlugs: Array<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  versionId?: Maybe<Scalars['ID']['output']>;
-};
-
-export type OntologyReprocessJob = {
-  __typename?: 'OntologyReprocessJob';
-  attempt: Scalars['Int']['output'];
-  changeSetId?: Maybe<Scalars['ID']['output']>;
-  claimedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  dedupeKey?: Maybe<Scalars['String']['output']>;
-  error?: Maybe<Scalars['String']['output']>;
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  impact: Scalars['AWSJSON']['output'];
-  input: Scalars['AWSJSON']['output'];
-  metrics: Scalars['AWSJSON']['output'];
-  ontologyVersionId?: Maybe<Scalars['ID']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: OntologyJobStatus;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type OntologySchemaGraph = {
-  __typename?: 'OntologySchemaGraph';
-  candidates: Array<OntologySchemaGraphCandidate>;
-  relationships: Array<OntologySchemaGraphRelationship>;
-  systemLinks: Array<OntologySchemaGraphSystemLink>;
-  systems: Array<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  types: Array<OntologySchemaGraphType>;
-};
-
-/**
- * Pending change-set item surfaced as a ghost candidate on the map. `origin`
- * is the owning change set's proposedBy (suggestion_engine, user, ...).
- */
-export type OntologySchemaGraphCandidate = {
-  __typename?: 'OntologySchemaGraphCandidate';
-  changeSetId: Scalars['ID']['output'];
-  editedValue?: Maybe<Scalars['AWSJSON']['output']>;
-  evidenceCount: Scalars['Int']['output'];
-  itemId: Scalars['ID']['output'];
-  itemType: OntologyChangeItemType;
-  origin: Scalars['String']['output'];
-  proposedValue: Scalars['AWSJSON']['output'];
-  slug?: Maybe<Scalars['String']['output']>;
-  status: OntologyChangeSetStatus;
-};
-
-/** Approved relationship type projected as a labeled schema-graph edge. */
-export type OntologySchemaGraphRelationship = {
-  __typename?: 'OntologySchemaGraphRelationship';
-  name: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  sourceTypeSlugs: Array<Scalars['String']['output']>;
-  targetTypeSlugs: Array<Scalars['String']['output']>;
-};
-
-/**
- * External system surfaced on the schema map (treasure-map view): which
- * systems hold identities and/or clone data for each entity type. Derived
- * from identity mappings and governed facet declarations — registering a
- * system's mappings is what makes it appear.
- */
-export type OntologySchemaGraphSystemLink = {
-  __typename?: 'OntologySchemaGraphSystemLink';
-  /** A declared facet clones data for this type from the system. */
-  data: Scalars['Boolean']['output'];
-  entityTypeSlug: Scalars['String']['output'];
-  /** The system holds identity keys for instances of this type. */
-  identity: Scalars['Boolean']['output'];
-  systemSlug: Scalars['String']['output'];
-};
-
-/**
- * Approved entity type projected for the Living Map canvas (THINK-320 U1):
- * slug/name plus a live count of kg entities carrying the type.
- */
-export type OntologySchemaGraphType = {
-  __typename?: 'OntologySchemaGraphType';
-  instanceCount: Scalars['Int']['output'];
-  lifecycleStatus: OntologyLifecycleStatus;
-  name: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-};
-
-export type OntologySuggestionScanJob = {
-  __typename?: 'OntologySuggestionScanJob';
-  createdAt: Scalars['AWSDateTime']['output'];
-  dedupeKey?: Maybe<Scalars['String']['output']>;
-  error?: Maybe<Scalars['String']['output']>;
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  metrics: Scalars['AWSJSON']['output'];
-  result: Scalars['AWSJSON']['output'];
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: OntologyJobStatus;
-  tenantId: Scalars['ID']['output'];
-  trigger: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type OntologyVersion = {
-  __typename?: 'OntologyVersion';
-  activatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  sourceChangeSetId?: Maybe<Scalars['ID']['output']>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  versionNumber: Scalars['Int']['output'];
 };
 
 export type OpenEngineEligibleWorkItemsInput = {
@@ -7640,16 +6702,6 @@ export type Query = {
   emailChannelLedger: Array<EmailLedgerEvent>;
   emailChannelSummary: EmailChannelSummary;
   emailSpaceEmailPolicy?: Maybe<EmailSpacePolicy>;
-  /**
-   * THINK-263 U5 — server-assembled dossier for one grounded knowledge-graph
-   * entity: contributing memories, linked threads, and artifacts.
-   * Every thread-derived surface is fenced behind the caller's thread
-   * visibility; content from threads the caller cannot open is dropped entirely
-   * (the thread, its artifacts, and any memory hit stamped with it). Multiple
-   * grounded matches with no `entityId` selector return a disambiguation list
-   * and assemble nothing; passing `entityId` resolves the ambiguity.
-   */
-  entityDossier: EntityDossierResult;
   entityResolutionCase?: Maybe<EntityResolutionCase>;
   entityResolutionCases: Array<EntityResolutionCase>;
   evalDataset?: Maybe<EvalDataset>;
@@ -7674,13 +6726,6 @@ export type Query = {
   inboxItems: Array<InboxItem>;
   /** Launchable plugin apps available to the current tenant/user. */
   installedPluginApps: Array<InstalledPluginApp>;
-  knowledgeGraphEntities: Array<KnowledgeGraphEntity>;
-  knowledgeGraphEntity?: Maybe<KnowledgeGraphEntity>;
-  knowledgeGraphGetEntity: KnowledgeGraphSearchResult;
-  knowledgeGraphGraph: KnowledgeGraphGraph;
-  knowledgeGraphIngestRuns: Array<KnowledgeGraphIngestRun>;
-  knowledgeGraphNeighbors: KnowledgeGraphSearchResult;
-  knowledgeGraphSearch: KnowledgeGraphSearchResult;
   managedApplicationDeployment?: Maybe<ManagedApplicationDeploymentJob>;
   managedApplicationHealthCheck: ManagedApplicationHealthCheck;
   managedApplications: Array<ManagedApplication>;
@@ -7716,17 +6761,6 @@ export type Query = {
   n8nAppData: N8nAppData;
   /** Operator settings for the installed n8n plugin package image config. */
   n8nPluginSettings?: Maybe<N8nPluginSettings>;
-  ontologyChangeSets: Array<OntologyChangeSet>;
-  ontologyDefinitions: OntologyDefinitions;
-  /** Installable seed-template bundles with per-type state (THINK-320 U3/R11). */
-  ontologyPacks: Array<OntologyPack>;
-  ontologyReprocessJob?: Maybe<OntologyReprocessJob>;
-  /**
-   * Living Map feed (THINK-320 U1): approved types with live instance
-   * counts, approved relationships, and pending candidate items.
-   */
-  ontologySchemaGraph: OntologySchemaGraph;
-  ontologySuggestionScanJob?: Maybe<OntologySuggestionScanJob>;
   openEngineEligibleWorkItems: Array<WorkItem>;
   pendingSystemReviewsCount: Scalars['Int']['output'];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
@@ -8228,13 +7262,6 @@ export type QueryEmailSpaceEmailPolicyArgs = {
 };
 
 
-export type QueryEntityDossierArgs = {
-  entityId?: InputMaybe<Scalars['ID']['input']>;
-  query: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-};
-
-
 export type QueryEntityResolutionCaseArgs = {
   caseId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -8358,68 +7385,6 @@ export type QueryInboxItemsArgs = {
   recipientId?: InputMaybe<Scalars['ID']['input']>;
   status?: InputMaybe<InboxItemStatus>;
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryKnowledgeGraphEntitiesArgs = {
-  groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  ontologyType?: InputMaybe<Scalars['String']['input']>;
-  provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
-  runId?: InputMaybe<Scalars['ID']['input']>;
-  search?: InputMaybe<Scalars['String']['input']>;
-  sourceKind?: InputMaybe<KnowledgeGraphSourceKind>;
-  sourceRef?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphEntityArgs = {
-  entityId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphGetEntityArgs = {
-  entityId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphGraphArgs = {
-  groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
-  ontologyType?: InputMaybe<Scalars['String']['input']>;
-  provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
-  runId?: InputMaybe<Scalars['ID']['input']>;
-  search?: InputMaybe<Scalars['String']['input']>;
-  sourceKind?: InputMaybe<KnowledgeGraphSourceKind>;
-  sourceRef?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphIngestRunsArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  sourceKind?: InputMaybe<KnowledgeGraphSourceKind>;
-  sourceRef?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphNeighborsArgs = {
-  depth?: InputMaybe<Scalars['Int']['input']>;
-  entityId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphSearchArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  query: Scalars['String']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -8555,39 +7520,6 @@ export type QueryN8nAppDataArgs = {
 
 export type QueryN8nPluginSettingsArgs = {
   installId: Scalars['ID']['input'];
-};
-
-
-export type QueryOntologyChangeSetsArgs = {
-  status?: InputMaybe<OntologyChangeSetStatus>;
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryOntologyDefinitionsArgs = {
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryOntologyPacksArgs = {
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryOntologyReprocessJobArgs = {
-  jobId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryOntologySchemaGraphArgs = {
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryOntologySuggestionScanJobArgs = {
-  jobId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -9265,15 +8197,13 @@ export type RegisterIdentitySourceInput = {
 
 /**
  * Identity-source registration result (THINK-321 U7, KTD-5). The
- * source_system → connector link is written and the workspace routing map is
- * re-projected; entityTypeSlugs echoes the validated target types.
+ * source_system → connector link is written; entityTypeSlugs echoes the
+ * declared target types.
  */
 export type RegisterIdentitySourceResult = {
   __typename?: 'RegisterIdentitySourceResult';
   connectorSlug: Scalars['String']['output'];
   entityTypeSlugs: Array<Scalars['String']['output']>;
-  routingMapAgents: Scalars['Int']['output'];
-  routingMapWritten: Scalars['Int']['output'];
   sourceSystem: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
 };
@@ -9290,24 +8220,6 @@ export type RejectInboxItemInput = {
 export type RejectManagedApplicationDeploymentInput = {
   jobId: Scalars['ID']['input'];
   reason?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type RejectOntologyChangeSetInput = {
-  changeSetId: Scalars['ID']['input'];
-  reason?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-};
-
-/**
- * Item-level reject from the Living Map evidence panel (THINK-320 U6, R13):
- * marks a single still-reviewable item rejected and writes its rejection
- * fingerprint so scans never re-propose the candidate. The owning change set
- * stays open and no ontology version is minted.
- */
-export type RejectOntologyChangeSetItemInput = {
-  itemId: Scalars['ID']['input'];
-  reason?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
 };
 
 export type RejectPiExtensionVersionInput = {
@@ -10014,20 +8926,8 @@ export type SearchAskResult = {
   threadId: Scalars['ID']['output'];
 };
 
-export type SearchEntityHit = {
-  __typename?: 'SearchEntityHit';
-  aliases?: Maybe<Array<Scalars['String']['output']>>;
-  entityId: Scalars['ID']['output'];
-  evidenceCount?: Maybe<Scalars['Int']['output']>;
-  label: Scalars['String']['output'];
-  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
-  relationshipCount?: Maybe<Scalars['Int']['output']>;
-  summary?: Maybe<Scalars['String']['output']>;
-};
-
 export type SearchLeg = {
   __typename?: 'SearchLeg';
-  entityHits?: Maybe<Array<SearchEntityHit>>;
   error?: Maybe<Scalars['String']['output']>;
   memoryHits?: Maybe<Array<SearchMemoryHit>>;
   source: SearchSource;
@@ -10069,7 +8969,6 @@ export type SearchResults = {
 };
 
 export enum SearchSource {
-  Entities = 'ENTITIES',
   Memory = 'MEMORY',
   Threads = 'THREADS'
 }
@@ -10595,12 +9494,6 @@ export type StartIdentityMatchJobInput = {
   trigger?: InputMaybe<Scalars['String']['input']>;
 };
 
-export type StartKnowledgeGraphObservationsIngestInput = {
-  fullRebuild?: InputMaybe<Scalars['Boolean']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
 export type StartManagedApplicationPlanInput = {
   desiredConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
   desiredConfigVersion?: InputMaybe<Scalars['String']['input']>;
@@ -10611,12 +9504,6 @@ export type StartManagedApplicationPlanInput = {
   manifestUrl?: InputMaybe<Scalars['String']['input']>;
   operation: Scalars['String']['input'];
   releaseVersion?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type StartOntologySuggestionScanInput = {
-  dedupeKey?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-  trigger?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type StartReleaseUpdatePreflightInput = {
@@ -11711,51 +10598,6 @@ export type UpdateN8nPluginPackageSettingsResult = {
   __typename?: 'UpdateN8nPluginPackageSettingsResult';
   deploymentJob: ManagedApplicationDeploymentJob;
   settings: N8nPluginSettings;
-};
-
-export type UpdateOntologyChangeSetInput = {
-  changeSetId: Scalars['ID']['input'];
-  items?: InputMaybe<Array<UpdateOntologyChangeSetItemInput>>;
-  status?: InputMaybe<OntologyChangeSetStatus>;
-  summary?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-  title?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type UpdateOntologyChangeSetItemInput = {
-  editedValue?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Optimistic concurrency guard (THINK-320 R16): the item's updatedAt as
-   * loaded by the client. If the item changed since, the mutation fails with
-   * a conflict instead of overwriting; omit to skip the check.
-   */
-  expectedUpdatedAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  id: Scalars['ID']['input'];
-  status?: InputMaybe<OntologyChangeSetStatus>;
-};
-
-export type UpdateOntologyEntityTypeInput = {
-  aliases?: InputMaybe<Array<Scalars['String']['input']>>;
-  broadType?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  entityTypeId: Scalars['ID']['input'];
-  guidanceNotes?: InputMaybe<Scalars['String']['input']>;
-  lifecycleStatus?: InputMaybe<OntologyLifecycleStatus>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-};
-
-export type UpdateOntologyRelationshipTypeInput = {
-  aliases?: InputMaybe<Array<Scalars['String']['input']>>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  guidanceNotes?: InputMaybe<Scalars['String']['input']>;
-  inverseName?: InputMaybe<Scalars['String']['input']>;
-  lifecycleStatus?: InputMaybe<OntologyLifecycleStatus>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  relationshipTypeId: Scalars['ID']['input'];
-  sourceTypeSlugs?: InputMaybe<Array<Scalars['String']['input']>>;
-  targetTypeSlugs?: InputMaybe<Array<Scalars['String']['input']>>;
-  tenantId: Scalars['ID']['input'];
 };
 
 export type UpdatePiExtensionAssignmentInput = {

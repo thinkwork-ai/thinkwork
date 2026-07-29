@@ -1,6 +1,6 @@
 /**
  * startIdentityMatchJob (THINK-321 U7, KTD-7) — operator/service gated.
- * Mirrors startOntologySuggestionScan: durable dedupe-key insert-or-load,
+ * Durable dedupe-key insert-or-load,
  * async Event invoke of the identity-match Lambda, invoke failure marked
  * on the row. The caller polls identityMatchJob.
  */

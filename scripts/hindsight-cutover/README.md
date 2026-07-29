@@ -92,5 +92,5 @@ WHERE n.nspname = 'hindsight';
 Relocate them first (`ALTER EXTENSION pg_trgm SET SCHEMA public;`) — or, if
 the CASCADE already ate them, recreate the extension in `public` and rebuild
 the dependent indexes from their definitions in
-`packages/database-pg/src/schema/{wiki,brain,knowledge-graph}.ts`, then
+`packages/database-pg/src/schema/{wiki,brain}.ts`, then
 smoke `similarity()` / `%` queries against the rebuilt indexes.

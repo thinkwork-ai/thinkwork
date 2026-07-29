@@ -34,10 +34,6 @@ Memory is an umbrella over durable Hindsight memory plus source families that ca
     Compiled pages: entity, topic, and decision pages distilled from memory
     records and source citations.
   </Card>
-  <Card title="Business Ontology" icon="setting">
-    Tenant-governed business types, relationships, facet templates, and mappings
-    that shape durable memory materialization.
-  </Card>
   <Card title="Brain Sources" icon="open-book">
     Operator-curated Space documents retained into Hindsight with stable
     document ids, tags, observation scopes, and source evidence.
@@ -99,7 +95,6 @@ Memory treats source trust as a product concern, not a prompt afterthought.
 
 - **Authored knowledge** comes from Hindsight-retained Brain Sources and keeps document/source citations.
 - **Memory** comes from prior work and keeps Hindsight bank/source references.
-- **Ontology** defines approved business meaning before it changes durable memory structure.
 - **Compiled pages** summarize many source facts and keep page-section provenance.
 - **External MCP hits** are transient unless a separate workflow promotes them.
 - **Operational facets** can be live and fresh, but should not be silently converted into durable narrative facts.
@@ -113,7 +108,7 @@ Memory treats source trust as a product concern, not a prompt afterthought.
 
 ## Admin Surface
 
-In Admin, the operator Memory surface lives at `/settings/memory` and has four
+In Admin, the operator Memory surface lives at `/settings/memory` and has three
 views:
 
 | View            | Purpose                                                                        |
@@ -121,9 +116,6 @@ views:
 | Memory          | Browse and search operator-visible Hindsight memory records with bank evidence |
 | Wiki            | Inspect compiled pages and page search output                                  |
 | Sources         | Manage Hindsight Brain Sources and document ingest                             |
-| Knowledge Graph | Inspect ThinkWork Brain graph diagnostics when graph infrastructure is present |
-
-Ontology Studio lives under **Manage → Ontology** because it governs tenant-level business vocabulary rather than one source family. Operators use it to scan for suggestions, review change sets, approve definitions, and monitor reprocess jobs.
 
 Older paths and implementation names may still use `knowledge` for
 compatibility, but the canonical operator route for this pass is
@@ -134,7 +126,6 @@ compatibility, but the canonical operator route for this pass is
 - [Brain Sources](/concepts/knowledge/document-knowledge/) — authored document sources
 - [Retained Memory](/concepts/knowledge/memory/) — Hindsight-backed retained facts and Space memory
 - [Compiled Pages](/concepts/knowledge/compounding-memory/) — durable page distillation
-- [Business Ontology](/concepts/knowledge/business-ontology/) — governed business/domain meaning for durable memory materialization
 - [Compile Pipeline](/concepts/knowledge/compounding-memory-pipeline/) — how memories become pages
 - [Page Model](/concepts/knowledge/compounding-memory-pages/) — sections, aliases, links, mentions, and sources
 - [Source Routing](/concepts/knowledge/retrieval-and-context/) — how `query_context` assembles source hits

@@ -481,25 +481,9 @@ describe("proposeMappingCandidates", () => {
           display_name: "Acme",
         },
       ],
-      // 2. ontology identity rules
-      [
-        {
-          slug: "company",
-          identity_rules: [
-            {
-              slug: "company-domain",
-              keyKind: "domain",
-              normalization: "domain",
-              unique: true,
-              autoLink: true,
-              version: 1,
-            },
-          ],
-        },
-      ],
-      // 3. subject's active claims
+      // 2. subject's active claims
       [{ key_kind: "domain", normalized_value: "acme.com", value_hash: hash }],
-      // 4. overlapping claims on other canonical entities
+      // 3. overlapping claims on other canonical entities
       [
         {
           canonical_entity_id: "c-shadow",
@@ -516,7 +500,7 @@ describe("proposeMappingCandidates", () => {
           confidence: null,
         },
       ],
-      // 5. target-system mappings on the overlapping entities
+      // 4. target-system mappings on the overlapping entities
       [
         {
           canonical_entity_id: "c-shadow",
@@ -531,7 +515,7 @@ describe("proposeMappingCandidates", () => {
           external_id: "tw-2",
         },
       ],
-      // 6. rejection rows: tw-2 was previously revoked against the subject
+      // 5. rejection rows: tw-2 was previously revoked against the subject
       [{ namespace: "", external_id: "tw-2" }],
     );
     fake.insertReturningQueue.push([{ id: "set-1" }]);

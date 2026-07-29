@@ -2,7 +2,7 @@
  * CanvasProvider — the host-supplied seam for Living Artifacts agent parity
  * (THINK-145 U9 / KTD8).
  *
- * Mirrors the {@link KnowledgeGraphProvider} seam shape: a narrow
+ * A narrow
  * request/response contract; the host supplies transport + identity. The
  * `artifacts` extension (`save_canvas` / `load_canvas` / `refresh_canvas_data`
  * / `list_canvases`) reaches the platform ONLY through this interface — it

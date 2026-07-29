@@ -7,7 +7,6 @@ import {
 } from "./settings-nav";
 
 const ACTIVITY = "/settings/activity";
-const KNOWLEDGE_GRAPH = "/settings/knowledge-graph";
 const BILLING = "/settings/billing";
 const AGENTS = "/settings/agents";
 const MODEL_CATALOG = "/settings/model-catalog";
@@ -165,16 +164,6 @@ describe("visibleSettingsNavItems", () => {
     expect(settingsCrumbForPath(MODEL_CATALOG)).toEqual([
       { label: "Model Catalog" },
     ]);
-  });
-
-  it("no longer lists a standalone Knowledge Graph nav entry", () => {
-    // The Knowledge Graph explorer is now a tab of the Memory page.
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(
-      false,
-    );
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Knowledge Graph")).toBe(
-      false,
-    );
   });
 
   it("carries no managed-app nav guards", () => {

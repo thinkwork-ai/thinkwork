@@ -111,6 +111,5 @@ install to converge:
    mapping export (`regenerateTwinMappingExport`) — without it the twin
    projection no-ops every batch.
 
-- Seed data. The ontology change set, identity bootstrap, and projector
-  drain/deposit sequence remain the engineer-run recipe (commissioning
-  gate is a named follow-up).
+- Seed data. The identity bootstrap and projector drain/deposit sequence
+  remain the engineer-run recipe (commissioning gate is a named follow-up).

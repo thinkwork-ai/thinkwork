@@ -22,7 +22,7 @@
  *
  * Downstream surfaces keyed on canonical_entity_id (what merge repoints,
  * split deliberately does NOT):
- *   - kg.entities.canonical_entity_id and memory_claims.canonical_subject_id:
+ *   - memory_claims.canonical_subject_id:
  *     graph/memory rows carry no mapping linkage, so their half is not
  *     derivable — they stay on A and re-derive on the next kg compile of
  *     the partitioned identity evidence.
@@ -38,7 +38,6 @@ import {
   canonicalEntities,
   entityIdentityClaims,
   entitySourceMappings,
-  kgEntities,
   mappingRejections,
   memoryClaims,
 } from "@thinkwork/database-pg/schema";
@@ -63,7 +62,6 @@ export interface SplitImpactPreview {
   claimCountRemainingA: number;
   /** Rows that stay on A and re-derive on the next compile (see header). */
   memoryClaimCount: number;
-  graphEntityCount: number;
 }
 
 /** Pure comparison guarding against stale previews (mirrors merge). */
@@ -76,8 +74,7 @@ export function splitImpactMatches(
     a.mappingCountB === b.mappingCountB &&
     a.claimCountFollowingB === b.claimCountFollowingB &&
     a.claimCountRemainingA === b.claimCountRemainingA &&
-    a.memoryClaimCount === b.memoryClaimCount &&
-    a.graphEntityCount === b.graphEntityCount
+    a.memoryClaimCount === b.memoryClaimCount
   );
 }
 
@@ -280,12 +277,6 @@ export async function previewCanonicalEntitySplit(
       .from(memoryClaims)
       .where(eq(memoryClaims.canonical_subject_id, args.canonicalEntityId)),
   );
-  const graphEntityCount = await countOf(
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(kgEntities)
-      .where(eq(kgEntities.canonical_entity_id, args.canonicalEntityId)),
-  );
   const halfCounts = { a: 0, b: 0 };
   for (const assignment of args.assignments) {
     halfCounts[assignment.half] += 1;
@@ -296,7 +287,6 @@ export async function previewCanonicalEntitySplit(
     claimCountFollowingB: claimFollowSet.size,
     claimCountRemainingA: claims.length - claimFollowSet.size,
     memoryClaimCount,
-    graphEntityCount,
   };
 }
 

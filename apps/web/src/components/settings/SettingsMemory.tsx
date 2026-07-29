@@ -405,7 +405,7 @@ export function SettingsMemory({
   // entities) are different datasets with no shared axis, so each view gets
   // facets appropriate to its data:
   //   • Table → Bank / Scope / Type(strategy), filtering the rows.
-  //   • Graph → Entity Type (ontology types reported by the graph), dimming
+  //   • Graph → Entity Type (entity types reported by the graph), dimming
   //     non-matching nodes via MemoryGraph's `typeFilter`.
   const [tableColumnFilters, setTableColumnFilters] =
     useState<ColumnFiltersState>([]);
@@ -486,7 +486,7 @@ export function SettingsMemory({
   );
 
   // Graph facets: Bank + Entity Type. The graph (tenant-wide) reports its
-  // banks and ontology types via callbacks; a headless filter table stores the
+  // banks and entity types via callbacks; a headless filter table stores the
   // selections, forwarded to MemoryGraph's `bankFilter` / `typeFilter`.
   const [graphTypes, setGraphTypes] = useState<string[]>([]);
   const [graphBanks, setGraphBanks] = useState<{ id: string; name: string }[]>(

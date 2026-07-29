@@ -43,10 +43,6 @@ import { triggerMutations } from "./triggers/index.js";
 import { threadMutations } from "./threads/index.js";
 import { inboxMutations } from "./inbox/index.js";
 import { costMutations } from "./costs/index.js";
-import {
-  knowledgeGraphMutations,
-  knowledgeGraphQueries,
-} from "./knowledge-graph/index.js";
 import { artifactMutations } from "./artifacts/index.js";
 import { orchestrationMutations } from "./orchestration/index.js";
 import { webhookMutations } from "./webhooks/index.js";
@@ -120,7 +116,6 @@ import {
 import { customizeQueries, customizeMutations } from "./customize/index.js";
 import { complianceQueries, complianceMutations } from "./compliance/index.js";
 import { slackQueries, slackMutations } from "./slack/index.js";
-import { ontologyQueries, ontologyMutations } from "./ontology/index.js";
 import { observabilityQueries } from "./observability/index.js";
 import {
   linkedTaskMutations,
@@ -166,7 +161,6 @@ export const queryResolvers: Record<string, any> = {
   ...inboxQueries,
   ...triggerQueries,
   ...costQueries,
-  ...knowledgeGraphQueries,
   ...artifactQueries,
   ...appletQueries,
   ...orchestrationQueries,
@@ -199,7 +193,6 @@ export const queryResolvers: Record<string, any> = {
   ...customizeQueries,
   ...complianceQueries,
   ...slackQueries,
-  ...ontologyQueries,
   ...observabilityQueries,
   ...spaceQueries,
   ...linkedTaskQueries,
@@ -221,7 +214,6 @@ export const mutationResolvers: Record<string, any> = {
   ...threadMutations,
   ...inboxMutations,
   ...costMutations,
-  ...knowledgeGraphMutations,
   ...artifactMutations,
   ...appletMutations,
   ...orchestrationMutations,
@@ -252,7 +244,6 @@ export const mutationResolvers: Record<string, any> = {
   ...customizeMutations,
   ...complianceMutations,
   ...slackMutations,
-  ...ontologyMutations,
   ...spaceMutations,
   ...linkedTaskMutations,
   ...workItemMutations,

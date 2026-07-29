@@ -4,10 +4,10 @@ import { describe, expect, it } from "vitest";
 import { MAX_STAGE_NAME_LENGTH, validateStage } from "../src/config.js";
 
 /**
- * Harness cycle-6 ledger entry: a 16-character stage name pushed
- * `thinkwork-<stage>-api-knowledge-graph-observations-ingest` past Lambda's
- * 64-character function-name cap, 437 resources into the first apply. The
- * stage-length cap must stay consistent with the actual handler list.
+ * Harness cycle-6 ledger entry: a 16-character stage name pushed a long
+ * `thinkwork-<stage>-api-<handler>` name past Lambda's 64-character
+ * function-name cap, 437 resources into the first apply. The stage-length
+ * cap must stay consistent with the actual handler list.
  */
 
 describe("validateStage length cap", () => {

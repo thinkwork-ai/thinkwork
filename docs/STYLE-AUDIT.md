@@ -96,7 +96,6 @@ These are accuracy drift items for future PRs, not style-guide violations.
 | `concepts/knowledge/compounding-memory-pipeline.mdx` | 448 | **KEEP** | **Gold standard — the template for the site.** Verify flag names (`WIKI_*`), env vars, cost numbers, model-id defaults against `packages/api/src/lib/wiki/` at 2026-04-21. |
 | `concepts/knowledge/compounding-memory-pages.mdx` | 240 | KEEP | Strong. Verify schema + alias dedupe sections still match migration `0015_pg_trgm_alias_title_indexes.sql`. |
 | `concepts/knowledge/retrieval-and-context.mdx` | 74 | POLISH | Good framing but short. Add a walking tour of how thread history + retrieved docs + recalled memories + tool results are assembled into a single invocation context, with token-budget tradeoffs. |
-| `concepts/knowledge/knowledge-graph.mdx` | 47 | **REWRITE** | Frames this as aspirational when the compounding-memory pipeline already produces a real graph (entity edges, co-mention links, parent_of/child_of). Reframe as "what's shipped vs. what's next" — ship today, typed-relationship semantics later. |
 
 ### Connectors (3 + 1 orphan)
 

@@ -19,7 +19,7 @@ describe("memory palette constants", () => {
     expect(AGENT_COLOR).toMatch(/^#[0-9a-f]{6}$/i);
   });
 
-  it("maps ontology types to hex colors", () => {
+  it("maps entity types to hex colors", () => {
     const expectedTypes = [
       "Person",
       "Company",

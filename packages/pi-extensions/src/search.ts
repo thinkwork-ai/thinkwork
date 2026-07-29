@@ -18,8 +18,8 @@ import {
  * GraphQL/HTTP client of its own), so the extension is identical on the
  * cloud and desktop hosts and — crucially — resolves the SAME broker the web
  * palette calls (R2). This is the fix for the wrong-source problem: one tool
- * that fans out across threads and entities in a single call, instead of the
- * model guessing between `recall` and the graph tools.
+ * that fans out across threads (and optionally memory) in a single call,
+ * instead of the model guessing which retrieval tool to reach for.
  *
  * Identity discipline: the tool params carry NO tenant/user/thread ids —
  * identity is closed over in the host-supplied provider (turn-bound
@@ -37,7 +37,7 @@ export interface SearchExtensionOptions {
 
 const MAX_LIMIT = 10;
 const UNAVAILABLE_TEXT = "ThinkWork search is currently unavailable.";
-const VALID_SOURCES = ["THREADS", "ENTITIES", "MEMORY"] as const;
+const VALID_SOURCES = ["THREADS", "MEMORY"] as const;
 
 function formatLeg(leg: SearchLegResult): string {
   const header =
@@ -80,10 +80,9 @@ export function createSearchExtension(
         label: "Search",
         description:
           "Search everything ThinkWork knows for the current user in ONE call — " +
-          "threads and knowledge-graph entities are all fanned out together " +
-          "and returned as source-tagged results. Prefer this " +
-          "over guessing between `recall` or the knowledge-graph " +
-          'tools for lookup questions ("what do we know about Acme?", "find the ' +
+          "every leg is fanned out together and returned as source-tagged " +
+          "results. Prefer this over reaching for `recall` " +
+          'for lookup questions ("what do we know about Acme?", "find the ' +
           'thread where we set pricing"). Results are scoped to what the current ' +
           "user can access. Set `sources` to narrow the legs; include `MEMORY` to " +
           "also search the user's own episodic memory (slower).",
@@ -94,7 +93,7 @@ export function createSearchExtension(
           sources: Type.Optional(
             Type.Array(Type.Union(VALID_SOURCES.map((s) => Type.Literal(s))), {
               description:
-                "Which legs to run (default: THREADS, ENTITIES). " +
+                "Which legs to run (default: THREADS). " +
                 "Add MEMORY to also search episodic memory.",
             }),
           ),

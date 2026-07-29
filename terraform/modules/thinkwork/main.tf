@@ -1208,12 +1208,9 @@ module "api" {
   enable_slack_workspace_app                    = var.enable_slack_workspace_app
   enable_msteams_app                            = var.enable_msteams_app
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
-  ontology_scan_model_id                        = var.ontology_scan_model_id
   brain_source_agent_model_id                   = var.brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
-  knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled
-  ontology_scan_sweep_enabled                   = var.ontology_scan_sweep_enabled
   identity_drift_match_enabled                  = var.identity_drift_match_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   enable_workspace_orchestration                = var.enable_workspace_orchestration

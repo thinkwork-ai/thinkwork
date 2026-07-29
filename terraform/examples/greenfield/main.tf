@@ -527,22 +527,6 @@ variable "stripe_price_ids_json" {
   default     = "{}"
 }
 
-variable "ontology_scan_model_id" {
-  description = <<-EOT
-    Bedrock model id the ontology-scan Lambda uses for suggestion scans.
-    Any Converse-compatible model works; change without a code deploy.
-
-    Default: openai.gpt-oss-120b-1:0 (strong output quality at a lower
-    per-minute throttle risk than Claude Haiku 4.5 on shared dev
-    accounts).
-
-    Named wiki_compile_model_id until the wiki backend was removed;
-    ontology-scan was always its other consumer and is now its only one.
-  EOT
-  type        = string
-  default     = "openai.gpt-oss-120b-1:0"
-}
-
 variable "requester_idle_memory_learning_enabled" {
   description = "Enable requester-scoped 15-minute idle memory learning."
   type        = bool
@@ -581,18 +565,6 @@ variable "brain_source_agent_model_id" {
   EOT
   type        = string
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-}
-
-variable "knowledge_graph_observations_ingest_enabled" {
-  description = "Enable the Brain distillation schedule (observations -> knowledge graph). Ships disabled; flip on dev after a validated manual run (plan 2026-07-03-005 U4)."
-  type        = bool
-  default     = false
-}
-
-variable "ontology_scan_sweep_enabled" {
-  description = "Enable the recurring per-tenant ontology suggestion scan sweep (THINK-320 U4/KTD-3). Ships disabled; enabled per stage once the Living Map review surfaces land."
-  type        = bool
-  default     = false
 }
 
 variable "identity_drift_match_enabled" {
@@ -995,12 +967,9 @@ module "thinkwork" {
   # Wiki compile Lambda config. Pinned so unrelated terraform applies
   # don't wipe the Bedrock model or the aggregation flag back to
   # whatever the Lambda env defaults to.
-  ontology_scan_model_id                        = var.ontology_scan_model_id
   brain_source_agent_model_id                   = var.brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
-  knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled
-  ontology_scan_sweep_enabled                   = var.ontology_scan_sweep_enabled
   identity_drift_match_enabled                  = var.identity_drift_match_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled

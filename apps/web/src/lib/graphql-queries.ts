@@ -2595,9 +2595,9 @@ export const ComputerMemorySystemConfigQuery = gql`
 
 /**
  * THINK-263 U4 — unified fan-out search broker as a palette rail query. Fired
- * once per source rail (Threads / Entities) so each rail hydrates and
- * renders its own pending / empty / timeout / error state independently. The
- * memory leg is intentionally never requested on keystrokes (find rung).
+ * once per source rail (Threads) so each rail hydrates and renders its own
+ * pending / empty / timeout / error state independently. The memory leg is
+ * intentionally never requested on keystrokes (find rung).
  */
 export const SearchQuery = gql`
   query Search(
@@ -2626,65 +2626,6 @@ export const SearchQuery = gql`
           spaceId
           updatedAt
         }
-        entityHits {
-          entityId
-          label
-          summary
-          ontologyTypeSlug
-          aliases
-          evidenceCount
-        }
-      }
-    }
-  }
-`;
-
-/**
- * THINK-263 U5 — the entity dossier: everything the tenant brain knows about
- * one grounded knowledge-graph entity. `match` is the assembled dossier (null
- * when ambiguous / no grounded match); `disambiguation` lists candidates when
- * more than one grounded entity matched and no `entityId` selector was given.
- */
-export const EntityDossierQuery = gql`
-  query EntityDossier($tenantId: ID!, $query: String!, $entityId: ID) {
-    entityDossier(tenantId: $tenantId, query: $query, entityId: $entityId) {
-      match {
-        entityId
-        label
-        ontologyTypeSlug
-        summary
-        aliases
-        canonicalEntityId
-        entityType
-        twinProjected
-        memories {
-          memoryRecordId
-          text
-          score
-          threadId
-          createdAt
-        }
-        threads {
-          id
-          identifier
-          title
-          spaceId
-          updatedAt
-        }
-        artifacts {
-          id
-          title
-          type
-          threadId
-        }
-      }
-      disambiguation {
-        entityId
-        label
-        ontologyTypeSlug
-        summary
-        aliases
-        evidenceCount
       }
     }
   }

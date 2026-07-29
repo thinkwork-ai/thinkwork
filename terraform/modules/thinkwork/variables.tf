@@ -1388,7 +1388,7 @@ variable "cognito_invite_sms_message" {
 }
 
 variable "ontology_scan_model_id" {
-  description = "Bedrock model id the ontology-scan Lambda uses for suggestion scans. Any Converse-compatible model works. Override per-env to spike a different model without re-deploying code. (Named wiki_compile_model_id until the wiki backend was removed; ontology-scan was always its other consumer and is now its only one.)"
+  description = "DEPRECATED (THINK-408): the ontology / knowledge-graph subsystem was removed; this variable is accepted for compatibility and has no effect."
   type        = string
   default     = "openai.gpt-oss-120b-1:0"
 }
@@ -1400,13 +1400,13 @@ variable "brain_source_agent_model_id" {
 }
 
 variable "knowledge_graph_observations_ingest_enabled" {
-  description = "Enable the Brain distillation schedule (Hindsight observations -> knowledge graph). Ships disabled (plan 2026-07-03-005 U4)."
+  description = "DEPRECATED (THINK-408): the ontology / knowledge-graph subsystem was removed; this variable is accepted for compatibility and has no effect."
   type        = bool
   default     = false
 }
 
 variable "ontology_scan_sweep_enabled" {
-  description = "Enable the recurring per-tenant ontology suggestion scan sweep (THINK-320 U4/KTD-3). Ships disabled."
+  description = "DEPRECATED (THINK-408): the ontology / knowledge-graph subsystem was removed; this variable is accepted for compatibility and has no effect."
   type        = bool
   default     = false
 }

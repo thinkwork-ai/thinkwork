@@ -27,25 +27,11 @@ answers the question:
 1. **Current prompt and workspace files** — especially `USER.md` for the
    requester's profile and family facts. If the answer is already present,
    answer directly; call no memory tools.
-2. **The tenant Brain (shared institutional knowledge)** — for questions about
-   customers, projects, people, decisions, and how they connect across the
-   company:
-   - the knowledge graph via `knowledge_graph_search`, then
-     `knowledge_graph_get_entity` / `knowledge_graph_neighbors` to traverse
-     entities and relationships.
-3. **Raw recall (drill-down)** — `recall` for the requester's own extracted
-   facts and preferences, and for underlying detail when consolidated Brain
-   content is not specific enough (e.g. a Brain answer cites supporting
-   observations and the user asks for the specifics behind one).
-
-Brain first, recall for drill-down: consolidated Brain content is deduplicated
-and evidence-weighted; raw recall is noisier and personal-scope only.
+2. **Recall** — `recall` for the requester's own extracted facts and
+   preferences, and for underlying detail on prior conversations.
 
 ## Lookup tools
 
-- **`knowledge_graph_search(query)`**, **`knowledge_graph_get_entity(entity_id)`**,
-  **`knowledge_graph_neighbors(entity_id, depth)`** — the tenant Brain's entity
-  graph. Use first for shared institutional questions.
 - **`recall(query)`** — the requester's long-term memory. Searches both what the
   platform extracted automatically and anything stored with `remember`. Use for
   prior conversations, stated preferences, and durable personal facts.

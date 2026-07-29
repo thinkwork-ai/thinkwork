@@ -15,7 +15,7 @@ const migration0167 = readFileSync(
 );
 
 describe("migration 0167 — Brain artifact manifest runtime metadata", () => {
-  it("links artifact manifests to Knowledge Graph ingest runs and source metadata", () => {
+  it("declares artifact manifest runtime metadata columns, indexes, and checks", () => {
     const columns = getTableColumns(brainArtifactManifests);
 
     expect(columns.ingest_run_id.notNull).toBe(false);
@@ -30,8 +30,11 @@ describe("migration 0167 — Brain artifact manifest runtime metadata", () => {
     expect(columns.ontology_mechanism.notNull).toBe(false);
     expect(columns.metadata.notNull).toBe(true);
 
+    // THINK-408: the ingest_run_id -> kg.ingest_runs FK is no longer mirrored
+    // in Drizzle (the knowledge-graph schema was removed); the physical
+    // constraint stays until the deferred kg.* DROP.
     const config = getTableConfig(brainArtifactManifests);
-    expect(config.foreignKeys.map((fk) => fk.getName())).toContain(
+    expect(config.foreignKeys.map((fk) => fk.getName())).not.toContain(
       "artifact_manifests_ingest_run_id_fk",
     );
     expect(config.indexes.map((index) => index.config.name)).toEqual(

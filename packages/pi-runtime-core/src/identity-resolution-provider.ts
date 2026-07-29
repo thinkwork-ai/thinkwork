@@ -2,7 +2,7 @@
  * IdentityResolutionProvider — the host-supplied seam for the entity-identity
  * crosswalk (THINK-321 U5).
  *
- * Mirrors the {@link KnowledgeGraphProvider} seam shape: a narrow
+ * A narrow
  * request/response contract; the host supplies transport + identity. The
  * identity-resolution extension reaches the crosswalk ONLY through this
  * interface — it never builds an HTTP/GraphQL client of its own — so the

@@ -24,7 +24,6 @@ import { Route as AuthedSettingsToolsRouteImport } from "./routes/_authed/settin
 import { Route as AuthedSettingsRoutineRepoRouteImport } from "./routes/_authed/settings.routine-repo";
 import { Route as AuthedSettingsModelCatalogRouteImport } from "./routes/_authed/settings.model-catalog";
 import { Route as AuthedSettingsMemoryRouteImport } from "./routes/_authed/settings.memory";
-import { Route as AuthedSettingsKnowledgeGraphRouteImport } from "./routes/_authed/settings.knowledge-graph";
 import { Route as AuthedSettingsGeneralRouteImport } from "./routes/_authed/settings.general";
 import { Route as AuthedSettingsCapabilitiesRouteImport } from "./routes/_authed/settings.capabilities";
 import { Route as AuthedSettingsBillingRouteImport } from "./routes/_authed/settings.billing";
@@ -62,7 +61,6 @@ import { Route as AuthedSettingsSkillsDraftsRouteImport } from "./routes/_authed
 import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_authed/settings.skills.$skillSlug";
 import { Route as AuthedSettingsRoutinesRoutineIdRouteImport } from "./routes/_authed/settings.routines.$routineId";
 import { Route as AuthedSettingsMemoryRecordsRouteImport } from "./routes/_authed/settings.memory.records";
-import { Route as AuthedSettingsMemoryKnowledgeGraphRouteImport } from "./routes/_authed/settings.memory.knowledge-graph";
 import { Route as AuthedSettingsMcpServersServersRouteImport } from "./routes/_authed/settings.mcp-servers.servers";
 import { Route as AuthedSettingsMcpServersServerIdRouteImport } from "./routes/_authed/settings.mcp-servers.$serverId";
 import { Route as AuthedSettingsEvaluationsProfilesRouteImport } from "./routes/_authed/settings.evaluations.profiles";
@@ -176,12 +174,6 @@ const AuthedSettingsMemoryRoute = AuthedSettingsMemoryRouteImport.update({
   path: "/memory",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
-const AuthedSettingsKnowledgeGraphRoute =
-  AuthedSettingsKnowledgeGraphRouteImport.update({
-    id: "/knowledge-graph",
-    path: "/knowledge-graph",
-    getParentRoute: () => AuthedSettingsRoute,
-  } as any);
 const AuthedSettingsGeneralRoute = AuthedSettingsGeneralRouteImport.update({
   id: "/general",
   path: "/general",
@@ -391,12 +383,6 @@ const AuthedSettingsMemoryRecordsRoute =
   AuthedSettingsMemoryRecordsRouteImport.update({
     id: "/records",
     path: "/records",
-    getParentRoute: () => AuthedSettingsMemoryRoute,
-  } as any);
-const AuthedSettingsMemoryKnowledgeGraphRoute =
-  AuthedSettingsMemoryKnowledgeGraphRouteImport.update({
-    id: "/knowledge-graph",
-    path: "/knowledge-graph",
     getParentRoute: () => AuthedSettingsMemoryRoute,
   } as any);
 const AuthedSettingsMcpServersServersRoute =
@@ -639,7 +625,6 @@ export interface FileRoutesByFullPath {
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
-  "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
   "/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
@@ -667,7 +652,6 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
-  "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
@@ -726,7 +710,6 @@ export interface FileRoutesByTo {
   "/settings/billing": typeof AuthedSettingsBillingRoute;
   "/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
   "/settings/general": typeof AuthedSettingsGeneralRoute;
-  "/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
   "/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
@@ -754,7 +737,6 @@ export interface FileRoutesByTo {
   "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
-  "/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
@@ -820,7 +802,6 @@ export interface FileRoutesById {
   "/_authed/settings/billing": typeof AuthedSettingsBillingRoute;
   "/_authed/settings/capabilities": typeof AuthedSettingsCapabilitiesRoute;
   "/_authed/settings/general": typeof AuthedSettingsGeneralRoute;
-  "/_authed/settings/knowledge-graph": typeof AuthedSettingsKnowledgeGraphRoute;
   "/_authed/settings/memory": typeof AuthedSettingsMemoryRouteWithChildren;
   "/_authed/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
   "/_authed/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
@@ -848,7 +829,6 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/_authed/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
   "/_authed/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
-  "/_authed/settings/memory/knowledge-graph": typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   "/_authed/settings/memory/records": typeof AuthedSettingsMemoryRecordsRoute;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/_authed/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
@@ -913,7 +893,6 @@ export interface FileRouteTypes {
     | "/settings/billing"
     | "/settings/capabilities"
     | "/settings/general"
-    | "/settings/knowledge-graph"
     | "/settings/memory"
     | "/settings/model-catalog"
     | "/settings/routine-repo"
@@ -941,7 +920,6 @@ export interface FileRouteTypes {
     | "/settings/evaluations/profiles"
     | "/settings/mcp-servers/$serverId"
     | "/settings/mcp-servers/servers"
-    | "/settings/memory/knowledge-graph"
     | "/settings/memory/records"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
@@ -1000,7 +978,6 @@ export interface FileRouteTypes {
     | "/settings/billing"
     | "/settings/capabilities"
     | "/settings/general"
-    | "/settings/knowledge-graph"
     | "/settings/memory"
     | "/settings/model-catalog"
     | "/settings/routine-repo"
@@ -1028,7 +1005,6 @@ export interface FileRouteTypes {
     | "/settings/evaluations/profiles"
     | "/settings/mcp-servers/$serverId"
     | "/settings/mcp-servers/servers"
-    | "/settings/memory/knowledge-graph"
     | "/settings/memory/records"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
@@ -1093,7 +1069,6 @@ export interface FileRouteTypes {
     | "/_authed/settings/billing"
     | "/_authed/settings/capabilities"
     | "/_authed/settings/general"
-    | "/_authed/settings/knowledge-graph"
     | "/_authed/settings/memory"
     | "/_authed/settings/model-catalog"
     | "/_authed/settings/routine-repo"
@@ -1121,7 +1096,6 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/profiles"
     | "/_authed/settings/mcp-servers/$serverId"
     | "/_authed/settings/mcp-servers/servers"
-    | "/_authed/settings/memory/knowledge-graph"
     | "/_authed/settings/memory/records"
     | "/_authed/settings/routines/$routineId"
     | "/_authed/settings/skills/$skillSlug"
@@ -1282,13 +1256,6 @@ declare module "@tanstack/react-router" {
       path: "/memory";
       fullPath: "/settings/memory";
       preLoaderRoute: typeof AuthedSettingsMemoryRouteImport;
-      parentRoute: typeof AuthedSettingsRoute;
-    };
-    "/_authed/settings/knowledge-graph": {
-      id: "/_authed/settings/knowledge-graph";
-      path: "/knowledge-graph";
-      fullPath: "/settings/knowledge-graph";
-      preLoaderRoute: typeof AuthedSettingsKnowledgeGraphRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
     "/_authed/settings/general": {
@@ -1548,13 +1515,6 @@ declare module "@tanstack/react-router" {
       path: "/records";
       fullPath: "/settings/memory/records";
       preLoaderRoute: typeof AuthedSettingsMemoryRecordsRouteImport;
-      parentRoute: typeof AuthedSettingsMemoryRoute;
-    };
-    "/_authed/settings/memory/knowledge-graph": {
-      id: "/_authed/settings/memory/knowledge-graph";
-      path: "/knowledge-graph";
-      fullPath: "/settings/memory/knowledge-graph";
-      preLoaderRoute: typeof AuthedSettingsMemoryKnowledgeGraphRouteImport;
       parentRoute: typeof AuthedSettingsMemoryRoute;
     };
     "/_authed/settings/mcp-servers/servers": {
@@ -1957,13 +1917,10 @@ const AuthedSettingsArtifactsRouteWithChildren =
   );
 
 interface AuthedSettingsMemoryRouteChildren {
-  AuthedSettingsMemoryKnowledgeGraphRoute: typeof AuthedSettingsMemoryKnowledgeGraphRoute;
   AuthedSettingsMemoryRecordsRoute: typeof AuthedSettingsMemoryRecordsRoute;
 }
 
 const AuthedSettingsMemoryRouteChildren: AuthedSettingsMemoryRouteChildren = {
-  AuthedSettingsMemoryKnowledgeGraphRoute:
-    AuthedSettingsMemoryKnowledgeGraphRoute,
   AuthedSettingsMemoryRecordsRoute: AuthedSettingsMemoryRecordsRoute,
 };
 
@@ -1992,7 +1949,6 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsBillingRoute: typeof AuthedSettingsBillingRoute;
   AuthedSettingsCapabilitiesRoute: typeof AuthedSettingsCapabilitiesRoute;
   AuthedSettingsGeneralRoute: typeof AuthedSettingsGeneralRoute;
-  AuthedSettingsKnowledgeGraphRoute: typeof AuthedSettingsKnowledgeGraphRoute;
   AuthedSettingsMemoryRoute: typeof AuthedSettingsMemoryRouteWithChildren;
   AuthedSettingsModelCatalogRoute: typeof AuthedSettingsModelCatalogRoute;
   AuthedSettingsRoutineRepoRoute: typeof AuthedSettingsRoutineRepoRoute;
@@ -2045,7 +2001,6 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsBillingRoute: AuthedSettingsBillingRoute,
   AuthedSettingsCapabilitiesRoute: AuthedSettingsCapabilitiesRoute,
   AuthedSettingsGeneralRoute: AuthedSettingsGeneralRoute,
-  AuthedSettingsKnowledgeGraphRoute: AuthedSettingsKnowledgeGraphRoute,
   AuthedSettingsMemoryRoute: AuthedSettingsMemoryRouteWithChildren,
   AuthedSettingsModelCatalogRoute: AuthedSettingsModelCatalogRoute,
   AuthedSettingsRoutineRepoRoute: AuthedSettingsRoutineRepoRoute,

@@ -37,7 +37,7 @@ export const SHARED_MEMORY_BLUEPRINT_KEY = "shared-memory";
  * This allowlist is the enforcement point: `stage_overrides.disabledStages` is
  * intent, and anything outside this set is ignored rather than trusted.
  */
-export const TOGGLEABLE_MEMORY_STAGES = ["compound", "graph", "wiki"] as const;
+export const TOGGLEABLE_MEMORY_STAGES = ["compound", "wiki"] as const;
 
 export type ToggleableMemoryStage = (typeof TOGGLEABLE_MEMORY_STAGES)[number];
 
@@ -149,9 +149,7 @@ export function buildSharedMemoryWorkflowDefinition(
   overrides?: MemoryStageOverrides | null,
 ): WorkflowDefinition {
   const disabled = new Set<string>(normalizeDisabledStages(overrides));
-  const tail = (["compound", "graph", "wiki"] as const).filter(
-    (s) => !disabled.has(s),
-  );
+  const tail = (["compound", "wiki"] as const).filter((s) => !disabled.has(s));
   return {
     version: WORKFLOW_DEFINITION_VERSION,
     steps: [

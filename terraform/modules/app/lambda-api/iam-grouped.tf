@@ -466,16 +466,6 @@ locals {
           # Event-invoke this as a post-commit nudge; the rebuild command is
           # a RequestResponse invoke. Cursor makes missed nudges harmless.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-identity-graph-projector",
-          # knowledge-graph-observations-ingest: graphql-http's
-          # startKnowledgeGraphObservationsIngest mutation invokes this with
-          # RequestResponse, and memory-stage-worker's graph stage (THINK-193
-          # U4 stitch) RequestResponse-invokes it with a targeted bankIds
-          # payload — the Bedrock classifier/extraction model config lives on
-          # the ingest Lambda's own env, so the worker never runs the ingest
-          # in-process. (The worker's self-invoke drain is retired — AWS
-          # recursive-loop detection terminated those chains; backlog drains
-          # in-process now.)
-          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-knowledge-graph-observations-ingest",
           # harness-runner: chat-agent-invoke Event-invokes this for chat
           # turns routed to the AWS AgentCore runtime (THINK-311 trial).
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-harness-runner",
@@ -487,12 +477,6 @@ locals {
           # signer re-derives the actor/tenant/thread tuple from the running
           # turn and alone holds KMS Sign; the shared runner role never does.
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-turn-assertion-mint",
-          # ontology-scan: startOntologySuggestionScan Event-invokes this
-          # after inserting a durable scan job row.
-          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-ontology-scan",
-          # ontology-reprocess: approveOntologyChangeSet Event-invokes this
-          # after inserting a durable reprocess job row.
-          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-ontology-reprocess",
           # identity-match (THINK-321 U7): startIdentityMatchJob Event-invokes
           # this after inserting a durable match job row; identity-match also
           # self-invokes for the continuation chain (same shared role).
@@ -861,26 +845,12 @@ locals {
     # Handler-gated SQS grants. Each statement was a count-gated inline
     # policy whose queue exists only when local.deploy_lambda_handlers.
     local.deploy_lambda_handlers ? [
-      # (was inline policy "thinkwork-${stage}-ontology-scan-dlq-send")
-      {
-        Sid      = "OntologyScanDlqSend"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.ontology_scan_dlq[0].arn
-      },
       # THINK-321 U7 identity-match async-failure DLQ.
       {
         Sid      = "IdentityMatchDlqSend"
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.identity_match_dlq[0].arn
-      },
-      # (was inline policy "thinkwork-${stage}-ontology-reprocess-dlq-send")
-      {
-        Sid      = "OntologyReprocessDlqSend"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.ontology_reprocess_dlq[0].arn
       },
       # (was inline policy "compliance-drainer-dlq-send")
       {

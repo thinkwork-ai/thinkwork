@@ -227,7 +227,7 @@ vi.mock("../entity-identity/resolution.js", async (importOriginal) => {
 });
 
 vi.mock("../entity-identity/snapshot-resolution.js", () => ({
-  // No approved ontology identity rules in these tenants — the resolve stage
+  // No operator-authored identity rules — the resolve stage
   // falls back to the matcher defaults (+ its built-in domain key).
   loadIdentityRulesByTypeSlug: vi.fn(async () => new Map()),
 }));

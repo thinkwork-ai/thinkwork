@@ -1,14 +1,14 @@
 /**
  * Color palette for the Hindsight memory force-graph. Memory nodes are pink,
  * untyped entity nodes are sky blue, and typed entity nodes use TYPE_COLORS
- * keyed off the Hindsight ontology label.
+ * keyed off the Hindsight entity-type label.
  */
 
 export const MEMORY_COLOR = "#e879a0";
 export const ENTITY_COLOR = "#7dd3fc";
 export const AGENT_COLOR = "#34d399";
 
-/** Ontology entity-type → hex color mapping for ForceGraph3D sphere materials. */
+/** Entity-type → hex color mapping for ForceGraph3D sphere materials. */
 export const MEMORY_TYPE_COLORS: Record<string, string> = {
   Person: "#34d399", // green
   Company: "#60a5fa", // blue

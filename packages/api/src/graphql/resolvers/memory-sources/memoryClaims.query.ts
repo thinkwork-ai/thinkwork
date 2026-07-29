@@ -1,5 +1,5 @@
 /**
- * Operator inspection of ontology claims for one target scope (THINK-193 U2).
+ * Operator inspection of durable claims for one target scope (THINK-193 U2).
  * Tenant-admin gated. supportCount is a grouped count over ACTIVE
  * memory_claim_evidence edges so retracted evidence stops counting.
  */

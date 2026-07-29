@@ -29,7 +29,7 @@ import {
 
 /** Parameter-safe id list: drizzle binds a raw JS array as a malformed
  * composite literal, so build `IN (...)` lists explicitly (same pattern as
- * knowledge-graph/graph-search.ts). */
+ * the Brain read path). */
 function idList(ids: string[], cast: "uuid" | "varchar"): SQL {
   return sql.join(
     ids.map((id) => (cast === "uuid" ? sql`${id}::uuid` : sql`${id}`)),

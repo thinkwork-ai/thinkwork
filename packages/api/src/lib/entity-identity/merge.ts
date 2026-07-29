@@ -6,7 +6,6 @@
  *
  *   - entity_source_mappings + entity_identity_claims repoint to the survivor;
  *   - memory_claims.canonical_subject_id repoints;
- *   - kg.entities.canonical_entity_id repoints;
  *   - the loser keeps its UUID as a redirect: status='merged',
  *     merged_into_id=survivor (CHECK-enforced pairing);
  *   - an entity_resolution_events 'merge' audit row appends.
@@ -21,7 +20,6 @@ import {
   canonicalEntities,
   entityIdentityClaims,
   entitySourceMappings,
-  kgEntities,
   memoryClaims,
 } from "@thinkwork/database-pg/schema";
 import type { Database } from "../db.js";
@@ -32,7 +30,6 @@ export interface MergeImpactPreview {
   sourceMappingCount: number;
   identityClaimCount: number;
   memoryClaimCount: number;
-  graphEntityCount: number;
 }
 
 export interface MergeCanonicalEntitiesArgs {
@@ -58,9 +55,7 @@ export function impactMatches(
   return (
     a.sourceMappingCount === b.sourceMappingCount &&
     a.identityClaimCount === b.identityClaimCount &&
-    a.memoryClaimCount === b.memoryClaimCount &&
-    a.graphEntityCount === b.graphEntityCount &&
-    a.graphEntityCount === b.graphEntityCount
+    a.memoryClaimCount === b.memoryClaimCount
   );
 }
 
@@ -84,7 +79,7 @@ export function validateMergePreconditions(args: {
   }
   if (args.survivor.entity_type_slug !== args.loser.entity_type_slug) {
     throw new Error(
-      "Cannot merge canonical entities of different ontology types",
+      "Cannot merge canonical entities of different entity types",
     );
   }
 }
@@ -151,17 +146,10 @@ export async function computeMergeImpact(
       .from(memoryClaims)
       .where(eq(memoryClaims.canonical_subject_id, args.loserId)),
   );
-  const graphEntityCount = await countOf(
-    db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(kgEntities)
-      .where(eq(kgEntities.canonical_entity_id, args.loserId)),
-  );
   return {
     sourceMappingCount,
     identityClaimCount,
     memoryClaimCount,
-    graphEntityCount,
   };
 }
 
@@ -208,11 +196,6 @@ export async function mergeCanonicalEntities(
       .update(memoryClaims)
       .set({ canonical_subject_id: args.survivorId, updated_at: now })
       .where(eq(memoryClaims.canonical_subject_id, args.loserId));
-
-    await tx
-      .update(kgEntities)
-      .set({ canonical_entity_id: args.survivorId, updated_at: now })
-      .where(eq(kgEntities.canonical_entity_id, args.loserId));
 
     await tx
       .update(canonicalEntities)

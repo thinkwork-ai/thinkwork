@@ -54,7 +54,6 @@ import {
   createDocumentComposerExtension,
   createFetchWorkspaceSourceExtension,
   createIdentityResolutionExtension,
-  createKnowledgeGraphExtension,
   createSearchExtension,
   createSkillsExtension,
   createMemoryExtension,
@@ -188,7 +187,6 @@ import {
 import { createApiCanvasProvider } from "./runtime/providers/canvas-provider.js";
 import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
 import { createApiIdentityResolutionProvider } from "./runtime/providers/identity-resolution-provider.js";
-import { createApiKnowledgeGraphProvider } from "./runtime/providers/knowledge-graph-provider.js";
 import { createApiSearchProvider } from "./runtime/providers/search-provider.js";
 import {
   AuroraSessionStore,
@@ -1760,57 +1758,6 @@ export async function buildInvocationResources(
         >,
       }),
     );
-  }
-
-  // Knowledge Graph (plan 2026-06-09-004 U8) — `knowledge_graph_search` over
-  // the API's GraphQL `knowledgeGraphSearch` query. Gated on the
-  // `knowledge_graph_enabled` payload flag; skipped in eval mode (user-less).
-  // Identity is turn-bound: the provider
-  // snapshots the thread-turn reference at entry and the API resolves the
-  // tenant server-side from it (R15) — no tenant assertion travels with the
-  // request. `addExtension` folds the tool name into the allowlist; omit
-  // that and the tool registers but is silently gated from the model.
-  if (
-    args.payload.eval_mode !== true &&
-    args.payload.knowledge_graph_enabled === true
-  ) {
-    const kgApiUrl = asString(args.payload.thinkwork_api_url);
-    const kgApiSecret = asString(args.payload.thinkwork_api_secret);
-    const kgThreadTurnId = asString(args.payload.thread_turn_id);
-    const kgThreadId = args.identity.threadId;
-    if (kgApiUrl && kgApiSecret && (kgThreadTurnId || kgThreadId)) {
-      addExtension(
-        createKnowledgeGraphExtension({
-          onError: (error, { phase }) =>
-            logStructured({
-              level: "warn",
-              event: "knowledge_graph_search_failed",
-              phase,
-              tenantId: args.identity.tenantId,
-              threadId: args.identity.threadId,
-              error: error instanceof Error ? error.message : String(error),
-            }),
-        }),
-        {
-          knowledgeGraph: createApiKnowledgeGraphProvider({
-            apiUrl: kgApiUrl,
-            apiSecret: kgApiSecret,
-            threadTurnId: kgThreadTurnId || undefined,
-            threadId: kgThreadId || undefined,
-          }),
-        },
-      );
-    } else {
-      logStructured({
-        level: "warn",
-        event: "knowledge_graph_skipped_missing_wiring",
-        tenantId: args.identity.tenantId,
-        threadId: args.identity.threadId,
-        hasApiUrl: Boolean(kgApiUrl),
-        hasApiSecret: Boolean(kgApiSecret),
-        hasTurnReference: Boolean(kgThreadTurnId || kgThreadId),
-      });
-    }
   }
 
   // Identity Resolution (THINK-321 U5+U6) — `resolve_entities` /

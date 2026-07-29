@@ -36,8 +36,7 @@ import {
   entitySourceMappings,
   mappingRejections,
 } from "@thinkwork/database-pg/schema";
-import type { Database } from "../db.js";
-import type { DatabaseTransaction } from "../knowledge-graph/repository.js";
+import type { Database, DatabaseTransaction } from "../db.js";
 import {
   applyNormalization,
   hashIdentityValue,
@@ -465,7 +464,7 @@ export async function matchCanonicalEntity(
 }
 
 /**
- * Default rule set used when an ontology entity type declares no identity
+ * Default rule set used when an entity type declares no identity
  * rules: exact normalized-name equality within (tenant, type) is treated as
  * a strong unique key. Single exact-name matches auto-link deterministically
  * (the graph pipeline's steady state), multi-matches defer to the queue.

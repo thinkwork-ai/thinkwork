@@ -23,12 +23,11 @@ import { searchQueries, threads } from "@thinkwork/database-pg/schema";
 import { randomUUID } from "node:crypto";
 
 import { getMemoryServices } from "../memory/index.js";
-import { searchKnowledgeGraph } from "../knowledge-graph/graph-search.js";
 import { threadSearchPredicate } from "../../graphql/resolvers/threads/search.js";
 import { callerVisibleThreadPredicate } from "../../graphql/resolvers/threads/access.js";
 import { visibleThreadListPredicate } from "../../graphql/resolvers/threads/system-hidden.js";
 
-export type SearchSource = "THREADS" | "ENTITIES" | "MEMORY";
+export type SearchSource = "THREADS" | "MEMORY";
 export type SearchLegStatus = "OK" | "TIMEOUT" | "ERROR";
 
 export type SearchBrokerArgs = {
@@ -61,15 +60,6 @@ export type SearchLegResult = {
     spaceId: string | null;
     updatedAt: string | null;
   }>;
-  entityHits?: Array<{
-    entityId: string;
-    label: string;
-    ontologyTypeSlug: string | null;
-    summary: string | null;
-    aliases: string[] | null;
-    relationshipCount: number | null;
-    evidenceCount: number | null;
-  }>;
   memoryHits?: Array<{
     memoryRecordId: string;
     text: string;
@@ -86,11 +76,10 @@ export type SearchBrokerResult = {
 
 // FTS legs answer in tens of milliseconds; their budget only bounds the
 // pathological case. The memory leg rides Hindsight (30s transport ceiling)
-// and gets a wider allowance because its callers (ask/dossier) are not
+// and gets a wider allowance because its callers (ask/research) are not
 // keystroke-bound.
 const DEFAULT_TIMEOUT_MS: Record<SearchSource, number> = {
   THREADS: 2_000,
-  ENTITIES: 2_000,
   MEMORY: 12_000,
 };
 
@@ -194,27 +183,6 @@ async function runLeg(
   switch (source) {
     case "THREADS":
       return runThreadsLeg(args, query, limit);
-    case "ENTITIES": {
-      const kg = await searchKnowledgeGraph({
-        db: getDb(),
-        tenantId: args.tenantId,
-        query,
-        limit,
-      });
-      return {
-        source,
-        status: "OK",
-        entityHits: kg.entities.map((e) => ({
-          entityId: e.id,
-          label: e.label,
-          ontologyTypeSlug: e.typeSlug ?? null,
-          summary: e.summary ?? null,
-          aliases: e.aliases ?? null,
-          relationshipCount: e.relationshipCount ?? null,
-          evidenceCount: e.evidenceCount ?? null,
-        })),
-      };
-    }
     case "MEMORY":
       return runMemoryLeg(args, query, limit);
   }
@@ -332,10 +300,7 @@ async function recordSearchQuery(input: {
   durationMs: number;
 }): Promise<void> {
   const hitCount = (leg: SearchLegResult) =>
-    leg.threadHits?.length ??
-    leg.entityHits?.length ??
-    leg.memoryHits?.length ??
-    0;
+    leg.threadHits?.length ?? leg.memoryHits?.length ?? 0;
   const legHitCounts: Record<string, number> = {};
   const legStatuses: Record<string, string> = {};
   let total = 0;

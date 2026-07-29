@@ -570,22 +570,10 @@ variable "job_scheduler_role_arn" {
   default     = ""
 }
 
-variable "ontology_scan_model_id" {
-  description = "Bedrock model id the ontology-scan Lambda uses for suggestion scans. Any Converse-compatible model works. Override per-env to spike a different model without re-deploying code. (Named wiki_compile_model_id until the wiki backend was removed; ontology-scan was always its other consumer and is now its only one.)"
-  type        = string
-  default     = "openai.gpt-oss-120b-1:0"
-}
-
 variable "brain_source_agent_model_id" {
   description = "Bedrock model id the GraphQL context-engine Brain source-agent runtime uses for JSON tool/action turns. Kept separate from the high-throughput wiki compiler model so source agents can use a model tuned for reliable action JSON."
   type        = string
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-}
-
-variable "kg_obs_max_candidates_per_run" {
-  description = "Per-run candidate cap for the observations → Knowledge Graph ingest worker (KG_OBS_MAX_CANDIDATES_PER_RUN). Bounds the layered-gate classifier cost and lets truncated runs self-invoke to drain the remaining backlog. Stored as a string because the Lambda reads it verbatim from env."
-  type        = string
-  default     = "10"
 }
 
 variable "wiki_aggregation_pass_enabled" {
@@ -600,24 +588,6 @@ variable "wiki_deterministic_linking_enabled" {
   default     = "true"
 }
 
-variable "kg_extraction_model_id" {
-  description = "Bedrock model id for knowledge-graph entity/relationship extraction from observations (plan 2026-07-03-005). Defaults to a gpt-oss high-quota model; overridable per stage."
-  type        = string
-  default     = "openai.gpt-oss-120b-1:0"
-}
-
-variable "knowledge_graph_observations_ingest_enabled" {
-  description = "Enable the recurring Brain distillation schedule (Hindsight observations -> knowledge graph). Ships disabled; dev flips on after a golden-set-validated manual run (plan 2026-07-03-005 U4)."
-  type        = bool
-  default     = false
-}
-
-variable "ontology_scan_sweep_enabled" {
-  description = "Enable the recurring per-tenant ontology suggestion scan sweep (THINK-320 U4/KTD-3). Ships disabled; enabled per stage once the Living Map review surfaces land."
-  type        = bool
-  default     = false
-}
-
 variable "identity_drift_match_enabled" {
   description = "Enable the recurring per-tenant identity drift match sweep (THINK-321 U7/KTD-7 — R10). Ships disabled; enabled per stage once bootstrap matching has been proven there."
   type        = bool
@@ -625,7 +595,7 @@ variable "identity_drift_match_enabled" {
 }
 
 variable "wiki_source" {
-  description = "Wiki pipeline source dispatch (plan 2026-06-09-004 U10). 'planner' (default) runs the original LLM compile path; 'graph' runs the deterministic graph→wiki materializer over the knowledge-graph mirror and makes successful observation-ingest runs the compile trigger. Variable-ized (not hardcoded) per the wiki-compile env precedent so unrelated deploys don't reset the flag; the Lambda reads it verbatim from env and treats any value other than 'graph' as 'planner'."
+  description = "Wiki pipeline source dispatch (plan 2026-06-09-004 U10). 'planner' (default) runs the original LLM compile path; 'graph' runs the deterministic graph→wiki materializer. Variable-ized (not hardcoded) per the wiki-compile env precedent so unrelated deploys don't reset the flag; the Lambda reads it verbatim from env and treats any value other than 'graph' as 'planner'."
   type        = string
   default     = "planner"
 
@@ -843,12 +813,6 @@ variable "compliance_exports_runner_role_name" {
   description = "Name of the IAM role the U11 export runner Lambda assumes (extracted from the role resource for inline-policy attachments — DLQ SendMessage, SQS receive)."
   type        = string
   default     = ""
-}
-
-variable "knowledge_graph_tool_enabled" {
-  description = "Stage gate for the Pi knowledge_graph_search tool (plan 2026-06-09-004 U8). Per-agent tool policy gates on top."
-  type        = bool
-  default     = true
 }
 
 variable "identity_resolution_tool_enabled" {
