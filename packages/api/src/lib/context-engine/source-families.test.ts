@@ -30,11 +30,6 @@ describe("Context Engine source families", () => {
     expect(
       sourceFamilyForProvider(provider({ id: "wiki", family: "wiki" })),
     ).toBe("pages");
-    expect(
-      sourceFamilyForProvider(
-        provider({ id: "bedrock-knowledge-base", family: "knowledge-base" }),
-      ),
-    ).toBe("knowledge-base");
   });
 
   it("detects web-backed MCP and sub-agent providers", () => {

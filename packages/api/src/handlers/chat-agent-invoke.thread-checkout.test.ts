@@ -193,7 +193,6 @@ beforeEach(() => {
     guardrailId: null,
     guardrailConfig: undefined,
     skillsConfig: [],
-    knowledgeBasesConfig: undefined,
     mcpConfigs: [],
     agentProfilesConfig: [],
   });

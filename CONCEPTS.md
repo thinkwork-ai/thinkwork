@@ -171,7 +171,7 @@ One of the four places a capability can be granted — agent root, sub-agent fol
 
 ### Context Plane vs Enforcement Plane
 
-The THINK-315 layer split: the workspace tree (`INSTRUCTIONS.md` + `skills/` + `agents/`) is the context plane — agent-shaping prose the model reads — while the capability registry + AgentCore Identity + AgentCore Gateway form the enforcement plane that decides every tool call. Tool, MCP, and connector grants are registry-only (no workspace folders; supersedes the THINK-302 `mcp/` folder and connector grants-by-presence direction for those classes), with mounted-vs-searchable tier as a binding attribute rather than a storage location. Spaces are context-first: they scope memory/KB/document access; space-scoped tool bindings stay legal but exceptional. The registry is the authored policy truth; the Gateway Policy engine is a compiled projection of it, never an authoring surface.
+The THINK-315 layer split: the workspace tree (`INSTRUCTIONS.md` + `skills/` + `agents/`) is the context plane — agent-shaping prose the model reads — while the capability registry + AgentCore Identity + AgentCore Gateway form the enforcement plane that decides every tool call. Tool, MCP, and connector grants are registry-only (no workspace folders; supersedes the THINK-302 `mcp/` folder and connector grants-by-presence direction for those classes), with mounted-vs-searchable tier as a binding attribute rather than a storage location. Spaces are context-first: they scope memory/document access; space-scoped tool bindings stay legal but exceptional. The registry is the authored policy truth; the Gateway Policy engine is a compiled projection of it, never an authoring surface.
 
 ### Approval Registry
 
@@ -241,7 +241,7 @@ The force-graph exploration state entered by clicking a node: the node's 2-degre
 
 ### Memory Source Family
 
-One of the four V1 external-source integrations feeding compounding memory (THINK-193): `twenty` (CRM), `firecrawl` (web), `email` (Gmail behind a provider-neutral adapter), `bedrock_kb` (knowledge-base documents). Each family binds under a processor via a source config (boundary + enable flag + erase generation) and requires a separately persisted, versioned source grant (`memory_source_authorizations`) — credential ownership is never authorization. Families enable and fail independently; one adapter's outage never requires disabling the others.
+One of the V1 external-source integrations feeding compounding memory (THINK-193): `twenty` (CRM), `firecrawl` (web), and `email` (Gmail behind a provider-neutral adapter). The `bedrock_kb` family was removed with Knowledge Bases (THINK-402). Each family binds under a processor via a source config (boundary + enable flag + erase generation) and requires a separately persisted, versioned source grant (`memory_source_authorizations`) — credential ownership is never authorization. Families enable and fail independently; one adapter's outage never requires disabling the others.
 
 ### Processor Mode
 

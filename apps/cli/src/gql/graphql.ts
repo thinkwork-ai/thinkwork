@@ -201,7 +201,6 @@ export type Agent = {
   humanPairId?: Maybe<Scalars['ID']['output']>;
   id: Scalars['ID']['output'];
   jsonRenderUi?: Maybe<Scalars['AWSJSON']['output']>;
-  knowledgeBases: Array<AgentKnowledgeBase>;
   lastHeartbeatAt?: Maybe<Scalars['AWSDateTime']['output']>;
   model?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
@@ -283,23 +282,6 @@ export enum AgentDispatchRequest {
   ForceOff = 'FORCE_OFF',
   ForceOn = 'FORCE_ON'
 }
-
-export type AgentKnowledgeBase = {
-  __typename?: 'AgentKnowledgeBase';
-  agentId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  knowledgeBase?: Maybe<KnowledgeBase>;
-  knowledgeBaseId: Scalars['ID']['output'];
-  searchConfig?: Maybe<Scalars['AWSJSON']['output']>;
-};
-
-export type AgentKnowledgeBaseInput = {
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseId: Scalars['ID']['input'];
-  searchConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
-};
 
 export type AgentLoop = {
   __typename?: 'AgentLoop';
@@ -1629,15 +1611,6 @@ export type ConfirmEntityMappingResult = {
   status: Scalars['String']['output'];
 };
 
-export type ConnectKnowledgeBaseSourceInput = {
-  bucket: Scalars['String']['input'];
-  bucketOwnerAccountId?: InputMaybe<Scalars['String']['input']>;
-  exclude?: InputMaybe<Array<Scalars['String']['input']>>;
-  include?: InputMaybe<Array<Scalars['String']['input']>>;
-  knowledgeBaseId: Scalars['ID']['input'];
-  prefix: Scalars['String']['input'];
-};
-
 export type ConnectionResearchPayload = {
   __typename?: 'ConnectionResearchPayload';
   definitions: Array<CapabilityDefinition>;
@@ -1789,16 +1762,6 @@ export type CreateInboxItemInput = {
   tenantId: Scalars['ID']['input'];
   title?: InputMaybe<Scalars['String']['input']>;
   type: Scalars['String']['input'];
-};
-
-export type CreateKnowledgeBaseInput = {
-  chunkOverlapPercent?: InputMaybe<Scalars['Int']['input']>;
-  chunkSizeTokens?: InputMaybe<Scalars['Int']['input']>;
-  chunkingStrategy?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  embeddingModel?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
 };
 
 /**
@@ -3262,83 +3225,6 @@ export type IssuePremiumPluginInstallKeyResult = {
   tenantId: Scalars['ID']['output'];
 };
 
-export type KnowledgeBase = {
-  __typename?: 'KnowledgeBase';
-  awsKbId?: Maybe<Scalars['String']['output']>;
-  chunkOverlapPercent?: Maybe<Scalars['Int']['output']>;
-  chunkSizeTokens?: Maybe<Scalars['Int']['output']>;
-  chunkingStrategy: Scalars['String']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  documentCount?: Maybe<Scalars['Int']['output']>;
-  documents: Array<KnowledgeBaseDocument>;
-  embeddingModel: Scalars['String']['output'];
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  lastSyncAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastSyncStatus?: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  sources: Array<KnowledgeBaseSource>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type KnowledgeBaseDocument = {
-  __typename?: 'KnowledgeBaseDocument';
-  contentHash?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  dataSourceId: Scalars['String']['output'];
-  documentKey: Scalars['String']['output'];
-  edition: Scalars['Int']['output'];
-  effectiveFrom?: Maybe<Scalars['AWSDateTime']['output']>;
-  effectiveTo?: Maybe<Scalars['AWSDateTime']['output']>;
-  etag?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  ingestStatus: Scalars['String']['output'];
-  knowledgeBaseId: Scalars['ID']['output'];
-  lastError?: Maybe<Scalars['String']['output']>;
-  projectionStatus: Scalars['String']['output'];
-  s3VersionId?: Maybe<Scalars['String']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type KnowledgeBaseRetrievalHit = {
-  __typename?: 'KnowledgeBaseRetrievalHit';
-  score?: Maybe<Scalars['Float']['output']>;
-  snippet: Scalars['String']['output'];
-  source?: Maybe<Scalars['String']['output']>;
-};
-
-export type KnowledgeBaseRetrievalResult = {
-  __typename?: 'KnowledgeBaseRetrievalResult';
-  hits: Array<KnowledgeBaseRetrievalHit>;
-  status: Scalars['String']['output'];
-};
-
-export type KnowledgeBaseSource = {
-  __typename?: 'KnowledgeBaseSource';
-  accessStatus: Scalars['String']['output'];
-  awsDataSourceId?: Maybe<Scalars['String']['output']>;
-  bucket?: Maybe<Scalars['String']['output']>;
-  bucketOwnerAccountId?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  documentCount?: Maybe<Scalars['Int']['output']>;
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  filterPatterns?: Maybe<Scalars['AWSJSON']['output']>;
-  id: Scalars['ID']['output'];
-  kind: Scalars['String']['output'];
-  knowledgeBaseId: Scalars['ID']['output'];
-  lastSyncAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastSyncStatus?: Maybe<Scalars['String']['output']>;
-  parsingStrategy: Scalars['String']['output'];
-  prefix?: Maybe<Scalars['String']['output']>;
-  sentinelDocumentKey?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
 export enum KnowledgeGraphArtifactManifestKind {
   Export = 'EXPORT',
   IngestionManifest = 'INGESTION_MANIFEST',
@@ -4458,7 +4344,6 @@ export type Mutation = {
    * arguments.
    */
   confirmEntityMapping: ConfirmEntityMappingResult;
-  connectKnowledgeBaseSource: KnowledgeBaseSource;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
   createCanvasRefreshSchedule: CanvasRefreshSchedule;
@@ -4483,7 +4368,6 @@ export type Mutation = {
   createEvalTestCase: EvalTestCase;
   createExternalCapabilityClient: CapabilityRuntimeMutationResult;
   createInboxItem: InboxItem;
-  createKnowledgeBase: KnowledgeBase;
   createOntologyChangeSet: CreateOntologyChangeSetPayload;
   createQuickAction: UserQuickAction;
   createRecipe: Recipe;
@@ -4532,7 +4416,6 @@ export type Mutation = {
   deleteDocumentPlate: DeleteDocumentPlateResult;
   deleteEvalRun: Scalars['Boolean']['output'];
   deleteEvalTestCase: Scalars['Boolean']['output'];
-  deleteKnowledgeBase: Scalars['Boolean']['output'];
   deleteMemoryRecord: Scalars['Boolean']['output'];
   deleteMessage: Scalars['Boolean']['output'];
   deleteMobileMemoryCapture: Scalars['Boolean']['output'];
@@ -4715,7 +4598,6 @@ export type Mutation = {
    */
   retractMemoryDerivation: MemoryRetractionAttempt;
   retryAgentDispatch: Message;
-  retryKnowledgeBase: KnowledgeBase;
   /**
    * Operator DLQ retry: reset a dead_lettered (or failed) retraction attempt —
    * saga child or erase marker — to a due queued state with a fresh attempt
@@ -4779,7 +4661,6 @@ export type Mutation = {
   searchResearch: SearchResearchResult;
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
-  setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
   setDefaultEvalProfile: EvalProfile;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
   /**
@@ -4845,7 +4726,6 @@ export type Mutation = {
   setRoutineTrigger: RoutineTrigger;
   setSkillEvalGate: SkillEvalGate;
   setSpaceEmailTriggers: Space;
-  setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
   setSpaceRuntimeOverrides: Space;
   setTenantMemberPassword: SetTenantMemberPasswordResult;
   /**
@@ -4887,7 +4767,6 @@ export type Mutation = {
   submitRunFeedback: SkillRun;
   /** Submit a draft for trust/review. */
   submitSkillDraft: SkillDraft;
-  syncKnowledgeBase: KnowledgeBase;
   /**
    * Inserts a synthetic delivery row for the webhook so an operator can
    * confirm the config exists and the delivery-log pipeline is reachable.
@@ -4921,7 +4800,6 @@ export type Mutation = {
   updateEvalDatasetCase: EvalTestCase;
   updateEvalProfile: EvalProfile;
   updateEvalTestCase: EvalTestCase;
-  updateKnowledgeBase: KnowledgeBase;
   updateLinkedTask: LinkedTask;
   updateMemoryRecord: Scalars['Boolean']['output'];
   /** Store or replace the tenant n8n public API key used for workflow discovery. */
@@ -5199,11 +5077,6 @@ export type MutationConfirmEntityMappingArgs = {
 };
 
 
-export type MutationConnectKnowledgeBaseSourceArgs = {
-  input: ConnectKnowledgeBaseSourceInput;
-};
-
-
 export type MutationCreateAgentProfileArgs = {
   input: AgentProfileInput;
   tenantId: Scalars['ID']['input'];
@@ -5264,11 +5137,6 @@ export type MutationCreateExternalCapabilityClientArgs = {
 
 export type MutationCreateInboxItemArgs = {
   input: CreateInboxItemInput;
-};
-
-
-export type MutationCreateKnowledgeBaseArgs = {
-  input: CreateKnowledgeBaseInput;
 };
 
 
@@ -5424,11 +5292,6 @@ export type MutationDeleteEvalRunArgs = {
 
 
 export type MutationDeleteEvalTestCaseArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type MutationDeleteKnowledgeBaseArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -6065,11 +5928,6 @@ export type MutationRetryAgentDispatchArgs = {
 };
 
 
-export type MutationRetryKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
 export type MutationRetryMemoryRetractionAttemptArgs = {
   attemptId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -6232,12 +6090,6 @@ export type MutationSendMessageArgs = {
 };
 
 
-export type MutationSetAgentKnowledgeBasesArgs = {
-  agentId: Scalars['ID']['input'];
-  knowledgeBases: Array<AgentKnowledgeBaseInput>;
-};
-
-
 export type MutationSetDefaultEvalProfileArgs = {
   id: Scalars['ID']['input'];
 };
@@ -6323,11 +6175,6 @@ export type MutationSetSkillEvalGateArgs = {
 export type MutationSetSpaceEmailTriggersArgs = {
   enabled: Scalars['Boolean']['input'];
   spaceId: Scalars['ID']['input'];
-};
-
-
-export type MutationSetSpaceKnowledgeBasesArgs = {
-  input: SetSpaceKnowledgeBasesInput;
 };
 
 
@@ -6442,11 +6289,6 @@ export type MutationSubmitSkillDraftArgs = {
 };
 
 
-export type MutationSyncKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
 export type MutationTestWebhookArgs = {
   id: Scalars['ID']['input'];
 };
@@ -6548,12 +6390,6 @@ export type MutationUpdateEvalProfileArgs = {
 export type MutationUpdateEvalTestCaseArgs = {
   id: Scalars['ID']['input'];
   input: UpdateEvalTestCaseInput;
-};
-
-
-export type MutationUpdateKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
-  input: UpdateKnowledgeBaseInput;
 };
 
 
@@ -7838,8 +7674,6 @@ export type Query = {
   inboxItems: Array<InboxItem>;
   /** Launchable plugin apps available to the current tenant/user. */
   installedPluginApps: Array<InstalledPluginApp>;
-  knowledgeBase?: Maybe<KnowledgeBase>;
-  knowledgeBases: Array<KnowledgeBase>;
   knowledgeGraphEntities: Array<KnowledgeGraphEntity>;
   knowledgeGraphEntity?: Maybe<KnowledgeGraphEntity>;
   knowledgeGraphGetEntity: KnowledgeGraphSearchResult;
@@ -7987,7 +7821,6 @@ export type Query = {
    */
   tenantSkillCatalog: Array<SkillCatalogEntry>;
   tenantToolInventory: TenantToolInventory;
-  testKnowledgeBaseRetrieval: KnowledgeBaseRetrievalResult;
   thread?: Maybe<Thread>;
   threadByNumber?: Maybe<Thread>;
   threadCanvasContext: ThreadCanvasContext;
@@ -8524,16 +8357,6 @@ export type QueryInboxItemsArgs = {
   entityType?: InputMaybe<Scalars['String']['input']>;
   recipientId?: InputMaybe<Scalars['ID']['input']>;
   status?: InputMaybe<InboxItemStatus>;
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type QueryKnowledgeBasesArgs = {
   tenantId: Scalars['ID']['input'];
 };
 
@@ -9077,12 +8900,6 @@ export type QueryTenantSkillCatalogArgs = {
 
 export type QueryTenantToolInventoryArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryTestKnowledgeBaseRetrievalArgs = {
-  id: Scalars['ID']['input'];
-  query: Scalars['String']['input'];
 };
 
 
@@ -10297,12 +10114,6 @@ export type SetManagedApplicationDeploymentInput = {
   key: Scalars['String']['input'];
 };
 
-export type SetSpaceKnowledgeBasesInput = {
-  knowledgeBases: Array<SpaceKnowledgeBaseInput>;
-  spaceId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
-};
-
 export type SetSpaceRuntimeOverridesInput = {
   budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
   budgetPaused?: InputMaybe<Scalars['Boolean']['input']>;
@@ -10572,7 +10383,6 @@ export type Space = {
   id: Scalars['ID']['output'];
   integrations: Array<SpaceIntegration>;
   kind: SpaceKind;
-  knowledgeBases: Array<SpaceKnowledgeBase>;
   lastActivityAt?: Maybe<Scalars['AWSDateTime']['output']>;
   mcpPolicy?: Maybe<Scalars['AWSJSON']['output']>;
   members: Array<SpaceMember>;
@@ -10667,24 +10477,6 @@ export enum SpaceKind {
   Custom = 'CUSTOM',
   CustomerOnboarding = 'CUSTOMER_ONBOARDING'
 }
-
-export type SpaceKnowledgeBase = {
-  __typename?: 'SpaceKnowledgeBase';
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  knowledgeBase?: Maybe<KnowledgeBase>;
-  knowledgeBaseId: Scalars['ID']['output'];
-  searchConfig?: Maybe<Scalars['AWSJSON']['output']>;
-  spaceId: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
-};
-
-export type SpaceKnowledgeBaseInput = {
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseId: Scalars['ID']['input'];
-  searchConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
-};
 
 export type SpaceMember = {
   __typename?: 'SpaceMember';
@@ -11885,14 +11677,6 @@ export type UpdateEvalTestCaseInput = {
   query?: InputMaybe<Scalars['String']['input']>;
   systemPrompt?: InputMaybe<Scalars['String']['input']>;
   tags?: InputMaybe<Array<Scalars['String']['input']>>;
-};
-
-export type UpdateKnowledgeBaseInput = {
-  chunkOverlapPercent?: InputMaybe<Scalars['Int']['input']>;
-  chunkSizeTokens?: InputMaybe<Scalars['Int']['input']>;
-  chunkingStrategy?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateLinkedTaskInput = {
@@ -13495,78 +13279,6 @@ export type CliInboxTenantBySlugQueryVariables = Exact<{
 
 export type CliInboxTenantBySlugQuery = { __typename?: 'Query', tenantBySlug?: { __typename?: 'Tenant', id: string, slug: string, name: string } | null };
 
-export type CliKnowledgeBasesQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-}>;
-
-
-export type CliKnowledgeBasesQuery = { __typename?: 'Query', knowledgeBases: Array<{ __typename?: 'KnowledgeBase', id: string, name: string, slug: string, embeddingModel: string, status: string, documentCount?: number | null, lastSyncAt?: any | null, lastSyncStatus?: string | null }> };
-
-export type CliKnowledgeBaseQueryVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type CliKnowledgeBaseQuery = { __typename?: 'Query', knowledgeBase?: { __typename?: 'KnowledgeBase', id: string, name: string, slug: string, description?: string | null, embeddingModel: string, chunkingStrategy: string, chunkSizeTokens?: number | null, chunkOverlapPercent?: number | null, status: string, awsKbId?: string | null, documentCount?: number | null, lastSyncAt?: any | null, lastSyncStatus?: string | null, errorMessage?: string | null, createdAt: any, updatedAt: any, sources: Array<{ __typename?: 'KnowledgeBaseSource', id: string, kind: string, bucket?: string | null, prefix?: string | null, filterPatterns?: any | null, accessStatus: string, lastSyncAt?: any | null, lastSyncStatus?: string | null, documentCount?: number | null, errorMessage?: string | null, sentinelDocumentKey?: string | null }> } | null };
-
-export type CliConnectKbSourceMutationVariables = Exact<{
-  input: ConnectKnowledgeBaseSourceInput;
-}>;
-
-
-export type CliConnectKbSourceMutation = { __typename?: 'Mutation', connectKnowledgeBaseSource: { __typename?: 'KnowledgeBaseSource', id: string, kind: string, bucket?: string | null, prefix?: string | null, filterPatterns?: any | null, accessStatus: string, sentinelDocumentKey?: string | null } };
-
-export type CliCreateKbMutationVariables = Exact<{
-  input: CreateKnowledgeBaseInput;
-}>;
-
-
-export type CliCreateKbMutation = { __typename?: 'Mutation', createKnowledgeBase: { __typename?: 'KnowledgeBase', id: string, name: string, slug: string, status: string } };
-
-export type CliUpdateKbMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-  input: UpdateKnowledgeBaseInput;
-}>;
-
-
-export type CliUpdateKbMutation = { __typename?: 'Mutation', updateKnowledgeBase: { __typename?: 'KnowledgeBase', id: string, name: string, description?: string | null } };
-
-export type CliDeleteKbMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type CliDeleteKbMutation = { __typename?: 'Mutation', deleteKnowledgeBase: boolean };
-
-export type CliSyncKbMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type CliSyncKbMutation = { __typename?: 'Mutation', syncKnowledgeBase: { __typename?: 'KnowledgeBase', id: string, status: string, lastSyncStatus?: string | null, lastSyncAt?: any | null } };
-
-export type CliAgentKBsQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-}>;
-
-
-export type CliAgentKBsQuery = { __typename?: 'Query', tenantAgent: { __typename?: 'Agent', id: string, knowledgeBases: Array<{ __typename?: 'AgentKnowledgeBase', knowledgeBaseId: string, enabled: boolean, searchConfig?: any | null }> } };
-
-export type CliSetAgentKBsMutationVariables = Exact<{
-  agentId: Scalars['ID']['input'];
-  knowledgeBases: Array<AgentKnowledgeBaseInput> | AgentKnowledgeBaseInput;
-}>;
-
-
-export type CliSetAgentKBsMutation = { __typename?: 'Mutation', setAgentKnowledgeBases: Array<{ __typename?: 'AgentKnowledgeBase', id: string, knowledgeBaseId: string, enabled: boolean }> };
-
-export type CliKbTenantBySlugQueryVariables = Exact<{
-  slug: Scalars['String']['input'];
-}>;
-
-
-export type CliKbTenantBySlugQuery = { __typename?: 'Query', tenantBySlug?: { __typename?: 'Tenant', id: string } | null };
-
 export type CliLabelListQueryVariables = Exact<{
   tenantId: Scalars['ID']['input'];
 }>;
@@ -14307,16 +14019,6 @@ export const CliInboxResubmitDocument = {"kind":"Document","definitions":[{"kind
 export const CliInboxCancelDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliInboxCancel"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"cancelInboxItem"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<CliInboxCancelMutation, CliInboxCancelMutationVariables>;
 export const CliInboxAddCommentDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliInboxAddComment"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AddInboxItemCommentInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"addInboxItemComment"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"inboxItemId"}},{"kind":"Field","name":{"kind":"Name","value":"authorType"}},{"kind":"Field","name":{"kind":"Name","value":"authorId"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliInboxAddCommentMutation, CliInboxAddCommentMutationVariables>;
 export const CliInboxTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliInboxTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}}]}}]}}]} as unknown as DocumentNode<CliInboxTenantBySlugQuery, CliInboxTenantBySlugQueryVariables>;
-export const CliKnowledgeBasesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliKnowledgeBases"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"knowledgeBases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"embeddingModel"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"documentCount"}},{"kind":"Field","name":{"kind":"Name","value":"lastSyncAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastSyncStatus"}}]}}]}}]} as unknown as DocumentNode<CliKnowledgeBasesQuery, CliKnowledgeBasesQueryVariables>;
-export const CliKnowledgeBaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliKnowledgeBase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"knowledgeBase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"embeddingModel"}},{"kind":"Field","name":{"kind":"Name","value":"chunkingStrategy"}},{"kind":"Field","name":{"kind":"Name","value":"chunkSizeTokens"}},{"kind":"Field","name":{"kind":"Name","value":"chunkOverlapPercent"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"awsKbId"}},{"kind":"Field","name":{"kind":"Name","value":"documentCount"}},{"kind":"Field","name":{"kind":"Name","value":"lastSyncAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastSyncStatus"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"sources"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"bucket"}},{"kind":"Field","name":{"kind":"Name","value":"prefix"}},{"kind":"Field","name":{"kind":"Name","value":"filterPatterns"}},{"kind":"Field","name":{"kind":"Name","value":"accessStatus"}},{"kind":"Field","name":{"kind":"Name","value":"lastSyncAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastSyncStatus"}},{"kind":"Field","name":{"kind":"Name","value":"documentCount"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}},{"kind":"Field","name":{"kind":"Name","value":"sentinelDocumentKey"}}]}}]}}]}}]} as unknown as DocumentNode<CliKnowledgeBaseQuery, CliKnowledgeBaseQueryVariables>;
-export const CliConnectKbSourceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliConnectKBSource"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ConnectKnowledgeBaseSourceInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"connectKnowledgeBaseSource"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"kind"}},{"kind":"Field","name":{"kind":"Name","value":"bucket"}},{"kind":"Field","name":{"kind":"Name","value":"prefix"}},{"kind":"Field","name":{"kind":"Name","value":"filterPatterns"}},{"kind":"Field","name":{"kind":"Name","value":"accessStatus"}},{"kind":"Field","name":{"kind":"Name","value":"sentinelDocumentKey"}}]}}]}}]} as unknown as DocumentNode<CliConnectKbSourceMutation, CliConnectKbSourceMutationVariables>;
-export const CliCreateKbDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliCreateKB"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateKnowledgeBaseInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createKnowledgeBase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<CliCreateKbMutation, CliCreateKbMutationVariables>;
-export const CliUpdateKbDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliUpdateKB"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateKnowledgeBaseInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateKnowledgeBase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<CliUpdateKbMutation, CliUpdateKbMutationVariables>;
-export const CliDeleteKbDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliDeleteKB"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteKnowledgeBase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<CliDeleteKbMutation, CliDeleteKbMutationVariables>;
-export const CliSyncKbDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliSyncKB"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"syncKnowledgeBase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"lastSyncStatus"}},{"kind":"Field","name":{"kind":"Name","value":"lastSyncAt"}}]}}]}}]} as unknown as DocumentNode<CliSyncKbMutation, CliSyncKbMutationVariables>;
-export const CliAgentKBsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliAgentKBs"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"knowledgeBases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"knowledgeBaseId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"searchConfig"}}]}}]}}]}}]} as unknown as DocumentNode<CliAgentKBsQuery, CliAgentKBsQueryVariables>;
-export const CliSetAgentKBsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliSetAgentKBs"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"knowledgeBases"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentKnowledgeBaseInput"}}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAgentKnowledgeBases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"knowledgeBases"},"value":{"kind":"Variable","name":{"kind":"Name","value":"knowledgeBases"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"knowledgeBaseId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}}]}}]} as unknown as DocumentNode<CliSetAgentKBsMutation, CliSetAgentKBsMutationVariables>;
-export const CliKbTenantBySlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliKBTenantBySlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"slug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantBySlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"slug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"slug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}}]}}]}}]} as unknown as DocumentNode<CliKbTenantBySlugQuery, CliKbTenantBySlugQueryVariables>;
 export const CliLabelListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"CliLabelList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"threadLabels"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<CliLabelListQuery, CliLabelListQueryVariables>;
 export const CliLabelCreateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliLabelCreate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateThreadLabelInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createThreadLabel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<CliLabelCreateMutation, CliLabelCreateMutationVariables>;
 export const CliLabelUpdateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CliLabelUpdate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateThreadLabelInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateThreadLabel"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"color"}},{"kind":"Field","name":{"kind":"Name","value":"description"}}]}}]}}]} as unknown as DocumentNode<CliLabelUpdateMutation, CliLabelUpdateMutationVariables>;

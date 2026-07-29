@@ -201,7 +201,6 @@ export type Agent = {
   humanPairId?: Maybe<Scalars['ID']['output']>;
   id: Scalars['ID']['output'];
   jsonRenderUi?: Maybe<Scalars['AWSJSON']['output']>;
-  knowledgeBases: Array<AgentKnowledgeBase>;
   lastHeartbeatAt?: Maybe<Scalars['AWSDateTime']['output']>;
   model?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
@@ -283,23 +282,6 @@ export enum AgentDispatchRequest {
   ForceOff = 'FORCE_OFF',
   ForceOn = 'FORCE_ON'
 }
-
-export type AgentKnowledgeBase = {
-  __typename?: 'AgentKnowledgeBase';
-  agentId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  knowledgeBase?: Maybe<KnowledgeBase>;
-  knowledgeBaseId: Scalars['ID']['output'];
-  searchConfig?: Maybe<Scalars['AWSJSON']['output']>;
-};
-
-export type AgentKnowledgeBaseInput = {
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseId: Scalars['ID']['input'];
-  searchConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
-};
 
 export type AgentLoop = {
   __typename?: 'AgentLoop';
@@ -1629,15 +1611,6 @@ export type ConfirmEntityMappingResult = {
   status: Scalars['String']['output'];
 };
 
-export type ConnectKnowledgeBaseSourceInput = {
-  bucket: Scalars['String']['input'];
-  bucketOwnerAccountId?: InputMaybe<Scalars['String']['input']>;
-  exclude?: InputMaybe<Array<Scalars['String']['input']>>;
-  include?: InputMaybe<Array<Scalars['String']['input']>>;
-  knowledgeBaseId: Scalars['ID']['input'];
-  prefix: Scalars['String']['input'];
-};
-
 export type ConnectionResearchPayload = {
   __typename?: 'ConnectionResearchPayload';
   definitions: Array<CapabilityDefinition>;
@@ -1789,16 +1762,6 @@ export type CreateInboxItemInput = {
   tenantId: Scalars['ID']['input'];
   title?: InputMaybe<Scalars['String']['input']>;
   type: Scalars['String']['input'];
-};
-
-export type CreateKnowledgeBaseInput = {
-  chunkOverlapPercent?: InputMaybe<Scalars['Int']['input']>;
-  chunkSizeTokens?: InputMaybe<Scalars['Int']['input']>;
-  chunkingStrategy?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  embeddingModel?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
 };
 
 /**
@@ -3262,83 +3225,6 @@ export type IssuePremiumPluginInstallKeyResult = {
   tenantId: Scalars['ID']['output'];
 };
 
-export type KnowledgeBase = {
-  __typename?: 'KnowledgeBase';
-  awsKbId?: Maybe<Scalars['String']['output']>;
-  chunkOverlapPercent?: Maybe<Scalars['Int']['output']>;
-  chunkSizeTokens?: Maybe<Scalars['Int']['output']>;
-  chunkingStrategy: Scalars['String']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  documentCount?: Maybe<Scalars['Int']['output']>;
-  documents: Array<KnowledgeBaseDocument>;
-  embeddingModel: Scalars['String']['output'];
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  lastSyncAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastSyncStatus?: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  sources: Array<KnowledgeBaseSource>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type KnowledgeBaseDocument = {
-  __typename?: 'KnowledgeBaseDocument';
-  contentHash?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  dataSourceId: Scalars['String']['output'];
-  documentKey: Scalars['String']['output'];
-  edition: Scalars['Int']['output'];
-  effectiveFrom?: Maybe<Scalars['AWSDateTime']['output']>;
-  effectiveTo?: Maybe<Scalars['AWSDateTime']['output']>;
-  etag?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  ingestStatus: Scalars['String']['output'];
-  knowledgeBaseId: Scalars['ID']['output'];
-  lastError?: Maybe<Scalars['String']['output']>;
-  projectionStatus: Scalars['String']['output'];
-  s3VersionId?: Maybe<Scalars['String']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type KnowledgeBaseRetrievalHit = {
-  __typename?: 'KnowledgeBaseRetrievalHit';
-  score?: Maybe<Scalars['Float']['output']>;
-  snippet: Scalars['String']['output'];
-  source?: Maybe<Scalars['String']['output']>;
-};
-
-export type KnowledgeBaseRetrievalResult = {
-  __typename?: 'KnowledgeBaseRetrievalResult';
-  hits: Array<KnowledgeBaseRetrievalHit>;
-  status: Scalars['String']['output'];
-};
-
-export type KnowledgeBaseSource = {
-  __typename?: 'KnowledgeBaseSource';
-  accessStatus: Scalars['String']['output'];
-  awsDataSourceId?: Maybe<Scalars['String']['output']>;
-  bucket?: Maybe<Scalars['String']['output']>;
-  bucketOwnerAccountId?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  documentCount?: Maybe<Scalars['Int']['output']>;
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  filterPatterns?: Maybe<Scalars['AWSJSON']['output']>;
-  id: Scalars['ID']['output'];
-  kind: Scalars['String']['output'];
-  knowledgeBaseId: Scalars['ID']['output'];
-  lastSyncAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastSyncStatus?: Maybe<Scalars['String']['output']>;
-  parsingStrategy: Scalars['String']['output'];
-  prefix?: Maybe<Scalars['String']['output']>;
-  sentinelDocumentKey?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
 export enum KnowledgeGraphArtifactManifestKind {
   Export = 'EXPORT',
   IngestionManifest = 'INGESTION_MANIFEST',
@@ -4458,7 +4344,6 @@ export type Mutation = {
    * arguments.
    */
   confirmEntityMapping: ConfirmEntityMappingResult;
-  connectKnowledgeBaseSource: KnowledgeBaseSource;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
   createCanvasRefreshSchedule: CanvasRefreshSchedule;
@@ -4483,7 +4368,6 @@ export type Mutation = {
   createEvalTestCase: EvalTestCase;
   createExternalCapabilityClient: CapabilityRuntimeMutationResult;
   createInboxItem: InboxItem;
-  createKnowledgeBase: KnowledgeBase;
   createOntologyChangeSet: CreateOntologyChangeSetPayload;
   createQuickAction: UserQuickAction;
   createRecipe: Recipe;
@@ -4532,7 +4416,6 @@ export type Mutation = {
   deleteDocumentPlate: DeleteDocumentPlateResult;
   deleteEvalRun: Scalars['Boolean']['output'];
   deleteEvalTestCase: Scalars['Boolean']['output'];
-  deleteKnowledgeBase: Scalars['Boolean']['output'];
   deleteMemoryRecord: Scalars['Boolean']['output'];
   deleteMessage: Scalars['Boolean']['output'];
   deleteMobileMemoryCapture: Scalars['Boolean']['output'];
@@ -4715,7 +4598,6 @@ export type Mutation = {
    */
   retractMemoryDerivation: MemoryRetractionAttempt;
   retryAgentDispatch: Message;
-  retryKnowledgeBase: KnowledgeBase;
   /**
    * Operator DLQ retry: reset a dead_lettered (or failed) retraction attempt —
    * saga child or erase marker — to a due queued state with a fresh attempt
@@ -4779,7 +4661,6 @@ export type Mutation = {
   searchResearch: SearchResearchResult;
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
-  setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
   setDefaultEvalProfile: EvalProfile;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
   /**
@@ -4845,7 +4726,6 @@ export type Mutation = {
   setRoutineTrigger: RoutineTrigger;
   setSkillEvalGate: SkillEvalGate;
   setSpaceEmailTriggers: Space;
-  setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
   setSpaceRuntimeOverrides: Space;
   setTenantMemberPassword: SetTenantMemberPasswordResult;
   /**
@@ -4887,7 +4767,6 @@ export type Mutation = {
   submitRunFeedback: SkillRun;
   /** Submit a draft for trust/review. */
   submitSkillDraft: SkillDraft;
-  syncKnowledgeBase: KnowledgeBase;
   /**
    * Inserts a synthetic delivery row for the webhook so an operator can
    * confirm the config exists and the delivery-log pipeline is reachable.
@@ -4921,7 +4800,6 @@ export type Mutation = {
   updateEvalDatasetCase: EvalTestCase;
   updateEvalProfile: EvalProfile;
   updateEvalTestCase: EvalTestCase;
-  updateKnowledgeBase: KnowledgeBase;
   updateLinkedTask: LinkedTask;
   updateMemoryRecord: Scalars['Boolean']['output'];
   /** Store or replace the tenant n8n public API key used for workflow discovery. */
@@ -5199,11 +5077,6 @@ export type MutationConfirmEntityMappingArgs = {
 };
 
 
-export type MutationConnectKnowledgeBaseSourceArgs = {
-  input: ConnectKnowledgeBaseSourceInput;
-};
-
-
 export type MutationCreateAgentProfileArgs = {
   input: AgentProfileInput;
   tenantId: Scalars['ID']['input'];
@@ -5264,11 +5137,6 @@ export type MutationCreateExternalCapabilityClientArgs = {
 
 export type MutationCreateInboxItemArgs = {
   input: CreateInboxItemInput;
-};
-
-
-export type MutationCreateKnowledgeBaseArgs = {
-  input: CreateKnowledgeBaseInput;
 };
 
 
@@ -5424,11 +5292,6 @@ export type MutationDeleteEvalRunArgs = {
 
 
 export type MutationDeleteEvalTestCaseArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type MutationDeleteKnowledgeBaseArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -6065,11 +5928,6 @@ export type MutationRetryAgentDispatchArgs = {
 };
 
 
-export type MutationRetryKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
 export type MutationRetryMemoryRetractionAttemptArgs = {
   attemptId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -6232,12 +6090,6 @@ export type MutationSendMessageArgs = {
 };
 
 
-export type MutationSetAgentKnowledgeBasesArgs = {
-  agentId: Scalars['ID']['input'];
-  knowledgeBases: Array<AgentKnowledgeBaseInput>;
-};
-
-
 export type MutationSetDefaultEvalProfileArgs = {
   id: Scalars['ID']['input'];
 };
@@ -6323,11 +6175,6 @@ export type MutationSetSkillEvalGateArgs = {
 export type MutationSetSpaceEmailTriggersArgs = {
   enabled: Scalars['Boolean']['input'];
   spaceId: Scalars['ID']['input'];
-};
-
-
-export type MutationSetSpaceKnowledgeBasesArgs = {
-  input: SetSpaceKnowledgeBasesInput;
 };
 
 
@@ -6442,11 +6289,6 @@ export type MutationSubmitSkillDraftArgs = {
 };
 
 
-export type MutationSyncKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
 export type MutationTestWebhookArgs = {
   id: Scalars['ID']['input'];
 };
@@ -6548,12 +6390,6 @@ export type MutationUpdateEvalProfileArgs = {
 export type MutationUpdateEvalTestCaseArgs = {
   id: Scalars['ID']['input'];
   input: UpdateEvalTestCaseInput;
-};
-
-
-export type MutationUpdateKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
-  input: UpdateKnowledgeBaseInput;
 };
 
 
@@ -7838,8 +7674,6 @@ export type Query = {
   inboxItems: Array<InboxItem>;
   /** Launchable plugin apps available to the current tenant/user. */
   installedPluginApps: Array<InstalledPluginApp>;
-  knowledgeBase?: Maybe<KnowledgeBase>;
-  knowledgeBases: Array<KnowledgeBase>;
   knowledgeGraphEntities: Array<KnowledgeGraphEntity>;
   knowledgeGraphEntity?: Maybe<KnowledgeGraphEntity>;
   knowledgeGraphGetEntity: KnowledgeGraphSearchResult;
@@ -7987,7 +7821,6 @@ export type Query = {
    */
   tenantSkillCatalog: Array<SkillCatalogEntry>;
   tenantToolInventory: TenantToolInventory;
-  testKnowledgeBaseRetrieval: KnowledgeBaseRetrievalResult;
   thread?: Maybe<Thread>;
   threadByNumber?: Maybe<Thread>;
   threadCanvasContext: ThreadCanvasContext;
@@ -8524,16 +8357,6 @@ export type QueryInboxItemsArgs = {
   entityType?: InputMaybe<Scalars['String']['input']>;
   recipientId?: InputMaybe<Scalars['ID']['input']>;
   status?: InputMaybe<InboxItemStatus>;
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type QueryKnowledgeBasesArgs = {
   tenantId: Scalars['ID']['input'];
 };
 
@@ -9077,12 +8900,6 @@ export type QueryTenantSkillCatalogArgs = {
 
 export type QueryTenantToolInventoryArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryTestKnowledgeBaseRetrievalArgs = {
-  id: Scalars['ID']['input'];
-  query: Scalars['String']['input'];
 };
 
 
@@ -10297,12 +10114,6 @@ export type SetManagedApplicationDeploymentInput = {
   key: Scalars['String']['input'];
 };
 
-export type SetSpaceKnowledgeBasesInput = {
-  knowledgeBases: Array<SpaceKnowledgeBaseInput>;
-  spaceId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
-};
-
 export type SetSpaceRuntimeOverridesInput = {
   budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
   budgetPaused?: InputMaybe<Scalars['Boolean']['input']>;
@@ -10572,7 +10383,6 @@ export type Space = {
   id: Scalars['ID']['output'];
   integrations: Array<SpaceIntegration>;
   kind: SpaceKind;
-  knowledgeBases: Array<SpaceKnowledgeBase>;
   lastActivityAt?: Maybe<Scalars['AWSDateTime']['output']>;
   mcpPolicy?: Maybe<Scalars['AWSJSON']['output']>;
   members: Array<SpaceMember>;
@@ -10667,24 +10477,6 @@ export enum SpaceKind {
   Custom = 'CUSTOM',
   CustomerOnboarding = 'CUSTOMER_ONBOARDING'
 }
-
-export type SpaceKnowledgeBase = {
-  __typename?: 'SpaceKnowledgeBase';
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  knowledgeBase?: Maybe<KnowledgeBase>;
-  knowledgeBaseId: Scalars['ID']['output'];
-  searchConfig?: Maybe<Scalars['AWSJSON']['output']>;
-  spaceId: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
-};
-
-export type SpaceKnowledgeBaseInput = {
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseId: Scalars['ID']['input'];
-  searchConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
-};
 
 export type SpaceMember = {
   __typename?: 'SpaceMember';
@@ -11885,14 +11677,6 @@ export type UpdateEvalTestCaseInput = {
   query?: InputMaybe<Scalars['String']['input']>;
   systemPrompt?: InputMaybe<Scalars['String']['input']>;
   tags?: InputMaybe<Array<Scalars['String']['input']>>;
-};
-
-export type UpdateKnowledgeBaseInput = {
-  chunkOverlapPercent?: InputMaybe<Scalars['Int']['input']>;
-  chunkSizeTokens?: InputMaybe<Scalars['Int']['input']>;
-  chunkingStrategy?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateLinkedTaskInput = {

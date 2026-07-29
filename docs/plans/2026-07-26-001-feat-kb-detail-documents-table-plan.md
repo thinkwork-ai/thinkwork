@@ -9,6 +9,8 @@ product_contract_source: ce-brainstorm
 execution: code
 ---
 
+> **OBSOLETE (2026-07-29):** Knowledge Base removed from the product (THINK-402). Never built.
+
 # Knowledge Base Detail Documents Table - Plan
 
 ## Goal Capsule

@@ -82,7 +82,6 @@ const runtimeConfig: AgentRuntimeConfig = {
     apiKey: "fc-key",
     config: null,
   },
-  knowledgeBasesConfig: undefined,
   mcpConfigs: [],
   piExtensions: [],
   agentProfilesConfig: [],

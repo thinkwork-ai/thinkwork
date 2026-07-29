@@ -106,7 +106,7 @@ variable "enable_hindsight" {
 }
 
 variable "external_kb_source_arns" {
-  description = "Bucket ARNs of customer-owned S3 buckets connected as external Knowledge Base sources (s3-connect). Empty by default — inert until a bucket is connected."
+  description = "DEPRECATED (THINK-402): Knowledge Bases were removed from the product; this input is inert and ignored. Retained so existing tfvars keep working."
   type        = list(string)
   default     = []
 }

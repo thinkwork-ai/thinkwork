@@ -287,11 +287,7 @@ async function executeStage(
 }
 
 /** Source families whose evidence/claims write shared scopes only (U3). */
-const SHARED_ONLY_SOURCE_FAMILIES = new Set([
-  "twenty",
-  "firecrawl",
-  "bedrock_kb",
-]);
+const SHARED_ONLY_SOURCE_FAMILIES = new Set(["twenty", "firecrawl"]);
 
 async function sendTaskSuccess(
   sfn: SFNClient,

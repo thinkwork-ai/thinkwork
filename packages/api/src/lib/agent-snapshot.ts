@@ -7,7 +7,6 @@
  * Snapshot scope:
  *   - agent row (role, system_prompt, etc. via config_snapshot)
  *   - agent_skills rows
- *   - agent_knowledge_bases rows
  *   - workspace file contents (full text; these are markdown/config and small)
  *
  * Out of scope:
@@ -29,7 +28,6 @@ import {
   sql,
   agents,
   agentSkills,
-  agentKnowledgeBases,
   agentVersions,
   tenants,
 } from "../graphql/utils.js";
@@ -189,15 +187,11 @@ export async function snapshotAgent(
   const [agent] = await db.select().from(agents).where(eq(agents.id, agentId));
   if (!agent) throw new Error(`Agent ${agentId} not found`);
 
-  // 2. Fetch skills + KBs
+  // 2. Fetch skills
   const skills = await db
     .select()
     .from(agentSkills)
     .where(eq(agentSkills.agent_id, agentId));
-  const kbs = await db
-    .select()
-    .from(agentKnowledgeBases)
-    .where(eq(agentKnowledgeBases.agent_id, agentId));
 
   // 3. Read workspace files — composed view, not just agent overrides.
   let workspaceFiles: Record<string, string> = {};
@@ -246,11 +240,6 @@ export async function snapshotAgent(
         model_override: s.model_override,
         enabled: s.enabled,
       })),
-      knowledge_bases_snapshot: kbs.map((k: any) => ({
-        knowledge_base_id: k.knowledge_base_id,
-        search_config: k.search_config,
-        enabled: k.enabled,
-      })),
       guardrail_snapshot: null, // guardrail is template-owned, not agent-owned
       created_by: null, // Cognito sub may not match users.id FK — store null for now
     })
@@ -283,7 +272,6 @@ export async function restoreAgentFromSnapshot(
 
   const configSnap = (version.config_snapshot as any) || {};
   const skillsSnap = (version.skills_snapshot as any[]) || [];
-  const kbsSnap = (version.knowledge_bases_snapshot as any[]) || [];
   const workspaceSnap =
     (version.workspace_snapshot as Record<string, string>) || {};
 
@@ -329,22 +317,6 @@ export async function restoreAgentFromSnapshot(
         enabled: s.enabled ?? true,
       },
     });
-  }
-
-  // 3. Replace KBs
-  await db
-    .delete(agentKnowledgeBases)
-    .where(eq(agentKnowledgeBases.agent_id, agentId));
-  if (kbsSnap.length > 0) {
-    await db.insert(agentKnowledgeBases).values(
-      kbsSnap.map((k: any) => ({
-        agent_id: agentId,
-        tenant_id: agent.tenant_id!,
-        knowledge_base_id: k.knowledge_base_id,
-        search_config: k.search_config,
-        enabled: k.enabled ?? true,
-      })),
-    );
   }
 
   // 4. Restore workspace

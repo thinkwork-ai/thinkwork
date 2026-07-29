@@ -57,7 +57,7 @@ A minimal guardrail includes:
 - **Content policies** — which of Bedrock's built-in categories to enforce and at what severity.
 - **Word lists** — custom deny-lists of terms.
 - **PII configuration** — which PII types to redact or block (emails, phone numbers, SSNs, etc.).
-- **Contextual grounding** — when the agent is answering from a knowledge base, require the response to be grounded in retrieved sources.
+- **Contextual grounding** — when the agent is answering from retrieved context, require the response to be grounded in those sources.
 
 ThinkWork provides a `gr-default-safe` starter guardrail in the Terraform module, intended as a reasonable default for most internal deployments. You'll want your own variants for tenant-specific policies — a customer-facing tenant likely needs stricter PII handling than an internal engineering tenant.
 

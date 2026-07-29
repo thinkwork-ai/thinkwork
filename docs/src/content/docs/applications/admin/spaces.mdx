@@ -16,7 +16,7 @@ The Admin UI has two levels:
 - **Spaces list:** `/spaces`
 - **Space Studio:** `/spaces/:spaceId`, which redirects to `/spaces/:spaceId/workspace`
 
-Space Studio tabs appear in this order: **Workspace**, **Sources**, **Triggers**, **Settings**, and **Members**. The Members tab appears only for Private Spaces. Legacy routes may still use `/kbs`.
+Space Studio tabs appear in this order: **Workspace**, **Sources**, **Triggers**, **Settings**, and **Members**. The Members tab appears only for Private Spaces.
 
 <Aside type="note">
   Workspace is the landing tab for a Space. If you open `/spaces/:spaceId`,
@@ -39,12 +39,6 @@ Start with Spaces list if you are creating or finding a Space. Then open the pag
     icon="file"
     href="/applications/admin/spaces/workspace/"
     description="Space-local files for procedures, customer context, project notes, and workroom instructions."
-  />
-  <LinkCard
-    title="Sources"
-    icon="open-book"
-    href="/applications/admin/spaces/kbs/"
-    description="Brain Source and legacy knowledge-base selection for the Space."
   />
   <LinkCard
     title="Triggers"
@@ -72,7 +66,7 @@ Use Admin Spaces when the operator decision is local to a workroom:
 
 - local workspace files;
 - Space-owned Goal templates for repeatable workflows;
-- Space Brain Sources and explicit legacy knowledge-base bindings;
+- Space Brain Sources;
 - schedules, webhooks, or Space email triggers;
 - Public or Private access;
 - Private Space membership.

@@ -41,7 +41,6 @@ describe("core context providers — wiki removal (U4)", () => {
       expect.arrayContaining([
         "memory",
         "workspace-files",
-        "bedrock-knowledge-base",
         "erp-customer",
         "crm-opportunity",
         "support-case",

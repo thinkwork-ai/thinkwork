@@ -4,7 +4,7 @@
  * The ARN is NOT an env var — graphql-http's env block is at the 4 KB ceiling
  * (see docs: graphql-http env 4KB ceiling). It lives in SSM Parameter Store at
  * `/thinkwork/<stage>/workflow-interpreter/state-machine-arn` and is read once
- * per warm Lambda container, then cached. Mirrors the getKbManagerFnArn /
+ * per warm Lambda container, then cached. Mirrors the
  * chat-agent-invoke SSM pattern in graphql/utils.ts.
  */
 import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm";

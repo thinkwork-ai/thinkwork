@@ -6,14 +6,12 @@ export type ContextProviderFamily =
   | "brain"
   | "wiki"
   | "workspace"
-  | "knowledge-base"
   | "mcp"
   | "sub-agent";
 export type ContextSourceFamily =
   | "brain"
   | "pages"
   | "workspace"
-  | "knowledge-base"
   | "web"
   | "mcp"
   | "source-agent";
@@ -24,7 +22,7 @@ export interface ContextEngineCaller {
   agentId?: string | null;
   // The thread the turn is running in, and the Space that thread belongs to.
   // Space-aware providers resolve spaceId server-side from threadId in the MCP
-  // handler. Bedrock KBs are legacy opt-in external context, not default Brain.
+  // handler.
   threadId?: string | null;
   spaceId?: string | null;
   templateId?: string | null;

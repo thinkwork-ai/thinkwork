@@ -110,12 +110,6 @@ const OPTIONAL_SOURCE_CATALOG = [
     description:
       "Authorized web pages enrich memory when a bounded Firecrawl source is configured.",
   },
-  {
-    family: "bedrock_kb",
-    label: "Knowledge bases",
-    description:
-      "Authorized Bedrock Knowledge Base documents enrich memory when a source is configured.",
-  },
 ] as const;
 
 /**

@@ -97,8 +97,8 @@ export interface MemorySourceAdapter {
    * runner fails visibly when created_by_user_id is missing. */
   readonly requiresOwnerUser: boolean;
   /** U6: whether this family may run on PERSONAL (user-scoped) processors
-   * writing the owner's User Bank. Shared-only families (twenty, firecrawl,
-   * bedrock_kb) declare false and are rejected on user scope both by the
+   * writing the owner's User Bank. Shared-only families (twenty, firecrawl)
+   * declare false and are rejected on user scope both by the
    * worker's family policy and the stage-level gate. */
   readonly supportsPersonalScope: boolean;
 
@@ -148,13 +148,11 @@ export interface MemorySourceAdapter {
 
 import { twentyAdapter } from "./twenty-adapter.js";
 import { firecrawlAdapter } from "./firecrawl.js";
-import { bedrockKbAdapter } from "./bedrock-kb.js";
 import { emailAdapter } from "./email.js";
 
 const ADAPTERS: Record<string, MemorySourceAdapter> = {
   [twentyAdapter.family]: twentyAdapter,
   [firecrawlAdapter.family]: firecrawlAdapter,
-  [bedrockKbAdapter.family]: bedrockKbAdapter,
   [emailAdapter.family]: emailAdapter,
 };
 

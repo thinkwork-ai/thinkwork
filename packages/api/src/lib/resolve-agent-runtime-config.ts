@@ -21,8 +21,6 @@
  *     per-skill env overrides (OAuth-resolved tokens, CURRENT_USER_EMAIL when
  *     a human invoker is known) with the template blocked-tools filter
  *     applied last
- *   - `knowledgeBasesConfig`: legacy Bedrock KBs assigned to the agent when
- *     explicitly enabled for compatibility
  *   - `mcpConfigs`: agent + tenant MCP servers with auth resolved
  *
  * What this helper does NOT resolve (per-turn concerns, filled by callers):
@@ -51,8 +49,6 @@ import {
   agentSkills,
   tenants,
   users,
-  agentKnowledgeBases,
-  knowledgeBases,
   guardrails,
   spaces,
   tenantMcpServers,
@@ -67,8 +63,6 @@ import {
   resolveAgentWorkspacePrefix,
 } from "./skills/assignment-state.js";
 import { buildMcpConfigs } from "./mcp-configs.js";
-import { resolveBoundKnowledgeBases } from "./bound-knowledge-bases.js";
-import type { ResolvedBoundKnowledgeBase } from "./bound-knowledge-bases.js";
 import type { McpRuntimeRecordLinkHints } from "./mcp-configs.js";
 import {
   normalizeAgentRuntimeType,
@@ -122,19 +116,6 @@ export interface SkillConfig {
   envOverrides?: Record<string, string>;
   mcpServer?: string;
 }
-
-export interface KnowledgeBaseConfig {
-  awsKbId: string | null;
-  name: string | null;
-  description: string | null;
-  searchConfig: unknown;
-}
-
-/**
- * One KB the Pi `search_knowledge` tool may query (U7): Bedrock via
- * `awsKbId`, or an MCP knowledge server via `retrieval` (KB-MCP retrieval).
- */
-export type BoundKnowledgeBaseConfig = ResolvedBoundKnowledgeBase;
 
 export interface McpConfig {
   name: string;
@@ -343,16 +324,6 @@ export interface AgentRuntimeConfig {
   webSearchConfig?: WebSearchConfig;
   webExtractConfig?: WebExtractConfig;
   sendEmailConfig?: SendEmailConfig;
-  knowledgeBasesConfig: KnowledgeBaseConfig[] | undefined;
-  /**
-   * External S3 KB source U7 — KBs bound to this agent OR its Space,
-   * resolved by the direct binding queries only (never the tenant-wide
-   * catalog fallback: an agent with no bindings gets NONE, preserving
-   * AE3 isolation). Non-empty ⇒ the Pi container assembles the
-   * `search_knowledge` tool. Independent of the legacy
-   * ENABLE_LEGACY_AGENT_KNOWLEDGE_BASES field above.
-   */
-  boundKnowledgeBases?: BoundKnowledgeBaseConfig[] | undefined;
   mcpConfigs: McpConfig[];
   piExtensions: AgentRuntimePiExtension[];
   agentProfilesConfig: AgentProfileRuntimeConfig[];
@@ -799,52 +770,6 @@ export async function resolveAgentRuntimeConfig(
       ? await loadTenantWebExtractConfig(opts.tenantId)
       : null;
 
-  // --- Knowledge bases -----------------------------------------------------
-
-  const kbRowsRaw = await db
-    .select({
-      aws_kb_id: knowledgeBases.aws_kb_id,
-      name: knowledgeBases.name,
-      description: knowledgeBases.description,
-      search_config: agentKnowledgeBases.search_config,
-    })
-    .from(agentKnowledgeBases)
-    .innerJoin(
-      knowledgeBases,
-      eq(agentKnowledgeBases.knowledge_base_id, knowledgeBases.id),
-    )
-    .where(
-      and(
-        eq(agentKnowledgeBases.agent_id, opts.agentId),
-        eq(agentKnowledgeBases.enabled, true),
-      ),
-    );
-  const kbRows = kbRowsRaw.filter((r) => r.aws_kb_id);
-
-  const legacyAgentKnowledgeBasesEnabled =
-    process.env.ENABLE_LEGACY_AGENT_KNOWLEDGE_BASES === "true";
-  const knowledgeBasesConfig: KnowledgeBaseConfig[] | undefined =
-    legacyAgentKnowledgeBasesEnabled && kbRows.length > 0
-      ? kbRows.map((kb) => ({
-          awsKbId: kb.aws_kb_id,
-          name: kb.name,
-          description: kb.description,
-          searchConfig: kb.search_config,
-        }))
-      : undefined;
-  // External S3 KB source U7: agent ∪ Space bound KBs for the Pi
-  // `search_knowledge` tool. Direct binding queries ONLY — the tenant-wide
-  // catalog fallback in listKnowledgeBases would grant the tool to every
-  // agent and break AE3 isolation. Shared resolver (also the
-  // wakeup-processor's) so a binding's `search_config.retrieval` can
-  // delegate retrieval to an MCP knowledge server.
-  const boundKnowledgeBases = await resolveBoundKnowledgeBases({
-    tenantId: opts.tenantId,
-    agentRows: kbRowsRaw,
-    spaceId: opts.spaceId,
-    logPrefix: "[resolve-agent-runtime-config]",
-  });
-
   const runtimeType = normalizeAgentRuntimeType(agent.runtime);
 
   // --- Per-agent Browser Automation override ------------------------------
@@ -980,8 +905,6 @@ export async function resolveAgentRuntimeConfig(
         }
       : undefined,
     sendEmailConfig,
-    knowledgeBasesConfig,
-    boundKnowledgeBases,
     mcpConfigs,
     piExtensions: [],
     agentProfilesConfig: [],

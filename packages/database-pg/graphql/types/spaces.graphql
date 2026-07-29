@@ -79,7 +79,6 @@ type Space {
   runtimeOverrides: SpaceRuntimeOverrides!
   renderDiagnostics: AWSJSON
   members: [SpaceMember!]!
-  knowledgeBases: [SpaceKnowledgeBase!]!
   checklistTemplates: [SpaceChecklistTemplate!]!
   integrations: [SpaceIntegration!]!
   unreadThreadCount: Int!
@@ -196,12 +195,6 @@ input UpdateSpaceEmailTriggerInput {
   emailPrefix: String
 }
 
-input SetSpaceKnowledgeBasesInput {
-  tenantId: ID!
-  spaceId: ID!
-  knowledgeBases: [SpaceKnowledgeBaseInput!]!
-}
-
 input SetSpaceRuntimeOverridesInput {
   model: String
   guardrailId: ID
@@ -230,9 +223,6 @@ extend type Mutation {
     spaceId: ID!
     input: SetSpaceRuntimeOverridesInput!
   ): Space!
-  setSpaceKnowledgeBases(
-    input: SetSpaceKnowledgeBasesInput!
-  ): [SpaceKnowledgeBase!]!
   addSpaceMember(spaceId: ID!, userId: ID!): SpaceMember!
   removeSpaceMember(spaceId: ID!, userId: ID!): Boolean!
   startCustomerOnboarding(

@@ -38,7 +38,6 @@ The old standalone routes redirect into the matching tab:
 | ------------------ | ---------------------------------- |
 | `/memory`          | `/settings/memory`                 |
 | `/wiki`            | `/settings/memory/wiki`            |
-| `/knowledge-bases` | `/settings/memory/knowledge-bases` |
 
 ## Sources Query Test
 
@@ -46,12 +45,12 @@ The Sources tab includes a safe query harness for operator verification. It is i
 
 The harness controls are:
 
-- **Sources** — multi-select dropdown for provider families such as Hindsight Memory, compiled pages, workspace files, approved MCP tools, and explicit legacy Bedrock KB compatibility.
+- **Sources** — multi-select dropdown for provider families such as Hindsight Memory, compiled pages, workspace files, and approved MCP tools.
 - **Agent target** — optional agent picker used when workspace files or agent-scoped attachments should participate in the test.
 - **Hindsight strategy** — `recall` for direct memory-record retrieval or `reflect` for synthesized memory output.
 - **Search** — natural-language query field.
 
-Results show provider statuses and top hits side by side. Clicking a hit opens a formatted markdown preview plus the raw structured hit. Clicking **View full result** opens the complete `query_context` response. Provider failures should be local: a skipped legacy Bedrock KB or slow external provider should not hide successful page or workspace hits.
+Results show provider statuses and top hits side by side. Clicking a hit opens a formatted markdown preview plus the raw structured hit. Clicking **View full result** opens the complete `query_context` response. Provider failures should be local: a slow or skipped external provider should not hide successful page or workspace hits.
 
 ## Template Configuration
 
@@ -65,13 +64,12 @@ Template configuration can choose which tenant-approved external sources partici
 - Select an agent target when testing workspace files. Workspace search needs the agent workspace scope to find files such as `USER.md`.
 - Use `reflect` for answer-like memory verification and `recall` when debugging raw memory retrieval.
 - Use Pages when you want the durable compiled view of what an agent has learned; use Memory when you need the raw retained records.
-- Use Brain Sources for authored, operator-curated Space documents that should be retained into Hindsight. Use Bedrock KBs only for explicit legacy compatibility.
+- Use Brain Sources for authored, operator-curated Space documents that should be retained into Hindsight.
 
 ## Related Pages
 
 - [Memory](/concepts/knowledge/) — product model and source families
 - [Memory Context API](/api/context-engine/) — shared `query_context` contract and runtime tool behavior
 - [Retained Memory](/applications/admin/memory/) — details of the Hindsight-backed Memory tab behavior
-- [Knowledge Bases](/applications/admin/knowledge-bases/) — legacy Bedrock KB compatibility management
 - [Tenant Agent](/applications/admin/agents/) — tenant-wide platform-agent workspace
 - [Spaces](/applications/admin/spaces/) — Space-scoped workspace, tools, memory, and knowledge context

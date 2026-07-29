@@ -11,7 +11,6 @@ import {
   type TenantContextProviderSetting,
 } from "../admin-config.js";
 import type { ContextProviderDescriptor } from "../types.js";
-import { createBedrockKnowledgeBaseContextProvider } from "./bedrock-knowledge-base.js";
 import { createCatalogContextProvider } from "./catalog.js";
 import { createCrmOpportunityContextProvider } from "./crm-opportunity.js";
 import { createErpCustomerContextProvider } from "./erp-customer.js";
@@ -28,10 +27,6 @@ export function createCoreContextProviders(
   const providers = [
     createMemoryContextProvider(memoryConfig),
     createWorkspaceFilesContextProvider(),
-    // Legacy external retrieval: available only by explicit provider selection
-    // or tenant override. Hindsight Space document memory is the default Brain
-    // substrate for retained documents.
-    createBedrockKnowledgeBaseContextProvider(),
     createErpCustomerContextProvider(),
     createCrmOpportunityContextProvider(),
     createSupportCaseContextProvider(),
@@ -181,7 +176,6 @@ async function callTenantMcpTool(args: {
   };
 }
 
-export { createBedrockKnowledgeBaseContextProvider } from "./bedrock-knowledge-base.js";
 export { createCatalogContextProvider } from "./catalog.js";
 export { createCrmOpportunityContextProvider } from "./crm-opportunity.js";
 export { createErpCustomerContextProvider } from "./erp-customer.js";

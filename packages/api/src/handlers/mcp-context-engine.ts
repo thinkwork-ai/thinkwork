@@ -55,14 +55,7 @@ export const TOOLS = [
               type: "array",
               items: {
                 type: "string",
-                enum: [
-                  "memory",
-                  "brain",
-                  "workspace",
-                  "knowledge-base",
-                  "mcp",
-                  "sub-agent",
-                ],
+                enum: ["memory", "brain", "workspace", "mcp", "sub-agent"],
               },
             },
           },

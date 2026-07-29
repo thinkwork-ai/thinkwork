@@ -333,8 +333,6 @@ export function buildEvalAgentCorePayload(input: {
         ? runtimeConfig.skillsConfig
         : undefined,
     trusted_skill_ids: runtimeConfig.skillsConfig.map((skill) => skill.skillId),
-    knowledge_bases: runtimeConfig.knowledgeBasesConfig,
-    bound_knowledge_bases: runtimeConfig.boundKnowledgeBases,
     trigger_channel: "eval",
     guardrail_config: runtimeConfig.guardrailConfig || undefined,
     // Read-only MCP tools on replay (U14): default-ALLOW read-shaped tools

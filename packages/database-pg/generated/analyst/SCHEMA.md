@@ -22,7 +22,6 @@ Conventions:
 
 - [activity_log](#activity-log)
 - [agent_capabilities](#agent-capabilities)
-- [agent_knowledge_bases](#agent-knowledge-bases)
 - [agent_loop_iterations](#agent-loop-iterations)
 - [agent_loop_runs](#agent-loop-runs)
 - [agent_loop_versions](#agent-loop-versions)
@@ -84,9 +83,6 @@ Conventions:
 - [inbox_item_comments](#inbox-item-comments)
 - [inbox_item_links](#inbox-item-links)
 - [inbox_items](#inbox-items)
-- [knowledge_base_documents](#knowledge-base-documents)
-- [knowledge_base_sources](#knowledge-base-sources)
-- [knowledge_bases](#knowledge-bases)
 - [linked_task_events](#linked-task-events)
 - [linked_tasks](#linked-tasks)
 - [managed_application_deployment_events](#managed-application-deployment-events)
@@ -144,7 +140,6 @@ Conventions:
 - [space_checklist_items](#space-checklist-items)
 - [space_checklist_templates](#space-checklist-templates)
 - [space_integrations](#space-integrations)
-- [space_knowledge_bases](#space-knowledge-bases)
 - [space_mcp_servers](#space-mcp-servers)
 - [space_members](#space-members)
 - [spaces](#spaces)
@@ -239,24 +234,6 @@ Join hints:
 
 - `agent_capabilities.agent_id` → `agents.id`
 - `agent_capabilities.tenant_id` → `tenants.id`
-
-## agent_knowledge_bases
-
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| agent_id | uuid | not null |
-| tenant_id | uuid | not null |
-| knowledge_base_id | uuid | not null |
-| enabled | boolean | not null |
-| search_config | jsonb |  |
-| created_at | timestamp with time zone | not null |
-
-Join hints:
-
-- `agent_knowledge_bases.agent_id` → `agents.id`
-- `agent_knowledge_bases.knowledge_base_id` → `knowledge_bases.id`
-- `agent_knowledge_bases.tenant_id` → `tenants.id`
 
 ## agent_loop_iterations
 
@@ -1899,106 +1876,6 @@ Join hints:
 
 - `inbox_items.tenant_id` → `tenants.id`
 
-## knowledge_base_documents
-
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| knowledge_base_id | uuid | not null |
-| data_source_id | text | not null |
-| source_id | uuid |  |
-| document_key | text | not null |
-| s3_version_id | text |  |
-| etag | text |  |
-| content_hash | text |  |
-| edition | integer | not null |
-| effective_from | timestamp with time zone |  |
-| effective_to | timestamp with time zone |  |
-| ingest_status | text | not null |
-| projection_status | text | not null |
-| last_error | text |  |
-| derived_prefix | text |  |
-| page_count | integer |  |
-| preprocessor_version | text |  |
-| page_report | jsonb |  |
-| needs_review | boolean | not null |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
-
-Enum values:
-
-- `ingest_status`: `pending`, `ingesting`, `indexed`, `failed`, `deleting`, `absent_verified`
-- `projection_status`: `pending`, `projected`, `skipped`, `failed`, `retracting`, `retracted`
-
-Join hints:
-
-- `knowledge_base_documents.knowledge_base_id` → `knowledge_bases.id`
-- `knowledge_base_documents.source_id` → `knowledge_base_sources.id`
-- `knowledge_base_documents.tenant_id` → `tenants.id`
-
-## knowledge_base_sources
-
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| knowledge_base_id | uuid | not null |
-| kind | text | not null |
-| bucket | text |  |
-| prefix | text |  |
-| filter_patterns | jsonb |  |
-| bucket_owner_account_id | text |  |
-| parsing_strategy | text | not null |
-| aws_data_source_id | text |  |
-| access_status | text | not null |
-| last_sync_at | timestamp with time zone |  |
-| last_sync_status | text |  |
-| document_count | integer |  |
-| error_message | text |  |
-| sentinel_document_key | text |  |
-| sentinel_phrase | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
-
-Enum values:
-
-- `kind`: `managed-upload`, `s3-connect`, `snapshot`
-- `parsing_strategy`: `DEFAULT`, `TRANSCRIBE`
-- `access_status`: `pending`, `healthy`, `degraded`, `access_revoked`, `failed`
-
-Join hints:
-
-- `knowledge_base_sources.knowledge_base_id` → `knowledge_bases.id`
-- `knowledge_base_sources.tenant_id` → `tenants.id`
-
-## knowledge_bases
-
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| tenant_id | uuid | not null |
-| name | text | not null |
-| slug | text | not null |
-| description | text |  |
-| embedding_model | text | not null |
-| chunking_strategy | text | not null |
-| chunk_size_tokens | integer |  |
-| chunk_overlap_percent | integer |  |
-| status | text | not null |
-| aws_kb_id | text |  |
-| aws_data_source_id | text |  |
-| last_sync_at | timestamp with time zone |  |
-| last_sync_status | text |  |
-| document_count | integer |  |
-| error_message | text |  |
-| created_at | timestamp with time zone | not null |
-| updated_at | timestamp with time zone | not null |
-
-Join hints:
-
-- `knowledge_bases.tenant_id` → `tenants.id`
-
 ## linked_task_events
 
 | column | type | flags |
@@ -3561,24 +3438,6 @@ Join hints:
 
 - `space_integrations.space_id` → `spaces.id`
 - `space_integrations.tenant_id` → `tenants.id`
-
-## space_knowledge_bases
-
-| column | type | flags |
-| --- | --- | --- |
-| id | uuid | PK, not null |
-| space_id | uuid | not null |
-| tenant_id | uuid | not null |
-| knowledge_base_id | uuid | not null |
-| enabled | boolean | not null |
-| search_config | jsonb |  |
-| created_at | timestamp with time zone | not null |
-
-Join hints:
-
-- `space_knowledge_bases.knowledge_base_id` → `knowledge_bases.id`
-- `space_knowledge_bases.space_id` → `spaces.id`
-- `space_knowledge_bases.tenant_id` → `tenants.id`
 
 ## space_mcp_servers
 

@@ -170,39 +170,6 @@ variable "appsync_api_id" {
   type        = string
 }
 
-variable "kb_service_role_arn" {
-  description = "Bedrock Knowledge Base service role ARN"
-  type        = string
-}
-
-variable "kb_transcribe_reserved_concurrency" {
-  description = <<-EOT
-    Reserved concurrent executions for the KB page transcriber. Each invocation
-    fans out KB_TRANSCRIBE_CONCURRENCY Bedrock calls, so total in-flight model
-    requests are the product of the two — and Bedrock's per-model
-    requests-per-minute quota is what a large corpus actually runs into.
-    A sync enqueues one invocation PER DOCUMENT at once, so without a reserve a
-    200-document corpus would open hundreds of parallel model calls and spend
-    most of its time in throttle backoff.
-
-    Raise this only alongside a verified requests-per-minute quota.
-  EOT
-  type        = number
-  default     = 2
-}
-
-variable "kb_transcribe_model_ladder" {
-  description = <<-EOT
-    Ordered, comma-separated Bedrock model ids the KB page transcriber tries.
-    The first model the ACCOUNT can actually call wins, and the worker records
-    which one ran. Model availability is per-account — the Opus tiers return
-    AccessDeniedException on accounts AWS has not allowlisted — so a single
-    pinned model would strand those tenants with no transcription at all.
-  EOT
-  type        = string
-  default     = "us.anthropic.claude-opus-5,us.anthropic.claude-opus-4-8,us.anthropic.claude-sonnet-4-6"
-}
-
 variable "agentcore_harness_execution_role_arn" {
   description = "Legacy Harness execution-role input retained for module compatibility. Request-path PassRole/control-plane grants were removed by THINK-316 U2."
   type        = string

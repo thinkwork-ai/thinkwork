@@ -952,7 +952,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     const humanName = runtimeConfig.humanName ?? "";
     const guardrailPayload = runtimeConfig.guardrailConfig;
     const skillsConfig = runtimeConfig.skillsConfig;
-    const knowledgeBasesConfig = runtimeConfig.knowledgeBasesConfig;
     const agent = {
       name: runtimeConfig.agentName,
       slug: runtimeConfig.agentSlug,
@@ -974,12 +973,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     if (guardrailPayload) {
       console.log(
         `[chat-agent-invoke] Guardrail resolved: bedrock=${guardrailPayload.guardrailIdentifier}`,
-      );
-    }
-
-    if (knowledgeBasesConfig) {
-      console.log(
-        `[chat-agent-invoke] Agent ${agentId} has ${knowledgeBasesConfig.length} KB(s): ${knowledgeBasesConfig.map((k: any) => k.name).join(", ")}`,
       );
     }
 
@@ -1671,7 +1664,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       }
     }
 
-
     const invokeStart = Date.now();
     const invokePayload = {
       tenant_id: tenantId,
@@ -1770,10 +1762,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       // permanent install. Already policy-filtered above (KD4).
       pinned_skills:
         pinnedSkillsConfig.length > 0 ? pinnedSkillsConfig : undefined,
-      knowledge_bases: knowledgeBasesConfig,
-      // External S3 KB source U7 — parity with wakeup-processor's payload
       // builder (documented two-builder trap).
-      bound_knowledge_bases: runtimeConfig.boundKnowledgeBases,
       trigger_channel: "chat",
       guardrail_config: guardrailPayload || undefined,
       mcp_configs:

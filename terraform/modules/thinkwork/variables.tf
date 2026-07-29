@@ -379,7 +379,7 @@ variable "database_engine" {
 }
 
 variable "external_kb_source_arns" {
-  description = "Bucket ARNs of customer-owned S3 buckets connected as external Knowledge Base sources (s3-connect). Grants the KB service role read on each ARN and its objects. Empty by default — inert until a bucket is connected (external S3 KB source R20)."
+  description = "DEPRECATED (THINK-402): Knowledge Bases were removed from the product; this input is inert and ignored. Declaration retained so existing customer-stage -var passthroughs keep working."
   type        = list(string)
   default     = []
 }

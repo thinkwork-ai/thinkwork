@@ -63,7 +63,6 @@ type Agent {
   templateId: ID
   template: AgentTemplate
   skillPackIds: [ID!]
-  knowledgeBaseId: ID
   rateLimits: RateLimits
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
@@ -133,7 +132,6 @@ query GetAgent {
     name
     systemPrompt
     skillPackIds
-    knowledgeBaseId
     rateLimits {
       turnsPerMinute
       turnsPerHour
@@ -235,7 +233,6 @@ mutation CreateAgent {
     systemPrompt: "You are a helpful support agent."
     templateId: "tpl-claude-sonnet"
     skillPackIds: ["sp-jira", "sp-confluence"]
-    knowledgeBaseId: "kb-support"
   }) {
     id
     status

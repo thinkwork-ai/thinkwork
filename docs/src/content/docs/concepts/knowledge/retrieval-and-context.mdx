@@ -20,9 +20,8 @@ Any given turn can draw from:
   traversal, not the default compiled-page provider.
 - **Workspace files.** Files in the relevant agent, template, or tenant-default workspace.
 - **Approved MCP tools.** Search-safe external tools that an admin has made eligible.
-- **Legacy knowledge bases.** Explicitly attached Bedrock Knowledge Bases for compatibility deployments or external retrieval experiments.
 
-Not every source feeds every turn. A focused chatbot may use only thread history and Hindsight Space memory. A long-running research agent adds compiled pages and workspace files. A deployment that still needs Bedrock KB retrieval attaches that source explicitly.
+Not every source feeds every turn. A focused chatbot may use only thread history and Hindsight Space memory. A long-running research agent adds compiled pages and workspace files.
 
 ## The assembly step
 
@@ -108,7 +107,7 @@ Long-term memory should never masquerade as the thread record. If an operator as
 ## Related pages
 
 - [Memory](/concepts/knowledge/) — the umbrella
-- [Brain Sources and Legacy Knowledge Bases](/concepts/knowledge/document-knowledge/) — the authored retrieval source
+- [Brain Sources](/concepts/knowledge/document-knowledge/) — the authored retrieval source
 - [Retained Memory](/concepts/knowledge/memory/) — the recall source
 - [Compiled Memory Pages](/concepts/knowledge/compounding-memory/) — the compiled page source
 - [Concepts: Managed Agents](/concepts/agents/managed-agents/) — where assembly sits in the invocation flow

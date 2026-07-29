@@ -4,8 +4,6 @@ import {
   AppletQuery,
   AppletsQuery,
   ChatGlobalInboxQuery,
-  ComputerKnowledgeBaseDetailQuery,
-  ComputerKnowledgeBasesQuery,
   ComputerMemoryRecordsQuery,
   ComputerMemorySearchQuery,
   ComputerMemorySystemConfigQuery,
@@ -99,12 +97,6 @@ describe("computer GraphQL queries", () => {
     expect(printed).toContain("spaceMemoryEnabled");
     expect(printed).toContain("legacyHindsightAvailable");
     expect(printed).toContain("managedMemoryEnabled");
-  });
-
-  it("KB queries hit the read-only knowledgeBases + knowledgeBase fields", () => {
-    expect(print(ComputerKnowledgeBasesQuery)).toContain("knowledgeBases");
-    expect(print(ComputerKnowledgeBaseDetailQuery)).toContain("knowledgeBase");
-    expect(print(ComputerKnowledgeBaseDetailQuery)).toContain("embeddingModel");
   });
 
   it("requests live applet source and preview fields for app mounting", () => {

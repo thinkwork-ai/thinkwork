@@ -138,8 +138,8 @@ See [Integrations](/concepts/integrations).
 │  CloudFront · Integration Lambdas · Step Functions            │
 ├─────────────────────────────────────────────────────────────┤
 │  Data Tier                                                   │
-│  Aurora Postgres (pgvector) · S3 (skills, KB, logs)         │
-│  Bedrock KB · Secrets Manager                                │
+│  Aurora Postgres (pgvector) · S3 (skills, docs, logs)       │
+│  Secrets Manager                                             │
 ├─────────────────────────────────────────────────────────────┤
 │  Foundation Tier                                             │
 │  VPC · Subnets · Cognito · KMS · Route53 · ACM · SES Setup  │
@@ -167,12 +167,11 @@ The data tier holds all persistent state. It depends on the foundation tier for 
 
 | Resource               | Purpose                                                                                                                                                |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Aurora Postgres        | Primary data store: agents, threads, messages, AgentLoops, Workflows, integrations, users. Also hosts legacy Bedrock KB `pgvector` compatibility state |
+| Aurora Postgres        | Primary data store: agents, threads, messages, AgentLoops, Workflows, integrations, users |
 | S3 — skill catalog     | `skills/catalog/*.md` — skill packs loaded at invoke time                                                                                              |
-| S3 — knowledge docs    | Source documents for Brain Sources and legacy Bedrock KB compatibility                                                                                 |
+| S3 — knowledge docs    | Source documents for Brain Sources                                                                                                                     |
 | S3 — audit logs        | Append-only log of every agent invoke (NDJSON, partitioned by date)                                                                                    |
 | S3 — assets            | Admin and end-user app static files                                                                                                                    |
-| Bedrock Knowledge Base | Legacy vector-indexed document store for compatibility retrieval, backed by Aurora `pgvector`                                                          |
 | Secrets Manager        | DB credentials, OAuth client secrets                                                                                                                   |
 
 ### App tier
@@ -313,11 +312,10 @@ This split is useful to keep in mind:
 
 <Aside type="note">
   Because the vector index lives in Aurora (`pgvector`), an Aurora snapshot
-  restore brings back agents, threads, memories, **and** the KB vector index in
+  restore brings back agents, threads, memories, **and** the vector index in
   one shot. The only state that is not in Aurora is binary assets (S3) and a
   small amount of managed identity or secret state in AWS services such as
-  Cognito and Secrets Manager. You may still want to re-trigger a Knowledge Base
-  sync if source S3 documents have changed since the snapshot.
+  Cognito and Secrets Manager.
 </Aside>
 
 ## Multi-tenancy
@@ -339,7 +337,7 @@ CREATE POLICY tenant_isolation ON threads
 | External → API      | Cognito JWT (API Gateway authorizer)                         |
 | API → Aurora        | IAM auth + VPC security groups                               |
 | AgentCore → Bedrock | IAM role (least privilege)                                   |
-| AgentCore → S3      | IAM role (read skills, read KB docs, write audit logs)       |
+| AgentCore → S3      | IAM role (read skills, read source docs, write audit logs)   |
 | AgentCore → SSM     | IAM role (read credentials for assigned integrations)        |
 | Tenant isolation    | Postgres RLS on all tables                                   |
 | Secrets at rest     | KMS encryption (dedicated key per secret category)           |

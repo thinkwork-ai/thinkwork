@@ -4,7 +4,6 @@ import { EVAL_SEED_CATEGORIES, EVAL_SEEDS } from "../lib/eval-seeds";
 
 const LEGACY_CATEGORIES = [
   "email-calendar",
-  "knowledge-base",
   "mcp-gateway",
   "red-team",
   "sub-agents",

@@ -15,7 +15,7 @@
 #                                          the locals note)
 #   thinkwork-<stage>-api-orchestration  — Scheduler, Step Functions, SES
 #   thinkwork-<stage>-api-invocation     — internal lambda:InvokeFunction
-#   thinkwork-<stage>-api-ai             — Bedrock invoke, Knowledge Bases,
+#   thinkwork-<stage>-api-ai             — Bedrock invoke,
 #                                          AgentCore memory/eval/code-interp
 #   thinkwork-<stage>-api-observability  — CloudWatch Logs reads, ECS/ALB
 #                                          health reads
@@ -446,7 +446,7 @@ locals {
       # (was inline policy "api-cross-function-invoke")
       # Allow API handler Lambdas to invoke each other directly. sendMessage
       # dispatches to chat-agent-invoke for instant chat response; the memory
-      # resolvers reach knowledge-base-manager and job-schedule-manager for
+      # resolvers reach job-schedule-manager for
       # admin-driven operations. The agentcore-invoke statement below covers
       # the Pi runtime Lambda only — this one covers internal api-to-api
       # calls. ARNs are constructed deterministically from the handler naming
@@ -458,11 +458,6 @@ locals {
         Action = ["lambda:InvokeFunction"]
         Resource = [
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke",
-          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-knowledge-base-manager",
-          # KB page transcription U3: knowledge-base-manager Event-invokes
-          # the transcriber once per image-bearing document during an
-          # s3-connect sync, then ingests the derived pages on a later pass.
-          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-kb-transcribe",
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-schedule-manager",
           # eval-runner: graphql-http's startEvalRun mutation Event-invokes
           # this asynchronously after inserting the eval_runs row.
@@ -741,7 +736,7 @@ locals {
   ]
 
   # ---------------------------------------------------------------------------
-  # Group 3: AI — Bedrock model invocation, Knowledge Bases, AgentCore
+  # Group 3: AI — Bedrock model invocation, AgentCore
   # memory / evaluations / code interpreter.
   # ---------------------------------------------------------------------------
   api_ai_statements = concat([
@@ -769,64 +764,6 @@ locals {
         "arn:aws:bedrock:*::foundation-model/*",
         "arn:aws:bedrock:*:${var.account_id}:inference-profile/*",
       ]
-    },
-    # (was standalone managed policy "lambda_bedrock_knowledge_base")
-    # The knowledge-base-manager Lambda provisions and manages Bedrock
-    # Knowledge Bases (control plane: create/sync/rechunk/delete), and
-    # graphql-http's testKnowledgeBaseRetrieval query calls Retrieve. Without
-    # these the manager fails with "not authorized to perform:
-    # bedrock:CreateKnowledgeBase" and every KB is stuck in `failed`.
-    # CreateKnowledgeBase / CreateDataSource also take a roleArn that Bedrock
-    # assumes, so the caller needs iam:PassRole on the KB service role.
-    {
-      Effect = "Allow"
-      Action = [
-        "bedrock:CreateKnowledgeBase",
-        "bedrock:GetKnowledgeBase",
-        "bedrock:UpdateKnowledgeBase",
-        "bedrock:DeleteKnowledgeBase",
-        "bedrock:ListKnowledgeBases",
-        "bedrock:CreateDataSource",
-        "bedrock:GetDataSource",
-        "bedrock:UpdateDataSource",
-        "bedrock:DeleteDataSource",
-        "bedrock:ListDataSources",
-        "bedrock:StartIngestionJob",
-        "bedrock:GetIngestionJob",
-        "bedrock:ListIngestionJobs",
-        "bedrock:Retrieve",
-        # THINK-193 U7: knowledge-base-manager reconciles the per-document
-        # manifest after successful syncs (List/Get) and gates deletion
-        # settlement on Get + the scoped Retrieve above. Ingest/Delete cover
-        # the explicit direct-delete path for S3 RETAIN'd documents — the
-        # manager never races them with StartIngestionJob. The workspace-
-        # bucket S3 read the memory-stage-worker needs for document text is
-        # already granted by the shared role's workspace "s3-access"
-        # statement (data-plane group).
-        "bedrock:ListKnowledgeBaseDocuments",
-        "bedrock:GetKnowledgeBaseDocuments",
-        "bedrock:IngestKnowledgeBaseDocuments",
-        "bedrock:DeleteKnowledgeBaseDocuments",
-      ]
-      # CreateKnowledgeBase/CreateDataSource have no resource ARN at create
-      # time and don't support resource-level scoping, so a knowledge-base/*
-      # ARN makes the grant not match. Control-plane "*" for this internal
-      # manager Lambda; PassRole below stays scoped to the KB service role.
-      Resource = "*"
-    },
-    {
-      Effect   = "Allow"
-      Action   = ["iam:PassRole"]
-      Resource = var.kb_service_role_arn != "" ? var.kb_service_role_arn : "*"
-    },
-    # External S3 KB source R8: connect-time access preflight runs AS the KB
-    # service role (STS assume, then ListBucket/GetObject) so the probe
-    # proves the identity Bedrock will actually crawl with. The KB role's
-    # trust policy names this Lambda role via aws:PrincipalArn.
-    {
-      Effect   = "Allow"
-      Action   = ["sts:AssumeRole"]
-      Resource = var.kb_service_role_arn != "" ? var.kb_service_role_arn : "*"
     },
     # (was inline policy "agentcore-memory-rw")
     # AgentCore Memory read access for the GraphQL memory resolvers.
@@ -951,13 +888,6 @@ locals {
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
         Resource = aws_sqs_queue.compliance_drainer_dlq[0].arn
-      },
-      # External S3 KB source U6 — kb-source-reconciler async on_failure DLQ.
-      {
-        Sid      = "KbSourceReconcilerDlqSend"
-        Effect   = "Allow"
-        Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.kb_source_reconciler_dlq[0].arn
       },
       # (was inline policy "compliance-exports-send")
       # graphql-http needs sqs:SendMessage on the exports queue to dispatch
@@ -1237,7 +1167,7 @@ resource "aws_iam_role_policy_attachment" "api_invocation" {
 
 resource "aws_iam_policy" "api_ai" {
   name        = "thinkwork-${var.stage}-api-ai"
-  description = "Grouped AI grants (Bedrock invoke, Knowledge Bases, AgentCore memory/eval/code-interpreter) for the shared api Lambda role"
+  description = "Grouped AI grants (Bedrock invoke, AgentCore memory/eval/code-interpreter) for the shared api Lambda role"
 
   policy = local.api_grouped_policy_documents.ai
 

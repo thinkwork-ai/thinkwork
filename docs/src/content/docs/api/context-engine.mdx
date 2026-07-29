@@ -26,7 +26,6 @@ Every response includes normalized hits plus provider statuses. Provider failure
 - `wiki`: compiled memory pages, via the database-backed wiki provider behind
   `query_wiki_context`.
 - `workspace`: permissioned workspace files for the active target.
-- `knowledge-base`: legacy Bedrock Knowledge Bases. This provider is opt-in compatibility, not a default hosted Brain provider.
 - `mcp`: tenant-approved, read-only, search-safe MCP tools.
 - `sub-agent`: legacy provider id for read-only folder-specialist providers, when enabled by the Memory v0 work.
 
@@ -58,8 +57,7 @@ Tenant-facing status callers receive redacted posture. Raw substrate details suc
 Context Engine sources are intentionally separate from the Hindsight Brain substrate:
 
 - Hindsight `memory`, which owns durable user/Space observations, retained documents, recall, reflect, and evidence;
-- `wiki`, which reads owner-scoped compiled pages derived from memory;
-- legacy `knowledge-base` sources, which read operator-uploaded Bedrock KB documents only when explicitly opted in.
+- `wiki`, which reads owner-scoped compiled pages derived from memory.
 
 ## Hindsight Strategy
 
@@ -98,6 +96,6 @@ Admin operators verify source routing from **Memory → Sources**. The test harn
 - run a query against the same backend Context Engine path used by runtimes;
 - inspect provider statuses, latency, partial failures, top hits, and the full structured response.
 
-Provider failures are expected to be partial. A Hindsight timeout, skipped legacy Bedrock KB, unavailable MCP adapter, or empty source result should appear as provider-local status while successful providers still return hits.
+Provider failures are expected to be partial. A Hindsight timeout, unavailable MCP adapter, or empty source result should appear as provider-local status while successful providers still return hits.
 
 `act_on_context` is reserved for future mutation support and is not callable in v0.
