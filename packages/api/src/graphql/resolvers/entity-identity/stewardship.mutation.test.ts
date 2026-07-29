@@ -93,7 +93,6 @@ describe("operator gate", () => {
             claimCountFollowingB: 0,
             claimCountRemainingA: 0,
             memoryClaimCount: 0,
-            graphEntityCount: 0,
           },
         },
         ctx,
@@ -237,7 +236,6 @@ describe("splitCanonicalEntity", () => {
           claimCountFollowingB: 2,
           claimCountRemainingA: 3,
           memoryClaimCount: 4,
-          graphEntityCount: 5,
         },
       },
       ctx,
@@ -261,7 +259,6 @@ describe("splitCanonicalEntity", () => {
           claimCountFollowingB: 2,
           claimCountRemainingA: 3,
           memoryClaimCount: 4,
-          graphEntityCount: 5,
         },
       }),
     );

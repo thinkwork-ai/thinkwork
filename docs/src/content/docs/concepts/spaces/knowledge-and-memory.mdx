@@ -1,42 +1,41 @@
 ---
 title: Sources and Memory
-description: How Space Brain Sources and scoped memory affect what the tenant platform agent can know for a workroom.
+description: How a Space narrows what the tenant platform agent can know for a workroom, now that Space-scoped memory banks are retired.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Spaces can narrow what the tenant platform agent knows for a particular workroom. Brain Sources bring authored material into the Space through Hindsight document memory. Space memory captures retained facts and observations that belong to that Space's history.
+Spaces narrow what the tenant platform agent knows for a particular workroom. A support Space works from support runbooks, a customer Space from customer documents, an internal finance Space from finance material — without every other Space inheriting it.
 
-This keeps context local. A support Space can use support runbooks, a customer Space can use customer documents, and an internal finance Space can retain finance-specific lessons without making every other Space inherit them.
-
-## Brain Sources
-
-Brain Sources are operator-curated document sources retained into the Space's Hindsight bank. Assign them to a Space when the agent should be able to recall from that material while working there.
-
-Good Space Source candidates include:
-
-- Customer documentation.
-- Product or policy runbooks.
-- Project plans and operating docs.
-- Department-specific source material.
-
-The Admin Sources tab controls which Brain Sources and explicit legacy knowledge-base bindings are selected for the Space.
-
-## Space-scoped memory
-
-Memory is retained knowledge from prior work. Space-scoped memory should answer "what has this workroom learned?" rather than "what is true for the whole tenant?"
-
-Use Space memory for observations, preferences, and facts that should follow future work in the same Space. Use tenant-wide Memory or agent workspace files for broader facts that should apply across Spaces.
-
-<Aside type="note">
-  Brain Sources and conversational memory are related but not interchangeable.
-  Sources are authored material retained with stable document ids. Memory is
-  retained from work over time.
+<Aside type="caution">
+  **Space-scoped memory banks are retired.** Space memory capture, Space memory
+  search, and Space document ingest were removed with the Hindsight memory
+  engine. Bedrock AgentCore Memory is the only memory engine and its records are
+  requester-scoped: there is no Space bank, no tenant bank, and no promotion
+  between scopes.
 </Aside>
+
+## What still scopes a Space
+
+Space context now comes from material the Space owns, not from a memory bank attached to it:
+
+- **Space workspace files.** The rendered per-Space workspace is the primary way to give a workroom its own runbooks, policies, plans, and reference documents. Files are versioned in S3 and mounted for work in that Space.
+- **Space tools.** Which connectors and approved MCP sources participate, configured on the Space's Tools tab.
+- **Space instructions.** The Space's `INSTRUCTIONS.md` shapes how the agent works there.
+- **Compiled pages.** Wiki entity, topic, and decision pages remain tenant-scope projections available from any Space.
+
+Good candidates for Space workspace files are exactly the ones that used to be Brain Sources: customer documentation, product or policy runbooks, project plans and operating docs, department-specific source material.
+
+## Where retained memory goes instead
+
+Memory retained from work in a Space is stored against the **requester**, not the Space. Practically:
+
+- A fact a user establishes while working in a Space is available to that user in any Space.
+- Knowledge that should be shared across people belongs in Space workspace files or in compiled wiki pages — both of which are visible to everyone with access, and both of which carry provenance.
+- There is no "what has this workroom learned" store to query. If a Space needs durable shared knowledge, write it down in the Space workspace.
 
 ## Related pages
 
-- [Admin - Space Sources](/applications/admin/spaces/kbs/) - selecting Brain Sources for a Space
 - [Memory](/concepts/knowledge/) - the broader context substrate
-- [Retained Memory](/concepts/knowledge/memory/) - Hindsight-backed retained facts and Space memory
-- [Sources and Knowledge Bases](/concepts/knowledge/document-knowledge/) - authored document sources
+- [Retained Memory](/concepts/knowledge/memory/) - the AgentCore-backed retained-memory layer
+- [Document Sources](/concepts/knowledge/document-knowledge/) - where authored documents live now

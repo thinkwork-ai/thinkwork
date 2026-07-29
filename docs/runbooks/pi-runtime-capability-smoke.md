@@ -41,10 +41,10 @@ Capabilities:
 - `execute_code` requires persisted code/sandbox tool evidence.
 - `browser_automation` requires persisted AgentCore Browser tool evidence and should include Browser substrate cost metadata when the session starts.
 - `goal` sends a composer-style goal-mode message and requires persisted `thread_turns.usage_json.goal_run` or `thread_turns.result_json.goal_run` evidence from `@narumitw/pi-goal`.
-- `hindsight` requires persisted memory/retain/recall/reflect evidence.
+- `memory` requires persisted evidence of the AgentCore memory tools — a `remember` write and a `recall` read. (Renamed from `hindsight`; the `reflect` and `compact` tools no longer exist.)
 - `mcp` requires persisted MCP tool/server evidence.
 
-`--capability all` intentionally keeps the core routing/tool set (`plain`, `web_search`, `execute_code`, `hindsight`, `mcp`). Run `--capability goal` explicitly when validating THNK-21 or a Pi goal extension rollout:
+`--capability all` intentionally keeps the core routing/tool set (`plain`, `web_search`, `execute_code`, `memory`, `mcp`). Run `--capability goal` explicitly when validating THNK-21 or a Pi goal extension rollout:
 
 ```bash
 pnpm --filter @thinkwork/api pi:capability-smoke -- \

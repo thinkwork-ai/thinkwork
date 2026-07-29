@@ -135,9 +135,7 @@ type DeploymentStatus {
   apiEndpoint: String
   appsyncUrl: String
   appsyncRealtimeUrl: String
-  hindsightEndpoint: String
   agentcoreStatus: String
-  hindsightEnabled: Boolean!
   managedMemoryEnabled: Boolean!
   twentyProvisioned: Boolean!
   twentyRuntimeEnabled: Boolean!

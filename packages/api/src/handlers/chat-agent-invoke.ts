@@ -146,20 +146,11 @@ function workspaceBucket(): string {
 function thinkworkApiUrl(): string {
   return getConfig("THINKWORK_API_URL") || process.env.MCP_BASE_URL || "";
 }
-function hindsightEndpoint(): string {
-  return getConfig("HINDSIGHT_ENDPOINT", "");
-}
-// Plan 2026-06-09-004 U8 — stage-level seam flag for the agent-facing
-// knowledge-graph tool. Lands inert (flag absent → tool never ships in the
-// invoke payload); the consumer seam flips by setting
-// KNOWLEDGE_GRAPH_TOOL_ENABLED=true on this Lambda in its own PR.
-const KNOWLEDGE_GRAPH_TOOL_ENABLED =
-  (process.env.KNOWLEDGE_GRAPH_TOOL_ENABLED || "").toLowerCase() === "true";
 // Company Brain twin tool seam (plan 2026-07-21-001 U7) — same rollout
 // posture: stage env flag, per-agent tool policy can still block.
 // THINK-321 U5 — stage-level seam flag for the agent-facing identity
 // resolution tools (resolve_entities / propose_mapping_candidates /
-// confirm_mapping). Same pattern as the knowledge-graph flag: terraform
+// confirm_mapping). Stage rollout pattern: terraform
 // sets IDENTITY_RESOLUTION_ENABLED on this Lambda; per-agent tool policy
 // gates on top.
 const IDENTITY_RESOLUTION_TOOL_ENABLED =
@@ -952,7 +943,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     const humanName = runtimeConfig.humanName ?? "";
     const guardrailPayload = runtimeConfig.guardrailConfig;
     const skillsConfig = runtimeConfig.skillsConfig;
-    const knowledgeBasesConfig = runtimeConfig.knowledgeBasesConfig;
     const agent = {
       name: runtimeConfig.agentName,
       slug: runtimeConfig.agentSlug,
@@ -974,12 +964,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     if (guardrailPayload) {
       console.log(
         `[chat-agent-invoke] Guardrail resolved: bedrock=${guardrailPayload.guardrailIdentifier}`,
-      );
-    }
-
-    if (knowledgeBasesConfig) {
-      console.log(
-        `[chat-agent-invoke] Agent ${agentId} has ${knowledgeBasesConfig.length} KB(s): ${knowledgeBasesConfig.map((k: any) => k.name).join(", ")}`,
       );
     }
 
@@ -1671,7 +1655,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       }
     }
 
-
     const invokeStart = Date.now();
     const invokePayload = {
       tenant_id: tenantId,
@@ -1707,7 +1690,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       computer_id: event.computerId || undefined,
       computer_task_id: event.computerTaskId || undefined,
       computer_response_mode: "thread_turn",
-      hindsight_endpoint: hindsightEndpoint() || undefined,
       web_search_config: isAnyToolAllowed(...toolPolicyAliases("web-search"))
         ? runtimeConfig.webSearchConfig
         : undefined,
@@ -1732,15 +1714,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         runtimeConfig.runtimeType === "strands" &&
         isAnyToolAllowed(...toolPolicyAliases("context_engine"))
           ? runtimeConfig.contextEngineConfig
-          : undefined,
-      // Plan 2026-06-09-004 U8 — knowledge-graph tool seam. Stage env flag
-      // gates the rollout (inert until set); the per-agent tool policy can
-      // still block it. The runtime additionally requires thread_turn_id /
-      // thread id for the turn-bound auth the U7 resolver enforces.
-      knowledge_graph_enabled:
-        KNOWLEDGE_GRAPH_TOOL_ENABLED &&
-        isAnyToolAllowed(...toolPolicyAliases("knowledge_graph_search"))
-          ? true
           : undefined,
       // THINK-321 U5 — identity-resolution tool seam. Stage env flag gates
       // the rollout; the per-agent tool policy can still block it. The
@@ -1770,10 +1743,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       // permanent install. Already policy-filtered above (KD4).
       pinned_skills:
         pinnedSkillsConfig.length > 0 ? pinnedSkillsConfig : undefined,
-      knowledge_bases: knowledgeBasesConfig,
-      // External S3 KB source U7 — parity with wakeup-processor's payload
       // builder (documented two-builder trap).
-      bound_knowledge_bases: runtimeConfig.boundKnowledgeBases,
       trigger_channel: "chat",
       guardrail_config: guardrailPayload || undefined,
       mcp_configs:

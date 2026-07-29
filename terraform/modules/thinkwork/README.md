@@ -56,7 +56,7 @@ feature flags:
 | `customer_domain`                | `""`    | Customer-namespace domain (e.g. `tei.thinkwork.ai`). Empty = skip. |
 | `customer_domain_delegated`      | `false` | Phase-two gate — flip once NS delegation resolves.                 |
 | `customer_domain_legacy_retired` | `false` | Retirement gate — removes legacy Cognito callbacks after cutover.  |
-| `enable_hindsight`               | `true`  | Provisions Hindsight canonical user and Space memory.              |
+| `enable_hindsight`               | `false` | Deprecated no-op (THINK-407) — accepted and ignored.               |
 | `www_domain`                     | `""`    | Public website apex domain. Empty = CloudFront URL only.           |
 
 ## Outputs

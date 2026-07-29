@@ -13,12 +13,9 @@ account_id = "123456789012"  # your AWS account ID
 database_engine = "rds-postgres"
 
 # Memory:
-#   Hindsight is the canonical user and Space memory provider for full
-#   ThinkWork installs and is enabled by default. Set enable_hindsight = false
-#   and memory_engine = "agentcore" only for explicit low-cost/development
-#   AgentCore-only deployments.
-# enable_hindsight = false
-# memory_engine    = "agentcore"
+#   Bedrock AgentCore managed memory is the only engine. The legacy
+#   `enable_hindsight` / `memory_engine` inputs are deprecated no-ops that are
+#   still accepted so old tfvars keep applying.
 
 # Managed applications:
 #   Twenty CRM is optional. First enable should set both booleans true after

@@ -160,7 +160,6 @@ async function createOkfFixtureRoot(tenantSlug = "acme"): Promise<string> {
 beforeEach(async () => {
   delete process.env.MEMORY_ENGINE;
   delete process.env.AGENTCORE_MEMORY_ID;
-  delete process.env.HINDSIGHT_ENDPOINT;
   delete process.env.MEMORY_RETAIN_FN_NAME;
   delete process.env.WORKSPACE_BUCKET;
   delete process.env.WORKSPACE_DIR;
@@ -252,7 +251,7 @@ describe("handleInvocation — payload validation", () => {
     expect(toolNames).not.toContain("execute_code");
   });
 
-  it("passes U7 extension tool names through to runAgentLoop in Hindsight mode", async () => {
+  it("passes U7 extension tool names through to runAgentLoop", async () => {
     let seenExtensionToolNames: string[] = [];
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
@@ -2688,7 +2687,6 @@ describe("buildInvocationResources — bearer never reaches the connect factory"
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -2753,7 +2751,6 @@ describe("buildInvocationResources — bearer never reaches the connect factory"
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -2821,7 +2818,6 @@ describe("buildInvocationResources — fetch_workspace_source gating", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -2899,7 +2895,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore" as const,
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -2957,7 +2952,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -3008,7 +3002,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -3060,7 +3053,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -3084,7 +3076,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(bundle.tools.map((tool) => tool.name)).toContain("execute_code");
   });
 
-  it("loads the memory extension (not hand-assembled tools) on the hindsight engine", async () => {
+  it("registers no memory tools when no AgentCore memory id is wired", async () => {
     const bundle = await buildInvocationResources({
       payload: { message: "what do you remember about me?" },
       identity: {
@@ -3099,8 +3091,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "https://hindsight.dev.example.com",
-        memoryEngine: "hindsight",
+        memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
         dbSecretArn: "",
@@ -3120,21 +3111,15 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       mcpRegistry: new McpToolRegistry(),
     });
 
-    // Memory is loaded as an extension, not as hand-assembled recall/reflect
-    // AgentTools (U5 retires the buildHindsightTools wiring on this path).
-    // Other safe built-in extensions may also be present, so assert the
-    // tool-name surface rather than a brittle factory count.
-    expect(bundle.extensionToolNames).toEqual(
-      expect.arrayContaining(["recall", "reflect"]),
-    );
-    expect(bundle.tools.map((tool) => tool.name)).not.toContain("recall");
-    expect(bundle.tools.map((tool) => tool.name)).not.toContain("reflect");
-    expect(bundle.tools.map((tool) => tool.name)).not.toContain(
-      "hindsight_recall",
-    );
+    // AgentCore managed memory is the only engine; with no memory id the
+    // runtime logs `memory_skipped_no_id` and registers nothing.
+    const toolNames = bundle.tools.map((tool) => tool.name);
+    expect(toolNames).not.toContain("recall");
+    expect(toolNames).not.toContain("remember");
+    expect(bundle.extensionToolNames).not.toContain("recall");
   });
 
-  it("removes file and shell built-ins on explicit Hindsight memory turns", async () => {
+  it("removes file and shell built-ins on explicit memory turns", async () => {
     const bundle = await buildInvocationResources({
       payload: {
         message:
@@ -3153,8 +3138,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "https://hindsight.dev.example.com",
-        memoryEngine: "hindsight",
+        memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
         dbSecretArn: "",
@@ -3175,77 +3159,14 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     });
 
     expect(bundle.builtinToolNames).toEqual([]);
-    expect(bundle.extensionToolNames).toEqual(
-      expect.arrayContaining(["recall", "reflect"]),
-    );
 
     const allowlist = buildToolAllowlist(
       bundle.tools,
       bundle.extensionToolNames,
       bundle.builtinToolNames,
     );
-    expect(allowlist).toEqual(expect.arrayContaining(["recall", "reflect"]));
     expect(allowlist).not.toEqual(
       expect.arrayContaining([...BUILTIN_TOOL_NAMES]),
-    );
-  });
-
-  it("grounds direct memory questions through Hindsight session_start recall", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ memories: [] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
-    );
-    const bundle = await buildInvocationResources({
-      payload: { message: "what is this space's launch codename again?" },
-      identity: {
-        tenantId: "tenant-1",
-        userId: "user-1",
-        agentId: "agent-1",
-        threadId: "thread-1",
-        spaceId: "space-1",
-        tenantSlug: "",
-        agentSlug: "",
-        traceId: "",
-      },
-      env: {
-        awsRegion: "us-east-1",
-        agentCoreMemoryId: "",
-        hindsightEndpoint: "https://hindsight.dev.example.com",
-        memoryEngine: "hindsight",
-        memoryRetainFnName: "",
-        dbClusterArn: "",
-        dbSecretArn: "",
-        dbName: "thinkwork",
-        workspaceBucket: "",
-        workspaceDir: "/tmp/workspace",
-        piAgentDir: "/tmp/thinkwork-pi-agent",
-        gitSha: "test",
-      },
-      agentCoreClient: fakeAgentCoreClient() as never,
-      workspaceSkills: [],
-      connectMcpServer: noopConnect,
-      sessionStoreFactory: () => ({}) as never,
-      cleanup: [],
-      handleStore: new HandleStore(),
-      mcpJsonConfig: { directTools: [] },
-      mcpRegistry: new McpToolRegistry(),
-    });
-    const { api, emit } = makeFakeExtensionApiWithEvents();
-
-    for (const factory of bundle.extensionFactories) {
-      await factory(api as never);
-    }
-    await emit("session_start");
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://hindsight.dev.example.com/v1/default/banks/user_user-1/memories/recall",
-      expect.any(Object),
-    );
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://hindsight.dev.example.com/v1/default/banks/space_space-1/memories/recall",
-      expect.any(Object),
     );
   });
 
@@ -3270,8 +3191,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "https://hindsight.dev.example.com",
-        memoryEngine: "hindsight",
+        memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
         dbSecretArn: "",
@@ -3300,7 +3220,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("registers direct Hindsight memory tools when Hindsight memory is active", async () => {
+  it("registers the AgentCore memory tools when a memory id is wired", async () => {
     const bundle = await buildInvocationResources({
       payload: {
         message: "what does this space remember?",
@@ -3320,8 +3240,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "managed-memory-id",
-        hindsightEndpoint: "https://hindsight.dev.example.com",
-        memoryEngine: "hindsight",
+        memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
         dbSecretArn: "",
@@ -3341,12 +3260,12 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       mcpRegistry: new McpToolRegistry(),
     });
 
-    expect(bundle.extensionToolNames).toEqual(
-      expect.arrayContaining(["recall", "reflect"]),
+    expect(bundle.tools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(["remember", "recall"]),
     );
   });
 
-  it("skips the memory extension in eval mode (user-less)", async () => {
+  it("skips memory tools in eval mode (user-less)", async () => {
     const bundle = await buildInvocationResources({
       payload: { message: "hi", eval_mode: true },
       identity: {
@@ -3361,8 +3280,7 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "https://hindsight.dev.example.com",
-        memoryEngine: "hindsight",
+        memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
         dbSecretArn: "",
@@ -3405,7 +3323,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -3447,7 +3364,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -3505,7 +3421,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -3549,7 +3464,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -3576,121 +3490,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
     expect(bundle.tools.map((tool) => tool.name)).not.toContain("web_search");
   });
 
-  it("registers knowledge_graph_search as an extension tool when the payload flag is on", async () => {
-    const bundle = await buildInvocationResources({
-      payload: {
-        knowledge_graph_enabled: true,
-        thinkwork_api_url: "https://api.example.com",
-        thinkwork_api_secret: "secret",
-        thread_turn_id: "7c1f8a8e-1c1d-4e58-9a8e-0b1c2d3e4f5a",
-      },
-      identity: {
-        tenantId: "tenant-1",
-        userId: "user-1",
-        agentId: "agent-1",
-        threadId: "thread-1",
-        tenantSlug: "",
-        agentSlug: "",
-        traceId: "",
-      },
-      env: {
-        awsRegion: "us-east-1",
-        agentCoreMemoryId: "",
-        hindsightEndpoint: "",
-        memoryEngine: "agentcore",
-        memoryRetainFnName: "",
-        dbClusterArn: "",
-        dbSecretArn: "",
-        dbName: "thinkwork",
-        workspaceBucket: "",
-        workspaceDir: "/tmp/workspace",
-        piAgentDir: "/tmp/thinkwork-pi-agent",
-        gitSha: "test",
-      },
-      agentCoreClient: fakeAgentCoreClient() as never,
-      workspaceSkills: [],
-      connectMcpServer: noopConnect,
-      sessionStoreFactory: () => ({}) as never,
-      cleanup: [],
-      handleStore: new HandleStore(),
-      mcpJsonConfig: { directTools: [] },
-      mcpRegistry: new McpToolRegistry(),
-    });
-
-    // Folded into the allowlist (extension tools are silently gated
-    // otherwise) but NOT plain AgentTools. All three KG tools ride the one
-    // extension's toolNames (THINK-133 U6).
-    for (const name of [
-      "knowledge_graph_search",
-      "knowledge_graph_get_entity",
-      "knowledge_graph_neighbors",
-    ]) {
-      expect(bundle.extensionToolNames).toContain(name);
-      expect(bundle.tools.map((tool) => tool.name)).not.toContain(name);
-    }
-  });
-
-  it("does not register knowledge_graph_search when the payload flag is off or in eval mode", async () => {
-    const baseArgs = {
-      identity: {
-        tenantId: "tenant-1",
-        userId: "user-1",
-        agentId: "agent-1",
-        threadId: "thread-1",
-        tenantSlug: "",
-        agentSlug: "",
-        traceId: "",
-      },
-      env: {
-        awsRegion: "us-east-1",
-        agentCoreMemoryId: "",
-        hindsightEndpoint: "",
-        memoryEngine: "agentcore" as const,
-        memoryRetainFnName: "",
-        dbClusterArn: "",
-        dbSecretArn: "",
-        dbName: "thinkwork",
-        workspaceBucket: "",
-        workspaceDir: "/tmp/workspace",
-        piAgentDir: "/tmp/thinkwork-pi-agent",
-        gitSha: "test",
-      },
-      agentCoreClient: fakeAgentCoreClient() as never,
-      workspaceSkills: [],
-      connectMcpServer: noopConnect,
-      sessionStoreFactory: () => ({}) as never,
-      mcpJsonConfig: { directTools: [] },
-    };
-
-    const flagOff = await buildInvocationResources({
-      ...baseArgs,
-      payload: {
-        thinkwork_api_url: "https://api.example.com",
-        thinkwork_api_secret: "secret",
-        thread_turn_id: "7c1f8a8e-1c1d-4e58-9a8e-0b1c2d3e4f5a",
-      },
-      cleanup: [],
-      handleStore: new HandleStore(),
-      mcpRegistry: new McpToolRegistry(),
-    });
-    expect(flagOff.extensionToolNames).not.toContain("knowledge_graph_search");
-
-    const evalMode = await buildInvocationResources({
-      ...baseArgs,
-      payload: {
-        eval_mode: true,
-        knowledge_graph_enabled: true,
-        thinkwork_api_url: "https://api.example.com",
-        thinkwork_api_secret: "secret",
-        thread_turn_id: "7c1f8a8e-1c1d-4e58-9a8e-0b1c2d3e4f5a",
-      },
-      cleanup: [],
-      handleStore: new HandleStore(),
-      mcpRegistry: new McpToolRegistry(),
-    });
-    expect(evalMode.extensionToolNames).not.toContain("knowledge_graph_search");
-  });
-
   it("registers the search tool as an extension tool when search_tool_enabled is on (THINK-263 U8)", async () => {
     const bundle = await buildInvocationResources({
       payload: {
@@ -3711,7 +3510,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -3752,7 +3550,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore" as const,
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -3818,7 +3615,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -3861,7 +3657,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore" as const,
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -3926,7 +3721,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -3980,7 +3774,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -4024,7 +3817,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -4096,7 +3888,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -4217,7 +4008,6 @@ describe("buildInvocationResources — Pi built-in tools", () => {
       env: {
         awsRegion: "us-east-1",
         agentCoreMemoryId: "",
-        hindsightEndpoint: "",
         memoryEngine: "agentcore",
         memoryRetainFnName: "",
         dbClusterArn: "",
@@ -4264,7 +4054,6 @@ describe("buildInvocationResources — mcp proxy registration (Plan §006 U4)", 
   const baseEnv = {
     awsRegion: "us-east-1",
     agentCoreMemoryId: "",
-    hindsightEndpoint: "",
     memoryEngine: "agentcore" as const,
     memoryRetainFnName: "",
     dbClusterArn: "",

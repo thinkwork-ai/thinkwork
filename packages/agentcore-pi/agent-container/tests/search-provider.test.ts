@@ -28,27 +28,12 @@ const searchPayload = {
           source: "THREADS",
           status: "OK",
           threadHits: [{ title: "Acme SOW", identifier: "TH-1" }],
-          entityHits: [],
-          memoryHits: [],
-        },
-        {
-          source: "ENTITIES",
-          status: "OK",
-          threadHits: [],
-          entityHits: [
-            {
-              label: "Acme",
-              ontologyTypeSlug: "company",
-              summary: "Customer.",
-            },
-          ],
           memoryHits: [],
         },
         {
           source: "MEMORY",
           status: "TIMEOUT",
           threadHits: [],
-          entityHits: [],
           memoryHits: [],
         },
       ],
@@ -82,7 +67,7 @@ describe("createApiSearchProvider", () => {
 
     const result = await provider.search({
       query: "Acme",
-      sources: ["THREADS", "ENTITIES"],
+      sources: ["THREADS", "MEMORY"],
       limit: 5,
     });
 
@@ -100,7 +85,7 @@ describe("createApiSearchProvider", () => {
     expect(body.variables).toEqual({
       tenantId: baseOptions.tenantId,
       query: "Acme",
-      sources: ["THREADS", "ENTITIES"],
+      sources: ["THREADS", "MEMORY"],
       limit: 5,
     });
 
@@ -108,11 +93,6 @@ describe("createApiSearchProvider", () => {
     // status and empty lines so the extension renders it as unavailable.
     expect(result.legs).toEqual([
       { source: "THREADS", status: "OK", lines: ["Acme SOW [TH-1]"] },
-      {
-        source: "ENTITIES",
-        status: "OK",
-        lines: ["Acme (company) — Customer."],
-      },
       { source: "MEMORY", status: "TIMEOUT", lines: [] },
     ]);
   });

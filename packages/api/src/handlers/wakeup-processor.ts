@@ -30,8 +30,6 @@ import {
   threads,
   agents,
   agentTemplates,
-  agentKnowledgeBases,
-  knowledgeBases,
   guardrails,
   messages,
   spaces,
@@ -56,8 +54,6 @@ import { revalidateRunAsAtDispatch } from "../lib/scheduled-jobs/run-as-authz.js
 import { resolveRunAsTargetMembership } from "../lib/scheduled-jobs/run-as-facts.js";
 import { createRunAsReaders } from "../lib/scheduled-jobs/run-as-readers.js";
 import { buildMcpConfigs } from "../lib/mcp-configs.js";
-import { resolveBoundKnowledgeBases } from "../lib/bound-knowledge-bases.js";
-import type { ResolvedBoundKnowledgeBase } from "../lib/bound-knowledge-bases.js";
 import {
   fingerprintInputsFromCapabilitiesManifest,
   parseCapabilitiesManifest,
@@ -187,9 +183,6 @@ function workspaceBucket(): string {
 function thinkworkApiUrl(): string {
   return getConfig("THINKWORK_API_URL") || process.env.MCP_BASE_URL || "";
 }
-function hindsightEndpoint(): string {
-  return getConfig("HINDSIGHT_ENDPOINT", "");
-}
 function workspaceRendererFunctionName(): string {
   // Derived from the per-stage naming convention (R7); a config/env
   // override still wins. "" preserves the legacy unconfigured guard
@@ -307,8 +300,9 @@ export async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -425,8 +419,9 @@ export async function renderWorkspaceTupleForWakeup(input: {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({
     region: process.env.AWS_REGION || "us-east-1",
   });
@@ -1193,40 +1188,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     trustedSkillIds.has(skill.skillId),
   );
 
-  // Look up legacy native Bedrock KBs for explicitly opted-in compatibility
-  // only. Hindsight Space document memory is the default retained Brain path.
-  const kbRowsRaw = await db
-    .select({
-      aws_kb_id: knowledgeBases.aws_kb_id,
-      name: knowledgeBases.name,
-      description: knowledgeBases.description,
-      search_config: agentKnowledgeBases.search_config,
-    })
-    .from(agentKnowledgeBases)
-    .innerJoin(
-      knowledgeBases,
-      eq(agentKnowledgeBases.knowledge_base_id, knowledgeBases.id),
-    )
-    .where(
-      and(
-        eq(agentKnowledgeBases.agent_id, wakeup.agent_id),
-        eq(agentKnowledgeBases.enabled, true),
-      ),
-    );
-  const kbRows = kbRowsRaw.filter((r) => r.aws_kb_id);
-
-  const legacyAgentKnowledgeBasesEnabled =
-    process.env.ENABLE_LEGACY_AGENT_KNOWLEDGE_BASES === "true";
-  const knowledgeBasesConfig =
-    legacyAgentKnowledgeBasesEnabled && kbRows.length > 0
-      ? kbRows.map((kb) => ({
-          awsKbId: kb.aws_kb_id,
-          name: kb.name,
-          description: kb.description,
-          searchConfig: kb.search_config,
-        }))
-      : undefined;
-
   const capabilityRows = await db
     .select({
       capability: agentCapabilities.capability,
@@ -1468,12 +1429,15 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } =
-          await import("../lib/orchestration/process-parser.js");
-        const { materializeProcess } =
-          await import("../lib/orchestration/process-materializer.js");
-        const { S3Client, GetObjectCommand } =
-          await import("@aws-sdk/client-s3");
+        const { parseProcessTemplate } = await import(
+          "../lib/orchestration/process-parser.js"
+        );
+        const { materializeProcess } = await import(
+          "../lib/orchestration/process-materializer.js"
+        );
+        const { S3Client, GetObjectCommand } = await import(
+          "@aws-sdk/client-s3"
+        );
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -1890,25 +1854,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       );
     }
   }
-  // External S3 KB source U7: agent ∪ Space bound KBs for Pi's
-  // search_knowledge tool. Shared resolver with chat-agent-invoke's
-  // runtime-config path (the old parity trap) — a binding's
-  // `search_config.retrieval` may delegate retrieval to an MCP server.
-  let boundKnowledgeBasesPayload: ResolvedBoundKnowledgeBase[] | undefined;
-  try {
-    boundKnowledgeBasesPayload = await resolveBoundKnowledgeBases({
-      tenantId: wakeup.tenant_id,
-      agentRows: kbRowsRaw,
-      spaceId: runSpaceId,
-      logPrefix: "[wakeup-processor]",
-    });
-  } catch (err) {
-    console.warn(
-      `[wakeup-processor] Failed to resolve bound knowledge bases:`,
-      err,
-    );
-  }
-
   if (runSpaceId && !runSpaceSlug) {
     try {
       const [spaceRow] = await db
@@ -2080,12 +2025,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
   const effectiveContextEngineConfig = effectiveContextEngineEnabled
     ? contextEngineConfig
     : undefined;
-  // Plan 2026-06-09-004 U8 — graph tool parity with chat-agent-invoke:
-  // wakeup turns get knowledge_graph_search under the same stage env flag
-  // and per-agent tool policy.
-  const effectiveKnowledgeGraphEnabled =
-    (process.env.KNOWLEDGE_GRAPH_TOOL_ENABLED || "").toLowerCase() === "true" &&
-    isAnyToolAllowed(...toolPolicyAliases("knowledge_graph_search"));
   // THINK-321 U5 — identity-resolution tool parity with chat-agent-invoke:
   // wakeup turns get the crosswalk tools under the same stage env flag and
   // per-agent tool policy.
@@ -2372,7 +2311,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       },
     );
 
-
     const agentCorePayload: Record<string, unknown> = {
       tenant_id: wakeup.tenant_id,
       // Unit 7 made workspace_tenant_id a hard gate in
@@ -2398,7 +2336,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       human_name: humanName || undefined,
       workspace_bucket: workspaceBucket() || undefined,
       workspace_prefix: workspacePrefix,
-      hindsight_endpoint: hindsightEndpoint() || undefined,
       web_search_config: effectiveWebSearchConfig,
       web_extract_config: effectiveWebExtractConfig
         ? {
@@ -2413,7 +2350,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
         : undefined,
       context_engine_enabled: effectiveContextEngineEnabled || undefined,
       context_engine_config: effectiveContextEngineConfig,
-      knowledge_graph_enabled: effectiveKnowledgeGraphEnabled || undefined,
       identity_resolution_enabled:
         effectiveIdentityResolutionEnabled || undefined,
       runtime_type: runtimeType,
@@ -2430,8 +2366,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       skills:
         effectiveSkillsConfig.length > 0 ? effectiveSkillsConfig : undefined,
       trusted_skill_ids: effectiveSkillsConfig.map((skill) => skill.skillId),
-      knowledge_bases: knowledgeBasesConfig,
-      bound_knowledge_bases: boundKnowledgeBasesPayload,
       guardrail_config: guardrailPayload || undefined,
       mcp_servers: mcpServers,
       mcp_base_url: MCP_BASE_URL || undefined,
@@ -3187,7 +3121,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
             human_name: humanName || undefined,
             workspace_bucket: workspaceBucket() || undefined,
             workspace_prefix: workspacePrefix,
-            hindsight_endpoint: hindsightEndpoint() || undefined,
             web_search_config: effectiveWebSearchConfig,
             web_extract_config: effectiveWebExtractConfig
               ? {
@@ -3202,8 +3135,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
               : undefined,
             context_engine_enabled: effectiveContextEngineEnabled || undefined,
             context_engine_config: effectiveContextEngineConfig,
-            knowledge_graph_enabled:
-              effectiveKnowledgeGraphEnabled || undefined,
             identity_resolution_enabled:
               effectiveIdentityResolutionEnabled || undefined,
             runtime_type: runtimeType,
@@ -3213,8 +3144,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
               effectiveSkillsConfig.length > 0
                 ? effectiveSkillsConfig
                 : undefined,
-            knowledge_bases: knowledgeBasesConfig,
-            bound_knowledge_bases: boundKnowledgeBasesPayload,
             guardrail_config: guardrailPayload || undefined,
             mcp_servers: mcpServers,
             mcp_base_url: MCP_BASE_URL || undefined,
@@ -3248,7 +3177,7 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
                 renderedWorkspace.rendered
                   ? renderedWorkspace.capabilities?.fingerprint
                   : undefined,
-                    turnAssertion: await mintTurnAssertion({
+              turnAssertion: await mintTurnAssertion({
                 tenant_id: wakeup.tenant_id,
                 thread_id: resolvedThreadId || "",
                 turn_id: run.id,
@@ -3471,8 +3400,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } =
-          await import("../lib/push-notifications.js");
+        const { sendTurnCompletedPush } = await import(
+          "../lib/push-notifications.js"
+        );
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,

@@ -40,13 +40,9 @@ export TF_VAR_microsoft_oauth_client_id="${MICROSOFT_OAUTH_CLIENT_ID}"
 export TF_VAR_microsoft_oauth_client_secret="${MICROSOFT_OAUTH_CLIENT_SECRET}"
 export TF_VAR_microsoft_oauth_tenant="${MICROSOFT_OAUTH_TENANT}"
 export TF_VAR_mapbox_public_token="${MAPBOX_PUBLIC_TOKEN:-}"
-# AgentCore managed memory is the active engine (THINK-404). Hindsight
-# infrastructure stays provisioned (`enable_hindsight=true`) through the
-# migration window so the ECS service and its data survive until the
-# teardown issue lands, but `memory_engine=agentcore` wins engine
-# selection — see the `resolved_memory_engine` local in
-# terraform/modules/thinkwork/main.tf.
-MEMORY_ENGINE="agentcore"
+# AgentCore managed memory is the only engine (THINK-407). The Hindsight
+# infrastructure and the `enable_hindsight` / `memory_engine` selection
+# flags are gone; the module inputs survive only as deprecated no-ops.
 AUTH_RETIREMENT_PHASE="${AUTH_RETIREMENT_PHASE:-retired}"
 AUTH_MIGRATION_RECOVERY_DEADLINE="${AUTH_MIGRATION_RECOVERY_DEADLINE:-}"
 if [ "$AUTH_RETIREMENT_PHASE" = "coexistence" ]; then
@@ -73,8 +69,6 @@ TF_VAR_ARGS=(
   -var "region=${AWS_REGION}"
   -var "account_id=${AWS_ACCOUNT_ID}"
   -var "database_engine=aurora-serverless"
-  -var "enable_hindsight=true"
-  -var "memory_engine=$MEMORY_ENGINE"
   -var "auth_retirement_phase=$AUTH_RETIREMENT_PHASE"
   -var "auth_migration_recovery_deadline=$AUTH_MIGRATION_RECOVERY_DEADLINE"
   -var "twenty_provisioned=$TWENTY_PROVISIONED"
@@ -104,9 +98,6 @@ TF_VAR_ARGS=(
   -var "n8n_cache_engine=$N8N_CACHE_ENGINE"
   -var "enable_workspace_orchestration=true"
   -var "wiki_source=${WIKI_SOURCE:-planner}"
-  -var "hindsight_database_name=${HINDSIGHT_DATABASE_NAME:-}"
-  -var "knowledge_graph_observations_ingest_enabled=${WIKI_KG_INGEST_ENABLED:-false}"
-  -var "ontology_scan_sweep_enabled=${ONTOLOGY_SCAN_SWEEP_ENABLED:-false}"
   -var "google_oauth_client_id=${GOOGLE_OAUTH_CLIENT_ID}"
   -var "lambda_zips_dir=$LAMBDA_DIR"
   -var "pre_signup_lambda_zip=$PRE_SIGNUP_ZIP"

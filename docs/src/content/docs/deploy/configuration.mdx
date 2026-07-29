@@ -11,8 +11,8 @@ This page documents all Terraform variables for the `thinkwork-ai/thinkwork/aws`
 
 A short orientation before the tables:
 
-- **Dev stacks** favor cost and speed. Aurora Serverless v2 at the minimum capacity, single NAT gateway, hosted Hindsight Brain memory, and Claude Haiku as the default model. You can stand up and tear down these stacks in minutes.
-- **Production stacks** favor availability and safety. HA across AZs, reserved concurrency on AgentCore, domain + ACM, Google OAuth enabled, and Hindsight sized for tenant memory load. Expect the first deploy to take 15–20 minutes.
+- **Dev stacks** favor cost and speed. Aurora Serverless v2 at the minimum capacity, single NAT gateway, and Claude Haiku as the default model. You can stand up and tear down these stacks in minutes.
+- **Production stacks** favor availability and safety. HA across AZs, reserved concurrency on AgentCore, domain + ACM, and Google OAuth enabled. Expect the first deploy to take 15–20 minutes.
 - **Shared-infrastructure stacks** use the `create_*` boolean flags to adopt an existing VPC, database, or Cognito pool instead of creating new ones. Every `existing_*` field is required if its corresponding `create_*` is `false`. See [BYO Infrastructure](/deploy/byo/) for the full story.
 - **Enterprise customer stacks** should use a customer-owned [Enterprise Deployment Repo](/deploy/enterprise-deployment-repo/) rather than forking the ThinkWork source repository. Bootstrap creates the repo, state backend, artifact bucket, GitHub OIDC trust, and per-stage CI environment; after that, GitHub Actions deploys pinned releases and applies [customer overlays](/deploy/customer-overlay-contract/).
 
@@ -45,8 +45,6 @@ These must be set in every deployment. There are no defaults.
 | Variable                         | Type   | Default                                       | Description                                                                                                                                                                                |
 | -------------------------------- | ------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `database_engine`                | string | `"aurora-serverless"`                         | `aurora-serverless` (Aurora Serverless v2) or `rds-postgres` (provisioned RDS). Use `aurora-serverless` for dev/staging and variable workloads.                                            |
-| `enable_hindsight`               | bool   | `true`                                        | Deploy the Hindsight ECS service used as the hosted Brain memory substrate for user memory, Space memory, retained documents, recall/reflect, and evidence.                                |
-| `memory_engine`                  | string | `""`                                          | Active memory engine. Empty selects Hindsight. Use `"agentcore"` only for explicit low-cost/development compatibility.                                                                     |
 | `enable_workspace_orchestration` | bool   | `false`                                       | Deploy S3 EventBridge/SQS routing and the workspace event dispatcher for async folder-native agent work. Also enable `tenants.workspace_orchestration_enabled` per tenant after migration. |
 | `default_model_id`               | string | `"anthropic.claude-3-5-sonnet-20241022-v2:0"` | Bedrock model ID for the default Agent Template created on first deploy.                                                                                                                   |
 | `log_retention_days`             | number | `30`                                          | CloudWatch log group retention in days. Set to `0` for never expire (not recommended for production).                                                                                      |
@@ -114,26 +112,30 @@ These must be set in every deployment. There are no defaults.
 
 ## Memory
 
-Hosted ThinkWork uses Hindsight as the canonical Brain memory substrate. The
-runtime retains learned context into Hindsight after turns and uses direct
-Hindsight recall/reflect for user and Space memory. AgentCore managed memory can
-still be provisioned as an explicit compatibility path, but it is not the
-hosted default.
+**Bedrock AgentCore Memory is the only memory engine.** There is nothing to
+choose. The runtime hands each completed turn to the `memory-retain` Lambda,
+which calls `retainTurn`; AgentCore then runs its own background extraction into
+the semantic, preferences, summaries, and episodes namespaces.
 
-| Variable                           | Type   | Default   | Description                                                                                                 |
-| ---------------------------------- | ------ | --------- | ----------------------------------------------------------------------------------------------------------- |
-| `agentcore_memory_id`              | string | `""`      | Optional pre-existing AgentCore Memory resource ID to reuse for explicit managed-memory compatibility mode. |
-| `enable_hindsight`                 | bool   | `true`    | Deploy the Hindsight ECS service used by hosted Brain memory.                                               |
-| `hindsight_image_tag`              | string | `"0.5.0"` | Hindsight Docker image tag. Only used when `enable_hindsight = true`.                                       |
-| `hindsight_retain_interval_hours`  | number | `1`       | How often (hours) Hindsight runs the retain step. Only used when `enable_hindsight = true`.                 |
-| `hindsight_reflect_interval_hours` | number | `24`      | How often (hours) Hindsight runs the reflect/synthesis step.                                                |
-| `hindsight_task_cpu`               | number | `512`     | ECS Fargate CPU units for Hindsight tasks.                                                                  |
-| `hindsight_task_memory`            | number | `1024`    | ECS Fargate memory (MB) for Hindsight tasks.                                                                |
+| Variable              | Type   | Default | Description                                                                          |
+| --------------------- | ------ | ------- | ------------------------------------------------------------------------------------ |
+| `agentcore_memory_id` | string | `""`    | Optional pre-existing AgentCore Memory resource ID to reuse instead of creating one. |
 
-When Hindsight is active, the agent runtime uses Hindsight recall/reflect for
-durable memory and the post-turn retain pipeline writes learned context back to
-Hindsight. Do not configure dual default memory products unless you are
-performing a deliberate compatibility migration.
+### Deprecated memory inputs
+
+The Hindsight memory engine and all of its infrastructure were removed in
+THINK-407. Two inputs are still **declared and ignored** so existing tfvars and
+`-var` passthroughs keep applying; new stacks should omit both.
+
+| Variable           | Status                                                                                   |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| `enable_hindsight` | Declared no-op. Accepted, never read. Omit on new stacks.                                |
+| `memory_engine`    | Declared no-op. Legacy values (`hindsight`, `managed`) still validate and are discarded. |
+
+The `hindsight_image_tag`, `hindsight_database_name`,
+`hindsight_enable_auto_consolidation`, `hindsight_consolidation_dedup_threshold`,
+and `hindsight_observations_mission` inputs were **removed** — a tfvars file
+that still sets them fails with "Value for undeclared variable".
 
 ## Email (SES)
 
@@ -145,16 +147,6 @@ performing a deliberate compatibility migration.
 | `ses_from_address`      | string      | `""`                  | From address for non-Space outbound email. Must be verified in SES.                                                              |
 | `ses_configuration_set` | string      | `"thinkwork-{stage}"` | SES configuration set name for email event tracking.                                                                             |
 | `ses_inbound_enabled`   | bool        | `false`               | Whether to configure SES inbound email (creates EMAIL- threads from inbound mail).                                               |
-
-## Legacy Knowledge Base
-
-Hindsight-backed Brain Sources are the default document-memory path. Bedrock
-Knowledge Bases remain available for explicit legacy compatibility and external
-document-retrieval experiments.
-
-ThinkWork provisions an IAM service role that lets Bedrock Knowledge Bases read from the KB S3 bucket, invoke `amazon.titan-embed-text-v2:0` for embeddings, and write vectors into Aurora Postgres via the RDS Data API. There is no OpenSearch Serverless collection — the vector index lives in the same Aurora cluster as the rest of your data (`pgvector`), so there is no separate vector-store cost line.
-
-Legacy Knowledge Base configuration (chunking strategy, data source wiring, sync schedule) is managed at runtime through the Knowledge module, not through terraform variables.
 
 ## AgentCore
 
@@ -212,8 +204,6 @@ hosted_zone_id = "Z1234567890ABC"
 database_engine   = "aurora-serverless"
 aurora_min_capacity = 1
 aurora_max_capacity = 32
-
-enable_hindsight = true      # hosted Hindsight Brain memory
 
 single_nat_gateway = false   # HA: one NAT per AZ
 

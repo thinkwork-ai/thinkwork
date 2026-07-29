@@ -2,7 +2,7 @@
 //
 // v1 ships an in-memory implementation behind an interface; the device-backed
 // implementation (expo-sqlite) and the "sync to server when online" reconciliation with
-// platform threads + Hindsight are later units that implement the same SessionStore shape.
+// platform threads + long-term memory are later units that implement the same SessionStore shape.
 
 import type { AgentEvent, AgentStopReason, Message } from "./types";
 

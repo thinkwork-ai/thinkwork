@@ -201,7 +201,6 @@ export type Agent = {
   humanPairId?: Maybe<Scalars['ID']['output']>;
   id: Scalars['ID']['output'];
   jsonRenderUi?: Maybe<Scalars['AWSJSON']['output']>;
-  knowledgeBases: Array<AgentKnowledgeBase>;
   lastHeartbeatAt?: Maybe<Scalars['AWSDateTime']['output']>;
   model?: Maybe<Scalars['String']['output']>;
   name: Scalars['String']['output'];
@@ -283,23 +282,6 @@ export enum AgentDispatchRequest {
   ForceOff = 'FORCE_OFF',
   ForceOn = 'FORCE_ON'
 }
-
-export type AgentKnowledgeBase = {
-  __typename?: 'AgentKnowledgeBase';
-  agentId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  knowledgeBase?: Maybe<KnowledgeBase>;
-  knowledgeBaseId: Scalars['ID']['output'];
-  searchConfig?: Maybe<Scalars['AWSJSON']['output']>;
-};
-
-export type AgentKnowledgeBaseInput = {
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseId: Scalars['ID']['input'];
-  searchConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
-};
 
 export type AgentLoop = {
   __typename?: 'AgentLoop';
@@ -803,17 +785,6 @@ export type ApproveManagedApplicationDeploymentInput = {
   planDigest: Scalars['String']['input'];
 };
 
-export type ApproveOntologyChangeSetInput = {
-  changeSetId: Scalars['ID']['input'];
-  excludedDisposition?: InputMaybe<OntologyExcludedItemDisposition>;
-  /**
-   * Per-item approval (THINK-320 R15): items to leave out of this approval.
-   * Excluded items get the excludedDisposition status instead of approved.
-   */
-  excludedItemIds?: InputMaybe<Array<Scalars['ID']['input']>>;
-  tenantId: Scalars['ID']['input'];
-};
-
 export type ApprovePiExtensionVersionInput = {
   tenantId: Scalars['ID']['input'];
   versionId: Scalars['ID']['input'];
@@ -995,26 +966,6 @@ export type BootstrapResult = {
   user: User;
 };
 
-/**
- * Dream-state run ledger row (THINK-133 U4). One row per (tenant, bank) dream
- * run; per-action detail is summarized in plannedCounts/appliedCounts.
- */
-export type BrainDreamRun = {
-  __typename?: 'BrainDreamRun';
-  appliedCounts?: Maybe<Scalars['AWSJSON']['output']>;
-  bankId: Scalars['String']['output'];
-  createdAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  dedupeKey: Scalars['String']['output'];
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  plannedCounts?: Maybe<Scalars['AWSJSON']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-};
-
 export type BudgetPolicy = {
   __typename?: 'BudgetPolicy';
   actionOnExceed: Scalars['String']['output'];
@@ -1047,7 +998,7 @@ export type BudgetStatus = {
 };
 
 /**
- * A stable canonical entity instance ("Acme"), distinct from the ontology type
+ * A stable canonical entity instance ("Acme"), distinct from its entity type
  * definition ("Customer"). Merged entities persist as redirects.
  */
 export type CanonicalEntity = {
@@ -1070,14 +1021,12 @@ export type CanonicalEntity = {
  */
 export type CanonicalEntityMergeImpact = {
   __typename?: 'CanonicalEntityMergeImpact';
-  graphEntityCount: Scalars['Int']['output'];
   identityClaimCount: Scalars['Int']['output'];
   memoryClaimCount: Scalars['Int']['output'];
   sourceMappingCount: Scalars['Int']['output'];
 };
 
 export type CanonicalEntityMergeImpactInput = {
-  graphEntityCount: Scalars['Int']['input'];
   identityClaimCount: Scalars['Int']['input'];
   memoryClaimCount: Scalars['Int']['input'];
   sourceMappingCount: Scalars['Int']['input'];
@@ -1100,7 +1049,6 @@ export type CanonicalEntitySplitImpact = {
   __typename?: 'CanonicalEntitySplitImpact';
   claimCountFollowingB: Scalars['Int']['output'];
   claimCountRemainingA: Scalars['Int']['output'];
-  graphEntityCount: Scalars['Int']['output'];
   mappingCountA: Scalars['Int']['output'];
   mappingCountB: Scalars['Int']['output'];
   memoryClaimCount: Scalars['Int']['output'];
@@ -1109,7 +1057,6 @@ export type CanonicalEntitySplitImpact = {
 export type CanonicalEntitySplitImpactInput = {
   claimCountFollowingB: Scalars['Int']['input'];
   claimCountRemainingA: Scalars['Int']['input'];
-  graphEntityCount: Scalars['Int']['input'];
   mappingCountA: Scalars['Int']['input'];
   mappingCountB: Scalars['Int']['input'];
   memoryClaimCount: Scalars['Int']['input'];
@@ -1629,15 +1576,6 @@ export type ConfirmEntityMappingResult = {
   status: Scalars['String']['output'];
 };
 
-export type ConnectKnowledgeBaseSourceInput = {
-  bucket: Scalars['String']['input'];
-  bucketOwnerAccountId?: InputMaybe<Scalars['String']['input']>;
-  exclude?: InputMaybe<Array<Scalars['String']['input']>>;
-  include?: InputMaybe<Array<Scalars['String']['input']>>;
-  knowledgeBaseId: Scalars['ID']['input'];
-  prefix: Scalars['String']['input'];
-};
-
 export type ConnectionResearchPayload = {
   __typename?: 'ConnectionResearchPayload';
   definitions: Array<CapabilityDefinition>;
@@ -1789,55 +1727,6 @@ export type CreateInboxItemInput = {
   tenantId: Scalars['ID']['input'];
   title?: InputMaybe<Scalars['String']['input']>;
   type: Scalars['String']['input'];
-};
-
-export type CreateKnowledgeBaseInput = {
-  chunkOverlapPercent?: InputMaybe<Scalars['Int']['input']>;
-  chunkSizeTokens?: InputMaybe<Scalars['Int']['input']>;
-  chunkingStrategy?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  embeddingModel?: InputMaybe<Scalars['String']['input']>;
-  name: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-};
-
-/**
- * Manual authoring entry point (THINK-320 U2, KTD-5): creates or appends to
- * the caller's open manual draft change set. Each item runs the R14
- * slug-collision check server-side — colliding pending slugs merge into the
- * existing item, colliding approved slugs come back as conflicts.
- */
-export type CreateOntologyChangeSetInput = {
-  items: Array<CreateOntologyChangeSetItemInput>;
-  summary?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-  title?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type CreateOntologyChangeSetItemInput = {
-  action?: InputMaybe<OntologyChangeAction>;
-  confidence?: InputMaybe<Scalars['Float']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  evidence?: InputMaybe<Array<OntologyChangeSetItemEvidenceInput>>;
-  itemType: OntologyChangeItemType;
-  proposedValue: Scalars['AWSJSON']['input'];
-  slug: Scalars['String']['input'];
-  title?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type CreateOntologyChangeSetPayload = {
-  __typename?: 'CreateOntologyChangeSetPayload';
-  /**
-   * Null when every submitted item merged into other pending items or
-   * conflicted with approved definitions (no draft was created or touched).
-   */
-  changeSet?: Maybe<OntologyChangeSet>;
-  conflicts: Array<OntologyChangeSetSlugConflict>;
-  /**
-   * Items whose slug matched an existing pending item — evidence was
-   * unioned onto that item and its proposal updated in place.
-   */
-  mergedItemIds: Array<Scalars['ID']['output']>;
 };
 
 export type CreateQuickActionInput = {
@@ -2234,8 +2123,6 @@ export type DeploymentStatus = {
   deploymentRunnerProjectName?: Maybe<Scalars['String']['output']>;
   docsUrl?: Maybe<Scalars['String']['output']>;
   ecrUrl?: Maybe<Scalars['String']['output']>;
-  hindsightEnabled: Scalars['Boolean']['output'];
-  hindsightEndpoint?: Maybe<Scalars['String']['output']>;
   managedApplications: Array<ManagedApplicationDeployment>;
   managedMemoryEnabled: Scalars['Boolean']['output'];
   region: Scalars['String']['output'];
@@ -2324,15 +2211,6 @@ export type DocumentPlatePreview = {
   __typename?: 'DocumentPlatePreview';
   diagnostics: Array<DocumentPlateDiagnostic>;
   html?: Maybe<Scalars['String']['output']>;
-};
-
-/** An artifact produced in an accessible thread linked to the entity. */
-export type DossierArtifact = {
-  __typename?: 'DossierArtifact';
-  id: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-  title?: Maybe<Scalars['String']['output']>;
-  type?: Maybe<Scalars['String']['output']>;
 };
 
 export type EffectiveCapabilitySet = {
@@ -2605,46 +2483,6 @@ export type EnableWorkflowInput = {
 export type EnableWorkflowTemplateInput = {
   agentId: Scalars['ID']['input'];
   slug: Scalars['String']['input'];
-};
-
-/** Everything the tenant brain knows about one grounded entity. */
-export type EntityDossier = {
-  __typename?: 'EntityDossier';
-  aliases?: Maybe<Array<Scalars['String']['output']>>;
-  artifacts: Array<DossierArtifact>;
-  /**
-   * Canonical identity for twin routing (THINK-327 U7): consumers link to the
-   * Explorer entity detail with these. Null when the matched entity has no
-   * canonical identity yet.
-   */
-  canonicalEntityId?: Maybe<Scalars['ID']['output']>;
-  entityId: Scalars['ID']['output'];
-  /** Ontology entity-type slug of the canonical identity (pairs with canonicalEntityId). */
-  entityType?: Maybe<Scalars['String']['output']>;
-  label: Scalars['String']['output'];
-  memories: Array<SearchMemoryHit>;
-  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
-  summary?: Maybe<Scalars['String']['output']>;
-  threads: Array<SearchThreadHit>;
-  /**
-   * Dual-read gate verdict (Company Brain U9 / AE8): true when this entity's
-   * tenant/type has flipped to the projected twin page, so search consumers
-   * can route to the living render.
-   */
-  twinProjected: Scalars['Boolean']['output'];
-};
-
-/**
- * Two-part dossier result: exactly one of `match` (resolved) or a non-empty
- * `disambiguation` (>1 grounded candidate) is populated. Both are empty/null
- * when there is no grounded match.
- */
-export type EntityDossierResult = {
-  __typename?: 'EntityDossierResult';
-  /** Grounded candidates when >1 matched and no `entityId` was supplied. */
-  disambiguation: Array<SearchEntityHit>;
-  /** The assembled dossier, or null when ambiguous or no grounded match. */
-  match?: Maybe<EntityDossier>;
 };
 
 /**
@@ -3009,7 +2847,7 @@ export type HeartbeatActivityEvent = {
 
 /**
  * Bootstrap/drift identity match job (THINK-321 U7, KTD-7). Mirrors the
- * ontology suggestion-scan job: dedupe-key insert-or-load, async Event invoke,
+ * durable job: dedupe-key insert-or-load, async Event invoke,
  * invoke failure marked on the row. Metrics report scanned / autoLinked /
  * casesFiled / casesExpired so the open-case budget interaction is visible.
  */
@@ -3125,63 +2963,6 @@ export type InboxItemStatusEvent = {
   updatedAt: Scalars['AWSDateTime']['output'];
 };
 
-export type IngestSpaceMemoryDocumentInput = {
-  content: Scalars['String']['input'];
-  contentType?: InputMaybe<Scalars['String']['input']>;
-  /**
-   * Stable caller document identity. When omitted, `path` is used. The resolver
-   * prefixes the final Hindsight document id with the Space id to avoid
-   * collisions inside the Space bank.
-   */
-  documentId?: InputMaybe<Scalars['String']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Stable document path/name from the source system. Required when `documentId`
-   * is omitted.
-   */
-  path?: InputMaybe<Scalars['String']['input']>;
-  /**
-   * Process through Hindsight async retain. Defaults to true for document-sized
-   * ingest so user-facing flows are not held open by extraction work.
-   */
-  processAsync?: InputMaybe<Scalars['Boolean']['input']>;
-  sourceUrl?: InputMaybe<Scalars['AWSURL']['input']>;
-  spaceId: Scalars['ID']['input'];
-  tags?: InputMaybe<Array<Scalars['String']['input']>>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  /**
-   * Event timestamp for temporal extraction. Omit for timeless reference
-   * material; the resolver sends Hindsight `timestamp: "unset"`.
-   */
-  timestamp?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  title?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type InstallOntologyPackInput = {
-  packSlug: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-};
-
-export type InstallOntologyPackPayload = {
-  __typename?: 'InstallOntologyPackPayload';
-  /**
-   * The staged (or re-surfaced) change set. Null when every pack item merged
-   * into other pending items, conflicted, or was skipped as rejected.
-   */
-  changeSet?: Maybe<OntologyChangeSet>;
-  conflicts: Array<OntologyChangeSetSlugConflict>;
-  /**
-   * Items whose slug matched an existing pending item — merged in place
-   * instead of duplicating (R14/AE6).
-   */
-  mergedItemIds: Array<Scalars['ID']['output']>;
-  /**
-   * Pack slugs skipped because the operator previously rejected them
-   * (R13 fingerprints) — re-install never resurrects a rejection.
-   */
-  skippedRejectedSlugs: Array<Scalars['String']['output']>;
-};
-
 export type InstallPluginInput = {
   idempotencyKey: Scalars['String']['input'];
   /** ThinkWork-provided one-time key for premium plugins when no entitlement exists. */
@@ -3261,329 +3042,6 @@ export type IssuePremiumPluginInstallKeyResult = {
   pluginKey: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
 };
-
-export type KnowledgeBase = {
-  __typename?: 'KnowledgeBase';
-  awsKbId?: Maybe<Scalars['String']['output']>;
-  chunkOverlapPercent?: Maybe<Scalars['Int']['output']>;
-  chunkSizeTokens?: Maybe<Scalars['Int']['output']>;
-  chunkingStrategy: Scalars['String']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  documentCount?: Maybe<Scalars['Int']['output']>;
-  documents: Array<KnowledgeBaseDocument>;
-  embeddingModel: Scalars['String']['output'];
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  lastSyncAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastSyncStatus?: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  sources: Array<KnowledgeBaseSource>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type KnowledgeBaseDocument = {
-  __typename?: 'KnowledgeBaseDocument';
-  contentHash?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  dataSourceId: Scalars['String']['output'];
-  documentKey: Scalars['String']['output'];
-  edition: Scalars['Int']['output'];
-  effectiveFrom?: Maybe<Scalars['AWSDateTime']['output']>;
-  effectiveTo?: Maybe<Scalars['AWSDateTime']['output']>;
-  etag?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  ingestStatus: Scalars['String']['output'];
-  knowledgeBaseId: Scalars['ID']['output'];
-  lastError?: Maybe<Scalars['String']['output']>;
-  projectionStatus: Scalars['String']['output'];
-  s3VersionId?: Maybe<Scalars['String']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type KnowledgeBaseRetrievalHit = {
-  __typename?: 'KnowledgeBaseRetrievalHit';
-  score?: Maybe<Scalars['Float']['output']>;
-  snippet: Scalars['String']['output'];
-  source?: Maybe<Scalars['String']['output']>;
-};
-
-export type KnowledgeBaseRetrievalResult = {
-  __typename?: 'KnowledgeBaseRetrievalResult';
-  hits: Array<KnowledgeBaseRetrievalHit>;
-  status: Scalars['String']['output'];
-};
-
-export type KnowledgeBaseSource = {
-  __typename?: 'KnowledgeBaseSource';
-  accessStatus: Scalars['String']['output'];
-  awsDataSourceId?: Maybe<Scalars['String']['output']>;
-  bucket?: Maybe<Scalars['String']['output']>;
-  bucketOwnerAccountId?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  documentCount?: Maybe<Scalars['Int']['output']>;
-  errorMessage?: Maybe<Scalars['String']['output']>;
-  filterPatterns?: Maybe<Scalars['AWSJSON']['output']>;
-  id: Scalars['ID']['output'];
-  kind: Scalars['String']['output'];
-  knowledgeBaseId: Scalars['ID']['output'];
-  lastSyncAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  lastSyncStatus?: Maybe<Scalars['String']['output']>;
-  parsingStrategy: Scalars['String']['output'];
-  prefix?: Maybe<Scalars['String']['output']>;
-  sentinelDocumentKey?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export enum KnowledgeGraphArtifactManifestKind {
-  Export = 'EXPORT',
-  IngestionManifest = 'INGESTION_MANIFEST',
-  MigrationSnapshot = 'MIGRATION_SNAPSHOT',
-  SourceArtifact = 'SOURCE_ARTIFACT',
-  VaultProjection = 'VAULT_PROJECTION'
-}
-
-export enum KnowledgeGraphArtifactManifestStatus {
-  Active = 'ACTIVE',
-  Deleted = 'DELETED',
-  Failed = 'FAILED',
-  Superseded = 'SUPERSEDED'
-}
-
-export type KnowledgeGraphArtifactManifestSummary = {
-  __typename?: 'KnowledgeGraphArtifactManifestSummary';
-  artifactKind: KnowledgeGraphArtifactManifestKind;
-  byteLength?: Maybe<Scalars['Int']['output']>;
-  checksumSha256?: Maybe<Scalars['String']['output']>;
-  contentEncoding?: Maybe<Scalars['String']['output']>;
-  contentType?: Maybe<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  embeddingModel?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  objectCount: Scalars['Int']['output'];
-  objectRef: Scalars['String']['output'];
-  ontologyMechanism?: Maybe<Scalars['String']['output']>;
-  ontologyVersion?: Maybe<Scalars['String']['output']>;
-  sourceCount: Scalars['Int']['output'];
-  sourceKind?: Maybe<KnowledgeGraphSourceKind>;
-  sourceType?: Maybe<Scalars['String']['output']>;
-  status: KnowledgeGraphArtifactManifestStatus;
-  updatedAt: Scalars['AWSDateTime']['output'];
-  vectorDimension?: Maybe<Scalars['Int']['output']>;
-};
-
-export type KnowledgeGraphEntity = {
-  __typename?: 'KnowledgeGraphEntity';
-  aliases: Array<Scalars['String']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  diagnostics: Scalars['AWSJSON']['output'];
-  evidence: Array<KnowledgeGraphEvidence>;
-  evidenceCount: Scalars['Int']['output'];
-  graphNodeId: Scalars['String']['output'];
-  groundingStatus: KnowledgeGraphGroundingStatus;
-  id: Scalars['ID']['output'];
-  ingestRunId: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  lastSeenAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  normalizedLabel: Scalars['String']['output'];
-  ontologyEntityTypeId?: Maybe<Scalars['ID']['output']>;
-  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
-  properties: Scalars['AWSJSON']['output'];
-  provenanceStatus: KnowledgeGraphProvenanceStatus;
-  relationshipCount: Scalars['Int']['output'];
-  relationships: Array<KnowledgeGraphRelationship>;
-  sourceKind: KnowledgeGraphSourceKind;
-  sourceRef: Scalars['String']['output'];
-  summary?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-  typeLabel?: Maybe<Scalars['String']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type KnowledgeGraphEvidence = {
-  __typename?: 'KnowledgeGraphEvidence';
-  charEnd?: Maybe<Scalars['Int']['output']>;
-  charStart?: Maybe<Scalars['Int']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  entityId?: Maybe<Scalars['ID']['output']>;
-  evidenceSourceKind: KnowledgeGraphEvidenceSourceKind;
-  evidenceSourceRef?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  ingestRunId: Scalars['ID']['output'];
-  messageCreatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  messageId?: Maybe<Scalars['ID']['output']>;
-  messageRole?: Maybe<Scalars['String']['output']>;
-  metadata: Scalars['AWSJSON']['output'];
-  observedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  relationshipId?: Maybe<Scalars['ID']['output']>;
-  snippet: Scalars['String']['output'];
-  sourceKind: KnowledgeGraphSourceKind;
-  sourceRef: Scalars['String']['output'];
-  speakerLabel?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-};
-
-export enum KnowledgeGraphEvidenceSourceKind {
-  BrainPage = 'BRAIN_PAGE',
-  BrainSection = 'BRAIN_SECTION',
-  GraphPayload = 'GRAPH_PAYLOAD',
-  HindsightObservation = 'HINDSIGHT_OBSERVATION',
-  Normalizer = 'NORMALIZER',
-  ThreadMessage = 'THREAD_MESSAGE',
-  WikiPage = 'WIKI_PAGE',
-  WikiSection = 'WIKI_SECTION'
-}
-
-export type KnowledgeGraphGraph = {
-  __typename?: 'KnowledgeGraphGraph';
-  edges: Array<KnowledgeGraphGraphEdge>;
-  nodes: Array<KnowledgeGraphGraphNode>;
-};
-
-export type KnowledgeGraphGraphEdge = {
-  __typename?: 'KnowledgeGraphGraphEdge';
-  evidenceCount: Scalars['Int']['output'];
-  groundingStatus: KnowledgeGraphGroundingStatus;
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
-  provenanceStatus: KnowledgeGraphProvenanceStatus;
-  relationshipId: Scalars['ID']['output'];
-  source: Scalars['ID']['output'];
-  target: Scalars['ID']['output'];
-};
-
-export type KnowledgeGraphGraphNode = {
-  __typename?: 'KnowledgeGraphGraphNode';
-  entityId: Scalars['ID']['output'];
-  evidenceCount: Scalars['Int']['output'];
-  groundingStatus: KnowledgeGraphGroundingStatus;
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
-  provenanceStatus: KnowledgeGraphProvenanceStatus;
-  relationshipCount: Scalars['Int']['output'];
-  typeLabel?: Maybe<Scalars['String']['output']>;
-};
-
-export enum KnowledgeGraphGroundingStatus {
-  Conflict = 'CONFLICT',
-  Grounded = 'GROUNDED',
-  UnapprovedType = 'UNAPPROVED_TYPE',
-  Ungrounded = 'UNGROUNDED',
-  Unknown = 'UNKNOWN'
-}
-
-export type KnowledgeGraphIngestRun = {
-  __typename?: 'KnowledgeGraphIngestRun';
-  artifactManifests: Array<KnowledgeGraphArtifactManifestSummary>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  diagnosticCount: Scalars['Int']['output'];
-  durationMs?: Maybe<Scalars['Int']['output']>;
-  entityCount: Scalars['Int']['output'];
-  error?: Maybe<Scalars['String']['output']>;
-  evidenceCount: Scalars['Int']['output'];
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  input: Scalars['AWSJSON']['output'];
-  messageCount: Scalars['Int']['output'];
-  metadata: Scalars['AWSJSON']['output'];
-  metrics: Scalars['AWSJSON']['output'];
-  relationshipCount: Scalars['Int']['output'];
-  requestedByUserId?: Maybe<Scalars['ID']['output']>;
-  sourceDatasetId?: Maybe<Scalars['String']['output']>;
-  sourceDatasetName: Scalars['String']['output'];
-  sourceKind: KnowledgeGraphSourceKind;
-  sourceLabel?: Maybe<Scalars['String']['output']>;
-  sourceRef: Scalars['String']['output'];
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: KnowledgeGraphIngestStatus;
-  tenantId: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-  trigger: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export enum KnowledgeGraphIngestStatus {
-  Canceled = 'CANCELED',
-  Failed = 'FAILED',
-  Queued = 'QUEUED',
-  Running = 'RUNNING',
-  StaleNoop = 'STALE_NOOP',
-  Succeeded = 'SUCCEEDED'
-}
-
-export enum KnowledgeGraphProvenanceStatus {
-  Missing = 'MISSING',
-  Strong = 'STRONG',
-  Weak = 'WEAK'
-}
-
-export type KnowledgeGraphRelationship = {
-  __typename?: 'KnowledgeGraphRelationship';
-  confidence?: Maybe<Scalars['Float']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  diagnostics: Scalars['AWSJSON']['output'];
-  evidence: Array<KnowledgeGraphEvidence>;
-  evidenceCount: Scalars['Int']['output'];
-  graphEdgeId?: Maybe<Scalars['String']['output']>;
-  groundingStatus: KnowledgeGraphGroundingStatus;
-  id: Scalars['ID']['output'];
-  ingestRunId: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  lastSeenAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  ontologyRelationshipTypeId?: Maybe<Scalars['ID']['output']>;
-  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
-  properties: Scalars['AWSJSON']['output'];
-  provenanceStatus: KnowledgeGraphProvenanceStatus;
-  sourceEntityId: Scalars['ID']['output'];
-  sourceKind: KnowledgeGraphSourceKind;
-  sourceRef: Scalars['String']['output'];
-  targetEntityId: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
-  threadId?: Maybe<Scalars['ID']['output']>;
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type KnowledgeGraphSearchEntity = {
-  __typename?: 'KnowledgeGraphSearchEntity';
-  aliases: Array<Scalars['String']['output']>;
-  evidenceCount: Scalars['Int']['output'];
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  observationIds: Array<Scalars['String']['output']>;
-  relationshipCount: Scalars['Int']['output'];
-  summary?: Maybe<Scalars['String']['output']>;
-  typeSlug?: Maybe<Scalars['String']['output']>;
-};
-
-export type KnowledgeGraphSearchRelationship = {
-  __typename?: 'KnowledgeGraphSearchRelationship';
-  fromLabel: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  toLabel: Scalars['String']['output'];
-  typeSlug?: Maybe<Scalars['String']['output']>;
-};
-
-export type KnowledgeGraphSearchResult = {
-  __typename?: 'KnowledgeGraphSearchResult';
-  entities: Array<KnowledgeGraphSearchEntity>;
-  relationships: Array<KnowledgeGraphSearchRelationship>;
-};
-
-export enum KnowledgeGraphSourceKind {
-  Brain = 'BRAIN',
-  Observations = 'OBSERVATIONS',
-  Thread = 'THREAD',
-  Wiki = 'WIKI'
-}
 
 export type LinkedTask = {
   __typename?: 'LinkedTask';
@@ -3835,7 +3293,7 @@ export type MarkThreadsReadResult = {
 };
 
 /**
- * Durable ontology-shaped claim. supportCount is the number of ACTIVE
+ * Durable structured claim. supportCount is the number of ACTIVE
  * evidence support edges (memory_claim_evidence status = 'active').
  */
 export type MemoryClaim = {
@@ -3859,7 +3317,7 @@ export type MemoryContent = {
   text?: Maybe<Scalars['String']['output']>;
 };
 
-/** Evidence → Hindsight projection lineage row. */
+/** Evidence → memory-document projection lineage row. */
 export type MemoryDerivation = {
   __typename?: 'MemoryDerivation';
   currentVersion: Scalars['String']['output'];
@@ -3887,52 +3345,6 @@ export type MemoryEvidenceItemSummary = {
   sourceConfigId: Scalars['ID']['output'];
   sourceItemId: Scalars['String']['output'];
   sourceVersion: Scalars['String']['output'];
-};
-
-export type MemoryGraph = {
-  __typename?: 'MemoryGraph';
-  /**
-   * All banks in scope for this graph (tenant-enumerated in allTenantBanks
-   * mode), including banks with no visible nodes.
-   */
-  banks: Array<MemoryGraphBank>;
-  edges: Array<MemoryGraphEdge>;
-  nodes: Array<MemoryGraphNode>;
-};
-
-/**
- * A Hindsight bank enumerated from tenant tables (user / space / agent),
- * independent of whether any of its entities appear in the returned graph.
- * The Bank filter facet builds from this list, never from node data.
- */
-export type MemoryGraphBank = {
-  __typename?: 'MemoryGraphBank';
-  id: Scalars['String']['output'];
-  name: Scalars['String']['output'];
-};
-
-export type MemoryGraphEdge = {
-  __typename?: 'MemoryGraphEdge';
-  label?: Maybe<Scalars['String']['output']>;
-  source: Scalars['String']['output'];
-  target: Scalars['String']['output'];
-  type: Scalars['String']['output'];
-  weight: Scalars['Float']['output'];
-};
-
-export type MemoryGraphNode = {
-  __typename?: 'MemoryGraphNode';
-  /** Hindsight bank the entity belongs to (populated when allTenantBanks is set). */
-  bankId?: Maybe<Scalars['String']['output']>;
-  /** Human label for the bank (space/user/agent name), for the Bank facet. */
-  bankName?: Maybe<Scalars['String']['output']>;
-  edgeCount: Scalars['Int']['output'];
-  entityType?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  label: Scalars['String']['output'];
-  latestThreadId?: Maybe<Scalars['String']['output']>;
-  strategy?: Maybe<Scalars['String']['output']>;
-  type: Scalars['String']['output'];
 };
 
 /**
@@ -3989,7 +3401,7 @@ export type MemoryPipelineStage = {
 /**
  * External Memory Compounding (THINK-193 U2). Operator-only inspection and
  * control surface for external memory sources: processor configs, source
- * bindings, authorization grants, the evidence ledger, ontology claims, and
+ * bindings, authorization grants, the evidence ledger, durable claims, and
  * the retraction ledger. Queries and mutations below require tenant admin,
  * with one exception (THINK-193 U6): grantMemorySourceAuthorization and
  * setMemorySourceConfig on a PERSONAL processor are owner self-service,
@@ -4044,8 +3456,8 @@ export enum MemoryRecordScope {
 }
 
 /**
- * ThinkWork-owned ledger row for a Hindsight retain attempt.
- * The retained memory record itself remains in Hindsight; this type exposes
+ * ThinkWork-owned ledger row for a memory retain attempt.
+ * The retained memory record itself lives in the memory engine; this type exposes
  * retry, timeout, and dead-letter state for diagnostics.
  */
 export type MemoryRetainAttempt = {
@@ -4188,28 +3600,17 @@ export enum MemoryStrategy {
 
 /**
  * Runtime memory system configuration exposed to the admin UI.
- * Lets the UI decide which views to render (e.g. Knowledge Graph toggle is
- * only meaningful when the active engine supports graph inspection).
+ * Lets the UI decide which views to render based on the active engine.
  */
 export type MemorySystemConfig = {
   __typename?: 'MemorySystemConfig';
-  /** Active long-term memory engine selected by MEMORY_ENGINE. */
+  /** Active long-term memory engine. Always "agentcore" (THINK-406). */
   activeEngine: Scalars['String']['output'];
   /**
    * ThinkWork Brain distillation is intentionally deferred from this memory
    * provider pivot.
    */
   companyDistillationEnabled: Scalars['Boolean']['output'];
-  /**
-   * True when Hindsight is the active long-term memory engine for canonical
-   * user and Space memory.
-   */
-  hindsightEnabled: Scalars['Boolean']['output'];
-  /**
-   * True when a Hindsight endpoint is configured while another engine is
-   * active. Operators should treat it as non-canonical diagnostic evidence.
-   */
-  legacyHindsightAvailable: Scalars['Boolean']['output'];
   /**
    * True when managed AgentCore Memory is provisioned and wired into the
    * agent container. This is the always-on baseline — when false, memory
@@ -4325,7 +3726,7 @@ export type MintArtifactShareLinkResult = {
 
 /**
  * Fact-type picker values exposed to the mobile quick-capture footer. Maps to
- * Hindsight's native fact_type via the resolver. FACT is the default when the
+ * the engine's native fact type via the resolver. FACT is the default when the
  * user doesn't override.
  */
 export enum MobileCaptureFactType {
@@ -4424,7 +3825,6 @@ export type Mutation = {
   applySkillUpdate: SkillUpdateApplyResult;
   approveInboxItem: InboxItem;
   approveManagedApplicationDeployment: ManagedApplicationDeploymentJob;
-  approveOntologyChangeSet: OntologyChangeSet;
   approvePiExtensionVersion: PiExtension;
   archiveEvalDataset: EvalDataset;
   archiveEvalProfile: EvalProfile;
@@ -4444,7 +3844,6 @@ export type Mutation = {
   cancelSkillRun: SkillRun;
   cancelThreadTurn: ThreadTurn;
   captureMobileMemory: MobileMemoryCapture;
-  captureSpaceMemory: MemoryRecord;
   checkoutCanvas: Artifact;
   checkoutThread: Thread;
   claimNextOpenEngineWorkItem?: Maybe<WorkItem>;
@@ -4458,7 +3857,6 @@ export type Mutation = {
    * arguments.
    */
   confirmEntityMapping: ConfirmEntityMappingResult;
-  connectKnowledgeBaseSource: KnowledgeBaseSource;
   createAgentProfile: AgentProfile;
   createArtifact: Artifact;
   createCanvasRefreshSchedule: CanvasRefreshSchedule;
@@ -4483,8 +3881,6 @@ export type Mutation = {
   createEvalTestCase: EvalTestCase;
   createExternalCapabilityClient: CapabilityRuntimeMutationResult;
   createInboxItem: InboxItem;
-  createKnowledgeBase: KnowledgeBase;
-  createOntologyChangeSet: CreateOntologyChangeSetPayload;
   createQuickAction: UserQuickAction;
   createRecipe: Recipe;
   createRoutine: Routine;
@@ -4532,7 +3928,6 @@ export type Mutation = {
   deleteDocumentPlate: DeleteDocumentPlateResult;
   deleteEvalRun: Scalars['Boolean']['output'];
   deleteEvalTestCase: Scalars['Boolean']['output'];
-  deleteKnowledgeBase: Scalars['Boolean']['output'];
   deleteMemoryRecord: Scalars['Boolean']['output'];
   deleteMessage: Scalars['Boolean']['output'];
   deleteMobileMemoryCapture: Scalars['Boolean']['output'];
@@ -4584,14 +3979,7 @@ export type Mutation = {
   handleJsonRenderAction: Message;
   importPiExtensionFromGitHub: PiExtension;
   importTenantBedrockModels: Array<TenantModelCatalogEntry>;
-  ingestSpaceMemoryDocument: SpaceMemoryDocumentIngest;
   installManagedApplicationMcpServer: ManagedApplicationMcpRegistration;
-  /**
-   * Stage a seed-template pack as a pre-staged change set (THINK-320 U3/R11).
-   * Existing hand-authored slugs merge or surface as conflicts (R14); rejected
-   * fingerprints are skipped and deferred items re-surface (R13).
-   */
-  installOntologyPack: InstallOntologyPackPayload;
   /**
    * Install a catalog plugin tenant-wide (tenant admin). Idempotent per
    * (tenant, plugin): a concurrent call returns the in-flight install; a
@@ -4631,7 +4019,6 @@ export type Mutation = {
   pinThread: PinnedThread;
   planRoutineDraft: RoutineDraft;
   promoteDraftApplet: SaveAppletPayload;
-  promoteSpaceMemoriesToTenant: TenantMemoryPromotionResult;
   /**
    * Rank candidate matches for one entity's unmapped target system and persist
    * the set for the consent echo check (THINK-321 KTD-2). Turn-bound service
@@ -4678,8 +4065,6 @@ export type Mutation = {
   rejectConnectionProposal: CapabilityRuntimeMutationResult;
   rejectInboxItem: InboxItem;
   rejectManagedApplicationDeployment: ManagedApplicationDeploymentJob;
-  rejectOntologyChangeSet: OntologyChangeSet;
-  rejectOntologyChangeSetItem: OntologyChangeSet;
   rejectPiExtensionVersion: PiExtension;
   /** Tenant-operator rejection with rationale. */
   rejectSkillDraft: SkillDraft;
@@ -4710,12 +4095,11 @@ export type Mutation = {
   resubmitInboxItem: InboxItem;
   resumeAgentWorkspaceRun: AgentWorkspaceRun;
   /**
-   * Enqueue a retraction for one derivation's Hindsight document and process
+   * Enqueue a retraction for one derivation's memory document and process
    * it inline once (RequestResponse semantics — errors surface to the caller).
    */
   retractMemoryDerivation: MemoryRetractionAttempt;
   retryAgentDispatch: Message;
-  retryKnowledgeBase: KnowledgeBase;
   /**
    * Operator DLQ retry: reset a dead_lettered (or failed) retraction attempt —
    * saga child or erase marker — to a due queued state with a fresh attempt
@@ -4779,7 +4163,6 @@ export type Mutation = {
   searchResearch: SearchResearchResult;
   seedEvalTestCases: Scalars['Int']['output'];
   sendMessage: Message;
-  setAgentKnowledgeBases: Array<AgentKnowledgeBase>;
   setDefaultEvalProfile: EvalProfile;
   setManagedApplicationDeployment: ManagedApplicationDeploymentChange;
   /**
@@ -4804,39 +4187,6 @@ export type Mutation = {
    */
   setMemorySourceConfig: MemorySourceConfig;
   /**
-   * Replace an entity type's identity rules (THINK-193 U4). Bumps
-   * identityRulesVersion. Tenant-admin gated.
-   */
-  setOntologyEntityTypeIdentityRules: OntologyEntityType;
-  /**
-   * Stage an entity-page section-declaration edit (Company Brain U3 / R10,
-   * R14): creates or merges a DRAFT page_section change-set item carrying
-   * { entityTypeSlug, sections }. Tenant-admin gated.
-   */
-  setOntologyEntityTypePageSections: CreateOntologyChangeSetPayload;
-  /**
-   * Stage a type-level system-map edit (THINK-321 U3 / R6): creates or
-   * updates a DRAFT identity_map change-set item carrying
-   * { entityTypeSlug, systemMap: [{ facet, sourceSystem, note? }] }. Never a
-   * direct write — entity_types.system_map only changes when the change set
-   * is approved and applied. Tenant-admin gated.
-   */
-  setOntologyEntityTypeSystemMap: CreateOntologyChangeSetPayload;
-  /**
-   * Stage a twin facet-declaration edit (Company Brain U3 / R2, R4): creates
-   * or merges a DRAFT facet_declaration change-set item carrying
-   * { entityTypeSlug, facets }. Never a direct write — declarations land on
-   * approval/apply, which also regenerates the compiled twin mapping export.
-   * Tenant-admin gated.
-   */
-  setOntologyEntityTypeTwinFacets: CreateOntologyChangeSetPayload;
-  /**
-   * Stage a twin edge source-binding edit (Company Brain U3 / R3): creates or
-   * merges a DRAFT relationship_binding change-set item carrying
-   * { relationshipTypeSlug, binding }. Tenant-admin gated.
-   */
-  setOntologyRelationshipTypeSourceBinding: CreateOntologyChangeSetPayload;
-  /**
    * Owner-only: set/clear the caller's personal memory automation schedule.
    * enabled=true requires a rate(...)/cron(...) scheduleExpression; false
    * disables the scheduled trigger (manual runs stay available).
@@ -4845,7 +4195,6 @@ export type Mutation = {
   setRoutineTrigger: RoutineTrigger;
   setSkillEvalGate: SkillEvalGate;
   setSpaceEmailTriggers: Space;
-  setSpaceKnowledgeBases: Array<SpaceKnowledgeBase>;
   setSpaceRuntimeOverrides: Space;
   setTenantMemberPassword: SetTenantMemberPasswordResult;
   /**
@@ -4877,9 +4226,7 @@ export type Mutation = {
    * gated.
    */
   startIdentityMatchJob: IdentityMatchJob;
-  startKnowledgeGraphObservationsIngest: KnowledgeGraphIngestRun;
   startManagedApplicationPlan: ManagedApplicationDeploymentJob;
-  startOntologySuggestionScan: OntologySuggestionScanJob;
   startReleaseUpdatePreflight: ReleaseUpdateJob;
   startSkillRun: SkillRun;
   startSlackWorkspaceInstall: SlackWorkspaceInstallStart;
@@ -4887,7 +4234,6 @@ export type Mutation = {
   submitRunFeedback: SkillRun;
   /** Submit a draft for trust/review. */
   submitSkillDraft: SkillDraft;
-  syncKnowledgeBase: KnowledgeBase;
   /**
    * Inserts a synthetic delivery row for the webhook so an operator can
    * confirm the config exists and the delivery-log pipeline is reachable.
@@ -4921,16 +4267,12 @@ export type Mutation = {
   updateEvalDatasetCase: EvalTestCase;
   updateEvalProfile: EvalProfile;
   updateEvalTestCase: EvalTestCase;
-  updateKnowledgeBase: KnowledgeBase;
   updateLinkedTask: LinkedTask;
   updateMemoryRecord: Scalars['Boolean']['output'];
   /** Store or replace the tenant n8n public API key used for workflow discovery. */
   updateN8nPluginApiCredential: UpdateN8nPluginApiCredentialResult;
   /** Update n8n custom package desired config and create/reuse an UPGRADE plan job. */
   updateN8nPluginPackageSettings: UpdateN8nPluginPackageSettingsResult;
-  updateOntologyChangeSet: OntologyChangeSet;
-  updateOntologyEntityType: OntologyEntityType;
-  updateOntologyRelationshipType: OntologyRelationshipType;
   updatePiExtensionAssignment: PiExtension;
   updateQuickAction: UserQuickAction;
   updateRecipe: Recipe;
@@ -5082,11 +4424,6 @@ export type MutationApproveManagedApplicationDeploymentArgs = {
 };
 
 
-export type MutationApproveOntologyChangeSetArgs = {
-  input: ApproveOntologyChangeSetInput;
-};
-
-
 export type MutationApprovePiExtensionVersionArgs = {
   input: ApprovePiExtensionVersionInput;
 };
@@ -5155,15 +4492,6 @@ export type MutationCaptureMobileMemoryArgs = {
 };
 
 
-export type MutationCaptureSpaceMemoryArgs = {
-  clientCaptureId?: InputMaybe<Scalars['ID']['input']>;
-  content: Scalars['String']['input'];
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  spaceId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
 export type MutationCheckoutCanvasArgs = {
   artifactId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
@@ -5196,11 +4524,6 @@ export type MutationConfirmEntityMappingArgs = {
   candidateSetId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
   threadRef?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type MutationConnectKnowledgeBaseSourceArgs = {
-  input: ConnectKnowledgeBaseSourceInput;
 };
 
 
@@ -5264,16 +4587,6 @@ export type MutationCreateExternalCapabilityClientArgs = {
 
 export type MutationCreateInboxItemArgs = {
   input: CreateInboxItemInput;
-};
-
-
-export type MutationCreateKnowledgeBaseArgs = {
-  input: CreateKnowledgeBaseInput;
-};
-
-
-export type MutationCreateOntologyChangeSetArgs = {
-  input: CreateOntologyChangeSetInput;
 };
 
 
@@ -5424,11 +4737,6 @@ export type MutationDeleteEvalRunArgs = {
 
 
 export type MutationDeleteEvalTestCaseArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type MutationDeleteKnowledgeBaseArgs = {
   id: Scalars['ID']['input'];
 };
 
@@ -5604,18 +4912,8 @@ export type MutationImportTenantBedrockModelsArgs = {
 };
 
 
-export type MutationIngestSpaceMemoryDocumentArgs = {
-  input: IngestSpaceMemoryDocumentInput;
-};
-
-
 export type MutationInstallManagedApplicationMcpServerArgs = {
   key: Scalars['String']['input'];
-};
-
-
-export type MutationInstallOntologyPackArgs = {
-  input: InstallOntologyPackInput;
 };
 
 
@@ -5817,14 +5115,6 @@ export type MutationPromoteDraftAppletArgs = {
 };
 
 
-export type MutationPromoteSpaceMemoriesToTenantArgs = {
-  justification: Scalars['String']['input'];
-  memoryIds: Array<Scalars['ID']['input']>;
-  spaceId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
 export type MutationProposeMappingCandidatesArgs = {
   canonicalEntityId: Scalars['ID']['input'];
   targetSystem: Scalars['String']['input'];
@@ -5916,16 +5206,6 @@ export type MutationRejectInboxItemArgs = {
 
 export type MutationRejectManagedApplicationDeploymentArgs = {
   input: RejectManagedApplicationDeploymentInput;
-};
-
-
-export type MutationRejectOntologyChangeSetArgs = {
-  input: RejectOntologyChangeSetInput;
-};
-
-
-export type MutationRejectOntologyChangeSetItemArgs = {
-  input: RejectOntologyChangeSetItemInput;
 };
 
 
@@ -6062,11 +5342,6 @@ export type MutationRetractMemoryDerivationArgs = {
 
 export type MutationRetryAgentDispatchArgs = {
   messageId: Scalars['ID']['input'];
-};
-
-
-export type MutationRetryKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -6232,12 +5507,6 @@ export type MutationSendMessageArgs = {
 };
 
 
-export type MutationSetAgentKnowledgeBasesArgs = {
-  agentId: Scalars['ID']['input'];
-  knowledgeBases: Array<AgentKnowledgeBaseInput>;
-};
-
-
 export type MutationSetDefaultEvalProfileArgs = {
   id: Scalars['ID']['input'];
 };
@@ -6266,41 +5535,6 @@ export type MutationSetMemorySourceConfigArgs = {
 };
 
 
-export type MutationSetOntologyEntityTypeIdentityRulesArgs = {
-  entityTypeId: Scalars['ID']['input'];
-  rules: Scalars['AWSJSON']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type MutationSetOntologyEntityTypePageSectionsArgs = {
-  entityTypeSlug: Scalars['String']['input'];
-  sections: Scalars['AWSJSON']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type MutationSetOntologyEntityTypeSystemMapArgs = {
-  entityTypeSlug: Scalars['String']['input'];
-  systemMap: Scalars['AWSJSON']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type MutationSetOntologyEntityTypeTwinFacetsArgs = {
-  entityTypeSlug: Scalars['String']['input'];
-  facets: Scalars['AWSJSON']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type MutationSetOntologyRelationshipTypeSourceBindingArgs = {
-  binding: Scalars['AWSJSON']['input'];
-  relationshipTypeSlug: Scalars['String']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
 export type MutationSetPersonalMemoryAutomationScheduleArgs = {
   enabled: Scalars['Boolean']['input'];
   scheduleExpression?: InputMaybe<Scalars['String']['input']>;
@@ -6323,11 +5557,6 @@ export type MutationSetSkillEvalGateArgs = {
 export type MutationSetSpaceEmailTriggersArgs = {
   enabled: Scalars['Boolean']['input'];
   spaceId: Scalars['ID']['input'];
-};
-
-
-export type MutationSetSpaceKnowledgeBasesArgs = {
-  input: SetSpaceKnowledgeBasesInput;
 };
 
 
@@ -6397,18 +5626,8 @@ export type MutationStartIdentityMatchJobArgs = {
 };
 
 
-export type MutationStartKnowledgeGraphObservationsIngestArgs = {
-  input?: InputMaybe<StartKnowledgeGraphObservationsIngestInput>;
-};
-
-
 export type MutationStartManagedApplicationPlanArgs = {
   input: StartManagedApplicationPlanInput;
-};
-
-
-export type MutationStartOntologySuggestionScanArgs = {
-  input: StartOntologySuggestionScanInput;
 };
 
 
@@ -6439,11 +5658,6 @@ export type MutationSubmitRunFeedbackArgs = {
 
 export type MutationSubmitSkillDraftArgs = {
   input: SubmitSkillDraftInput;
-};
-
-
-export type MutationSyncKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
 };
 
 
@@ -6551,12 +5765,6 @@ export type MutationUpdateEvalTestCaseArgs = {
 };
 
 
-export type MutationUpdateKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
-  input: UpdateKnowledgeBaseInput;
-};
-
-
 export type MutationUpdateLinkedTaskArgs = {
   input: UpdateLinkedTaskInput;
 };
@@ -6578,21 +5786,6 @@ export type MutationUpdateN8nPluginApiCredentialArgs = {
 
 export type MutationUpdateN8nPluginPackageSettingsArgs = {
   input: UpdateN8nPluginPackageSettingsInput;
-};
-
-
-export type MutationUpdateOntologyChangeSetArgs = {
-  input: UpdateOntologyChangeSetInput;
-};
-
-
-export type MutationUpdateOntologyEntityTypeArgs = {
-  input: UpdateOntologyEntityTypeInput;
-};
-
-
-export type MutationUpdateOntologyRelationshipTypeArgs = {
-  input: UpdateOntologyRelationshipTypeInput;
 };
 
 
@@ -6861,436 +6054,6 @@ export type NewMessageEvent = {
   senderType?: Maybe<Scalars['String']['output']>;
   tenantId: Scalars['ID']['output'];
   threadId: Scalars['ID']['output'];
-};
-
-export enum OntologyChangeAction {
-  Create = 'CREATE',
-  Deprecate = 'DEPRECATE',
-  Reject = 'REJECT',
-  Update = 'UPDATE'
-}
-
-/**
- * IDENTITY_MAP (THINK-321 U3): a type-level system-map edit — value carries
- * { entityTypeSlug, systemMap: [{ facet, sourceSystem, note? }] }. Operator
- * authored only; the suggestion pipeline never proposes it.
- *
- * Twin declaration items (Company Brain U3 — operator authored only, never
- * LLM-proposed):
- * FACET_DECLARATION — value carries { entityTypeSlug, facets: [{ slug,
- * clonePolicy, cadence?, sourceSystem, sourceDataset?, attributes?, note? }] }.
- * RELATIONSHIP_BINDING — value carries { relationshipTypeSlug, binding:
- * { sourceSystem, sourceDataset, sourceKeyFields, targetKeyFields, note? } }.
- * PAGE_SECTION — value carries { entityTypeSlug, sections: [{ slug, heading,
- * kind, facetSlug?, sourceSystem?, visibility, position }] }.
- */
-export enum OntologyChangeItemType {
-  EntityType = 'ENTITY_TYPE',
-  ExternalMapping = 'EXTERNAL_MAPPING',
-  FacetDeclaration = 'FACET_DECLARATION',
-  FacetTemplate = 'FACET_TEMPLATE',
-  IdentityMap = 'IDENTITY_MAP',
-  PageSection = 'PAGE_SECTION',
-  RelationshipBinding = 'RELATIONSHIP_BINDING',
-  RelationshipType = 'RELATIONSHIP_TYPE'
-}
-
-export type OntologyChangeSet = {
-  __typename?: 'OntologyChangeSet';
-  appliedVersionId?: Maybe<Scalars['ID']['output']>;
-  approvedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  approvedByUserId?: Maybe<Scalars['ID']['output']>;
-  confidence?: Maybe<Scalars['Float']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  evidenceExamples: Array<OntologyEvidenceExample>;
-  expectedImpact: Scalars['AWSJSON']['output'];
-  id: Scalars['ID']['output'];
-  items: Array<OntologyChangeSetItem>;
-  observedFrequency: Scalars['Int']['output'];
-  proposedBy: Scalars['String']['output'];
-  proposedByUserId?: Maybe<Scalars['ID']['output']>;
-  rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  rejectedByUserId?: Maybe<Scalars['ID']['output']>;
-  status: OntologyChangeSetStatus;
-  summary?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  title: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type OntologyChangeSetItem = {
-  __typename?: 'OntologyChangeSetItem';
-  action: OntologyChangeAction;
-  changeSetId: Scalars['ID']['output'];
-  confidence?: Maybe<Scalars['Float']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  description?: Maybe<Scalars['String']['output']>;
-  editedValue?: Maybe<Scalars['AWSJSON']['output']>;
-  evidenceExamples: Array<OntologyEvidenceExample>;
-  id: Scalars['ID']['output'];
-  itemType: OntologyChangeItemType;
-  position: Scalars['Int']['output'];
-  proposedValue: Scalars['AWSJSON']['output'];
-  status: OntologyChangeSetStatus;
-  targetKind?: Maybe<Scalars['String']['output']>;
-  targetSlug?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  title: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type OntologyChangeSetItemEvidenceInput = {
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  observedAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  quote: Scalars['String']['input'];
-  sourceKind: Scalars['String']['input'];
-  sourceLabel?: InputMaybe<Scalars['String']['input']>;
-  sourceRef?: InputMaybe<Scalars['String']['input']>;
-};
-
-/**
- * R14 collision that could not be staged: the slug already exists as an
- * approved definition, so no duplicate row was created.
- */
-export type OntologyChangeSetSlugConflict = {
-  __typename?: 'OntologyChangeSetSlugConflict';
-  itemType: OntologyChangeItemType;
-  reason: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-};
-
-/**
- * Shared status vocabulary for change sets and their items. DEFERRED is
- * item-only (an item excluded from an approval that stays re-reviewable,
- * THINK-320 R15) — passing it as a change-set status is rejected.
- */
-export enum OntologyChangeSetStatus {
-  Applied = 'APPLIED',
-  Approved = 'APPROVED',
-  Deferred = 'DEFERRED',
-  Draft = 'DRAFT',
-  PendingReview = 'PENDING_REVIEW',
-  Rejected = 'REJECTED'
-}
-
-export type OntologyDefinitions = {
-  __typename?: 'OntologyDefinitions';
-  activeVersion?: Maybe<OntologyVersion>;
-  entityTypes: Array<OntologyEntityType>;
-  externalMappings: Array<OntologyExternalMapping>;
-  facetTemplates: Array<OntologyFacetTemplate>;
-  relationshipTypes: Array<OntologyRelationshipType>;
-  tenantId: Scalars['ID']['output'];
-};
-
-export type OntologyEntityType = {
-  __typename?: 'OntologyEntityType';
-  aliases: Array<Scalars['String']['output']>;
-  approvedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  broadType: Scalars['String']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  deprecatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  externalMappings: Array<OntologyExternalMapping>;
-  facetTemplates: Array<OntologyFacetTemplate>;
-  guidanceNotes?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  /**
-   * Versioned identity rules (THINK-193 U4): array of
-   * { slug, keyKind, normalization, unique, uniquenessScope,
-   *   sourcePrecedence, autoLink, version }. Rules govern how instances of
-   * this type resolve to canonical entities; the instances live in the
-   * identity registry, never in ontology tables.
-   */
-  identityRules: Scalars['AWSJSON']['output'];
-  identityRulesVersion: Scalars['Int']['output'];
-  lifecycleStatus: OntologyLifecycleStatus;
-  name: Scalars['String']['output'];
-  /**
-   * Entity-page section declarations (Company Brain U3 / R10, R14): array of
-   * { slug, heading, kind, facetSlug?, sourceSystem?, visibility, position }.
-   * Edited only through page_section change-set items.
-   */
-  pageSections: Scalars['AWSJSON']['output'];
-  pageSectionsVersion: Scalars['Int']['output'];
-  propertiesSchema: Scalars['AWSJSON']['output'];
-  rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  slug: Scalars['String']['output'];
-  /**
-   * Type-level system map (THINK-321 U3 / R6): array of
-   * { facet, sourceSystem, note? } entries declaring which attached system
-   * holds which facets for this type. Edited only through identity_map
-   * change-set items — never a direct write.
-   */
-  systemMap: Scalars['AWSJSON']['output'];
-  systemMapVersion: Scalars['Int']['output'];
-  tenantId: Scalars['ID']['output'];
-  /**
-   * Twin facet declarations (Company Brain U3 / R2, R4): array of
-   * { slug, clonePolicy, cadence?, sourceSystem, sourceDataset?,
-   *   attributes?, note? }. Edited only through facet_declaration
-   * change-set items; the ETL projection consumes the compiled export.
-   */
-  twinFacets: Scalars['AWSJSON']['output'];
-  twinFacetsVersion: Scalars['Int']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  versionId?: Maybe<Scalars['ID']['output']>;
-};
-
-export type OntologyEvidenceExample = {
-  __typename?: 'OntologyEvidenceExample';
-  changeSetId: Scalars['ID']['output'];
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  itemId?: Maybe<Scalars['ID']['output']>;
-  metadata: Scalars['AWSJSON']['output'];
-  observedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  quote: Scalars['String']['output'];
-  sourceKind: Scalars['String']['output'];
-  sourceLabel?: Maybe<Scalars['String']['output']>;
-  sourceRef?: Maybe<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-};
-
-/**
- * What happens to items excluded from a per-item approval (THINK-320 R15):
- * DEFERRED keeps them re-reviewable; REJECTED fingerprints them so scans
- * never re-propose the candidate (R13).
- */
-export enum OntologyExcludedItemDisposition {
-  Deferred = 'DEFERRED',
-  Rejected = 'REJECTED'
-}
-
-export type OntologyExternalMapping = {
-  __typename?: 'OntologyExternalMapping';
-  createdAt: Scalars['AWSDateTime']['output'];
-  externalLabel?: Maybe<Scalars['String']['output']>;
-  externalUri: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  mappingKind: OntologyMappingKind;
-  notes?: Maybe<Scalars['String']['output']>;
-  subjectId: Scalars['ID']['output'];
-  subjectKind: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  vocabulary: Scalars['String']['output'];
-};
-
-export type OntologyFacetTemplate = {
-  __typename?: 'OntologyFacetTemplate';
-  createdAt: Scalars['AWSDateTime']['output'];
-  entityTypeId: Scalars['ID']['output'];
-  facetType: Scalars['String']['output'];
-  guidanceNotes?: Maybe<Scalars['String']['output']>;
-  heading: Scalars['String']['output'];
-  id: Scalars['ID']['output'];
-  lifecycleStatus: OntologyLifecycleStatus;
-  position: Scalars['Int']['output'];
-  prompt?: Maybe<Scalars['String']['output']>;
-  slug: Scalars['String']['output'];
-  sourcePriority: Scalars['AWSJSON']['output'];
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export enum OntologyJobStatus {
-  Canceled = 'CANCELED',
-  Failed = 'FAILED',
-  Pending = 'PENDING',
-  Running = 'RUNNING',
-  Succeeded = 'SUCCEEDED'
-}
-
-export enum OntologyLifecycleStatus {
-  Approved = 'APPROVED',
-  Deprecated = 'DEPRECATED',
-  Proposed = 'PROPOSED',
-  Rejected = 'REJECTED'
-}
-
-export enum OntologyMappingKind {
-  Broad = 'BROAD',
-  Close = 'CLOSE',
-  Exact = 'EXACT',
-  Narrow = 'NARROW',
-  Related = 'RELATED'
-}
-
-/**
- * Named bundle of dormant seed templates (THINK-320 U3/R11), browsable in the
- * Ontology tab. Install stages the pack as a pre-staged change set for
- * one-click admin approval — nothing applies without review.
- */
-export type OntologyPack = {
-  __typename?: 'OntologyPack';
-  description: Scalars['String']['output'];
-  name: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  types: Array<OntologyPackType>;
-};
-
-export type OntologyPackType = {
-  __typename?: 'OntologyPackType';
-  description?: Maybe<Scalars['String']['output']>;
-  name: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  state: OntologyPackTypeState;
-};
-
-/**
- * Per-type install state inside a pack (THINK-320 U3/R11): APPROVED — the
- * type is an approved definition; PENDING — a change-set item for the type is
- * awaiting review; AVAILABLE — installable.
- */
-export enum OntologyPackTypeState {
-  Approved = 'APPROVED',
-  Available = 'AVAILABLE',
-  Pending = 'PENDING'
-}
-
-export type OntologyRelationshipType = {
-  __typename?: 'OntologyRelationshipType';
-  aliases: Array<Scalars['String']['output']>;
-  approvedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  deprecatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  description?: Maybe<Scalars['String']['output']>;
-  externalMappings: Array<OntologyExternalMapping>;
-  guidanceNotes?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  inverseName?: Maybe<Scalars['String']['output']>;
-  lifecycleStatus: OntologyLifecycleStatus;
-  name: Scalars['String']['output'];
-  rejectedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  slug: Scalars['String']['output'];
-  /**
-   * Twin edge source binding (Company Brain U3 / R3):
-   * { sourceSystem, sourceDataset, sourceKeyFields, targetKeyFields, note? }
-   * or {} when unbound. Edge instances populate deterministically from these
-   * source foreign keys — never LLM-inferred. Edited only through
-   * relationship_binding change-set items.
-   */
-  sourceBinding: Scalars['AWSJSON']['output'];
-  sourceBindingVersion: Scalars['Int']['output'];
-  sourceEntityTypeId?: Maybe<Scalars['ID']['output']>;
-  sourceTypeSlugs: Array<Scalars['String']['output']>;
-  targetEntityTypeId?: Maybe<Scalars['ID']['output']>;
-  targetTypeSlugs: Array<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-  versionId?: Maybe<Scalars['ID']['output']>;
-};
-
-export type OntologyReprocessJob = {
-  __typename?: 'OntologyReprocessJob';
-  attempt: Scalars['Int']['output'];
-  changeSetId?: Maybe<Scalars['ID']['output']>;
-  claimedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  dedupeKey?: Maybe<Scalars['String']['output']>;
-  error?: Maybe<Scalars['String']['output']>;
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  impact: Scalars['AWSJSON']['output'];
-  input: Scalars['AWSJSON']['output'];
-  metrics: Scalars['AWSJSON']['output'];
-  ontologyVersionId?: Maybe<Scalars['ID']['output']>;
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: OntologyJobStatus;
-  tenantId: Scalars['ID']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type OntologySchemaGraph = {
-  __typename?: 'OntologySchemaGraph';
-  candidates: Array<OntologySchemaGraphCandidate>;
-  relationships: Array<OntologySchemaGraphRelationship>;
-  systemLinks: Array<OntologySchemaGraphSystemLink>;
-  systems: Array<Scalars['String']['output']>;
-  tenantId: Scalars['ID']['output'];
-  types: Array<OntologySchemaGraphType>;
-};
-
-/**
- * Pending change-set item surfaced as a ghost candidate on the map. `origin`
- * is the owning change set's proposedBy (suggestion_engine, user, ...).
- */
-export type OntologySchemaGraphCandidate = {
-  __typename?: 'OntologySchemaGraphCandidate';
-  changeSetId: Scalars['ID']['output'];
-  editedValue?: Maybe<Scalars['AWSJSON']['output']>;
-  evidenceCount: Scalars['Int']['output'];
-  itemId: Scalars['ID']['output'];
-  itemType: OntologyChangeItemType;
-  origin: Scalars['String']['output'];
-  proposedValue: Scalars['AWSJSON']['output'];
-  slug?: Maybe<Scalars['String']['output']>;
-  status: OntologyChangeSetStatus;
-};
-
-/** Approved relationship type projected as a labeled schema-graph edge. */
-export type OntologySchemaGraphRelationship = {
-  __typename?: 'OntologySchemaGraphRelationship';
-  name: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-  sourceTypeSlugs: Array<Scalars['String']['output']>;
-  targetTypeSlugs: Array<Scalars['String']['output']>;
-};
-
-/**
- * External system surfaced on the schema map (treasure-map view): which
- * systems hold identities and/or clone data for each entity type. Derived
- * from identity mappings and governed facet declarations — registering a
- * system's mappings is what makes it appear.
- */
-export type OntologySchemaGraphSystemLink = {
-  __typename?: 'OntologySchemaGraphSystemLink';
-  /** A declared facet clones data for this type from the system. */
-  data: Scalars['Boolean']['output'];
-  entityTypeSlug: Scalars['String']['output'];
-  /** The system holds identity keys for instances of this type. */
-  identity: Scalars['Boolean']['output'];
-  systemSlug: Scalars['String']['output'];
-};
-
-/**
- * Approved entity type projected for the Living Map canvas (THINK-320 U1):
- * slug/name plus a live count of kg entities carrying the type.
- */
-export type OntologySchemaGraphType = {
-  __typename?: 'OntologySchemaGraphType';
-  instanceCount: Scalars['Int']['output'];
-  lifecycleStatus: OntologyLifecycleStatus;
-  name: Scalars['String']['output'];
-  slug: Scalars['String']['output'];
-};
-
-export type OntologySuggestionScanJob = {
-  __typename?: 'OntologySuggestionScanJob';
-  createdAt: Scalars['AWSDateTime']['output'];
-  dedupeKey?: Maybe<Scalars['String']['output']>;
-  error?: Maybe<Scalars['String']['output']>;
-  finishedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  id: Scalars['ID']['output'];
-  metrics: Scalars['AWSJSON']['output'];
-  result: Scalars['AWSJSON']['output'];
-  startedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  status: OntologyJobStatus;
-  tenantId: Scalars['ID']['output'];
-  trigger: Scalars['String']['output'];
-  updatedAt: Scalars['AWSDateTime']['output'];
-};
-
-export type OntologyVersion = {
-  __typename?: 'OntologyVersion';
-  activatedAt?: Maybe<Scalars['AWSDateTime']['output']>;
-  createdAt: Scalars['AWSDateTime']['output'];
-  id: Scalars['ID']['output'];
-  sourceChangeSetId?: Maybe<Scalars['ID']['output']>;
-  status: Scalars['String']['output'];
-  tenantId: Scalars['ID']['output'];
-  versionNumber: Scalars['Int']['output'];
 };
 
 export type OpenEngineEligibleWorkItemsInput = {
@@ -7726,7 +6489,6 @@ export type Query = {
   artifactShares: Array<ArtifactShare>;
   artifacts: Array<Artifact>;
   bedrockModelImportCandidates: Array<BedrockModelImportCandidate>;
-  brainDreamRuns: Array<BrainDreamRun>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
   canonicalEntities: Array<CanonicalEntity>;
@@ -7804,16 +6566,6 @@ export type Query = {
   emailChannelLedger: Array<EmailLedgerEvent>;
   emailChannelSummary: EmailChannelSummary;
   emailSpaceEmailPolicy?: Maybe<EmailSpacePolicy>;
-  /**
-   * THINK-263 U5 — server-assembled dossier for one grounded knowledge-graph
-   * entity: contributing memories, linked threads, and artifacts.
-   * Every thread-derived surface is fenced behind the caller's thread
-   * visibility; content from threads the caller cannot open is dropped entirely
-   * (the thread, its artifacts, and any memory hit stamped with it). Multiple
-   * grounded matches with no `entityId` selector return a disambiguation list
-   * and assemble nothing; passing `entityId` resolves the ambiguity.
-   */
-  entityDossier: EntityDossierResult;
   entityResolutionCase?: Maybe<EntityResolutionCase>;
   entityResolutionCases: Array<EntityResolutionCase>;
   evalDataset?: Maybe<EvalDataset>;
@@ -7838,22 +6590,20 @@ export type Query = {
   inboxItems: Array<InboxItem>;
   /** Launchable plugin apps available to the current tenant/user. */
   installedPluginApps: Array<InstalledPluginApp>;
-  knowledgeBase?: Maybe<KnowledgeBase>;
-  knowledgeBases: Array<KnowledgeBase>;
-  knowledgeGraphEntities: Array<KnowledgeGraphEntity>;
-  knowledgeGraphEntity?: Maybe<KnowledgeGraphEntity>;
-  knowledgeGraphGetEntity: KnowledgeGraphSearchResult;
-  knowledgeGraphGraph: KnowledgeGraphGraph;
-  knowledgeGraphIngestRuns: Array<KnowledgeGraphIngestRun>;
-  knowledgeGraphNeighbors: KnowledgeGraphSearchResult;
-  knowledgeGraphSearch: KnowledgeGraphSearchResult;
   managedApplicationDeployment?: Maybe<ManagedApplicationDeploymentJob>;
   managedApplicationHealthCheck: ManagedApplicationHealthCheck;
   managedApplications: Array<ManagedApplication>;
   me?: Maybe<User>;
   memoryClaims: Array<MemoryClaim>;
+  /**
+   * Session-scoped episodes plus the cross-session reflections filed alongside
+   * them, for one user. Separate from `memoryRecords` on purpose: episodic
+   * records are per-thread and would swamp the cross-thread listing, so the
+   * Memory page loads them as their own facet. Engines with no episodic facet
+   * return an empty list rather than erroring.
+   */
+  memoryEpisodicRecords: Array<MemoryRecord>;
   memoryEvidenceItems: Array<MemoryEvidenceItemSummary>;
-  memoryGraph: MemoryGraph;
   memoryProcessorConfigs: Array<MemoryProcessorConfig>;
   memoryRecords: Array<MemoryRecord>;
   memoryRecordsByIds: Array<MemoryRecord>;
@@ -7866,8 +6616,8 @@ export type Query = {
   messages: MessageConnection;
   mobileMemoryCaptures: Array<MobileMemoryCapture>;
   /**
-   * Free-text search across the full Hindsight bank for the given user.
-   * Hits Hindsight's recall endpoint (semantic + rerank) and normalizes results
+   * Free-text search across the full memory bank for the given user.
+   * Hits the engine's recall endpoint (semantic + rerank) and normalizes results
    * back to MobileMemoryCapture so the Memories list can render search results
    * with the same rows it uses for captures. Not filtered by capture_source —
    * search is meant to answer "what does this user know?", including chat-
@@ -7882,17 +6632,6 @@ export type Query = {
   n8nAppData: N8nAppData;
   /** Operator settings for the installed n8n plugin package image config. */
   n8nPluginSettings?: Maybe<N8nPluginSettings>;
-  ontologyChangeSets: Array<OntologyChangeSet>;
-  ontologyDefinitions: OntologyDefinitions;
-  /** Installable seed-template bundles with per-type state (THINK-320 U3/R11). */
-  ontologyPacks: Array<OntologyPack>;
-  ontologyReprocessJob?: Maybe<OntologyReprocessJob>;
-  /**
-   * Living Map feed (THINK-320 U1): approved types with live instance
-   * counts, approved relationships, and pending candidate items.
-   */
-  ontologySchemaGraph: OntologySchemaGraph;
-  ontologySuggestionScanJob?: Maybe<OntologySuggestionScanJob>;
   openEngineEligibleWorkItems: Array<WorkItem>;
   pendingSystemReviewsCount: Scalars['Int']['output'];
   performanceTimeSeries: Array<PerformanceTimeSeries>;
@@ -7964,13 +6703,11 @@ export type Query = {
   skillRuns: Array<SkillRun>;
   slackWorkspaces: Array<SlackWorkspace>;
   space?: Maybe<Space>;
-  spaceMemorySearch: MemorySearchResult;
   spaces: Array<Space>;
   tenant?: Maybe<Tenant>;
   tenantAgent: Agent;
   tenantAgentSummary: TenantAgentSummary;
   tenantArtifactShares: Array<ArtifactShare>;
-  tenantBankMemories: Array<TenantBankMemory>;
   tenantBySlug?: Maybe<Tenant>;
   tenantCredentials: Array<TenantCredential>;
   tenantDocumentPalette: TenantDocumentPalette;
@@ -7987,7 +6724,6 @@ export type Query = {
    */
   tenantSkillCatalog: Array<SkillCatalogEntry>;
   tenantToolInventory: TenantToolInventory;
-  testKnowledgeBaseRetrieval: KnowledgeBaseRetrievalResult;
   thread?: Maybe<Thread>;
   threadByNumber?: Maybe<Thread>;
   threadCanvasContext: ThreadCanvasContext;
@@ -8209,14 +6945,6 @@ export type QueryBedrockModelImportCandidatesArgs = {
 };
 
 
-export type QueryBrainDreamRunsArgs = {
-  bankId?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  status?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
 export type QueryBudgetPoliciesArgs = {
   tenantId: Scalars['ID']['input'];
 };
@@ -8395,13 +7123,6 @@ export type QueryEmailSpaceEmailPolicyArgs = {
 };
 
 
-export type QueryEntityDossierArgs = {
-  entityId?: InputMaybe<Scalars['ID']['input']>;
-  query: Scalars['String']['input'];
-  tenantId: Scalars['ID']['input'];
-};
-
-
 export type QueryEntityResolutionCaseArgs = {
   caseId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -8528,78 +7249,6 @@ export type QueryInboxItemsArgs = {
 };
 
 
-export type QueryKnowledgeBaseArgs = {
-  id: Scalars['ID']['input'];
-};
-
-
-export type QueryKnowledgeBasesArgs = {
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryKnowledgeGraphEntitiesArgs = {
-  groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  ontologyType?: InputMaybe<Scalars['String']['input']>;
-  provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
-  runId?: InputMaybe<Scalars['ID']['input']>;
-  search?: InputMaybe<Scalars['String']['input']>;
-  sourceKind?: InputMaybe<KnowledgeGraphSourceKind>;
-  sourceRef?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphEntityArgs = {
-  entityId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphGetEntityArgs = {
-  entityId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphGraphArgs = {
-  groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
-  ontologyType?: InputMaybe<Scalars['String']['input']>;
-  provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
-  runId?: InputMaybe<Scalars['ID']['input']>;
-  search?: InputMaybe<Scalars['String']['input']>;
-  sourceKind?: InputMaybe<KnowledgeGraphSourceKind>;
-  sourceRef?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphIngestRunsArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  sourceKind?: InputMaybe<KnowledgeGraphSourceKind>;
-  sourceRef?: InputMaybe<Scalars['String']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphNeighborsArgs = {
-  depth?: InputMaybe<Scalars['Int']['input']>;
-  entityId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryKnowledgeGraphSearchArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  query: Scalars['String']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
 export type QueryManagedApplicationDeploymentArgs = {
   jobId: Scalars['ID']['input'];
 };
@@ -8619,18 +7268,18 @@ export type QueryMemoryClaimsArgs = {
 };
 
 
+export type QueryMemoryEpisodicRecordsArgs = {
+  assistantId?: InputMaybe<Scalars['ID']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  tenantId?: InputMaybe<Scalars['ID']['input']>;
+  userId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+
 export type QueryMemoryEvidenceItemsArgs = {
   limit?: InputMaybe<Scalars['Int']['input']>;
   sourceConfigId: Scalars['ID']['input'];
   tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
-export type QueryMemoryGraphArgs = {
-  allTenantBanks?: InputMaybe<Scalars['Boolean']['input']>;
-  assistantId?: InputMaybe<Scalars['ID']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-  userId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -8732,39 +7381,6 @@ export type QueryN8nAppDataArgs = {
 
 export type QueryN8nPluginSettingsArgs = {
   installId: Scalars['ID']['input'];
-};
-
-
-export type QueryOntologyChangeSetsArgs = {
-  status?: InputMaybe<OntologyChangeSetStatus>;
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryOntologyDefinitionsArgs = {
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryOntologyPacksArgs = {
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryOntologyReprocessJobArgs = {
-  jobId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryOntologySchemaGraphArgs = {
-  tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryOntologySuggestionScanJobArgs = {
-  jobId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
 };
 
 
@@ -8992,14 +7608,6 @@ export type QuerySpaceArgs = {
 };
 
 
-export type QuerySpaceMemorySearchArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  query: Scalars['String']['input'];
-  spaceId: Scalars['ID']['input'];
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-
 export type QuerySpacesArgs = {
   includeAllForAdmin?: InputMaybe<Scalars['Boolean']['input']>;
   status?: InputMaybe<SpaceStatus>;
@@ -9024,12 +7632,6 @@ export type QueryTenantAgentSummaryArgs = {
 
 export type QueryTenantArtifactSharesArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryTenantBankMemoriesArgs = {
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
 };
 
 
@@ -9077,12 +7679,6 @@ export type QueryTenantSkillCatalogArgs = {
 
 export type QueryTenantToolInventoryArgs = {
   tenantId: Scalars['ID']['input'];
-};
-
-
-export type QueryTestKnowledgeBaseRetrievalArgs = {
-  id: Scalars['ID']['input'];
-  query: Scalars['String']['input'];
 };
 
 
@@ -9448,15 +8044,13 @@ export type RegisterIdentitySourceInput = {
 
 /**
  * Identity-source registration result (THINK-321 U7, KTD-5). The
- * source_system → connector link is written and the workspace routing map is
- * re-projected; entityTypeSlugs echoes the validated target types.
+ * source_system → connector link is written; entityTypeSlugs echoes the
+ * declared target types.
  */
 export type RegisterIdentitySourceResult = {
   __typename?: 'RegisterIdentitySourceResult';
   connectorSlug: Scalars['String']['output'];
   entityTypeSlugs: Array<Scalars['String']['output']>;
-  routingMapAgents: Scalars['Int']['output'];
-  routingMapWritten: Scalars['Int']['output'];
   sourceSystem: Scalars['String']['output'];
   tenantId: Scalars['ID']['output'];
 };
@@ -9473,24 +8067,6 @@ export type RejectInboxItemInput = {
 export type RejectManagedApplicationDeploymentInput = {
   jobId: Scalars['ID']['input'];
   reason?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type RejectOntologyChangeSetInput = {
-  changeSetId: Scalars['ID']['input'];
-  reason?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-};
-
-/**
- * Item-level reject from the Living Map evidence panel (THINK-320 U6, R13):
- * marks a single still-reviewable item rejected and writes its rejection
- * fingerprint so scans never re-propose the candidate. The owning change set
- * stays open and no ontology version is minted.
- */
-export type RejectOntologyChangeSetItemInput = {
-  itemId: Scalars['ID']['input'];
-  reason?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
 };
 
 export type RejectPiExtensionVersionInput = {
@@ -10197,20 +8773,8 @@ export type SearchAskResult = {
   threadId: Scalars['ID']['output'];
 };
 
-export type SearchEntityHit = {
-  __typename?: 'SearchEntityHit';
-  aliases?: Maybe<Array<Scalars['String']['output']>>;
-  entityId: Scalars['ID']['output'];
-  evidenceCount?: Maybe<Scalars['Int']['output']>;
-  label: Scalars['String']['output'];
-  ontologyTypeSlug?: Maybe<Scalars['String']['output']>;
-  relationshipCount?: Maybe<Scalars['Int']['output']>;
-  summary?: Maybe<Scalars['String']['output']>;
-};
-
 export type SearchLeg = {
   __typename?: 'SearchLeg';
-  entityHits?: Maybe<Array<SearchEntityHit>>;
   error?: Maybe<Scalars['String']['output']>;
   memoryHits?: Maybe<Array<SearchMemoryHit>>;
   source: SearchSource;
@@ -10252,7 +8816,6 @@ export type SearchResults = {
 };
 
 export enum SearchSource {
-  Entities = 'ENTITIES',
   Memory = 'MEMORY',
   Threads = 'THREADS'
 }
@@ -10295,12 +8858,6 @@ export type SetManagedApplicationDeploymentInput = {
   action?: InputMaybe<ManagedApplicationDeploymentAction>;
   enabled?: InputMaybe<Scalars['Boolean']['input']>;
   key: Scalars['String']['input'];
-};
-
-export type SetSpaceKnowledgeBasesInput = {
-  knowledgeBases: Array<SpaceKnowledgeBaseInput>;
-  spaceId: Scalars['ID']['input'];
-  tenantId: Scalars['ID']['input'];
 };
 
 export type SetSpaceRuntimeOverridesInput = {
@@ -10572,7 +9129,6 @@ export type Space = {
   id: Scalars['ID']['output'];
   integrations: Array<SpaceIntegration>;
   kind: SpaceKind;
-  knowledgeBases: Array<SpaceKnowledgeBase>;
   lastActivityAt?: Maybe<Scalars['AWSDateTime']['output']>;
   mcpPolicy?: Maybe<Scalars['AWSJSON']['output']>;
   members: Array<SpaceMember>;
@@ -10668,24 +9224,6 @@ export enum SpaceKind {
   CustomerOnboarding = 'CUSTOMER_ONBOARDING'
 }
 
-export type SpaceKnowledgeBase = {
-  __typename?: 'SpaceKnowledgeBase';
-  createdAt: Scalars['AWSDateTime']['output'];
-  enabled: Scalars['Boolean']['output'];
-  id: Scalars['ID']['output'];
-  knowledgeBase?: Maybe<KnowledgeBase>;
-  knowledgeBaseId: Scalars['ID']['output'];
-  searchConfig?: Maybe<Scalars['AWSJSON']['output']>;
-  spaceId: Scalars['ID']['output'];
-  tenantId: Scalars['ID']['output'];
-};
-
-export type SpaceKnowledgeBaseInput = {
-  enabled?: InputMaybe<Scalars['Boolean']['input']>;
-  knowledgeBaseId: Scalars['ID']['input'];
-  searchConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
-};
-
 export type SpaceMember = {
   __typename?: 'SpaceMember';
   createdAt: Scalars['AWSDateTime']['output'];
@@ -10705,17 +9243,6 @@ export enum SpaceMemberRole {
   Owner = 'OWNER',
   Viewer = 'VIEWER'
 }
-
-export type SpaceMemoryDocumentIngest = {
-  __typename?: 'SpaceMemoryDocumentIngest';
-  contentBytes: Scalars['Int']['output'];
-  context: Scalars['String']['output'];
-  documentId: Scalars['String']['output'];
-  path: Scalars['String']['output'];
-  processAsync: Scalars['Boolean']['output'];
-  spaceId: Scalars['ID']['output'];
-  status: Scalars['String']['output'];
-};
 
 export enum SpaceNotificationPreference {
   Mentions = 'MENTIONS',
@@ -10803,12 +9330,6 @@ export type StartIdentityMatchJobInput = {
   trigger?: InputMaybe<Scalars['String']['input']>;
 };
 
-export type StartKnowledgeGraphObservationsIngestInput = {
-  fullRebuild?: InputMaybe<Scalars['Boolean']['input']>;
-  metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
-  tenantId?: InputMaybe<Scalars['ID']['input']>;
-};
-
 export type StartManagedApplicationPlanInput = {
   desiredConfig?: InputMaybe<Scalars['AWSJSON']['input']>;
   desiredConfigVersion?: InputMaybe<Scalars['String']['input']>;
@@ -10819,12 +9340,6 @@ export type StartManagedApplicationPlanInput = {
   manifestUrl?: InputMaybe<Scalars['String']['input']>;
   operation: Scalars['String']['input'];
   releaseVersion?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type StartOntologySuggestionScanInput = {
-  dedupeKey?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-  trigger?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type StartReleaseUpdatePreflightInput = {
@@ -11072,25 +9587,6 @@ export type TenantAgentSummary = {
   type: AgentType;
 };
 
-/**
- * One Tenant Bank memory with its Governed Promotion provenance and consumption
- * signal (company-brain plan U11 — provenance queryable in one step).
- */
-export type TenantBankMemory = {
-  __typename?: 'TenantBankMemory';
-  accessCount?: Maybe<Scalars['Int']['output']>;
-  content: Scalars['String']['output'];
-  createdAt?: Maybe<Scalars['String']['output']>;
-  factType?: Maybe<Scalars['String']['output']>;
-  id: Scalars['ID']['output'];
-  justification?: Maybe<Scalars['String']['output']>;
-  promotedAt?: Maybe<Scalars['String']['output']>;
-  promotedBy?: Maybe<Scalars['String']['output']>;
-  sourceBankId?: Maybe<Scalars['String']['output']>;
-  sourceMemoryId?: Maybe<Scalars['ID']['output']>;
-  sourceTimestamp?: Maybe<Scalars['String']['output']>;
-};
-
 export type TenantCredential = {
   __typename?: 'TenantCredential';
   createdAt: Scalars['AWSDateTime']['output'];
@@ -11146,18 +9642,6 @@ export type TenantMember = {
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
   user?: Maybe<User>;
-};
-
-/**
- * Governed Promotion (company-brain plan U10): explicitly selected space-bank
- * memories copied into the Tenant Bank with provenance intact. Idempotent per
- * source memory; the source rows are untouched.
- */
-export type TenantMemoryPromotionResult = {
-  __typename?: 'TenantMemoryPromotionResult';
-  alreadyPromoted: Array<Scalars['ID']['output']>;
-  missing: Array<Scalars['ID']['output']>;
-  promoted: Array<Scalars['ID']['output']>;
 };
 
 export type TenantModelCatalogEntry = {
@@ -11460,8 +9944,6 @@ export type ThreadIdleLearningChangedFile = {
   afterHash?: Maybe<Scalars['String']['output']>;
   beforeBytes?: Maybe<Scalars['Int']['output']>;
   beforeHash?: Maybe<Scalars['String']['output']>;
-  hindsightDocumentId?: Maybe<Scalars['String']['output']>;
-  hindsightStatus?: Maybe<Scalars['String']['output']>;
   key?: Maybe<Scalars['String']['output']>;
   path: Scalars['String']['output'];
   snapshotKey?: Maybe<Scalars['String']['output']>;
@@ -11887,14 +10369,6 @@ export type UpdateEvalTestCaseInput = {
   tags?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
-export type UpdateKnowledgeBaseInput = {
-  chunkOverlapPercent?: InputMaybe<Scalars['Int']['input']>;
-  chunkSizeTokens?: InputMaybe<Scalars['Int']['input']>;
-  chunkingStrategy?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  name?: InputMaybe<Scalars['String']['input']>;
-};
-
 export type UpdateLinkedTaskInput = {
   linkedTaskId: Scalars['ID']['input'];
   metadata?: InputMaybe<Scalars['AWSJSON']['input']>;
@@ -11927,51 +10401,6 @@ export type UpdateN8nPluginPackageSettingsResult = {
   __typename?: 'UpdateN8nPluginPackageSettingsResult';
   deploymentJob: ManagedApplicationDeploymentJob;
   settings: N8nPluginSettings;
-};
-
-export type UpdateOntologyChangeSetInput = {
-  changeSetId: Scalars['ID']['input'];
-  items?: InputMaybe<Array<UpdateOntologyChangeSetItemInput>>;
-  status?: InputMaybe<OntologyChangeSetStatus>;
-  summary?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-  title?: InputMaybe<Scalars['String']['input']>;
-};
-
-export type UpdateOntologyChangeSetItemInput = {
-  editedValue?: InputMaybe<Scalars['AWSJSON']['input']>;
-  /**
-   * Optimistic concurrency guard (THINK-320 R16): the item's updatedAt as
-   * loaded by the client. If the item changed since, the mutation fails with
-   * a conflict instead of overwriting; omit to skip the check.
-   */
-  expectedUpdatedAt?: InputMaybe<Scalars['AWSDateTime']['input']>;
-  id: Scalars['ID']['input'];
-  status?: InputMaybe<OntologyChangeSetStatus>;
-};
-
-export type UpdateOntologyEntityTypeInput = {
-  aliases?: InputMaybe<Array<Scalars['String']['input']>>;
-  broadType?: InputMaybe<Scalars['String']['input']>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  entityTypeId: Scalars['ID']['input'];
-  guidanceNotes?: InputMaybe<Scalars['String']['input']>;
-  lifecycleStatus?: InputMaybe<OntologyLifecycleStatus>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  tenantId: Scalars['ID']['input'];
-};
-
-export type UpdateOntologyRelationshipTypeInput = {
-  aliases?: InputMaybe<Array<Scalars['String']['input']>>;
-  description?: InputMaybe<Scalars['String']['input']>;
-  guidanceNotes?: InputMaybe<Scalars['String']['input']>;
-  inverseName?: InputMaybe<Scalars['String']['input']>;
-  lifecycleStatus?: InputMaybe<OntologyLifecycleStatus>;
-  name?: InputMaybe<Scalars['String']['input']>;
-  relationshipTypeId: Scalars['ID']['input'];
-  sourceTypeSlugs?: InputMaybe<Array<Scalars['String']['input']>>;
-  targetTypeSlugs?: InputMaybe<Array<Scalars['String']['input']>>;
-  tenantId: Scalars['ID']['input'];
 };
 
 export type UpdatePiExtensionAssignmentInput = {
@@ -13707,86 +12136,6 @@ export type ApplySkillUpdateMutationVariables = Exact<{
 
 export type ApplySkillUpdateMutation = { __typename?: 'Mutation', applySkillUpdate: { __typename?: 'SkillUpdateApplyResult', applied: boolean, blocked: boolean, overridden: boolean, passRate?: number | null, threshold?: number | null } };
 
-export type KnowledgeBasesListQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-}>;
-
-
-export type KnowledgeBasesListQuery = { __typename?: 'Query', knowledgeBases: Array<{ __typename?: 'KnowledgeBase', id: string, name: string, description?: string | null, status: string, documentCount?: number | null, lastSyncAt?: any | null }> };
-
-export type KnowledgeBaseDetailQueryVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type KnowledgeBaseDetailQuery = { __typename?: 'Query', knowledgeBase?: { __typename?: 'KnowledgeBase', id: string, tenantId: string, name: string, slug: string, description?: string | null, embeddingModel: string, chunkingStrategy: string, chunkSizeTokens?: number | null, chunkOverlapPercent?: number | null, status: string, awsKbId?: string | null, lastSyncAt?: any | null, lastSyncStatus?: string | null, documentCount?: number | null, errorMessage?: string | null } | null };
-
-export type TestKnowledgeBaseRetrievalQueryVariables = Exact<{
-  id: Scalars['ID']['input'];
-  query: Scalars['String']['input'];
-}>;
-
-
-export type TestKnowledgeBaseRetrievalQuery = { __typename?: 'Query', testKnowledgeBaseRetrieval: { __typename?: 'KnowledgeBaseRetrievalResult', status: string, hits: Array<{ __typename?: 'KnowledgeBaseRetrievalHit', snippet: string, score?: number | null, source?: string | null }> } };
-
-export type CreateKnowledgeBaseMutationVariables = Exact<{
-  input: CreateKnowledgeBaseInput;
-}>;
-
-
-export type CreateKnowledgeBaseMutation = { __typename?: 'Mutation', createKnowledgeBase: { __typename?: 'KnowledgeBase', id: string, name: string, status: string } };
-
-export type UpdateKnowledgeBaseMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-  input: UpdateKnowledgeBaseInput;
-}>;
-
-
-export type UpdateKnowledgeBaseMutation = { __typename?: 'Mutation', updateKnowledgeBase: { __typename?: 'KnowledgeBase', id: string, name: string, description?: string | null, chunkingStrategy: string, chunkSizeTokens?: number | null, chunkOverlapPercent?: number | null, status: string } };
-
-export type SyncKnowledgeBaseMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type SyncKnowledgeBaseMutation = { __typename?: 'Mutation', syncKnowledgeBase: { __typename?: 'KnowledgeBase', id: string, status: string, lastSyncStatus?: string | null } };
-
-export type RetryKnowledgeBaseMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type RetryKnowledgeBaseMutation = { __typename?: 'Mutation', retryKnowledgeBase: { __typename?: 'KnowledgeBase', id: string, status: string, errorMessage?: string | null } };
-
-export type DeleteKnowledgeBaseMutationVariables = Exact<{
-  id: Scalars['ID']['input'];
-}>;
-
-
-export type DeleteKnowledgeBaseMutation = { __typename?: 'Mutation', deleteKnowledgeBase: boolean };
-
-export type KnowledgeBaseBindingsQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-}>;
-
-
-export type KnowledgeBaseBindingsQuery = { __typename?: 'Query', tenantAgent: { __typename?: 'Agent', id: string, knowledgeBases: Array<{ __typename?: 'AgentKnowledgeBase', knowledgeBaseId: string }> }, spaces: Array<{ __typename?: 'Space', id: string, name: string, knowledgeBases: Array<{ __typename?: 'SpaceKnowledgeBase', knowledgeBaseId: string }> }> };
-
-export type SetAgentKnowledgeBasesMutationVariables = Exact<{
-  agentId: Scalars['ID']['input'];
-  knowledgeBases: Array<AgentKnowledgeBaseInput> | AgentKnowledgeBaseInput;
-}>;
-
-
-export type SetAgentKnowledgeBasesMutation = { __typename?: 'Mutation', setAgentKnowledgeBases: Array<{ __typename?: 'AgentKnowledgeBase', id: string, knowledgeBaseId: string }> };
-
-export type SetSpaceKnowledgeBasesMutationVariables = Exact<{
-  input: SetSpaceKnowledgeBasesInput;
-}>;
-
-
-export type SetSpaceKnowledgeBasesMutation = { __typename?: 'Mutation', setSpaceKnowledgeBases: Array<{ __typename?: 'SpaceKnowledgeBase', id: string, knowledgeBaseId: string }> };
-
 export type RoutineSourceQueryVariables = Exact<{
   routineId: Scalars['ID']['input'];
 }>;
@@ -13893,7 +12242,7 @@ export type SidebarDeployedReleaseQuery = { __typename?: 'Query', deploymentStat
 export type SettingsDeploymentStatusQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type SettingsDeploymentStatusQuery = { __typename?: 'Query', deploymentStatus: { __typename?: 'DeploymentStatus', stage: string, source: string, region: string, accountId?: string | null, releaseVersion?: string | null, releaseManifestUrl?: string | null, releaseManifestSha256?: string | null, deploymentControllerArn?: string | null, deploymentRunnerProjectName?: string | null, deploymentEvidenceBucket?: string | null, bucketName?: string | null, databaseEndpoint?: string | null, ecrUrl?: string | null, adminUrl?: string | null, docsUrl?: string | null, apiEndpoint?: string | null, appsyncUrl?: string | null, appsyncRealtimeUrl?: string | null, hindsightEndpoint?: string | null, agentcoreStatus?: string | null, hindsightEnabled: boolean, managedMemoryEnabled: boolean } };
+export type SettingsDeploymentStatusQuery = { __typename?: 'Query', deploymentStatus: { __typename?: 'DeploymentStatus', stage: string, source: string, region: string, accountId?: string | null, releaseVersion?: string | null, releaseManifestUrl?: string | null, releaseManifestSha256?: string | null, deploymentControllerArn?: string | null, deploymentRunnerProjectName?: string | null, deploymentEvidenceBucket?: string | null, bucketName?: string | null, databaseEndpoint?: string | null, ecrUrl?: string | null, adminUrl?: string | null, docsUrl?: string | null, apiEndpoint?: string | null, appsyncUrl?: string | null, appsyncRealtimeUrl?: string | null, agentcoreStatus?: string | null, managedMemoryEnabled: boolean } };
 
 export type SettingsEmailChannelQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -13990,44 +12339,6 @@ export type SettingsDeploymentEvidenceQueryVariables = Exact<{
 
 
 export type SettingsDeploymentEvidenceQuery = { __typename?: 'Query', deploymentEvidence: { __typename?: 'DeploymentEvidence', jobId: string, bucket?: string | null, prefix?: string | null, urls: Array<string> } };
-
-export type SettingsKnowledgeGraphOntologyQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-}>;
-
-
-export type SettingsKnowledgeGraphOntologyQuery = { __typename?: 'Query', ontologyDefinitions: { __typename?: 'OntologyDefinitions', activeVersion?: { __typename?: 'OntologyVersion', id: string, versionNumber: number, status: string, activatedAt?: any | null } | null, entityTypes: Array<{ __typename?: 'OntologyEntityType', id: string, slug: string, name: string, description?: string | null, broadType: string, aliases: Array<string>, lifecycleStatus: OntologyLifecycleStatus, externalMappings: Array<{ __typename?: 'OntologyExternalMapping', id: string, mappingKind: OntologyMappingKind, vocabulary: string, externalUri: string, externalLabel?: string | null }> }>, relationshipTypes: Array<{ __typename?: 'OntologyRelationshipType', id: string, slug: string, name: string, description?: string | null, sourceTypeSlugs: Array<string>, targetTypeSlugs: Array<string>, aliases: Array<string>, lifecycleStatus: OntologyLifecycleStatus, externalMappings: Array<{ __typename?: 'OntologyExternalMapping', id: string, mappingKind: OntologyMappingKind, vocabulary: string, externalUri: string, externalLabel?: string | null }> }>, externalMappings: Array<{ __typename?: 'OntologyExternalMapping', id: string, subjectKind: string, subjectId: string, mappingKind: OntologyMappingKind, vocabulary: string, externalUri: string, externalLabel?: string | null }> } };
-
-export type SettingsKnowledgeGraphIngestRunsQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type SettingsKnowledgeGraphIngestRunsQuery = { __typename?: 'Query', knowledgeGraphIngestRuns: Array<{ __typename?: 'KnowledgeGraphIngestRun', id: string, threadId?: string | null, status: KnowledgeGraphIngestStatus, trigger: string, entityCount: number, relationshipCount: number, evidenceCount: number, diagnosticCount: number, messageCount: number, metrics: any, durationMs?: number | null, error?: string | null, createdAt: any, updatedAt: any, startedAt?: any | null, finishedAt?: any | null }> };
-
-export type SettingsKnowledgeGraphEntitiesQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-  runId?: InputMaybe<Scalars['ID']['input']>;
-  search?: InputMaybe<Scalars['String']['input']>;
-  ontologyType?: InputMaybe<Scalars['String']['input']>;
-  groundingStatus?: InputMaybe<KnowledgeGraphGroundingStatus>;
-  provenanceStatus?: InputMaybe<KnowledgeGraphProvenanceStatus>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type SettingsKnowledgeGraphEntitiesQuery = { __typename?: 'Query', knowledgeGraphEntities: Array<{ __typename?: 'KnowledgeGraphEntity', id: string, label: string, normalizedLabel: string, typeLabel?: string | null, ontologyTypeSlug?: string | null, groundingStatus: KnowledgeGraphGroundingStatus, provenanceStatus: KnowledgeGraphProvenanceStatus, summary?: string | null, aliases: Array<string>, relationshipCount: number, evidenceCount: number, lastSeenAt?: any | null, createdAt: any, updatedAt: any }> };
-
-export type SettingsKnowledgeGraphEntityQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-  entityId: Scalars['ID']['input'];
-}>;
-
-
-export type SettingsKnowledgeGraphEntityQuery = { __typename?: 'Query', knowledgeGraphEntity?: { __typename?: 'KnowledgeGraphEntity', id: string, label: string, normalizedLabel: string, typeLabel?: string | null, ontologyTypeSlug?: string | null, groundingStatus: KnowledgeGraphGroundingStatus, provenanceStatus: KnowledgeGraphProvenanceStatus, summary?: string | null, aliases: Array<string>, properties: any, diagnostics: any, relationshipCount: number, evidenceCount: number, lastSeenAt?: any | null, relationships: Array<{ __typename?: 'KnowledgeGraphRelationship', id: string, sourceEntityId: string, targetEntityId: string, label: string, ontologyTypeSlug?: string | null, groundingStatus: KnowledgeGraphGroundingStatus, provenanceStatus: KnowledgeGraphProvenanceStatus, confidence?: number | null, evidenceCount: number, lastSeenAt?: any | null, evidence: Array<{ __typename?: 'KnowledgeGraphEvidence', id: string, snippet: string, messageId?: string | null, messageRole?: string | null, messageCreatedAt?: any | null, speakerLabel?: string | null }> }>, evidence: Array<{ __typename?: 'KnowledgeGraphEvidence', id: string, snippet: string, messageId?: string | null, messageRole?: string | null, messageCreatedAt?: any | null, speakerLabel?: string | null }> } | null };
 
 export type SettingsRenameTenantSlugMutationVariables = Exact<{
   tenantId: Scalars['ID']['input'];
@@ -14503,7 +12814,7 @@ export type SettingsCanonicalEntityMergePreviewQueryVariables = Exact<{
 }>;
 
 
-export type SettingsCanonicalEntityMergePreviewQuery = { __typename?: 'Query', canonicalEntityMergePreview: { __typename?: 'CanonicalEntityMergeImpact', sourceMappingCount: number, identityClaimCount: number, memoryClaimCount: number, graphEntityCount: number } };
+export type SettingsCanonicalEntityMergePreviewQuery = { __typename?: 'Query', canonicalEntityMergePreview: { __typename?: 'CanonicalEntityMergeImpact', sourceMappingCount: number, identityClaimCount: number, memoryClaimCount: number } };
 
 export type SettingsMergeCanonicalEntitiesMutationVariables = Exact<{
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -14513,7 +12824,7 @@ export type SettingsMergeCanonicalEntitiesMutationVariables = Exact<{
 }>;
 
 
-export type SettingsMergeCanonicalEntitiesMutation = { __typename?: 'Mutation', mergeCanonicalEntities: { __typename?: 'CanonicalEntityMergeResult', survivorId: string, loserId: string, impact: { __typename?: 'CanonicalEntityMergeImpact', sourceMappingCount: number, identityClaimCount: number, memoryClaimCount: number, graphEntityCount: number } } };
+export type SettingsMergeCanonicalEntitiesMutation = { __typename?: 'Mutation', mergeCanonicalEntities: { __typename?: 'CanonicalEntityMergeResult', survivorId: string, loserId: string, impact: { __typename?: 'CanonicalEntityMergeImpact', sourceMappingCount: number, identityClaimCount: number, memoryClaimCount: number } } };
 
 export type SettingsAuthorEntitySourceMappingMutationVariables = Exact<{
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -14542,7 +12853,7 @@ export type SettingsCanonicalEntitySplitPreviewQueryVariables = Exact<{
 }>;
 
 
-export type SettingsCanonicalEntitySplitPreviewQuery = { __typename?: 'Query', canonicalEntitySplitPreview: { __typename?: 'CanonicalEntitySplitImpact', mappingCountA: number, mappingCountB: number, claimCountFollowingB: number, claimCountRemainingA: number, memoryClaimCount: number, graphEntityCount: number } };
+export type SettingsCanonicalEntitySplitPreviewQuery = { __typename?: 'Query', canonicalEntitySplitPreview: { __typename?: 'CanonicalEntitySplitImpact', mappingCountA: number, mappingCountB: number, claimCountFollowingB: number, claimCountRemainingA: number, memoryClaimCount: number } };
 
 export type SettingsSplitCanonicalEntityMutationVariables = Exact<{
   tenantId?: InputMaybe<Scalars['ID']['input']>;
@@ -14554,69 +12865,6 @@ export type SettingsSplitCanonicalEntityMutationVariables = Exact<{
 
 
 export type SettingsSplitCanonicalEntityMutation = { __typename?: 'Mutation', splitCanonicalEntity: { __typename?: 'SplitCanonicalEntityResult', entityAId: string, entityBId: string, impact: { __typename?: 'CanonicalEntitySplitImpact', mappingCountA: number, mappingCountB: number, claimCountFollowingB: number, claimCountRemainingA: number } } };
-
-export type SettingsOntologySchemaGraphQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-}>;
-
-
-export type SettingsOntologySchemaGraphQuery = { __typename?: 'Query', ontologySchemaGraph: { __typename?: 'OntologySchemaGraph', tenantId: string, systems: Array<string>, types: Array<{ __typename?: 'OntologySchemaGraphType', slug: string, name: string, instanceCount: number, lifecycleStatus: OntologyLifecycleStatus }>, relationships: Array<{ __typename?: 'OntologySchemaGraphRelationship', slug: string, name: string, sourceTypeSlugs: Array<string>, targetTypeSlugs: Array<string> }>, candidates: Array<{ __typename?: 'OntologySchemaGraphCandidate', itemId: string, changeSetId: string, itemType: OntologyChangeItemType, slug?: string | null, proposedValue: any, editedValue?: any | null, evidenceCount: number, origin: string, status: OntologyChangeSetStatus }>, systemLinks: Array<{ __typename?: 'OntologySchemaGraphSystemLink', systemSlug: string, entityTypeSlug: string, identity: boolean, data: boolean }> } };
-
-export type SettingsOntologyChangeSetsQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-}>;
-
-
-export type SettingsOntologyChangeSetsQuery = { __typename?: 'Query', ontologyChangeSets: Array<{ __typename?: 'OntologyChangeSet', id: string, title: string, summary?: string | null, status: OntologyChangeSetStatus, proposedBy: string, createdAt: any, updatedAt: any, items: Array<{ __typename?: 'OntologyChangeSetItem', id: string, changeSetId: string, itemType: OntologyChangeItemType, action: OntologyChangeAction, status: OntologyChangeSetStatus, targetSlug?: string | null, title: string, description?: string | null, proposedValue: any, editedValue?: any | null, confidence?: number | null, updatedAt: any, evidenceExamples: Array<{ __typename?: 'OntologyEvidenceExample', id: string, sourceKind: string, sourceRef?: string | null, sourceLabel?: string | null, quote: string, observedAt?: any | null }> }> }> };
-
-export type SettingsCreateOntologyChangeSetMutationVariables = Exact<{
-  input: CreateOntologyChangeSetInput;
-}>;
-
-
-export type SettingsCreateOntologyChangeSetMutation = { __typename?: 'Mutation', createOntologyChangeSet: { __typename?: 'CreateOntologyChangeSetPayload', mergedItemIds: Array<string>, changeSet?: { __typename?: 'OntologyChangeSet', id: string, status: OntologyChangeSetStatus, updatedAt: any, items: Array<{ __typename?: 'OntologyChangeSetItem', id: string, targetSlug?: string | null, status: OntologyChangeSetStatus, updatedAt: any }> } | null, conflicts: Array<{ __typename?: 'OntologyChangeSetSlugConflict', slug: string, itemType: OntologyChangeItemType, reason: string }> } };
-
-export type SettingsUpdateOntologyChangeSetMutationVariables = Exact<{
-  input: UpdateOntologyChangeSetInput;
-}>;
-
-
-export type SettingsUpdateOntologyChangeSetMutation = { __typename?: 'Mutation', updateOntologyChangeSet: { __typename?: 'OntologyChangeSet', id: string, status: OntologyChangeSetStatus, updatedAt: any, items: Array<{ __typename?: 'OntologyChangeSetItem', id: string, status: OntologyChangeSetStatus, editedValue?: any | null, updatedAt: any }> } };
-
-export type SettingsApproveOntologyChangeSetMutationVariables = Exact<{
-  input: ApproveOntologyChangeSetInput;
-}>;
-
-
-export type SettingsApproveOntologyChangeSetMutation = { __typename?: 'Mutation', approveOntologyChangeSet: { __typename?: 'OntologyChangeSet', id: string, status: OntologyChangeSetStatus, updatedAt: any, items: Array<{ __typename?: 'OntologyChangeSetItem', id: string, status: OntologyChangeSetStatus, updatedAt: any }> } };
-
-export type SettingsRejectOntologyChangeSetMutationVariables = Exact<{
-  input: RejectOntologyChangeSetInput;
-}>;
-
-
-export type SettingsRejectOntologyChangeSetMutation = { __typename?: 'Mutation', rejectOntologyChangeSet: { __typename?: 'OntologyChangeSet', id: string, status: OntologyChangeSetStatus, updatedAt: any } };
-
-export type SettingsRejectOntologyChangeSetItemMutationVariables = Exact<{
-  input: RejectOntologyChangeSetItemInput;
-}>;
-
-
-export type SettingsRejectOntologyChangeSetItemMutation = { __typename?: 'Mutation', rejectOntologyChangeSetItem: { __typename?: 'OntologyChangeSet', id: string, status: OntologyChangeSetStatus, updatedAt: any, items: Array<{ __typename?: 'OntologyChangeSetItem', id: string, status: OntologyChangeSetStatus, updatedAt: any }> } };
-
-export type SettingsOntologyPacksQueryVariables = Exact<{
-  tenantId: Scalars['ID']['input'];
-}>;
-
-
-export type SettingsOntologyPacksQuery = { __typename?: 'Query', ontologyPacks: Array<{ __typename?: 'OntologyPack', slug: string, name: string, description: string, types: Array<{ __typename?: 'OntologyPackType', slug: string, name: string, description?: string | null, state: OntologyPackTypeState }> }> };
-
-export type SettingsInstallOntologyPackMutationVariables = Exact<{
-  input: InstallOntologyPackInput;
-}>;
-
-
-export type SettingsInstallOntologyPackMutation = { __typename?: 'Mutation', installOntologyPack: { __typename?: 'InstallOntologyPackPayload', mergedItemIds: Array<string>, skippedRejectedSlugs: Array<string>, changeSet?: { __typename?: 'OntologyChangeSet', id: string, status: OntologyChangeSetStatus, updatedAt: any, items: Array<{ __typename?: 'OntologyChangeSetItem', id: string, status: OntologyChangeSetStatus, itemType: OntologyChangeItemType, targetSlug?: string | null, title: string, proposedValue: any, editedValue?: any | null }> } | null, conflicts: Array<{ __typename?: 'OntologyChangeSetSlugConflict', slug: string, itemType: OntologyChangeItemType, reason: string }> } };
 
 export type SettingsMySlackLinksQueryVariables = Exact<{
   tenantId: Scalars['ID']['input'];
@@ -14732,17 +12980,6 @@ export const SkillEvalScoreDetailDocument = {"kind":"Document","definitions":[{"
 export const SkillEvalGateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SkillEvalGate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"skillEvalGate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"threshold"}}]}}]}}]} as unknown as DocumentNode<SkillEvalGateQuery, SkillEvalGateQueryVariables>;
 export const SetSkillEvalGateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetSkillEvalGate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threshold"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Float"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setSkillEvalGate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"threshold"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threshold"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"threshold"}}]}}]}}]} as unknown as DocumentNode<SetSkillEvalGateMutation, SetSkillEvalGateMutationVariables>;
 export const ApplySkillUpdateDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"ApplySkillUpdate"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"skillSlug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"override"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Boolean"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"applySkillUpdate"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"skillSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"skillSlug"}}},{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"override"},"value":{"kind":"Variable","name":{"kind":"Name","value":"override"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"applied"}},{"kind":"Field","name":{"kind":"Name","value":"blocked"}},{"kind":"Field","name":{"kind":"Name","value":"overridden"}},{"kind":"Field","name":{"kind":"Name","value":"passRate"}},{"kind":"Field","name":{"kind":"Name","value":"threshold"}}]}}]}}]} as unknown as DocumentNode<ApplySkillUpdateMutation, ApplySkillUpdateMutationVariables>;
-export const KnowledgeBasesListDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"KnowledgeBasesList"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"knowledgeBases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"documentCount"}},{"kind":"Field","name":{"kind":"Name","value":"lastSyncAt"}}]}}]}}]} as unknown as DocumentNode<KnowledgeBasesListQuery, KnowledgeBasesListQueryVariables>;
-export const KnowledgeBaseDetailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"KnowledgeBaseDetail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"knowledgeBase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"embeddingModel"}},{"kind":"Field","name":{"kind":"Name","value":"chunkingStrategy"}},{"kind":"Field","name":{"kind":"Name","value":"chunkSizeTokens"}},{"kind":"Field","name":{"kind":"Name","value":"chunkOverlapPercent"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"awsKbId"}},{"kind":"Field","name":{"kind":"Name","value":"lastSyncAt"}},{"kind":"Field","name":{"kind":"Name","value":"lastSyncStatus"}},{"kind":"Field","name":{"kind":"Name","value":"documentCount"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}}]}}]}}]} as unknown as DocumentNode<KnowledgeBaseDetailQuery, KnowledgeBaseDetailQueryVariables>;
-export const TestKnowledgeBaseRetrievalDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"TestKnowledgeBaseRetrieval"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"query"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"testKnowledgeBaseRetrieval"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"query"},"value":{"kind":"Variable","name":{"kind":"Name","value":"query"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"hits"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"snippet"}},{"kind":"Field","name":{"kind":"Name","value":"score"}},{"kind":"Field","name":{"kind":"Name","value":"source"}}]}}]}}]}}]} as unknown as DocumentNode<TestKnowledgeBaseRetrievalQuery, TestKnowledgeBaseRetrievalQueryVariables>;
-export const CreateKnowledgeBaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"CreateKnowledgeBase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateKnowledgeBaseInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createKnowledgeBase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<CreateKnowledgeBaseMutation, CreateKnowledgeBaseMutationVariables>;
-export const UpdateKnowledgeBaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateKnowledgeBase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateKnowledgeBaseInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateKnowledgeBase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"chunkingStrategy"}},{"kind":"Field","name":{"kind":"Name","value":"chunkSizeTokens"}},{"kind":"Field","name":{"kind":"Name","value":"chunkOverlapPercent"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<UpdateKnowledgeBaseMutation, UpdateKnowledgeBaseMutationVariables>;
-export const SyncKnowledgeBaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SyncKnowledgeBase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"syncKnowledgeBase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"lastSyncStatus"}}]}}]}}]} as unknown as DocumentNode<SyncKnowledgeBaseMutation, SyncKnowledgeBaseMutationVariables>;
-export const RetryKnowledgeBaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"RetryKnowledgeBase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"retryKnowledgeBase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"errorMessage"}}]}}]}}]} as unknown as DocumentNode<RetryKnowledgeBaseMutation, RetryKnowledgeBaseMutationVariables>;
-export const DeleteKnowledgeBaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"DeleteKnowledgeBase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deleteKnowledgeBase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}]}]}}]} as unknown as DocumentNode<DeleteKnowledgeBaseMutation, DeleteKnowledgeBaseMutationVariables>;
-export const KnowledgeBaseBindingsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"KnowledgeBaseBindings"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantAgent"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"knowledgeBases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"knowledgeBaseId"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"spaces"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"EnumValue","value":"ACTIVE"}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"knowledgeBases"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"knowledgeBaseId"}}]}}]}}]}}]} as unknown as DocumentNode<KnowledgeBaseBindingsQuery, KnowledgeBaseBindingsQueryVariables>;
-export const SetAgentKnowledgeBasesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetAgentKnowledgeBases"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"knowledgeBases"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"AgentKnowledgeBaseInput"}}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setAgentKnowledgeBases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}},{"kind":"Argument","name":{"kind":"Name","value":"knowledgeBases"},"value":{"kind":"Variable","name":{"kind":"Name","value":"knowledgeBases"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"knowledgeBaseId"}}]}}]}}]} as unknown as DocumentNode<SetAgentKnowledgeBasesMutation, SetAgentKnowledgeBasesMutationVariables>;
-export const SetSpaceKnowledgeBasesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SetSpaceKnowledgeBases"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SetSpaceKnowledgeBasesInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"setSpaceKnowledgeBases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"knowledgeBaseId"}}]}}]}}]} as unknown as DocumentNode<SetSpaceKnowledgeBasesMutation, SetSpaceKnowledgeBasesMutationVariables>;
 export const RoutineSourceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"RoutineSource"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"routineId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"routineSource"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"routineId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"routineId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"routineId"}},{"kind":"Field","name":{"kind":"Name","value":"ref"}},{"kind":"Field","name":{"kind":"Name","value":"files"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"path"}},{"kind":"Field","name":{"kind":"Name","value":"content"}},{"kind":"Field","name":{"kind":"Name","value":"language"}}]}}]}}]}}]} as unknown as DocumentNode<RoutineSourceQuery, RoutineSourceQueryVariables>;
 export const RoutineDetailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"RoutineDetail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"routine"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"type"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"schedule"}},{"kind":"Field","name":{"kind":"Name","value":"engine"}},{"kind":"Field","name":{"kind":"Name","value":"currentVersion"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"lastRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"nextRunAt"}},{"kind":"Field","name":{"kind":"Name","value":"agentId"}},{"kind":"Field","name":{"kind":"Name","value":"agent"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"avatarUrl"}}]}},{"kind":"Field","name":{"kind":"Name","value":"triggers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"triggerType"}},{"kind":"Field","name":{"kind":"Name","value":"config"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<RoutineDetailQuery, RoutineDetailQueryVariables>;
 export const RoutineRecipeCatalogDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"RoutineRecipeCatalog"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"routineRecipeCatalog"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"category"}},{"kind":"Field","name":{"kind":"Name","value":"hitlCapable"}},{"kind":"Field","name":{"kind":"Name","value":"defaultArgs"}},{"kind":"Field","name":{"kind":"Name","value":"configFields"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"key"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"inputType"}},{"kind":"Field","name":{"kind":"Name","value":"control"}},{"kind":"Field","name":{"kind":"Name","value":"required"}},{"kind":"Field","name":{"kind":"Name","value":"editable"}},{"kind":"Field","name":{"kind":"Name","value":"options"}},{"kind":"Field","name":{"kind":"Name","value":"placeholder"}},{"kind":"Field","name":{"kind":"Name","value":"helpText"}},{"kind":"Field","name":{"kind":"Name","value":"min"}},{"kind":"Field","name":{"kind":"Name","value":"max"}},{"kind":"Field","name":{"kind":"Name","value":"pattern"}}]}}]}}]}}]} as unknown as DocumentNode<RoutineRecipeCatalogQuery, RoutineRecipeCatalogQueryVariables>;
@@ -14757,7 +12994,7 @@ export const RoutineRepairEventsDocument = {"kind":"Document","definitions":[{"k
 export const UpdateRoutineStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"UpdateRoutineStatus"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateRoutineInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateRoutine"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"disabledReason"}}]}}]}}]} as unknown as DocumentNode<UpdateRoutineStatusMutation, UpdateRoutineStatusMutationVariables>;
 export const SettingsTenantDetailDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsTenantDetail"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"plan"}},{"kind":"Field","name":{"kind":"Name","value":"issuePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"issueCounter"}},{"kind":"Field","name":{"kind":"Name","value":"settings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"defaultModel"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]} as unknown as DocumentNode<SettingsTenantDetailQuery, SettingsTenantDetailQueryVariables>;
 export const SidebarDeployedReleaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SidebarDeployedRelease"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deploymentStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"releaseVersion"}}]}}]}}]} as unknown as DocumentNode<SidebarDeployedReleaseQuery, SidebarDeployedReleaseQueryVariables>;
-export const SettingsDeploymentStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsDeploymentStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deploymentStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"region"}},{"kind":"Field","name":{"kind":"Name","value":"accountId"}},{"kind":"Field","name":{"kind":"Name","value":"releaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"releaseManifestUrl"}},{"kind":"Field","name":{"kind":"Name","value":"releaseManifestSha256"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentControllerArn"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentRunnerProjectName"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentEvidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"bucketName"}},{"kind":"Field","name":{"kind":"Name","value":"databaseEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"ecrUrl"}},{"kind":"Field","name":{"kind":"Name","value":"adminUrl"}},{"kind":"Field","name":{"kind":"Name","value":"docsUrl"}},{"kind":"Field","name":{"kind":"Name","value":"apiEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"appsyncUrl"}},{"kind":"Field","name":{"kind":"Name","value":"appsyncRealtimeUrl"}},{"kind":"Field","name":{"kind":"Name","value":"hindsightEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreStatus"}},{"kind":"Field","name":{"kind":"Name","value":"hindsightEnabled"}},{"kind":"Field","name":{"kind":"Name","value":"managedMemoryEnabled"}}]}}]}}]} as unknown as DocumentNode<SettingsDeploymentStatusQuery, SettingsDeploymentStatusQueryVariables>;
+export const SettingsDeploymentStatusDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsDeploymentStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deploymentStatus"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"stage"}},{"kind":"Field","name":{"kind":"Name","value":"source"}},{"kind":"Field","name":{"kind":"Name","value":"region"}},{"kind":"Field","name":{"kind":"Name","value":"accountId"}},{"kind":"Field","name":{"kind":"Name","value":"releaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"releaseManifestUrl"}},{"kind":"Field","name":{"kind":"Name","value":"releaseManifestSha256"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentControllerArn"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentRunnerProjectName"}},{"kind":"Field","name":{"kind":"Name","value":"deploymentEvidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"bucketName"}},{"kind":"Field","name":{"kind":"Name","value":"databaseEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"ecrUrl"}},{"kind":"Field","name":{"kind":"Name","value":"adminUrl"}},{"kind":"Field","name":{"kind":"Name","value":"docsUrl"}},{"kind":"Field","name":{"kind":"Name","value":"apiEndpoint"}},{"kind":"Field","name":{"kind":"Name","value":"appsyncUrl"}},{"kind":"Field","name":{"kind":"Name","value":"appsyncRealtimeUrl"}},{"kind":"Field","name":{"kind":"Name","value":"agentcoreStatus"}},{"kind":"Field","name":{"kind":"Name","value":"managedMemoryEnabled"}}]}}]}}]} as unknown as DocumentNode<SettingsDeploymentStatusQuery, SettingsDeploymentStatusQueryVariables>;
 export const SettingsEmailChannelDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsEmailChannel"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"emailChannelSummary"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"productionReady"}},{"kind":"Field","name":{"kind":"Name","value":"ledgerEventCount"}},{"kind":"Field","name":{"kind":"Name","value":"providers"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"activeForProduction"}},{"kind":"Field","name":{"kind":"Name","value":"credentialConfigured"}},{"kind":"Field","name":{"kind":"Name","value":"webhookSecretConfigured"}},{"kind":"Field","name":{"kind":"Name","value":"defaultFromEmail"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"domains"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"providerInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"domain"}},{"kind":"Field","name":{"kind":"Name","value":"ownershipType"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"sendingVerifiedAt"}},{"kind":"Field","name":{"kind":"Name","value":"inboundVerifiedAt"}},{"kind":"Field","name":{"kind":"Name","value":"dnsRecords"}},{"kind":"Field","name":{"kind":"Name","value":"providerMetadata"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"readinessChecks"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"providerInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"domainId"}},{"kind":"Field","name":{"kind":"Name","value":"checkKey"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"lastCheckedAt"}},{"kind":"Field","name":{"kind":"Name","value":"failureCode"}},{"kind":"Field","name":{"kind":"Name","value":"failureMessage"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"blockingReadinessChecks"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"providerInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"domainId"}},{"kind":"Field","name":{"kind":"Name","value":"checkKey"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"failureCode"}},{"kind":"Field","name":{"kind":"Name","value":"failureMessage"}}]}},{"kind":"Field","name":{"kind":"Name","value":"spacePolicies"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"spaceId"}},{"kind":"Field","name":{"kind":"Name","value":"providerInstallId"}},{"kind":"Field","name":{"kind":"Name","value":"enabled"}},{"kind":"Field","name":{"kind":"Name","value":"registeredUsersAllowed"}},{"kind":"Field","name":{"kind":"Name","value":"privateSpaceMembershipRequired"}},{"kind":"Field","name":{"kind":"Name","value":"outsideSenderDefault"}},{"kind":"Field","name":{"kind":"Name","value":"firstSendReviewRequired"}},{"kind":"Field","name":{"kind":"Name","value":"policy"}},{"kind":"Field","name":{"kind":"Name","value":"allowlists"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"valueType"}},{"kind":"Field","name":{"kind":"Name","value":"value"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsEmailChannelQuery, SettingsEmailChannelQueryVariables>;
 export const SettingsSaveEmailProviderCredentialDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsSaveEmailProviderCredential"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SaveEmailProviderCredentialInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"saveEmailProviderCredential"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"activeForProduction"}},{"kind":"Field","name":{"kind":"Name","value":"credentialConfigured"}},{"kind":"Field","name":{"kind":"Name","value":"webhookSecretConfigured"}},{"kind":"Field","name":{"kind":"Name","value":"defaultFromEmail"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsSaveEmailProviderCredentialMutation, SettingsSaveEmailProviderCredentialMutationVariables>;
 export const SettingsConfigureEmailProviderDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsConfigureEmailProvider"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ConfigureEmailProviderInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"configureEmailProvider"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"provider"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"activeForProduction"}},{"kind":"Field","name":{"kind":"Name","value":"credentialConfigured"}},{"kind":"Field","name":{"kind":"Name","value":"defaultFromEmail"}},{"kind":"Field","name":{"kind":"Name","value":"metadata"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsConfigureEmailProviderMutation, SettingsConfigureEmailProviderMutationVariables>;
@@ -14772,10 +13009,6 @@ export const SettingsStartReleaseUpdatePreflightDocument = {"kind":"Document","d
 export const SettingsReleaseUpdateJobDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsReleaseUpdateJob"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"jobId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"releaseUpdateJob"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"jobId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"jobId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"targetReleaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentReleaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"manifestSha256"}},{"kind":"Field","name":{"kind":"Name","value":"manifestSigned"}},{"kind":"Field","name":{"kind":"Name","value":"manifestTrustPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"terraformModuleVersion"}},{"kind":"Field","name":{"kind":"Name","value":"preflightSummary"}},{"kind":"Field","name":{"kind":"Name","value":"preservedConfigSummary"}},{"kind":"Field","name":{"kind":"Name","value":"remediationSummary"}},{"kind":"Field","name":{"kind":"Name","value":"stateMachineArn"}},{"kind":"Field","name":{"kind":"Name","value":"executionArn"}},{"kind":"Field","name":{"kind":"Name","value":"codebuildBuildArn"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"evidencePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"statusPointerBucket"}},{"kind":"Field","name":{"kind":"Name","value":"statusPointerKey"}},{"kind":"Field","name":{"kind":"Name","value":"finalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"failureCategory"}},{"kind":"Field","name":{"kind":"Name","value":"failureMessage"}},{"kind":"Field","name":{"kind":"Name","value":"recoveryAction"}},{"kind":"Field","name":{"kind":"Name","value":"events"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsReleaseUpdateJobQuery, SettingsReleaseUpdateJobQueryVariables>;
 export const SettingsRemediateReleaseRunnerDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsRemediateReleaseRunner"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RemediateReleaseRunnerInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"remediateReleaseRunner"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"targetReleaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"currentReleaseVersion"}},{"kind":"Field","name":{"kind":"Name","value":"manifestSha256"}},{"kind":"Field","name":{"kind":"Name","value":"manifestSigned"}},{"kind":"Field","name":{"kind":"Name","value":"manifestTrustPolicy"}},{"kind":"Field","name":{"kind":"Name","value":"terraformModuleVersion"}},{"kind":"Field","name":{"kind":"Name","value":"preflightSummary"}},{"kind":"Field","name":{"kind":"Name","value":"preservedConfigSummary"}},{"kind":"Field","name":{"kind":"Name","value":"remediationSummary"}},{"kind":"Field","name":{"kind":"Name","value":"stateMachineArn"}},{"kind":"Field","name":{"kind":"Name","value":"executionArn"}},{"kind":"Field","name":{"kind":"Name","value":"codebuildBuildArn"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceBucket"}},{"kind":"Field","name":{"kind":"Name","value":"evidencePrefix"}},{"kind":"Field","name":{"kind":"Name","value":"statusPointerBucket"}},{"kind":"Field","name":{"kind":"Name","value":"statusPointerKey"}},{"kind":"Field","name":{"kind":"Name","value":"finalStatus"}},{"kind":"Field","name":{"kind":"Name","value":"failureCategory"}},{"kind":"Field","name":{"kind":"Name","value":"failureMessage"}},{"kind":"Field","name":{"kind":"Name","value":"recoveryAction"}},{"kind":"Field","name":{"kind":"Name","value":"events"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"eventType"}},{"kind":"Field","name":{"kind":"Name","value":"message"}},{"kind":"Field","name":{"kind":"Name","value":"payload"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsRemediateReleaseRunnerMutation, SettingsRemediateReleaseRunnerMutationVariables>;
 export const SettingsDeploymentEvidenceDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsDeploymentEvidence"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"jobId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"deploymentEvidence"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"jobId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"jobId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"jobId"}},{"kind":"Field","name":{"kind":"Name","value":"bucket"}},{"kind":"Field","name":{"kind":"Name","value":"prefix"}},{"kind":"Field","name":{"kind":"Name","value":"urls"}}]}}]}}]} as unknown as DocumentNode<SettingsDeploymentEvidenceQuery, SettingsDeploymentEvidenceQueryVariables>;
-export const SettingsKnowledgeGraphOntologyDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsKnowledgeGraphOntology"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ontologyDefinitions"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"activeVersion"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"versionNumber"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"activatedAt"}}]}},{"kind":"Field","name":{"kind":"Name","value":"entityTypes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"broadType"}},{"kind":"Field","name":{"kind":"Name","value":"aliases"}},{"kind":"Field","name":{"kind":"Name","value":"lifecycleStatus"}},{"kind":"Field","name":{"kind":"Name","value":"externalMappings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"mappingKind"}},{"kind":"Field","name":{"kind":"Name","value":"vocabulary"}},{"kind":"Field","name":{"kind":"Name","value":"externalUri"}},{"kind":"Field","name":{"kind":"Name","value":"externalLabel"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"relationshipTypes"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"sourceTypeSlugs"}},{"kind":"Field","name":{"kind":"Name","value":"targetTypeSlugs"}},{"kind":"Field","name":{"kind":"Name","value":"aliases"}},{"kind":"Field","name":{"kind":"Name","value":"lifecycleStatus"}},{"kind":"Field","name":{"kind":"Name","value":"externalMappings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"mappingKind"}},{"kind":"Field","name":{"kind":"Name","value":"vocabulary"}},{"kind":"Field","name":{"kind":"Name","value":"externalUri"}},{"kind":"Field","name":{"kind":"Name","value":"externalLabel"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"externalMappings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"subjectKind"}},{"kind":"Field","name":{"kind":"Name","value":"subjectId"}},{"kind":"Field","name":{"kind":"Name","value":"mappingKind"}},{"kind":"Field","name":{"kind":"Name","value":"vocabulary"}},{"kind":"Field","name":{"kind":"Name","value":"externalUri"}},{"kind":"Field","name":{"kind":"Name","value":"externalLabel"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsKnowledgeGraphOntologyQuery, SettingsKnowledgeGraphOntologyQueryVariables>;
-export const SettingsKnowledgeGraphIngestRunsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsKnowledgeGraphIngestRuns"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"knowledgeGraphIngestRuns"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"threadId"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"trigger"}},{"kind":"Field","name":{"kind":"Name","value":"entityCount"}},{"kind":"Field","name":{"kind":"Name","value":"relationshipCount"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceCount"}},{"kind":"Field","name":{"kind":"Name","value":"diagnosticCount"}},{"kind":"Field","name":{"kind":"Name","value":"messageCount"}},{"kind":"Field","name":{"kind":"Name","value":"metrics"}},{"kind":"Field","name":{"kind":"Name","value":"durationMs"}},{"kind":"Field","name":{"kind":"Name","value":"error"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"startedAt"}},{"kind":"Field","name":{"kind":"Name","value":"finishedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsKnowledgeGraphIngestRunsQuery, SettingsKnowledgeGraphIngestRunsQueryVariables>;
-export const SettingsKnowledgeGraphEntitiesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsKnowledgeGraphEntities"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"runId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"search"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"ontologyType"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"groundingStatus"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"KnowledgeGraphGroundingStatus"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"provenanceStatus"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"KnowledgeGraphProvenanceStatus"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"knowledgeGraphEntities"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"threadId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"threadId"}}},{"kind":"Argument","name":{"kind":"Name","value":"runId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"runId"}}},{"kind":"Argument","name":{"kind":"Name","value":"search"},"value":{"kind":"Variable","name":{"kind":"Name","value":"search"}}},{"kind":"Argument","name":{"kind":"Name","value":"ontologyType"},"value":{"kind":"Variable","name":{"kind":"Name","value":"ontologyType"}}},{"kind":"Argument","name":{"kind":"Name","value":"groundingStatus"},"value":{"kind":"Variable","name":{"kind":"Name","value":"groundingStatus"}}},{"kind":"Argument","name":{"kind":"Name","value":"provenanceStatus"},"value":{"kind":"Variable","name":{"kind":"Name","value":"provenanceStatus"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"normalizedLabel"}},{"kind":"Field","name":{"kind":"Name","value":"typeLabel"}},{"kind":"Field","name":{"kind":"Name","value":"ontologyTypeSlug"}},{"kind":"Field","name":{"kind":"Name","value":"groundingStatus"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceStatus"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}},{"kind":"Field","name":{"kind":"Name","value":"aliases"}},{"kind":"Field","name":{"kind":"Name","value":"relationshipCount"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceCount"}},{"kind":"Field","name":{"kind":"Name","value":"lastSeenAt"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsKnowledgeGraphEntitiesQuery, SettingsKnowledgeGraphEntitiesQueryVariables>;
-export const SettingsKnowledgeGraphEntityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsKnowledgeGraphEntity"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"entityId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"knowledgeGraphEntity"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"entityId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"entityId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"normalizedLabel"}},{"kind":"Field","name":{"kind":"Name","value":"typeLabel"}},{"kind":"Field","name":{"kind":"Name","value":"ontologyTypeSlug"}},{"kind":"Field","name":{"kind":"Name","value":"groundingStatus"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceStatus"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}},{"kind":"Field","name":{"kind":"Name","value":"aliases"}},{"kind":"Field","name":{"kind":"Name","value":"properties"}},{"kind":"Field","name":{"kind":"Name","value":"diagnostics"}},{"kind":"Field","name":{"kind":"Name","value":"relationshipCount"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceCount"}},{"kind":"Field","name":{"kind":"Name","value":"lastSeenAt"}},{"kind":"Field","name":{"kind":"Name","value":"relationships"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"sourceEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"targetEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"label"}},{"kind":"Field","name":{"kind":"Name","value":"ontologyTypeSlug"}},{"kind":"Field","name":{"kind":"Name","value":"groundingStatus"}},{"kind":"Field","name":{"kind":"Name","value":"provenanceStatus"}},{"kind":"Field","name":{"kind":"Name","value":"confidence"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceCount"}},{"kind":"Field","name":{"kind":"Name","value":"lastSeenAt"}},{"kind":"Field","name":{"kind":"Name","value":"evidence"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"snippet"}},{"kind":"Field","name":{"kind":"Name","value":"messageId"}},{"kind":"Field","name":{"kind":"Name","value":"messageRole"}},{"kind":"Field","name":{"kind":"Name","value":"messageCreatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"speakerLabel"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"evidence"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"snippet"}},{"kind":"Field","name":{"kind":"Name","value":"messageId"}},{"kind":"Field","name":{"kind":"Name","value":"messageRole"}},{"kind":"Field","name":{"kind":"Name","value":"messageCreatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"speakerLabel"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsKnowledgeGraphEntityQuery, SettingsKnowledgeGraphEntityQueryVariables>;
 export const SettingsRenameTenantSlugDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsRenameTenantSlug"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"newSlug"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"renameTenantSlug"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"newSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"newSlug"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsRenameTenantSlugMutation, SettingsRenameTenantSlugMutationVariables>;
 export const SettingsTenantFeaturesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsTenantFeatures"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenant"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"settings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"features"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsTenantFeaturesQuery, SettingsTenantFeaturesQueryVariables>;
 export const SettingsUpdateTenantArtifactStyleDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsUpdateTenantArtifactStyle"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateTenantSettingsInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateTenantSettings"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"features"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsUpdateTenantArtifactStyleMutation, SettingsUpdateTenantArtifactStyleMutationVariables>;
@@ -14834,21 +13067,12 @@ export const SettingsWorkspacePreviewFileDocument = {"kind":"Document","definiti
 export const SettingsCanonicalEntitiesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsCanonicalEntities"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"entityTypeSlug"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"search"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"canonicalEntities"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"entityTypeSlug"},"value":{"kind":"Variable","name":{"kind":"Name","value":"entityTypeSlug"}}},{"kind":"Argument","name":{"kind":"Name","value":"search"},"value":{"kind":"Variable","name":{"kind":"Name","value":"search"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"entityTypeSlug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"normalizedName"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"mergedIntoId"}},{"kind":"Field","name":{"kind":"Name","value":"version"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"sourceMappings"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"sourceSystem"}},{"kind":"Field","name":{"kind":"Name","value":"namespace"}},{"kind":"Field","name":{"kind":"Name","value":"externalId"}},{"kind":"Field","name":{"kind":"Name","value":"visibility"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdByUserId"}},{"kind":"Field","name":{"kind":"Name","value":"createdThreadRef"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsCanonicalEntitiesQuery, SettingsCanonicalEntitiesQueryVariables>;
 export const SettingsEntityResolutionCasesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsEntityResolutionCases"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"status"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"limit"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"Int"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"entityResolutionCases"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"status"},"value":{"kind":"Variable","name":{"kind":"Name","value":"status"}}},{"kind":"Argument","name":{"kind":"Name","value":"limit"},"value":{"kind":"Variable","name":{"kind":"Name","value":"limit"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"entityTypeSlug"}},{"kind":"Field","name":{"kind":"Name","value":"displayHint"}},{"kind":"Field","name":{"kind":"Name","value":"candidates"}},{"kind":"Field","name":{"kind":"Name","value":"conflictingClaims"}},{"kind":"Field","name":{"kind":"Name","value":"impactSummary"}},{"kind":"Field","name":{"kind":"Name","value":"itemCount"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"decision"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsEntityResolutionCasesQuery, SettingsEntityResolutionCasesQueryVariables>;
 export const SettingsResolveEntityResolutionCaseDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsResolveEntityResolutionCase"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"caseId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"decision"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"EntityResolutionDecision"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"canonicalEntityId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"displayName"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"resolveEntityResolutionCase"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"caseId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"caseId"}}},{"kind":"Argument","name":{"kind":"Name","value":"decision"},"value":{"kind":"Variable","name":{"kind":"Name","value":"decision"}}},{"kind":"Argument","name":{"kind":"Name","value":"canonicalEntityId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"canonicalEntityId"}}},{"kind":"Argument","name":{"kind":"Name","value":"displayName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"displayName"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"decision"}},{"kind":"Field","name":{"kind":"Name","value":"resolvedCanonicalEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsResolveEntityResolutionCaseMutation, SettingsResolveEntityResolutionCaseMutationVariables>;
-export const SettingsCanonicalEntityMergePreviewDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsCanonicalEntityMergePreview"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"survivorId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"loserId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"canonicalEntityMergePreview"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"survivorId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"survivorId"}}},{"kind":"Argument","name":{"kind":"Name","value":"loserId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"loserId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sourceMappingCount"}},{"kind":"Field","name":{"kind":"Name","value":"identityClaimCount"}},{"kind":"Field","name":{"kind":"Name","value":"memoryClaimCount"}},{"kind":"Field","name":{"kind":"Name","value":"graphEntityCount"}}]}}]}}]} as unknown as DocumentNode<SettingsCanonicalEntityMergePreviewQuery, SettingsCanonicalEntityMergePreviewQueryVariables>;
-export const SettingsMergeCanonicalEntitiesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsMergeCanonicalEntities"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"survivorId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"loserId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"confirmImpact"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CanonicalEntityMergeImpactInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"mergeCanonicalEntities"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"survivorId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"survivorId"}}},{"kind":"Argument","name":{"kind":"Name","value":"loserId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"loserId"}}},{"kind":"Argument","name":{"kind":"Name","value":"confirmImpact"},"value":{"kind":"Variable","name":{"kind":"Name","value":"confirmImpact"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"survivorId"}},{"kind":"Field","name":{"kind":"Name","value":"loserId"}},{"kind":"Field","name":{"kind":"Name","value":"impact"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sourceMappingCount"}},{"kind":"Field","name":{"kind":"Name","value":"identityClaimCount"}},{"kind":"Field","name":{"kind":"Name","value":"memoryClaimCount"}},{"kind":"Field","name":{"kind":"Name","value":"graphEntityCount"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsMergeCanonicalEntitiesMutation, SettingsMergeCanonicalEntitiesMutationVariables>;
+export const SettingsCanonicalEntityMergePreviewDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsCanonicalEntityMergePreview"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"survivorId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"loserId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"canonicalEntityMergePreview"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"survivorId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"survivorId"}}},{"kind":"Argument","name":{"kind":"Name","value":"loserId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"loserId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sourceMappingCount"}},{"kind":"Field","name":{"kind":"Name","value":"identityClaimCount"}},{"kind":"Field","name":{"kind":"Name","value":"memoryClaimCount"}}]}}]}}]} as unknown as DocumentNode<SettingsCanonicalEntityMergePreviewQuery, SettingsCanonicalEntityMergePreviewQueryVariables>;
+export const SettingsMergeCanonicalEntitiesDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsMergeCanonicalEntities"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"survivorId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"loserId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"confirmImpact"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CanonicalEntityMergeImpactInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"mergeCanonicalEntities"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"survivorId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"survivorId"}}},{"kind":"Argument","name":{"kind":"Name","value":"loserId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"loserId"}}},{"kind":"Argument","name":{"kind":"Name","value":"confirmImpact"},"value":{"kind":"Variable","name":{"kind":"Name","value":"confirmImpact"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"survivorId"}},{"kind":"Field","name":{"kind":"Name","value":"loserId"}},{"kind":"Field","name":{"kind":"Name","value":"impact"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"sourceMappingCount"}},{"kind":"Field","name":{"kind":"Name","value":"identityClaimCount"}},{"kind":"Field","name":{"kind":"Name","value":"memoryClaimCount"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsMergeCanonicalEntitiesMutation, SettingsMergeCanonicalEntitiesMutationVariables>;
 export const SettingsAuthorEntitySourceMappingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsAuthorEntitySourceMapping"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"canonicalEntityId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"sourceSystem"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"namespace"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"externalId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"authorEntitySourceMapping"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"canonicalEntityId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"canonicalEntityId"}}},{"kind":"Argument","name":{"kind":"Name","value":"sourceSystem"},"value":{"kind":"Variable","name":{"kind":"Name","value":"sourceSystem"}}},{"kind":"Argument","name":{"kind":"Name","value":"namespace"},"value":{"kind":"Variable","name":{"kind":"Name","value":"namespace"}}},{"kind":"Argument","name":{"kind":"Name","value":"externalId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"externalId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"mapping"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"canonicalEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceSystem"}},{"kind":"Field","name":{"kind":"Name","value":"namespace"}},{"kind":"Field","name":{"kind":"Name","value":"externalId"}},{"kind":"Field","name":{"kind":"Name","value":"createdBy"}}]}},{"kind":"Field","name":{"kind":"Name","value":"existingMappingId"}},{"kind":"Field","name":{"kind":"Name","value":"existingCanonicalEntityId"}}]}}]}}]} as unknown as DocumentNode<SettingsAuthorEntitySourceMappingMutation, SettingsAuthorEntitySourceMappingMutationVariables>;
 export const SettingsRevokeEntitySourceMappingDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsRevokeEntitySourceMapping"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"mappingId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"reason"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"revokeEntitySourceMapping"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"mappingId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"mappingId"}}},{"kind":"Argument","name":{"kind":"Name","value":"reason"},"value":{"kind":"Variable","name":{"kind":"Name","value":"reason"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}},{"kind":"Field","name":{"kind":"Name","value":"canonicalEntityId"}},{"kind":"Field","name":{"kind":"Name","value":"sourceSystem"}},{"kind":"Field","name":{"kind":"Name","value":"namespace"}},{"kind":"Field","name":{"kind":"Name","value":"externalId"}}]}}]}}]} as unknown as DocumentNode<SettingsRevokeEntitySourceMappingMutation, SettingsRevokeEntitySourceMappingMutationVariables>;
-export const SettingsCanonicalEntitySplitPreviewDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsCanonicalEntitySplitPreview"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"canonicalEntityId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"assignments"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SplitMappingAssignmentInput"}}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"canonicalEntitySplitPreview"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"canonicalEntityId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"canonicalEntityId"}}},{"kind":"Argument","name":{"kind":"Name","value":"assignments"},"value":{"kind":"Variable","name":{"kind":"Name","value":"assignments"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"mappingCountA"}},{"kind":"Field","name":{"kind":"Name","value":"mappingCountB"}},{"kind":"Field","name":{"kind":"Name","value":"claimCountFollowingB"}},{"kind":"Field","name":{"kind":"Name","value":"claimCountRemainingA"}},{"kind":"Field","name":{"kind":"Name","value":"memoryClaimCount"}},{"kind":"Field","name":{"kind":"Name","value":"graphEntityCount"}}]}}]}}]} as unknown as DocumentNode<SettingsCanonicalEntitySplitPreviewQuery, SettingsCanonicalEntitySplitPreviewQueryVariables>;
+export const SettingsCanonicalEntitySplitPreviewDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsCanonicalEntitySplitPreview"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"canonicalEntityId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"assignments"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SplitMappingAssignmentInput"}}}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"canonicalEntitySplitPreview"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"canonicalEntityId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"canonicalEntityId"}}},{"kind":"Argument","name":{"kind":"Name","value":"assignments"},"value":{"kind":"Variable","name":{"kind":"Name","value":"assignments"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"mappingCountA"}},{"kind":"Field","name":{"kind":"Name","value":"mappingCountB"}},{"kind":"Field","name":{"kind":"Name","value":"claimCountFollowingB"}},{"kind":"Field","name":{"kind":"Name","value":"claimCountRemainingA"}},{"kind":"Field","name":{"kind":"Name","value":"memoryClaimCount"}}]}}]}}]} as unknown as DocumentNode<SettingsCanonicalEntitySplitPreviewQuery, SettingsCanonicalEntitySplitPreviewQueryVariables>;
 export const SettingsSplitCanonicalEntityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsSplitCanonicalEntity"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"canonicalEntityId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"assignments"}},"type":{"kind":"NonNullType","type":{"kind":"ListType","type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"SplitMappingAssignmentInput"}}}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"newEntityDisplayName"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"String"}}}},{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"confirmImpact"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CanonicalEntitySplitImpactInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"splitCanonicalEntity"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}},{"kind":"Argument","name":{"kind":"Name","value":"canonicalEntityId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"canonicalEntityId"}}},{"kind":"Argument","name":{"kind":"Name","value":"assignments"},"value":{"kind":"Variable","name":{"kind":"Name","value":"assignments"}}},{"kind":"Argument","name":{"kind":"Name","value":"newEntityDisplayName"},"value":{"kind":"Variable","name":{"kind":"Name","value":"newEntityDisplayName"}}},{"kind":"Argument","name":{"kind":"Name","value":"confirmImpact"},"value":{"kind":"Variable","name":{"kind":"Name","value":"confirmImpact"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"entityAId"}},{"kind":"Field","name":{"kind":"Name","value":"entityBId"}},{"kind":"Field","name":{"kind":"Name","value":"impact"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"mappingCountA"}},{"kind":"Field","name":{"kind":"Name","value":"mappingCountB"}},{"kind":"Field","name":{"kind":"Name","value":"claimCountFollowingB"}},{"kind":"Field","name":{"kind":"Name","value":"claimCountRemainingA"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsSplitCanonicalEntityMutation, SettingsSplitCanonicalEntityMutationVariables>;
-export const SettingsOntologySchemaGraphDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsOntologySchemaGraph"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ontologySchemaGraph"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantId"}},{"kind":"Field","name":{"kind":"Name","value":"types"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"instanceCount"}},{"kind":"Field","name":{"kind":"Name","value":"lifecycleStatus"}}]}},{"kind":"Field","name":{"kind":"Name","value":"relationships"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"sourceTypeSlugs"}},{"kind":"Field","name":{"kind":"Name","value":"targetTypeSlugs"}}]}},{"kind":"Field","name":{"kind":"Name","value":"candidates"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"itemId"}},{"kind":"Field","name":{"kind":"Name","value":"changeSetId"}},{"kind":"Field","name":{"kind":"Name","value":"itemType"}},{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"proposedValue"}},{"kind":"Field","name":{"kind":"Name","value":"editedValue"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceCount"}},{"kind":"Field","name":{"kind":"Name","value":"origin"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}},{"kind":"Field","name":{"kind":"Name","value":"systems"}},{"kind":"Field","name":{"kind":"Name","value":"systemLinks"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"systemSlug"}},{"kind":"Field","name":{"kind":"Name","value":"entityTypeSlug"}},{"kind":"Field","name":{"kind":"Name","value":"identity"}},{"kind":"Field","name":{"kind":"Name","value":"data"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsOntologySchemaGraphQuery, SettingsOntologySchemaGraphQueryVariables>;
-export const SettingsOntologyChangeSetsDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsOntologyChangeSets"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ontologyChangeSets"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"summary"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"proposedBy"}},{"kind":"Field","name":{"kind":"Name","value":"createdAt"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"changeSetId"}},{"kind":"Field","name":{"kind":"Name","value":"itemType"}},{"kind":"Field","name":{"kind":"Name","value":"action"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"targetSlug"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"proposedValue"}},{"kind":"Field","name":{"kind":"Name","value":"editedValue"}},{"kind":"Field","name":{"kind":"Name","value":"confidence"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"evidenceExamples"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"sourceKind"}},{"kind":"Field","name":{"kind":"Name","value":"sourceRef"}},{"kind":"Field","name":{"kind":"Name","value":"sourceLabel"}},{"kind":"Field","name":{"kind":"Name","value":"quote"}},{"kind":"Field","name":{"kind":"Name","value":"observedAt"}}]}}]}}]}}]}}]} as unknown as DocumentNode<SettingsOntologyChangeSetsQuery, SettingsOntologyChangeSetsQueryVariables>;
-export const SettingsCreateOntologyChangeSetDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsCreateOntologyChangeSet"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"CreateOntologyChangeSetInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"createOntologyChangeSet"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"changeSet"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"targetSlug"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"mergedItemIds"}},{"kind":"Field","name":{"kind":"Name","value":"conflicts"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"itemType"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsCreateOntologyChangeSetMutation, SettingsCreateOntologyChangeSetMutationVariables>;
-export const SettingsUpdateOntologyChangeSetDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsUpdateOntologyChangeSet"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"UpdateOntologyChangeSetInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"updateOntologyChangeSet"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"editedValue"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsUpdateOntologyChangeSetMutation, SettingsUpdateOntologyChangeSetMutationVariables>;
-export const SettingsApproveOntologyChangeSetDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsApproveOntologyChangeSet"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ApproveOntologyChangeSetInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"approveOntologyChangeSet"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsApproveOntologyChangeSetMutation, SettingsApproveOntologyChangeSetMutationVariables>;
-export const SettingsRejectOntologyChangeSetDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsRejectOntologyChangeSet"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RejectOntologyChangeSetInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rejectOntologyChangeSet"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsRejectOntologyChangeSetMutation, SettingsRejectOntologyChangeSetMutationVariables>;
-export const SettingsRejectOntologyChangeSetItemDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsRejectOntologyChangeSetItem"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"RejectOntologyChangeSetItemInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"rejectOntologyChangeSetItem"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsRejectOntologyChangeSetItemMutation, SettingsRejectOntologyChangeSetItemMutationVariables>;
-export const SettingsOntologyPacksDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsOntologyPacks"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"ontologyPacks"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"types"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"name"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"state"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsOntologyPacksQuery, SettingsOntologyPacksQueryVariables>;
-export const SettingsInstallOntologyPackDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsInstallOntologyPack"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"input"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"InstallOntologyPackInput"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"installOntologyPack"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"input"},"value":{"kind":"Variable","name":{"kind":"Name","value":"input"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"changeSet"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"updatedAt"}},{"kind":"Field","name":{"kind":"Name","value":"items"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"itemType"}},{"kind":"Field","name":{"kind":"Name","value":"targetSlug"}},{"kind":"Field","name":{"kind":"Name","value":"title"}},{"kind":"Field","name":{"kind":"Name","value":"proposedValue"}},{"kind":"Field","name":{"kind":"Name","value":"editedValue"}}]}}]}},{"kind":"Field","name":{"kind":"Name","value":"mergedItemIds"}},{"kind":"Field","name":{"kind":"Name","value":"skippedRejectedSlugs"}},{"kind":"Field","name":{"kind":"Name","value":"conflicts"},"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"itemType"}},{"kind":"Field","name":{"kind":"Name","value":"reason"}}]}}]}}]}}]} as unknown as DocumentNode<SettingsInstallOntologyPackMutation, SettingsInstallOntologyPackMutationVariables>;
 export const SettingsMySlackLinksDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"SettingsMySlackLinks"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"mySlackLinks"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"tenantId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"tenantId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"slackTeamId"}},{"kind":"Field","name":{"kind":"Name","value":"slackTeamName"}},{"kind":"Field","name":{"kind":"Name","value":"slackUserId"}},{"kind":"Field","name":{"kind":"Name","value":"slackUserName"}},{"kind":"Field","name":{"kind":"Name","value":"slackUserEmail"}},{"kind":"Field","name":{"kind":"Name","value":"status"}},{"kind":"Field","name":{"kind":"Name","value":"linkedAt"}}]}}]}}]} as unknown as DocumentNode<SettingsMySlackLinksQuery, SettingsMySlackLinksQueryVariables>;
 export const SettingsUnlinkSlackIdentityDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"mutation","name":{"kind":"Name","value":"SettingsUnlinkSlackIdentity"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"id"}},"type":{"kind":"NonNullType","type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"unlinkSlackIdentity"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"id"},"value":{"kind":"Variable","name":{"kind":"Name","value":"id"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"id"}},{"kind":"Field","name":{"kind":"Name","value":"status"}}]}}]}}]} as unknown as DocumentNode<SettingsUnlinkSlackIdentityMutation, SettingsUnlinkSlackIdentityMutationVariables>;
 export const TenantSkillCatalogDocument = {"kind":"Document","definitions":[{"kind":"OperationDefinition","operation":"query","name":{"kind":"Name","value":"TenantSkillCatalog"},"variableDefinitions":[{"kind":"VariableDefinition","variable":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}},"type":{"kind":"NamedType","name":{"kind":"Name","value":"ID"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"tenantSkillCatalog"},"arguments":[{"kind":"Argument","name":{"kind":"Name","value":"agentId"},"value":{"kind":"Variable","name":{"kind":"Name","value":"agentId"}}}],"selectionSet":{"kind":"SelectionSet","selections":[{"kind":"Field","name":{"kind":"Name","value":"slug"}},{"kind":"Field","name":{"kind":"Name","value":"displayName"}},{"kind":"Field","name":{"kind":"Name","value":"description"}},{"kind":"Field","name":{"kind":"Name","value":"icon"}},{"kind":"Field","name":{"kind":"Name","value":"installed"}}]}}]}}]} as unknown as DocumentNode<TenantSkillCatalogQuery, TenantSkillCatalogQueryVariables>;

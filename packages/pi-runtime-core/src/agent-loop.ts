@@ -2,7 +2,7 @@ import { lstat, mkdir, readFile, readlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
+import type { AssistantMessage, Message, Usage } from "@earendil-works/pi-ai";
 // Type-only imports: erased at runtime, so importing the heavy coding-agent
 // package (TUI components, interactive mode) has zero load-time side effects in
 // the headless container, while `typeof import(...)` below keeps the call shape
@@ -80,6 +80,45 @@ export interface OpenedSession {
   durable?: boolean;
   /** Post-turn session entries for host-specific extension evidence capture. */
   readSessionEntries?: () => unknown[];
+}
+
+/**
+ * Sum usage across every assistant message a turn produced. An agentic turn
+ * makes one model call per tool round, each appending its own assistant
+ * message; reporting only the last message's usage drops every earlier call
+ * (and under prompt caching the final call's uncached `input` can be ~1
+ * token). Returns undefined when no message in the slice carries usage so
+ * callers can fall back.
+ */
+function sumAssistantUsage(
+  messages: readonly AgentMessage[],
+): Usage | undefined {
+  let found = false;
+  const total: Usage = {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  };
+  for (const message of messages) {
+    if (message.role !== "assistant") continue;
+    const usage = (message as AssistantMessage).usage;
+    if (!usage) continue;
+    found = true;
+    total.input += usage.input ?? 0;
+    total.output += usage.output ?? 0;
+    total.cacheRead += usage.cacheRead ?? 0;
+    total.cacheWrite += usage.cacheWrite ?? 0;
+    total.totalTokens += usage.totalTokens ?? 0;
+    total.cost.input += usage.cost?.input ?? 0;
+    total.cost.output += usage.cost?.output ?? 0;
+    total.cost.cacheRead += usage.cost?.cacheRead ?? 0;
+    total.cost.cacheWrite += usage.cost?.cacheWrite ?? 0;
+    total.cost.total += usage.cost?.total ?? 0;
+  }
+  return found ? total : undefined;
 }
 
 function assistantFailureMessage(
@@ -1077,6 +1116,10 @@ export async function runAgentLoop(
     // the new message. Without one, fall back to prepending conversation text.
     const previousPwd = process.env.PWD;
     process.env.PWD = cwd;
+    // Baseline for per-turn usage aggregation: a resumed durable session
+    // already carries prior turns' assistant messages, whose usage must not
+    // be re-counted into this turn.
+    const preTurnMessageCount = session.messages.length;
     try {
       await session.prompt(durable ? args.message : buildTurnPrompt(args));
     } finally {
@@ -1149,7 +1192,9 @@ export async function runAgentLoop(
 
     return {
       content: textFromAssistant(assistant),
-      usage: assistant?.usage,
+      usage:
+        sumAssistantUsage(session.messages.slice(preTurnMessageCount)) ??
+        assistant?.usage,
       modelId,
       toolsCalled: [...toolsCalled],
       toolInvocations,

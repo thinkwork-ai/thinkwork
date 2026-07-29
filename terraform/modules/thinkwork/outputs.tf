@@ -108,10 +108,6 @@ output "aurora_aws_s3_iam_role_arn" {
   value       = module.database.aws_s3_iam_role_arn
 }
 
-output "kb_service_role_arn" {
-  value = module.bedrock_kb.kb_service_role_arn
-}
-
 # App
 output "api_endpoint" {
   value = module.api.api_endpoint
@@ -203,16 +199,6 @@ output "ecr_repository_url" {
 output "agentcore_memory_id" {
   description = "Bedrock AgentCore Memory resource ID (always present — managed memory is always on)"
   value       = module.agentcore_memory.memory_id
-}
-
-output "hindsight_enabled" {
-  description = "Whether Hindsight canonical memory is enabled"
-  value       = local.hindsight_enabled
-}
-
-output "hindsight_endpoint" {
-  description = "Hindsight API endpoint (null when enable_hindsight = false)"
-  value       = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : null
 }
 
 output "brain_artifacts_bucket_name" {

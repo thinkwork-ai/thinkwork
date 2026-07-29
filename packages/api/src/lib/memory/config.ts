@@ -1,11 +1,10 @@
 /**
  * ThinkWork memory contract — deployment configuration.
  *
- * Resolves the active long-term memory engine and its feature flags from
- * process env. Exactly one engine is selected per deployment via
- * `MEMORY_ENGINE`; the selected engine's required env vars
- * (`HINDSIGHT_ENDPOINT` or `AGENTCORE_MEMORY_ID`) must be present or
- * {@link loadMemoryConfig} throws.
+ * Resolves the long-term memory feature flags from process env. AgentCore
+ * managed memory is the only engine (THINK-406); `AGENTCORE_MEMORY_ID` must
+ * be present or {@link loadMemoryConfig} throws. Legacy `MEMORY_ENGINE`
+ * values are tolerated and normalized — see {@link parseEngine}.
  *
  * `sessionSource` is fixed to `"thread_db"` in v1: Aurora thread messages
  * remain the short-term/session context source. Long-term engines must not
@@ -37,7 +36,6 @@ export type MemoryConfig = {
     exportEnabled: boolean;
   };
   backends: {
-    hindsightEndpoint: string | null;
     agentcoreMemoryId: string | null;
     awsRegion: string;
   };
@@ -53,14 +51,23 @@ export class MemoryConfigError extends Error {
   }
 }
 
+/**
+ * Resolve the memory engine.
+ *
+ * AgentCore managed memory is the only engine (THINK-406). Terraform still
+ * ships `memory_engine`/`enable_hindsight` inputs until the infrastructure
+ * teardown lands, so customer stages can boot this code with a stale
+ * `MEMORY_ENGINE=hindsight` value. Rather than crash the Lambda, any
+ * unrecognized or legacy value normalizes to `"agentcore"` with a warning.
+ */
 function parseEngine(raw: string | undefined): MemoryEngineType {
-  const value = (raw || "hindsight").toLowerCase();
-  if (value === "hindsight" || value === "agentcore") {
-    return value;
+  const value = (raw || "").trim().toLowerCase();
+  if (value && value !== "agentcore") {
+    console.warn(
+      `[memory-config] MEMORY_ENGINE="${raw}" is retired; using "agentcore"`,
+    );
   }
-  throw new MemoryConfigError(
-    `MEMORY_ENGINE must be "hindsight" or "agentcore", got "${raw}"`,
-  );
+  return "agentcore";
 }
 
 function parseBool(raw: string | undefined, fallback: boolean): boolean {
@@ -85,24 +92,15 @@ export function loadMemoryConfig(
   const apiEnabled = parseBool(env.MEMORY_API_ENABLED, true);
   const mcpEnabled = parseBool(env.MEMORY_MCP_ENABLED, true);
 
-  const hindsightEndpoint =
-    (env.HINDSIGHT_ENDPOINT ?? getConfig("HINDSIGHT_ENDPOINT"))?.trim() || null;
   const agentcoreMemoryId =
     (env.AGENTCORE_MEMORY_ID ?? getConfig("AGENTCORE_MEMORY_ID"))?.trim() ||
     null;
   const awsRegion = env.AWS_REGION || "us-east-1";
 
-  if (enabled) {
-    if (engine === "hindsight" && !hindsightEndpoint) {
-      throw new MemoryConfigError(
-        'MEMORY_ENGINE="hindsight" requires HINDSIGHT_ENDPOINT to be set',
-      );
-    }
-    if (engine === "agentcore" && !agentcoreMemoryId) {
-      throw new MemoryConfigError(
-        'MEMORY_ENGINE="agentcore" requires AGENTCORE_MEMORY_ID to be set',
-      );
-    }
+  if (enabled && !agentcoreMemoryId) {
+    throw new MemoryConfigError(
+      "AgentCore memory requires AGENTCORE_MEMORY_ID to be set",
+    );
   }
 
   return {
@@ -116,18 +114,14 @@ export function loadMemoryConfig(
       tokenBudget: parseInt10(env.MEMORY_TOKEN_BUDGET, DEFAULT_TOKEN_BUDGET),
     },
     retain: {
-      autoRetainTurns: parseBool(
-        env.MEMORY_AUTO_RETAIN_TURNS,
-        engine === "agentcore",
-      ),
+      autoRetainTurns: parseBool(env.MEMORY_AUTO_RETAIN_TURNS, true),
       explicitRememberEnabled: parseBool(env.MEMORY_EXPLICIT_REMEMBER, true),
     },
     inspect: {
-      graphEnabled: engine === "hindsight",
+      graphEnabled: false,
       exportEnabled: parseBool(env.MEMORY_EXPORT_ENABLED, true),
     },
     backends: {
-      hindsightEndpoint,
       agentcoreMemoryId,
       awsRegion,
     },

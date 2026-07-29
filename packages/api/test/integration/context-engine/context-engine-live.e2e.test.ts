@@ -12,7 +12,6 @@ const PROVIDER_IDS = (
   [
     "memory",
     "workspace-files",
-    "bedrock-knowledge-base",
     "erp-customer",
     "crm-opportunity",
     "support-case",
@@ -23,8 +22,7 @@ const PROVIDER_IDS = (
   .map((item) => item.trim())
   .filter(Boolean);
 const REQUIRED_FAMILIES = (
-  process.env.CONTEXT_ENGINE_E2E_EXPECT_FAMILIES ??
-  "memory,workspace,knowledge-base,sub-agent"
+  process.env.CONTEXT_ENGINE_E2E_EXPECT_FAMILIES ?? "memory,workspace,sub-agent"
 )
   .split(",")
   .map((item) => item.trim())

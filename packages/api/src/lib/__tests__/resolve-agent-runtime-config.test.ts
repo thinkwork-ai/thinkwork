@@ -144,18 +144,6 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     last_test_error: "tenantContextProviderSettings.last_test_error",
   },
   users: { id: "users.id", tenant_id: "users.tenant_id" },
-  agentKnowledgeBases: {
-    agent_id: "agentKnowledgeBases.agent_id",
-    enabled: "agentKnowledgeBases.enabled",
-    knowledge_base_id: "agentKnowledgeBases.knowledge_base_id",
-  },
-  knowledgeBases: { id: "knowledgeBases.id" },
-  spaceKnowledgeBases: {
-    space_id: "spaceKnowledgeBases.space_id",
-    tenant_id: "spaceKnowledgeBases.tenant_id",
-    enabled: "spaceKnowledgeBases.enabled",
-    knowledge_base_id: "spaceKnowledgeBases.knowledge_base_id",
-  },
   guardrails: {
     id: "guardrails.id",
     tenant_id: "guardrails.tenant_id",
@@ -508,7 +496,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_skills metadata overlay
 
     const cfg = await resolveAgentRuntimeConfig({
@@ -520,13 +507,12 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.templateModel).toBe("us.anthropic.claude-sonnet-4-6");
   });
 
-  it("returns the expected shape on the happy path with no skills/KBs/MCPs", async () => {
+  it("returns the expected shape on the happy path with no skills/MCPs", async () => {
     stageAgentRow();
     stageTemplateRow();
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup (tenant_id + is_default=true)
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -545,7 +531,6 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.threadJsonRenderUiEnabled).toBe(true);
     expect(cfg.contextEngineEnabled).toBe(false);
     expect(cfg.contextEngineConfig).toBeUndefined();
-    expect(cfg.knowledgeBasesConfig).toBeUndefined();
     expect(cfg.mcpConfigs).toEqual([]);
     // Default script skills stay present when they have passed the same trust gate.
     const slugs = cfg.skillsConfig.map((s) => s.skillId);
@@ -560,66 +545,11 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(cfg.sendEmailConfig).not.toHaveProperty("agentEmailAddress");
   });
 
-  it("suppresses legacy native Bedrock KB payloads unless explicitly enabled", async () => {
-    stageAgentRow();
-    stageTemplateRow();
-    stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
-    stageTrustedRuntimeSkillRows();
-    rowsQueue.push([
-      {
-        aws_kb_id: "aws-kb-1",
-        name: "Policies",
-        description: "Legacy AWS KB",
-        search_config: { topK: 4 },
-      },
-    ]);
-
-    const cfg = await resolveAgentRuntimeConfig({
-      tenantId: TENANT_ID,
-      agentId: AGENT_ID,
-    });
-
-    expect(cfg.knowledgeBasesConfig).toBeUndefined();
-  });
-
-  it("keeps legacy native Bedrock KB payloads available behind an opt-in flag", async () => {
-    vi.stubEnv("ENABLE_LEGACY_AGENT_KNOWLEDGE_BASES", "true");
-    stageAgentRow();
-    stageTemplateRow();
-    stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
-    stageTrustedRuntimeSkillRows();
-    rowsQueue.push([
-      {
-        aws_kb_id: "aws-kb-1",
-        name: "Policies",
-        description: "Legacy AWS KB",
-        search_config: { topK: 4 },
-      },
-    ]);
-
-    const cfg = await resolveAgentRuntimeConfig({
-      tenantId: TENANT_ID,
-      agentId: AGENT_ID,
-    });
-
-    expect(cfg.knowledgeBasesConfig).toEqual([
-      {
-        awsKbId: "aws-kb-1",
-        name: "Policies",
-        description: "Legacy AWS KB",
-        searchConfig: { topK: 4 },
-      },
-    ]);
-  });
-
   it("filters default runtime skills that have not passed the trust pipeline", async () => {
     stageAgentRow();
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
     rowsQueue.push([]); // skill trust gate
-    rowsQueue.push([]); // kbs
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -663,7 +593,6 @@ describe("resolveAgentRuntimeConfig", () => {
     rowsQueue.push([]); // default guardrail lookup
     rowsQueue.push([]); // agent_skills metadata overlay
     stageTrustedRuntimeSkillRows("approve-receipt", "tag-vendor");
-    rowsQueue.push([]); // kbs
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -714,8 +643,6 @@ describe("resolveAgentRuntimeConfig", () => {
     rowsQueue.push([]); // default guardrail lookup
     rowsQueue.push([]); // agent_skills metadata overlay
     stageTrustedRuntimeSkillRows("ratio-review");
-    rowsQueue.push([]); // kbs
-    rowsQueue.push([]); // space-bound kbs (U7)
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -769,7 +696,6 @@ describe("resolveAgentRuntimeConfig", () => {
         trust_report_content_sha: "old-sha",
       }),
     ]); // skill trust gate
-    rowsQueue.push([]); // kbs
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -821,7 +747,6 @@ describe("resolveAgentRuntimeConfig", () => {
       },
     ]); // agent_skills metadata overlay
     stageTrustedRuntimeSkillRows("github-issues");
-    rowsQueue.push([]); // kbs
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -885,7 +810,6 @@ describe("resolveAgentRuntimeConfig", () => {
       },
     ]); // agent_skills metadata overlay (must lose to the file)
     stageTrustedRuntimeSkillRows("github-issues");
-    rowsQueue.push([]); // kbs
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -903,7 +827,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -919,7 +842,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -933,7 +855,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     await expect(
       resolveAgentRuntimeConfig({
         tenantId: TENANT_ID,
@@ -948,7 +869,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -963,7 +883,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -981,7 +900,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -995,7 +913,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([{ capability: "browser_automation", enabled: true }]); // agent_capabilities
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1010,7 +927,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([{ capability: "browser_automation", enabled: false }]); // agent_capabilities
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1028,7 +944,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([{ capability: "browser_automation", enabled: true }]); // agent_capabilities
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1043,7 +958,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
 
     const cfg = await resolveAgentRuntimeConfig({
@@ -1060,7 +974,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
 
     const cfg = await resolveAgentRuntimeConfig({
@@ -1085,7 +998,6 @@ describe("resolveAgentRuntimeConfig", () => {
       stageTenantSlug();
       rowsQueue.push([]); // default guardrail
       stageTrustedRuntimeSkillRows();
-      rowsQueue.push([]); // kbs
       rowsQueue.push([]); // agent_capabilities
 
       const cfg = await resolveAgentRuntimeConfig({
@@ -1103,7 +1015,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -1117,7 +1028,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -1138,7 +1048,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push([]); // tenant context provider settings
     const cfg = await resolveAgentRuntimeConfig({
@@ -1161,7 +1070,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push([
       {
@@ -1189,7 +1097,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -1209,7 +1116,6 @@ describe("resolveAgentRuntimeConfig", () => {
       },
     ]); // tenant-default guardrail row
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -1232,7 +1138,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([]); // users lookup — empty because predicate rejects cross-tenant
     await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1258,7 +1163,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -1279,7 +1183,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     mockLoadTenantBuiltinTools.mockResolvedValueOnce([
       {
         toolSlug: "web-search",
@@ -1311,7 +1214,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     mockLoadTenantBuiltinTools.mockResolvedValueOnce([
       {
         toolSlug: "web-search",
@@ -1333,7 +1235,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     mockLoadTenantWebExtractConfig.mockResolvedValueOnce({
       toolSlug: "web-extract",
       provider: "firecrawl",
@@ -1361,7 +1262,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
 
     const disabledCfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1379,7 +1279,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
 
     const blockedCfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1396,7 +1295,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     mockBuildMcpConfigs.mockResolvedValueOnce([
       {
         name: "admin-ops",
@@ -1476,7 +1374,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push([
       piExtensionRuntimeRow(),
@@ -1537,7 +1434,6 @@ describe("resolveAgentRuntimeConfig", () => {
     rowsQueue.push([{ slug: "engineering", workspace_folder_name: null }]);
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push([
       piExtensionRuntimeRow({
@@ -1585,7 +1481,6 @@ describe("resolveAgentRuntimeConfig", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push(new Error("pi extension table unavailable"));
 
@@ -1604,8 +1499,6 @@ describe("resolveAgentRuntimeConfig", () => {
     rowsQueue.push([{ slug: "finance", workspace_folder_name: null }]);
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
-    rowsQueue.push([]); // space-bound kbs (U7)
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push([
       {
@@ -1654,7 +1547,6 @@ describe("capability diagnostics channel (U1)", () => {
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail lookup
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
   }
 
   it("flag off: output carries no capabilityDiagnostics key and is unchanged", async () => {
@@ -1692,7 +1584,6 @@ describe("capability diagnostics channel (U1)", () => {
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -1714,7 +1605,6 @@ describe("capability diagnostics channel (U1)", () => {
     stageTenantSlug("acme");
     rowsQueue.push([]); // default guardrail
     rowsQueue.push([]); // skill trust gate — nothing trusted
-    rowsQueue.push([]); // kbs
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -1739,7 +1629,6 @@ describe("capability diagnostics channel (U1)", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     const stale = piExtensionRuntimeRow({
       assignment_id: "assignment-stale",
@@ -1801,7 +1690,6 @@ describe("capability diagnostics channel (U1)", () => {
     stageTenantSlug();
     rowsQueue.push([]); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // kbs
     rowsQueue.push([]); // agent_capabilities
     rowsQueue.push(new Error("pi extension table unavailable"));
 

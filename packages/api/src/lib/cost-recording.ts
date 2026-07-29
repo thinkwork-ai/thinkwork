@@ -139,7 +139,7 @@ function deriveProvider(modelId: string | null): string | null {
   if (lower.includes("claude") || lower.includes("anthropic"))
     return "anthropic";
   if (lower.includes("kimi") || lower.includes("moonshot")) return "moonshotai";
-  // Hindsight calls Bedrock-hosted GPT-OSS models — they're prefixed
+  // Some memory phases call Bedrock-hosted GPT-OSS models — they're prefixed
   // `openai.gpt-oss-...` in Bedrock but the spend goes to AWS, not OpenAI.
   if (lower.includes("gpt-oss")) return "bedrock";
   if (lower.includes("gpt") || lower.includes("openai")) return "openai";
@@ -214,7 +214,7 @@ export async function recordCostEvents(
 
   if (inputTokens > 0 || outputTokens > 0) {
     console.log(
-      `[cost] Real token data: input=${inputTokens} output=${outputTokens} model=${params.model}`,
+      `[cost] Real token data: input=${inputTokens} output=${outputTokens} cachedRead=${params.cachedReadTokens} cachedWrite=${params.cachedWriteTokens ?? 0} model=${params.model}`,
     );
   } else {
     // Runtime didn't return tokens (e.g. pi runtime always returns 0).

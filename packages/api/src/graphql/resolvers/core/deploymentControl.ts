@@ -9,13 +9,13 @@ export function deploymentControlConfig() {
   const stage = process.env.STAGE || "dev";
   return {
     tokenSecretId:
-      process.env.KNOWLEDGE_GRAPH_GITHUB_TOKEN_SECRET_ID ||
+      process.env.DEPLOY_CONTROL_GITHUB_TOKEN_SECRET_ID ||
       `thinkwork/${stage}/github/deploy-token`,
     repository:
-      process.env.KNOWLEDGE_GRAPH_DEPLOY_REPOSITORY || "thinkwork-ai/thinkwork",
+      process.env.DEPLOY_CONTROL_REPOSITORY || "thinkwork-ai/thinkwork",
     workflowFile:
-      process.env.KNOWLEDGE_GRAPH_DEPLOY_WORKFLOW_FILE || "deploy.yml",
-    ref: process.env.KNOWLEDGE_GRAPH_DEPLOY_REF || "main",
+      process.env.DEPLOY_CONTROL_WORKFLOW_FILE || "deploy.yml",
+    ref: process.env.DEPLOY_CONTROL_REF || "main",
   };
 }
 
@@ -25,7 +25,7 @@ export async function readGithubToken(secretId: string): Promise<string> {
   );
   const raw = response.SecretString?.trim();
   if (!raw) {
-    throw new GraphQLError("Knowledge Graph deploy token secret is empty", {
+    throw new GraphQLError("Deploy token secret is empty", {
       extensions: { code: "FAILED_PRECONDITION" },
     });
   }
@@ -135,7 +135,7 @@ export async function requirePlatformOperator(
     .filter(Boolean);
   if (allowlist.length === 0) {
     throw new GraphQLError(
-      "Knowledge Graph deployment is not enabled: THINKWORK_PLATFORM_OPERATOR_EMAILS must be configured",
+      "Deployment control is not enabled: THINKWORK_PLATFORM_OPERATOR_EMAILS must be configured",
       { extensions: { code: "FAILED_PRECONDITION" } },
     );
   }
@@ -143,7 +143,7 @@ export async function requirePlatformOperator(
   const email = (ctx.auth as any)?.email?.toLowerCase?.();
   if (!email || !allowlist.includes(email)) {
     throw new GraphQLError(
-      "Knowledge Graph deployment requires platform-operator role",
+      "Deployment control requires platform-operator role",
       { extensions: { code: "FORBIDDEN" } },
     );
   }

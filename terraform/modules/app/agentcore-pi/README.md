@@ -43,11 +43,9 @@ The Lambda function name changes from `thinkwork-${stage}-agentcore-flue` to `th
 | `bucket_name`         | yes      | Primary S3 bucket for skills + workspace files.                                |
 | `ecr_repository_url`  | yes      | Shared ECR repo URL from `module.agentcore_platform.ecr_repository_url`.       |
 | `async_dlq_arn`       | yes      | Shared async DLQ ARN from `module.agentcore_platform.agentcore_async_dlq_arn`. |
-| `hindsight_endpoint`  | no       | Hindsight API endpoint when enabled; empty disables Hindsight tools.           |
 | `agentcore_memory_id` | no       | AgentCore Memory resource ID for auto-retention.                               |
 | `api_endpoint`        | no       | API Gateway base URL for the `/api/skills/complete` callback.                  |
 | `api_auth_secret`     | no       | Service-auth bearer for the same callback.                                     |
-| `memory_engine`       | no       | `hindsight` or `agentcore`; surfaced as `MEMORY_ENGINE` env var.               |
 
 ## Outputs
 

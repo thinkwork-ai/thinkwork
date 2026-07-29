@@ -35,6 +35,8 @@ export type MemoryRow = {
   ownerType?: string | null;
   ownerId?: string | null;
   strategy: string | null;
+  /** Relevance from a semantic search; null when browsing. */
+  score?: number | null;
   factType: string | null;
   confidence: number | null;
   eventDate: string | null;
@@ -134,6 +136,22 @@ export function MemoryDetailSheet({
 
           <div className="border-t border-muted pt-4 space-y-3">
             <div className="grid grid-cols-2 gap-3 text-xs">
+              {record.namespace && (
+                <div>
+                  <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                    Namespace
+                  </p>
+                  <p className="mt-0.5 truncate">{record.namespace}</p>
+                </div>
+              )}
+              {record.score != null && (
+                <div>
+                  <p className="text-muted-foreground uppercase tracking-wider font-medium">
+                    Relevance
+                  </p>
+                  <p className="mt-0.5">{record.score.toFixed(3)}</p>
+                </div>
+              )}
               {record.bankId && (
                 <div>
                   <p className="text-muted-foreground uppercase tracking-wider font-medium">
@@ -241,8 +259,9 @@ export function MemoryDetailSheet({
                   <AlertDialogHeader>
                     <AlertDialogTitle>Forget this memory?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      This requester memory will no longer be recalled in future
-                      threads. This cannot be undone.
+                      This memory record is deleted from the memory store and
+                      will no longer be recalled in future threads. This cannot
+                      be undone.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>

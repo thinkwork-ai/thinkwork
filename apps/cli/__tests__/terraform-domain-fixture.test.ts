@@ -19,14 +19,13 @@ describe("init-generated main.tf template wiring", () => {
     expect(initSource).toContain("aws.us_east_1 = aws.us_east_1");
   });
 
-  it("threads domain, SES, operator-email, and memory vars through the module block", () => {
+  it("threads domain, SES, and operator-email vars through the module block", () => {
     for (const wiring of [
       "customer_domain           = var.customer_domain",
       "customer_domain_delegated = var.customer_domain_delegated",
       "platform_operator_emails  = var.platform_operator_emails",
       "ses_parent_domain         = var.ses_parent_domain",
       "cognito_email_source_arn  = var.cognito_email_source_arn",
-      "memory_engine             = var.memory_engine",
     ]) {
       expect(initSource).toContain(wiring);
     }
@@ -53,7 +52,6 @@ describe("init-generated main.tf template wiring", () => {
       'variable "platform_operator_emails"',
       'variable "ses_parent_domain"',
       'variable "cognito_email_source_arn"',
-      'variable "memory_engine"',
       'variable "lambda_artifact_bucket"',
       'variable "lambda_artifact_prefix"',
       'variable "agentcore_pi_source_image_uri"',

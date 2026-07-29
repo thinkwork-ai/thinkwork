@@ -5,9 +5,9 @@
  * docs/solutions/database-issues/feature-schema-extraction-pattern.md — the
  * compliance-style greenfield variant, no compat views needed).
  *
- * The ontology schema defines the *type system* ("Customer" is a definition);
- * this schema registers the *instances* ("Acme" is a canonical entity). Graph
- * mirror rows, wiki Entity pages, and durable memory claims all point at one
+ * Entity types are the *type system* ("Customer" is a type); this schema
+ * registers the *instances* ("Acme" is a canonical entity). Wiki Entity
+ * pages and durable memory claims all point at one
  * stable canonical UUID so renames, merges, and retraction survive slug and
  * label churn.
  *
@@ -135,16 +135,6 @@ export const ENTITY_RESOLUTION_DECISIONS = [
 export type EntityResolutionDecision =
   (typeof ENTITY_RESOLUTION_DECISIONS)[number];
 
-/** Resolution state stamped on kg.entities rows (U4). */
-export const KNOWLEDGE_GRAPH_RESOLUTION_STATES = [
-  "resolved",
-  "deferred",
-  "private",
-  "legacy",
-] as const;
-export type KnowledgeGraphResolutionState =
-  (typeof KNOWLEDGE_GRAPH_RESOLUTION_STATES)[number];
-
 // ---------------------------------------------------------------------------
 // identity.canonical_entities — the stable instance registry
 // ---------------------------------------------------------------------------
@@ -158,7 +148,7 @@ export const canonicalEntities = identity.table(
     tenant_id: uuid("tenant_id")
       .references(() => tenants.id, { onDelete: "cascade" })
       .notNull(),
-    /** Ontology entity-type slug — definitions stay in ontology.entity_types. */
+    /** Entity-type slug. */
     entity_type_slug: text("entity_type_slug").notNull(),
     display_name: text("display_name").notNull(),
     normalized_name: text("normalized_name").notNull(),
@@ -213,7 +203,7 @@ export const entitySourceMappings = identity.table(
     canonical_entity_id: uuid("canonical_entity_id")
       .references(() => canonicalEntities.id, { onDelete: "cascade" })
       .notNull(),
-    /** e.g. 'twenty', 'gmail', 'knowledge_graph', 'wiki'. */
+    /** e.g. 'twenty', 'gmail', 'wiki'. */
     source_system: text("source_system").notNull(),
     /** Sub-namespace inside the source system (e.g. workspace id). */
     namespace: text("namespace").notNull().default(""),
@@ -266,7 +256,7 @@ export const entityIdentityClaims = identity.table(
     canonical_entity_id: uuid("canonical_entity_id")
       .references(() => canonicalEntities.id, { onDelete: "cascade" })
       .notNull(),
-    /** Identity rule that produced this claim (ontology entity-type rules). */
+    /** Identity rule that produced this claim. */
     rule_slug: text("rule_slug").notNull(),
     rule_version: integer("rule_version").notNull().default(1),
     /** e.g. 'name', 'domain', 'email'. */
@@ -577,7 +567,7 @@ export const sourceSystemConnectors = identity.table(
 // ---------------------------------------------------------------------------
 
 /**
- * Mirrors ontology.suggestion_scan_jobs: dedupe-key insert-or-load, async
+ * Durable-job convention: dedupe-key insert-or-load, async
  * Event invoke of the identity-match Lambda, invoke failure marked on the
  * row. Metrics report scanned / auto-linked / cases-filed / cases-expired so
  * the open-case budget interaction is visible, not silent. Continuation

@@ -72,10 +72,6 @@ import {
   // Cost Management (PRD-02)
   costEvents,
   budgetPolicies,
-  // Knowledge Bases (PRD-13)
-  knowledgeBases,
-  agentKnowledgeBases,
-  spaceKnowledgeBases,
   // Thread Dependencies (PRD-09)
   threadDependencies,
   // Artifacts
@@ -209,9 +205,6 @@ export {
   agentApiKeys,
   costEvents,
   budgetPolicies,
-  knowledgeBases,
-  agentKnowledgeBases,
-  spaceKnowledgeBases,
   threadDependencies,
   artifacts,
   artifactShares,
@@ -345,36 +338,6 @@ export async function getChatAgentInvokeFnArn(): Promise<string | null> {
     _chatAgentInvokeFnArn = null;
   }
   return _chatAgentInvokeFnArn;
-}
-
-// ---------------------------------------------------------------------------
-// KB Manager Lambda — resolved from SSM at cold start
-// ---------------------------------------------------------------------------
-
-let _kbManagerFnArn: string | null | undefined;
-export async function getKbManagerFnArn(): Promise<string | null> {
-  if (_kbManagerFnArn !== undefined) return _kbManagerFnArn;
-  try {
-    let stage = process.env.STAGE || process.env.STAGE || "";
-    if (!stage && process.env.SST_RESOURCE_App) {
-      try {
-        stage = JSON.parse(process.env.SST_RESOURCE_App).stage;
-      } catch {}
-    }
-    if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } =
-      await import("@aws-sdk/client-ssm");
-    const ssm = new SSMClient({});
-    const res = await ssm.send(
-      new GetParameterCommand({
-        Name: `/thinkwork/${stage}/kb-manager-fn-arn`,
-      }),
-    );
-    _kbManagerFnArn = res.Parameter?.Value || null;
-  } catch {
-    _kbManagerFnArn = null;
-  }
-  return _kbManagerFnArn;
 }
 
 // ---------------------------------------------------------------------------

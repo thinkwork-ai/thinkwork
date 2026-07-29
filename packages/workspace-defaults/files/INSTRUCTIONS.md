@@ -193,8 +193,6 @@ workspace style guide says otherwise.
 
 Space reference documents are retained into platform memory as Brain Sources. Use
 direct memory lookup for durable Space document memory.
-Use any legacy `knowledge_base_search` tool only if the workspace explicitly
-provides it for compatibility.
 
 ### Computer Apps
 

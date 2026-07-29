@@ -455,7 +455,7 @@ async function deleteTenantCascade(
   const db = await openDb(env);
   try {
     // Order matters — FK cascades handle most of it, but a few tables
-    // don't cascade (agent_skills, agent_knowledge_bases, agents → template_id).
+    // don't cascade (agent_skills, agents → template_id).
     // Do the non-cascading ones explicitly, then the rest falls through
     // the tenants row delete.
     await db.execute(
@@ -463,9 +463,6 @@ async function deleteTenantCascade(
     );
     await db.execute(
       sql`DELETE FROM agent_capabilities WHERE tenant_id = ${tenantId}::uuid`,
-    );
-    await db.execute(
-      sql`DELETE FROM agent_knowledge_bases WHERE tenant_id = ${tenantId}::uuid`,
     );
     await db.execute(
       sql`DELETE FROM messages WHERE tenant_id = ${tenantId}::uuid`,

@@ -142,7 +142,7 @@ function record(args: {
     sourceType: "thread_turn",
     status: "active",
     content: { text: args.text },
-    backendRefs: [{ backend: "hindsight", ref: args.id }],
+    backendRefs: [{ backend: "agentcore", ref: args.id }],
     createdAt: args.createdAt,
     metadata: {
       bankId: `user_${args.ownerId}`,

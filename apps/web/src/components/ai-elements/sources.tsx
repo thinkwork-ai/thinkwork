@@ -1,25 +1,20 @@
 import { useCallback, useMemo, useState } from "react";
 import { BookOpen, ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getDocumentViewUrlByKey } from "@/lib/kb-files-api";
 
 /**
- * Knowledge-base citations for one agent turn (AI-Elements-style Sources
+ * Source citations for one agent turn (AI-Elements-style Sources
  * block): "Used N sources" collapsible, one row per distinct document the
- * turn's `search_knowledge` calls returned passages from. Clicking a row
- * resolves a presigned view URL for the original file (rendered inline for
- * PDFs/text, downloaded otherwise) — the KB manifest is the lookup key, so
- * this works for managed uploads and connected external buckets alike.
+ * turn's retrieval calls returned passages from. Clicking a row opens the
+ * retrieval-supplied document URL when one is present.
  */
 
 /**
  * Split a `<key>#p=<n>` page-document id into its source key and page.
  *
- * Transcribed documents are ingested one Bedrock document per page, so the
- * runtime's citation lines can carry the page suffix. Presigned-URL lookup and
- * the KB manifest both key on the SOURCE document, so the suffix has to come
- * off here too — the web must not depend on the runtime version having
- * stripped it, or an older runtime silently breaks every source link.
+ * Paginated documents can be ingested one document per page, so the runtime's
+ * citation lines can carry the page suffix. Lookup keys on the SOURCE
+ * document, so the suffix has to come off here.
  */
 export function splitPageDocumentKey(raw: string): {
   key: string;
@@ -194,8 +189,7 @@ export function knowledgeCitationsFromInvocations(
       add({
         n: index + 1,
         key: split.key,
-        page:
-          typeof row.pageNumber === "number" ? row.pageNumber : split.page,
+        page: typeof row.pageNumber === "number" ? row.pageNumber : split.page,
         quote:
           typeof row.text === "string" ? row.text.slice(0, 280) : undefined,
         documentUrl:
@@ -294,8 +288,7 @@ export function knowledgeSourcesFromInvocations(
       seen.add(split.key);
       sources.push({
         key: split.key,
-        page:
-          typeof row.pageNumber === "number" ? row.pageNumber : split.page,
+        page: typeof row.pageNumber === "number" ? row.pageNumber : split.page,
         documentUrl:
           typeof row.documentUrl === "string" && row.documentUrl
             ? row.documentUrl
@@ -350,23 +343,25 @@ export function KnowledgeSourcesCard({
       // issued after an await.
       const tab = window.open("about:blank", "_blank");
       try {
-        const url =
-          documentUrl ?? (await getDocumentViewUrlByKey(documentKey));
-      // PDF viewers honour the #page= fragment, so a citation lands on the
-      // page the passage was actually read from.
-      const target = page ? `${url}#page=${page}` : url;
-      if (tab) {
-        tab.location.href = target;
-      } else {
-        window.location.href = target;
+        const url = documentUrl;
+        if (!url) throw new Error("Source document is not viewable");
+        // PDF viewers honour the #page= fragment, so a citation lands on the
+        // page the passage was actually read from.
+        const target = page ? `${url}#page=${page}` : url;
+        if (tab) {
+          tab.location.href = target;
+        } else {
+          window.location.href = target;
+        }
+      } catch (e) {
+        tab?.close();
+        setError(e instanceof Error ? e.message : "Failed to open source");
+      } finally {
+        setOpening(null);
       }
-    } catch (e) {
-      tab?.close();
-      setError(e instanceof Error ? e.message : "Failed to open source");
-    } finally {
-      setOpening(null);
-    }
-  }, []);
+    },
+    [],
+  );
 
   if (sources.length === 0) return null;
 

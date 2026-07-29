@@ -20,10 +20,7 @@ These features are complete and supported in v1:
 | Agent Templates                                                        | Stable |
 | Skill packs (SKILL.md → S3 → invoke-time loading)                      | Stable |
 | Threads + channels (CHAT, AUTO, EMAIL, GITHUB)                         | Stable |
-| Hindsight Brain memory (`enable_hindsight = true`, ECS Fargate)        | Beta   |
-| AgentCore managed memory compatibility                                 | Stable |
-| Brain Sources (Hindsight document ingest)                              | Beta   |
-| Legacy Knowledge Bases (Bedrock KB + document upload)                  | Stable |
+| Bedrock AgentCore Memory (the memory engine)                           | Stable |
 | GitHub integration                                                     | Stable |
 | Google Workspace integration (Gmail + Calendar)                        | Beta   |
 | private extension tracker integration (pickup + PR writeback)          | Beta   |
@@ -49,12 +46,6 @@ These features are complete and supported in v1:
 ## What's NOT in v1
 
 These features are explicitly not in scope for v1. They're on the roadmap but don't have committed timelines yet.
-
-### Knowledge Graph + Ontology Studio
-
-A Postgres-backed knowledge graph with entity extraction, relationship modeling, and an ontology editor UI. This would complement Hindsight Brain Sources and legacy document RAG with structured entity graphs for precise, relationship-aware retrieval.
-
-**Not in v1 because:** Hindsight Brain Sources and legacy document retrieval cover the common authored-document path. The graph data model needs more design work before we commit to a schema.
 
 ### AutoResearch
 

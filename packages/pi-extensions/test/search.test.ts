@@ -44,7 +44,7 @@ function makeFakeSearch(
             status: "OK",
             lines: ["Acme SOW [TH-1]"],
           },
-          { source: "ENTITIES", status: "TIMEOUT", lines: [] },
+          { source: "MEMORY", status: "TIMEOUT", lines: [] },
         ],
       };
     },
@@ -114,20 +114,20 @@ describe("createSearchExtension", () => {
 
     const result = await getTool(tools, "search").execute(
       "call-1",
-      { query: "Acme", sources: ["THREADS", "ENTITIES"], limit: 5 },
+      { query: "Acme", sources: ["THREADS", "MEMORY"], limit: 5 },
       NO_SIGNAL,
       NO_UPDATE,
       NO_CTX,
     );
 
     expect(calls).toEqual([
-      { query: "Acme", sources: ["THREADS", "ENTITIES"], limit: 5 },
+      { query: "Acme", sources: ["THREADS", "MEMORY"], limit: 5 },
     ]);
     const text = (result.content?.[0] as { text: string }).text;
     expect(text).toContain("THREADS:");
     expect(text).toContain("Acme SOW [TH-1]");
     // A degraded leg renders as unavailable, not as an empty/OK rail.
-    expect(text).toContain("ENTITIES (timeout): unavailable for this query");
+    expect(text).toContain("MEMORY (timeout): unavailable for this query");
   });
 
   it("degrades to an explicit unavailable result instead of throwing when the provider fails", async () => {

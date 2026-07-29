@@ -56,7 +56,6 @@ function baseArgs(
     env: {
       awsRegion: "us-east-1",
       agentCoreMemoryId: "",
-      hindsightEndpoint: "",
       memoryEngine: "agentcore" as const,
       memoryRetainFnName: "",
       dbClusterArn: "",
@@ -131,7 +130,7 @@ describe("buildInvocationResources — identity-resolution extension allowlist",
 });
 
 // ---------------------------------------------------------------------------
-// Provider transport (mirrors knowledge-graph-provider.test.ts)
+// Provider transport
 // ---------------------------------------------------------------------------
 
 function jsonResponse(body: unknown, status = 200): Response {

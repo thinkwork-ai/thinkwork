@@ -221,15 +221,15 @@ export function WorkflowPlanReview({
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                Completed Thread conversations are already retained in
-                Hindsight; this run compounds that memory bank.
+                Completed Thread conversations are already retained in memory;
+                this run compounds that memory bank.
               </p>
             </div>
           </li>
           {plan.sources.length === 0 ? (
             <li className="rounded-md border border-dashed border-border/70 p-3 text-sm text-muted-foreground">
               No optional external sources are configured. Gmail, Twenty CRM,
-              web, and knowledge-base nodes will be skipped.
+              and web nodes will be skipped.
             </li>
           ) : (
             plan.sources.map((source) => {

@@ -7,8 +7,6 @@ import {
 } from "./settings-nav";
 
 const ACTIVITY = "/settings/activity";
-const KNOWLEDGE_GRAPH = "/settings/knowledge-graph";
-const KNOWLEDGE_BASES = "/settings/knowledge-bases";
 const BILLING = "/settings/billing";
 const AGENTS = "/settings/agents";
 const MODEL_CATALOG = "/settings/model-catalog";
@@ -168,27 +166,10 @@ describe("visibleSettingsNavItems", () => {
     ]);
   });
 
-  it("no longer lists a standalone Knowledge Graph nav entry", () => {
-    // The Knowledge Graph explorer is now a tab of the Memory page.
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === KNOWLEDGE_GRAPH)).toBe(
-      false,
-    );
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.label === "Knowledge Graph")).toBe(
-      false,
-    );
-  });
-
   it("carries no managed-app nav guards", () => {
     for (const item of SETTINGS_NAV_ITEMS) {
       expect("managedAppKey" in item).toBe(false);
     }
-  });
-
-  it("no longer lists a standalone Knowledge Bases nav entry", () => {
-    // Knowledge Bases is a tab of the Memory page using the legacy route.
-    expect(SETTINGS_NAV_ITEMS.some((i) => i.to === KNOWLEDGE_BASES)).toBe(
-      false,
-    );
   });
 
   it("collapses the memory family to a single Memory entry", () => {

@@ -90,13 +90,13 @@ db_password = "change-me-before-deploy"
 
 # Optional — defaults shown
 database_engine = "aurora-serverless"   # or "rds-postgres"
-# enable_hindsight = true                # default Hindsight Brain memory
 ```
 
-Hindsight is the default hosted Brain memory substrate. It provides durable
-user memory, Space memory, retained Brain Sources, recall/reflect, and evidence.
-Set `memory_engine = "agentcore"` only for an explicit low-cost/development
-managed-memory compatibility deployment.
+Memory needs no configuration. Bedrock AgentCore Memory is the only memory
+engine: the runtime hands each completed turn to AgentCore, which extracts
+semantic facts, preferences, summaries, and episodes in the background. New
+stacks should leave `enable_hindsight` and `memory_engine` unset — both are
+declared-but-ignored inputs kept only so older tfvars keep applying.
 
 <Aside type="caution">
   Do not commit `db_password` to source control. Use a secrets manager or
@@ -113,7 +113,7 @@ thinkwork deploy -s dev
 This command runs `terraform init` followed by `terraform apply` inside the ThinkWork module. The first deploy provisions approximately 260 AWS resources across three tiers:
 
 - **Foundation** — VPC, subnets, Cognito user pool, KMS keys, Route53 records
-- **Data** — Aurora Postgres cluster, S3 buckets, Bedrock Knowledge Base
+- **Data** — Aurora Postgres cluster, S3 buckets
 - **App** — AppSync API, API Gateway, AgentCore Lambda, Step Functions, SES
 
 A typical first deploy takes 12–18 minutes. Subsequent deploys that don't touch the database or VPC take 2–4 minutes.

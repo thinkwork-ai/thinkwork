@@ -1,7 +1,7 @@
 ################################################################################
 # S3 Buckets — Data Module
 #
-# Creates the primary S3 bucket for skills, artifacts, knowledge base docs,
+# Creates the primary S3 bucket for skills, artifacts,
 # and email inbound storage. HTTPS-only enforcement + SES inbound policy.
 ################################################################################
 

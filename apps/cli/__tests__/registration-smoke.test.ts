@@ -11,7 +11,6 @@ import { registerAgentCommand } from "../src/commands/agent.js";
 import { registerComputerCommand } from "../src/commands/computer.js";
 import { registerTenantCommand } from "../src/commands/tenant.js";
 import { registerMemberCommand } from "../src/commands/member.js";
-import { registerKbCommand } from "../src/commands/kb.js";
 import { registerRoutineCommand } from "../src/commands/routine.js";
 import { registerScheduledJobCommand } from "../src/commands/scheduled-job.js";
 import { registerTurnCommand } from "../src/commands/turn.js";
@@ -85,12 +84,6 @@ const DOMAINS: DomainCase[] = [
     phase: 2,
     register: registerMemberCommand,
     expectedSubcommand: "invite",
-  },
-  {
-    domain: "kb",
-    phase: 2,
-    register: registerKbCommand,
-    expectedSubcommand: "sync",
   },
   {
     domain: "routine",
@@ -314,9 +307,9 @@ describe("stub registration (taxonomy smoke test)", () => {
     vi.restoreAllMocks();
   });
 
-  it("covers 22 domain groups after retiring template + team commands", () => {
+  it("covers 21 domain groups after retiring template + team + kb commands", () => {
     // Guards against accidental drops when someone deletes a register() import.
-    expect(DOMAINS.length).toBe(22);
+    expect(DOMAINS.length).toBe(21);
   });
 });
 

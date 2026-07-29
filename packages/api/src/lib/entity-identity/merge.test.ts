@@ -9,7 +9,6 @@ const impact: MergeImpactPreview = {
   sourceMappingCount: 2,
   identityClaimCount: 3,
   memoryClaimCount: 4,
-  graphEntityCount: 5,
 };
 
 describe("impactMatches", () => {
@@ -24,7 +23,7 @@ describe("impactMatches", () => {
     expect(impactMatches(impact, { ...impact, sourceMappingCount: 9 })).toBe(
       false,
     );
-    expect(impactMatches(impact, { ...impact, graphEntityCount: 0 })).toBe(
+    expect(impactMatches(impact, { ...impact, identityClaimCount: 0 })).toBe(
       false,
     );
   });
@@ -35,7 +34,6 @@ describe("impactMatches", () => {
     // entities, so a merged loser simply stops being projected — there is no
     // page convergence left to preview or confirm.
     expect(Object.keys(impact).sort()).toEqual([
-      "graphEntityCount",
       "identityClaimCount",
       "memoryClaimCount",
       "sourceMappingCount",
@@ -95,6 +93,6 @@ describe("validateMergePreconditions", () => {
         survivor: active,
         loser: { status: "active", entity_type_slug: "person" },
       }),
-    ).toThrow(/different ontology types/);
+    ).toThrow(/different entity types/);
   });
 });

@@ -3,7 +3,7 @@
  * (THINK-263 U8).
  *
  * The Pi agent tool calls `search` as a SERVICE bearer with a turn-bound
- * header. Unlike the knowledge-graph tool (which needs only the tenant), the
+ * header. Unlike a tenant-only tool, the
  * search broker reaches into per-user surfaces — thread visibility and the
  * caller's own memory bank — so it must run as the turn's USER, not just the
  * tenant. This helper derives BOTH server-side from the turn reference so a

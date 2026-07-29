@@ -13,10 +13,8 @@ function emptyConfig() {
   return {
     activeEngine: "unavailable",
     managedMemoryEnabled: false,
-    hindsightEnabled: false,
     userMemoryEnabled: false,
     spaceMemoryEnabled: false,
-    legacyHindsightAvailable: false,
     companyDistillationEnabled: false,
   };
 }
@@ -25,7 +23,6 @@ export const memorySystemConfig = async () => {
   try {
     const { config, adapter } = getMemoryServices();
     const capabilities = await adapter.capabilities();
-    const hindsightActive = config.enabled && config.engine === "hindsight";
     const userMemoryEnabled =
       config.enabled && capabilities.retain && capabilities.recall;
     const spaceMemoryEnabled =
@@ -33,12 +30,8 @@ export const memorySystemConfig = async () => {
     return {
       activeEngine: config.engine,
       managedMemoryEnabled: config.enabled,
-      hindsightEnabled: hindsightActive,
       userMemoryEnabled,
       spaceMemoryEnabled,
-      legacyHindsightAvailable: Boolean(
-        config.backends.hindsightEndpoint && !hindsightActive,
-      ),
       companyDistillationEnabled: false,
     };
   } catch {

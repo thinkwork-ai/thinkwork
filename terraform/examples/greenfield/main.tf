@@ -93,20 +93,14 @@ variable "database_engine" {
   default     = "aurora-serverless"
 }
 
-variable "hindsight_database_name" {
-  description = "Dedicated Hindsight database name (THINK-220 cutover flag). Empty keeps Hindsight in the hindsight schema of the primary database."
-  type        = string
-  default     = ""
-}
-
 variable "enable_hindsight" {
-  description = "Enable Hindsight canonical user and Space memory. Full ThinkWork installs default this on; set false only for explicit low-cost/development AgentCore-only deployments."
+  description = "DEPRECATED (THINK-407): the Hindsight memory engine and its infrastructure were removed; this input is inert and ignored. Retained so existing tfvars keep working."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "external_kb_source_arns" {
-  description = "Bucket ARNs of customer-owned S3 buckets connected as external Knowledge Base sources (s3-connect). Empty by default — inert until a bucket is connected."
+  description = "DEPRECATED (THINK-402): Knowledge Bases were removed from the product; this input is inert and ignored. Retained so existing tfvars keep working."
   type        = list(string)
   default     = []
 }
@@ -184,7 +178,7 @@ variable "neptune_loader_role_arn" {
 }
 
 variable "memory_engine" {
-  description = "Active long-term memory engine. Empty selects Hindsight when enable_hindsight = true. Use 'agentcore' only for explicit low-cost/development managed-memory deployments."
+  description = "DEPRECATED (THINK-407): AgentCore managed memory is the only engine; this input is inert and ignored. Retained so existing tfvars keep working."
   type        = string
   default     = ""
 }
@@ -527,22 +521,6 @@ variable "stripe_price_ids_json" {
   default     = "{}"
 }
 
-variable "ontology_scan_model_id" {
-  description = <<-EOT
-    Bedrock model id the ontology-scan Lambda uses for suggestion scans.
-    Any Converse-compatible model works; change without a code deploy.
-
-    Default: openai.gpt-oss-120b-1:0 (strong output quality at a lower
-    per-minute throttle risk than Claude Haiku 4.5 on shared dev
-    accounts).
-
-    Named wiki_compile_model_id until the wiki backend was removed;
-    ontology-scan was always its other consumer and is now its only one.
-  EOT
-  type        = string
-  default     = "openai.gpt-oss-120b-1:0"
-}
-
 variable "requester_idle_memory_learning_enabled" {
   description = "Enable requester-scoped 15-minute idle memory learning."
   type        = bool
@@ -581,18 +559,6 @@ variable "brain_source_agent_model_id" {
   EOT
   type        = string
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-}
-
-variable "knowledge_graph_observations_ingest_enabled" {
-  description = "Enable the Brain distillation schedule (observations -> knowledge graph). Ships disabled; flip on dev after a validated manual run (plan 2026-07-03-005 U4)."
-  type        = bool
-  default     = false
-}
-
-variable "ontology_scan_sweep_enabled" {
-  description = "Enable the recurring per-tenant ontology suggestion scan sweep (THINK-320 U4/KTD-3). Ships disabled; enabled per stage once the Living Map review surfaces land."
-  type        = bool
-  default     = false
 }
 
 variable "identity_drift_match_enabled" {
@@ -909,7 +875,6 @@ module "thinkwork" {
   neptune_client_security_group_id            = var.neptune_client_security_group_id
   neptune_load_bucket                         = var.neptune_load_bucket
   neptune_loader_role_arn                     = var.neptune_loader_role_arn
-  hindsight_database_name                     = var.hindsight_database_name
   memory_engine                               = var.memory_engine
   twenty_provisioned                          = var.twenty_provisioned
   twenty_runtime_enabled                      = var.twenty_runtime_enabled
@@ -995,12 +960,9 @@ module "thinkwork" {
   # Wiki compile Lambda config. Pinned so unrelated terraform applies
   # don't wipe the Bedrock model or the aggregation flag back to
   # whatever the Lambda env defaults to.
-  ontology_scan_model_id                        = var.ontology_scan_model_id
   brain_source_agent_model_id                   = var.brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
-  knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled
-  ontology_scan_sweep_enabled                   = var.ontology_scan_sweep_enabled
   identity_drift_match_enabled                  = var.identity_drift_match_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled
@@ -1233,15 +1195,6 @@ output "database_name" {
   value       = module.thinkwork.database_name
 }
 
-output "hindsight_enabled" {
-  description = "Whether Hindsight canonical memory is enabled"
-  value       = module.thinkwork.hindsight_enabled
-}
-
-output "hindsight_endpoint" {
-  description = "Hindsight API endpoint (null when enable_hindsight = false)"
-  value       = module.thinkwork.hindsight_endpoint
-}
 output "twenty_provisioned" {
   description = "Whether the Twenty CRM retained managed-app substrate is provisioned"
   value       = module.thinkwork.twenty_provisioned

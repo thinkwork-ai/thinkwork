@@ -10,7 +10,7 @@ type Capability =
   | "execute_code"
   | "browser_automation"
   | "goal"
-  | "hindsight"
+  | "memory"
   | "mcp";
 
 interface Args {
@@ -83,7 +83,7 @@ const ALL_CAPABILITIES: Capability[] = [
   "plain",
   "web_search",
   "execute_code",
-  "hindsight",
+  "memory",
   "mcp",
 ];
 // Provider-backed browser and extraction smokes are selectable but excluded
@@ -102,7 +102,7 @@ function usage(exitCode = 2): never {
     --tenant-id <tenant-id> \\
     --agent-id <agent-id> \\
     [--sender-id <human-user-id>] \\
-    [--capability plain,web_search,web_extract,execute_code,browser_automation,goal,hindsight,mcp] \\
+    [--capability plain,web_search,web_extract,execute_code,browser_automation,goal,memory,mcp] \\
     [--timeout 90000] [--json]
 
 Environment:
@@ -250,7 +250,7 @@ async function createThread(
 }
 
 async function verifySender(args: Args, capability: Capability): Promise<void> {
-  if (capability !== "execute_code" && capability !== "hindsight") return;
+  if (capability !== "execute_code" && capability !== "memory") return;
   if (!args.senderId) {
     throw new Error(
       `${capability} smoke requires --sender-id for user-scoped sandbox/memory`,
@@ -505,9 +505,9 @@ function hasBrowserCostRecord(turn: ThreadTurn): boolean {
   );
 }
 
-function hasHindsightResult(invocation: Record<string, unknown>): boolean {
+function hasMemoryResult(invocation: Record<string, unknown>): boolean {
   const blob = invocationBlob(invocation);
-  return /(hindsight_recall|hindsight_reflect)/.test(blob);
+  return /(remember|recall)/.test(blob);
 }
 
 function hasMcpResult(invocation: Record<string, unknown>): boolean {
@@ -586,11 +586,11 @@ function promptFor(capability: Capability, token: string): string {
         `Reply with ${token}.`,
         "Then mark the goal complete with the goal_complete tool and include a one-sentence summary plus verification note.",
       ].join(" ");
-    case "hindsight":
+    case "memory":
       return [
-        "Use hindsight_recall and hindsight_reflect to answer from long-term memory.",
-        "Search for recent Pi runtime smoke tests or Codex managed recall smoke.",
-        `After using Hindsight tools, reply with ${token} and a short summary of what memory returned.`,
+        "Use the recall tool to answer from long-term memory.",
+        "Search for recent Pi runtime smoke tests or managed recall smoke.",
+        `After using the memory tools, reply with ${token} and a short summary of what memory returned.`,
       ].join(" ");
     case "mcp":
       return [
@@ -660,7 +660,7 @@ function evaluate(
     execute_code: [/execute_code/, /sandbox/, /code/],
     browser_automation: [/browser_automation/, /agentcore_browser/, /browser/],
     goal: [/goal_complete/, /goal/],
-    hindsight: [/hindsight/, /memory/, /reflect/, /recall/],
+    memory: [/memory/, /remember/, /recall/],
     mcp: [/mcp/, /server/],
   };
 
@@ -693,8 +693,8 @@ function evaluate(
           ? invocations.some(hasExecuteCodeResult)
           : capability === "browser_automation"
             ? invocations.some(hasBrowserAutomationResult)
-            : capability === "hindsight"
-              ? invocations.some(hasHindsightResult)
+            : capability === "memory"
+              ? invocations.some(hasMemoryResult)
               : capability === "mcp"
                 ? invocations.some(hasMcpResult)
                 : false;

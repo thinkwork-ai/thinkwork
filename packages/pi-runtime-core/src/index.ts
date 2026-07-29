@@ -9,8 +9,6 @@ export * from "./finalize-client.js";
 export * from "./history.js";
 export * from "./identity-resolution-provider.js";
 export * from "./json-render-runtime.js";
-export * from "./knowledge-graph-provider.js";
-export * from "./memory-provider.js";
 export * from "./manifest-client.js";
 export * from "./mcp-app-runtime.js";
 export * from "./mcp-result-transforms.js";

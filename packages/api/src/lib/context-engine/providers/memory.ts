@@ -100,11 +100,7 @@ export function createMemoryContextProvider(
       const hits = (
         await Promise.all(
           recallRequests.map((recallRequest) =>
-            queryMode === "reflect" &&
-            recallRequest.ownerType === "user" &&
-            services.adapter.reflect
-              ? services.adapter.reflect(recallRequest)
-              : services.recall.recall(recallRequest),
+            services.recall.recall(recallRequest),
           ),
         )
       )
@@ -164,12 +160,6 @@ function buildRecallRequest(args: {
       credentialSubject:
         args.request.caller.requesterContext?.credentialSubject ?? undefined,
       event: args.request.caller.requesterContext?.event ?? undefined,
-    },
-    hindsight: {
-      budget: args.request.depth === "deep" ? "mid" : "low",
-      maxTokens: args.request.depth === "deep" ? 2_000 : 500,
-      includeEntities: false,
-      includeLegacyBanks: args.includeLegacyBanks,
     },
   };
 }
@@ -298,7 +288,7 @@ async function loadWikiBridgeHits(args: {
             sourceId: row.pageId,
             uri: pageSourceUri(row),
             metadata: {
-              bridge: "hindsight-memory-to-wiki",
+              bridge: "memory-to-wiki",
               pageTable: row.pageTable,
               sectionId: row.sectionId,
               sourceKind: row.sourceKind,

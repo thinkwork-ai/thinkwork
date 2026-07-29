@@ -95,7 +95,6 @@ const {
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
     ComputerThreadQuery: Symbol("ComputerThreadQuery"),
     DeleteThreadMutation: Symbol("DeleteThreadMutation"),
-    EntityDossierQuery: Symbol("EntityDossierQuery"),
     MarkThreadsReadMutation: Symbol("MarkThreadsReadMutation"),
     NewMessageSubscription: Symbol("NewMessageSubscription"),
     PinThreadMutation: Symbol("PinThreadMutation"),

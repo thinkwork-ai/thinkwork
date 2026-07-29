@@ -93,7 +93,7 @@ export function buildRetainSourceEventKey(input: {
 export function classifyRetainError(err: unknown): RetainFailureClassification {
   const message = errorMessage(err);
   const lower = message.toLowerCase();
-  const httpStatus = parseHindsightStatus(message);
+  const httpStatus = parseHttpStatus(message);
 
   if (
     lower.includes("timeout") ||
@@ -113,7 +113,7 @@ export function classifyRetainError(err: unknown): RetainFailureClassification {
     return {
       status: "dead_lettered",
       retryable: false,
-      errorClass: `hindsight_${httpStatus}`,
+      errorClass: `http_${httpStatus}`,
       errorMessage: truncateError(message),
     };
   }
@@ -128,7 +128,7 @@ export function classifyRetainError(err: unknown): RetainFailureClassification {
     return {
       status: "failed_backend",
       retryable: true,
-      errorClass: httpStatus ? `hindsight_${httpStatus}` : "transport",
+      errorClass: httpStatus ? `http_${httpStatus}` : "transport",
       errorMessage: truncateError(message),
     };
   }
@@ -164,7 +164,7 @@ export async function upsertRetainAttempt(
       thread_turn_id: input.threadTurnId || null,
       source_event_key: input.sourceEventKey,
       source_event_type: input.sourceEventType || "thread_turn",
-      provider: input.provider || "hindsight",
+      provider: input.provider || "agentcore",
       status: "queued",
       max_attempts: DEFAULT_MAX_ATTEMPTS,
       next_retry_at: now,
@@ -393,8 +393,10 @@ function truncateError(message: string): string {
   return message.slice(0, MAX_ERROR_MESSAGE_CHARS);
 }
 
-function parseHindsightStatus(message: string): number | null {
-  const match = message.match(/\bhindsight\s+\w+\s+(\d{3})\b/i);
+function parseHttpStatus(message: string): number | null {
+  const match = message.match(
+    /\b(?:hindsight|agentcore|memory)\s+\w+\s+(\d{3})\b/i,
+  );
   if (!match) return null;
   const status = Number(match[1]);
   return Number.isFinite(status) ? status : null;

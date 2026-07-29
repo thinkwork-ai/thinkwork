@@ -12,7 +12,7 @@ import { tenants } from "./core.js";
 /**
  * Materialization suggestions (Company Brain U8 / R8): when a cohort
  * question needs a limited (or undeclared) facet, the gap surfaces to
- * operators on the ontology surface — persisted, deduped by
+ * operators on the twin surface — persisted, deduped by
  * (tenant, entity type, facet) with a hit counter, dismissible. Created by
  * hand-rolled migration 0273 (markers), not db:push.
  */

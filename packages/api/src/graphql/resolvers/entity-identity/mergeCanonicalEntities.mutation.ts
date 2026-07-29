@@ -46,7 +46,6 @@ export async function mergeCanonicalEntities(
     sourceMappingCount: args.confirmImpact.sourceMappingCount,
     identityClaimCount: args.confirmImpact.identityClaimCount,
     memoryClaimCount: args.confirmImpact.memoryClaimCount,
-    graphEntityCount: args.confirmImpact.graphEntityCount,
   };
   const result = await mergeCanonicalEntitiesLib(db, {
     tenantId,

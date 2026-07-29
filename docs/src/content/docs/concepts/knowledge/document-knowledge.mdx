@@ -1,110 +1,72 @@
 ---
-title: Brain Sources and Legacy Knowledge Bases
-description: How Memory uses authored documents — product docs, runbooks, policies — through Hindsight Brain Sources and explicit legacy Bedrock Knowledge Bases.
+title: Document Sources
+description: How authored documents — product docs, runbooks, policies — reach an agent now that Brain Sources are retired.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
 
-Brain Sources are the authored-source facet inside Memory. A policy document, a product FAQ, a runbook, an API reference — something authoritative that should be a source of truth when the agent answers a question, not a hallucinated guess. The **Reliability** operating guarantee lives here in a specific form: grounding the agent on a corpus you control means responses are reproducible against a known source, not synthesized from training-set memory the operator can't audit.
+Authored documents are the material where "what does the document say?" is the right question: a policy, a product FAQ, a runbook, an API reference. The **Reliability** operating guarantee lives here in a specific form — grounding the agent on a corpus you control means responses are reproducible against a known source, not synthesized from training-set memory the operator can't audit.
 
-Hosted ThinkWork retains authored Space documents into Hindsight as Brain
-Sources. Agents recall or reflect over the current Space's Hindsight bank, so
-the source document, tags, observation scopes, and evidence travel with the
-memory record. Legacy Bedrock Knowledge Bases remain available when an operator
-explicitly attaches them as an external retrieval source.
+<Aside type="caution">
+  **Brain Sources are retired.** The Space document-ingest path that retained
+  authored documents into a per-Space memory bank was removed with the Hindsight
+  memory engine. Bedrock AgentCore Memory holds extracted memory, not uploaded
+  source corpora. Authored documents now reach agents as workspace files and
+  compiled pages, described below.
+</Aside>
 
-## When to reach for it
+## Where authored documents live now
 
-Document knowledge is the right fit when:
+- **Workspace files.** Drop the document into the agent, template, or tenant-default workspace. It is versioned in S3, mounted for the agent, and reachable through the workspace provider in Context Engine. This is the direct replacement for a small, curated authored corpus.
+- **Compiled pages.** The [wiki compile pipeline](/concepts/knowledge/compounding-memory-pipeline/) distills what an agent has actually learned into entity, topic, and decision pages with per-section citations. This is the right home for knowledge that accumulates from work rather than arriving as a finished document.
+- **Approved MCP tools.** When the canonical document already lives in a system with an API — a wiki, a ticket tracker, a docs site — an admin-approved MCP source is better than copying it. Context Engine loads it for the turn without making it durable memory.
 
-- **The canonical answer lives in a document.** Product documentation, standard operating procedures, compliance policies — places where "what does the document say?" is the right question.
-- **You want citations.** Every retrieved chunk is traceable back to a specific source file, so agents can cite what they used.
+## When to reach for authored documents
+
+Document context is the right fit when:
+
+- **The canonical answer lives in a document.** Product documentation, standard operating procedures, compliance policies.
+- **You want citations.** Every retrieved hit should be traceable to a specific source file so agents can cite what they used.
 - **The content changes occasionally, not continuously.** A runbook updated monthly is a good fit. A feed of live events is not.
 - **You don't want the agent inventing facts.** Grounding reduces hallucination on questions where ground truth exists.
 
 And it's the _wrong_ fit when:
 
-- **The useful context is what this agent has learned across work** — that's [Memory](/concepts/knowledge/memory/) and [compiled pages](/concepts/knowledge/compounding-memory/), not authored source documents.
-- **The content is massive and sparsely relevant** — a million-line codebase isn't a knowledge base; it's a search target for a different tool.
+- **The useful context is what this agent has learned across work** — that's [Retained Memory](/concepts/knowledge/memory/) and [compiled pages](/concepts/knowledge/compounding-memory/).
+- **The content is massive and sparsely relevant** — a million-line codebase isn't an authored corpus; it's a search target for a different tool.
 - **The question needs reasoning over a graph of entities** — document chunks won't reliably answer "which engineers owned which services in Q3."
 
 ## What happens at turn time
 
-For the hosted Brain path, a Space document is retained into Hindsight with a
-stable document id, source context, tags, and observation scopes. When an agent
-works in that Space, its memory pass recalls or reflects over the Space bank:
-
 ```
-User message -> Hindsight recall/reflect over Space bank -> source evidence -> model call
+User message -> Context Engine queries workspace files + compiled pages -> ranked hits with citations -> model call
 ```
 
 Concretely:
 
-1. The user or operator uploads an authored source into the Space's Sources tab.
-2. ThinkWork retains the full source into the Space's Hindsight bank with source metadata.
-3. The agent recalls relevant facts or asks Hindsight to reflect over the Space bank.
-4. Returned memories include evidence and source facts when requested.
-5. The model generates a response grounded in source-backed Space memory.
+1. The document sits in a workspace scope the agent can see.
+2. Context Engine's workspace provider matches it against the turn's query.
+3. Hits return with provenance — source family, path, rank, freshness — and compete for the retrieved-context budget.
+4. The model generates a response grounded in cited source content.
 
-Legacy Bedrock KB retrieval still runs per-turn when a KB is explicitly attached,
-but it is no longer the default document-memory path.
-
-## How ingestion works
-
-Brain Sources are populated through ThinkWork document ingest, which calls
-Hindsight retain with the original source content. The retain request preserves
-the source context, stable document id, tags, and observation scopes so future
-recall/reflect calls can filter by Space, source type, and document identity.
-
-A legacy Bedrock knowledge base is populated by syncing from an S3 bucket. You upload source documents (or point to an existing bucket the agent should read), and Bedrock's ingestion pipeline:
-
-1. Chunks each document (configurable: fixed-size, semantic, hierarchical).
-2. Embeds each chunk using the KB's configured embedding model.
-3. Writes the chunks + embeddings into the vector index.
-
-ThinkWork configures the vector index to live in the same Aurora Postgres cluster as the rest of the system, via the `pgvector` extension. That means:
-
-- No separate vector database to run.
-- An Aurora snapshot restores both your agents' state _and_ their KB vector index in one shot.
-- Query latency is low because the KB index is colocated with everything else the turn needs.
-
-<Aside type="tip">
-  Start with focused knowledge bases per Space rather than sharing a giant
-  tenant-wide KB. Retrieval quality falls off sharply when the corpus is too
-  broad; a 500-document KB tightly scoped to one product area outperforms a
-  5,000-document general KB.
-</Aside>
-
-## Assigning sources to a Space or agent
-
-Brain Sources are assigned by Space: add the source to the Space that should
-remember it. Agents operating in that Space can recall or reflect over the
-Space's Hindsight bank without a per-agent KB attachment.
-
-Legacy knowledge bases are assigned to the relevant runtime scope in the admin app or via the GraphQL API. In current Space-aware flows, attach focused KBs only to the Space or template that still needs Bedrock retrieval. Tenant-level inspection and upload flows live in Memory → Knowledge Bases.
-
-The agent template can specify a default KB assignment — new agents created from that template inherit it. That makes fleet-wide KB rotation a single update to the template.
+Nothing on this path writes durable memory. If a fact from a document should survive the thread, the agent retains it like any other fact and AgentCore extracts it.
 
 ## Known limits
 
-- **Hindsight retain is async in user flows.** Large document ingest should report progress rather than blocking the operator on retention.
-- **Use stable document ids.** Re-uploading the same source with a new id weakens source continuity and deduplication.
-- **Legacy KB sync is not real-time.** Uploading a new document and immediately asking the agent about it will return "I don't know" until the next sync runs.
-- **Retrieval is not graph-aware by itself.** Source recall can't answer "which documents cite this one" — that's a graph question, better served by [compiled pages](/concepts/knowledge/compounding-memory/) over authored content.
+- **No document-ingest surface.** There is no upload-and-retain flow; adding an authored source means adding a workspace file or approving an MCP source.
+- **Retrieval is not graph-aware by itself.** Workspace search can't answer "which documents cite this one" — that's a graph question, better served by [compiled pages](/concepts/knowledge/compounding-memory/).
+- **Scope is workspace scope.** A document is visible where its workspace is visible; there is no per-Space document bank.
 
 ## Related pages
 
 - [Memory](/concepts/knowledge/) — where authored sources sit relative to memory and compiled pages
 - [Retained Memory](/concepts/knowledge/memory/) — for agent-learned context, distinct from authored documents
 - [Source Routing](/concepts/knowledge/retrieval-and-context/) — how retrieved chunks combine with thread history and recalled memories at turn time
-- [Admin: Memory](/applications/admin/knowledge/) — the operator surface for Hindsight memory, Brain Sources, pages, and legacy sources
-- [Admin: Knowledge Bases](/applications/admin/knowledge-bases/) — the legacy Bedrock KB compatibility surface
-- [Architecture](/architecture/) — where KBs fit in the data tier
+- [Admin: Memory](/applications/admin/knowledge/) — the operator surface for memory and pages
+- [Architecture](/architecture/) — where authored sources fit in the data tier
 
 ## Under the hood
 
-- **Default backing service.** Hindsight retain/recall/reflect, scoped by user and Space banks.
-- **Source storage.** Full source content is retained with stable document ids, tags, context, observation scopes, and source facts.
-- **Runtime API.** Agents use direct Hindsight recall/reflect for durable Brain memory; `query_context` is reserved for explicit lazy-loaded external context.
-- **Legacy backing service.** Amazon Bedrock Knowledge Bases, Aurora Postgres + `pgvector`, and `bedrock-agent-runtime:Retrieve` when explicitly attached.
-- **Code path.** ThinkWork-side orchestration lives under `packages/api/src/`; runtime memory and legacy retrieval integration live in `packages/agentcore-pi/`.
+- **Storage.** Workspace files are versioned objects in the tenant S3 bucket, mounted into the runtime workspace.
+- **Retrieval.** The workspace and wiki providers inside Context Engine; see the [Memory Context API](/api/context-engine/).
+- **Code path.** ThinkWork-side orchestration lives under `packages/api/src/`; runtime workspace mounting lives in `packages/agentcore-pi/`.

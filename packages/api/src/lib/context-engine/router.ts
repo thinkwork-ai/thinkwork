@@ -13,7 +13,6 @@ import {
   type ContextProviderStatus,
   type ContextEngineScope,
 } from "./types.js";
-import { invokeKbPromotionWorker } from "../kb-promotion/promotion-worker.js";
 import {
   sourceFamilyForHit,
   sourceFamilyForProvider,
@@ -29,7 +28,6 @@ const FAMILY_ORDER: ContextProviderFamily[] = [
   "brain",
   "wiki",
   "workspace",
-  "knowledge-base",
   "mcp",
   "sub-agent",
 ];
@@ -61,20 +59,6 @@ export function createContextEngineRouter(args: {
       const hits = rankAndDedupe(
         results.flatMap((result) => result.hits),
       ).slice(0, normalized.limit);
-      const kbHits = hits.filter(
-        (hit) => hit.providerId === "bedrock-knowledge-base",
-      );
-      if (kbHits.length > 0) {
-        void invokeKbPromotionWorker({
-          tenantId: normalized.caller.tenantId,
-          kbHits,
-        }).catch((err) => {
-          console.warn("kb_promotion_worker_failed", {
-            tenantId: normalized.caller.tenantId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
-      }
       const answer =
         normalized.mode === "answer"
           ? await args.synthesize?.(normalized, hits)

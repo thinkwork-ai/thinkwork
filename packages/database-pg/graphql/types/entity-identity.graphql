@@ -6,7 +6,7 @@
 # guarded Merge repair — no Split, no MDM workbench.
 
 """
-A stable canonical entity instance ("Acme"), distinct from the ontology type
+A stable canonical entity instance ("Acme"), distinct from its entity type
 definition ("Customer"). Merged entities persist as redirects.
 """
 type CanonicalEntity {
@@ -82,14 +82,12 @@ type CanonicalEntityMergeImpact {
   sourceMappingCount: Int!
   identityClaimCount: Int!
   memoryClaimCount: Int!
-  graphEntityCount: Int!
 }
 
 input CanonicalEntityMergeImpactInput {
   sourceMappingCount: Int!
   identityClaimCount: Int!
   memoryClaimCount: Int!
-  graphEntityCount: Int!
 }
 
 type CanonicalEntityMergeResult {
@@ -125,7 +123,6 @@ type CanonicalEntitySplitImpact {
   claimCountFollowingB: Int!
   claimCountRemainingA: Int!
   memoryClaimCount: Int!
-  graphEntityCount: Int!
 }
 
 input CanonicalEntitySplitImpactInput {
@@ -134,7 +131,6 @@ input CanonicalEntitySplitImpactInput {
   claimCountFollowingB: Int!
   claimCountRemainingA: Int!
   memoryClaimCount: Int!
-  graphEntityCount: Int!
 }
 
 type SplitCanonicalEntityResult {
@@ -280,16 +276,14 @@ type DeclineEntityMappingResult {
 
 """
 Identity-source registration result (THINK-321 U7, KTD-5). The
-source_system → connector link is written and the workspace routing map is
-re-projected; entityTypeSlugs echoes the validated target types.
+source_system → connector link is written; entityTypeSlugs echoes the
+declared target types.
 """
 type RegisterIdentitySourceResult {
   tenantId: ID!
   sourceSystem: String!
   connectorSlug: String!
   entityTypeSlugs: [String!]!
-  routingMapAgents: Int!
-  routingMapWritten: Int!
 }
 
 input RegisterIdentitySourceInput {
@@ -308,7 +302,7 @@ enum IdentityMatchJobStatus {
 
 """
 Bootstrap/drift identity match job (THINK-321 U7, KTD-7). Mirrors the
-ontology suggestion-scan job: dedupe-key insert-or-load, async Event invoke,
+durable job: dedupe-key insert-or-load, async Event invoke,
 invoke failure marked on the row. Metrics report scanned / autoLinked /
 casesFiled / casesExpired so the open-case budget interaction is visible.
 """

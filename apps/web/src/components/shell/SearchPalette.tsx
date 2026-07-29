@@ -38,12 +38,7 @@ import {
 // broker operation has no generated document type — we type the useQuery hook
 // with the schema types, which ARE generated.
 import { SearchLegStatus, SearchSource } from "@/gql/graphql";
-import type {
-  SearchEntityHit,
-  SearchLeg,
-  SearchResults,
-  SearchThreadHit,
-} from "@/gql/graphql";
+import type { SearchLeg, SearchResults, SearchThreadHit } from "@/gql/graphql";
 
 interface SearchQueryResult {
   search: SearchResults;
@@ -67,10 +62,9 @@ const SEARCH_DEBOUNCE_MS = 200;
 const RAIL_LIMIT = 6;
 
 // One rail per broker source. Order is the arrow-traversal order below the
-// (optional) dossier card and the Ask row.
+// Ask row.
 const RAILS: ReadonlyArray<{ source: SearchSource; label: string }> = [
   { source: SearchSource.Threads, label: "Threads" },
-  { source: SearchSource.Entities, label: "Entities" },
 ];
 
 export function SearchPalette({
@@ -84,12 +78,10 @@ export function SearchPalette({
   defaultSpaceIds,
   locallyReadThreadAt,
   onSelectThread,
-  onSelectEntity,
   onAsk,
   onResearch,
   emptyStateLoading,
   emptyStateError,
-  dossierSlot,
   askView,
   onAskBack,
   onAskOpenPermalink,
@@ -106,14 +98,11 @@ export function SearchPalette({
   defaultSpaceIds: ReadonlySet<string>;
   locallyReadThreadAt: LocallyReadThreadAt;
   onSelectThread: (thread: PaletteThreadTarget) => void;
-  onSelectEntity: (hit: SearchEntityHit) => void;
   onAsk: (query: string) => void;
   /** U9 research escalation: enqueue a background run for the current query. */
   onResearch: (query: string) => void;
   emptyStateLoading: boolean;
   emptyStateError: string | null;
-  /** U5 dossier card, rendered above the rails and first in arrow traversal. */
-  dossierSlot?: ReactNode;
   /**
    * U7 ask view-model. When non-null, the palette renders the streaming ask
    * answer in place of the rails (the CommandInput stays). Shell-owned so the
@@ -161,7 +150,7 @@ export function SearchPalette({
       open={open}
       onOpenChange={onOpenChange}
       title="Search"
-      description="Search across threads and entities"
+      description="Search across threads"
       className="sm:max-w-2xl"
       showCloseButton
     >
@@ -186,12 +175,9 @@ export function SearchPalette({
             <BrokerRails
               tenantId={tenantId}
               query={debouncedQuery}
-              locallyReadThreadAt={locallyReadThreadAt}
               onSelectThread={onSelectThread}
-              onSelectEntity={onSelectEntity}
               onAsk={handleAsk}
               onResearch={handleResearch}
-              dossierSlot={dossierSlot}
             />
           ) : (
             <EmptyStateThreads
@@ -282,21 +268,15 @@ function EmptyStateThreads({
 function BrokerRails({
   tenantId,
   query,
-  locallyReadThreadAt,
   onSelectThread,
-  onSelectEntity,
   onAsk,
   onResearch,
-  dossierSlot,
 }: {
   tenantId: string | null | undefined;
   query: string;
-  locallyReadThreadAt: LocallyReadThreadAt;
   onSelectThread: (thread: PaletteThreadTarget) => void;
-  onSelectEntity: (hit: SearchEntityHit) => void;
   onAsk: () => void;
   onResearch: () => void;
-  dossierSlot?: ReactNode;
 }) {
   // One shared id correlates the parallel per-rail calls of a single palette
   // query in the broker's telemetry (search_queries).
@@ -307,7 +287,6 @@ function BrokerRails({
 
   return (
     <>
-      {dossierSlot}
       <CommandGroup>
         <CommandItem
           value={`__ask__ ${query}`}
@@ -340,9 +319,7 @@ function BrokerRails({
           queryId={queryId}
           source={rail.source}
           label={rail.label}
-          locallyReadThreadAt={locallyReadThreadAt}
           onSelectThread={onSelectThread}
-          onSelectEntity={onSelectEntity}
         />
       ))}
     </>
@@ -355,18 +332,14 @@ function BrokerRail({
   queryId,
   source,
   label,
-  locallyReadThreadAt,
   onSelectThread,
-  onSelectEntity,
 }: {
   tenantId: string | null | undefined;
   query: string;
   queryId: string;
   source: SearchSource;
   label: string;
-  locallyReadThreadAt: LocallyReadThreadAt;
   onSelectThread: (thread: PaletteThreadTarget) => void;
-  onSelectEntity: (hit: SearchEntityHit) => void;
 }) {
   const [{ data, fetching, error }] = useQuery<
     SearchQueryResult,
@@ -393,40 +366,31 @@ function BrokerRail({
   return (
     <CommandGroup heading={label}>
       <RailBody
-        source={source}
         label={label}
         leg={leg}
         status={status}
         error={railError}
         fetching={fetching && !data}
-        locallyReadThreadAt={locallyReadThreadAt}
         onSelectThread={onSelectThread}
-        onSelectEntity={onSelectEntity}
       />
     </CommandGroup>
   );
 }
 
 function RailBody({
-  source,
   label,
   leg,
   status,
   error,
   fetching,
-  locallyReadThreadAt,
   onSelectThread,
-  onSelectEntity,
 }: {
-  source: SearchSource;
   label: string;
   leg: SearchLeg | undefined;
   status: SearchLegStatus | "PENDING";
   error: string | null;
   fetching: boolean;
-  locallyReadThreadAt: LocallyReadThreadAt;
   onSelectThread: (thread: PaletteThreadTarget) => void;
-  onSelectEntity: (hit: SearchEntityHit) => void;
 }) {
   // Distinct per-rail states — one rail's failure never blocks another's.
   if (error || status === SearchLegStatus.Error) {
@@ -439,46 +403,19 @@ function RailBody({
     return <RailNote tone="muted">Searching…</RailNote>;
   }
 
-  if (source === SearchSource.Threads) {
-    const hits = leg?.threadHits ?? [];
-    if (hits.length === 0) return <RailNote tone="muted">No matches</RailNote>;
-    return (
-      <>
-        {hits.map((hit: SearchThreadHit) => (
-          <ThreadRow
-            key={hit.id}
-            value={`thread ${label} ${hit.title ?? ""} ${hit.identifier ?? ""} ${hit.id}`}
-            title={hit.title ?? "Untitled thread"}
-            unread={false}
-            trailing={formatTinyRelativeDate(hit.updatedAt)}
-            onSelect={() =>
-              onSelectThread({ id: hit.id, spaceId: hit.spaceId })
-            }
-          />
-        ))}
-      </>
-    );
-  }
-
-  // ENTITIES
-  const hits = leg?.entityHits ?? [];
+  const hits = leg?.threadHits ?? [];
   if (hits.length === 0) return <RailNote tone="muted">No matches</RailNote>;
   return (
     <>
-      {hits.map((hit: SearchEntityHit) => (
-        <CommandItem
-          key={hit.entityId}
-          value={`entity ${hit.label} ${(hit.aliases ?? []).join(" ")}`}
-          className="h-10"
-          onSelect={() => onSelectEntity(hit)}
-        >
-          <span className="min-w-0 flex-1 truncate">{hit.label}</span>
-          {hit.ontologyTypeSlug ? (
-            <CommandShortcut className="tracking-normal">
-              {hit.ontologyTypeSlug}
-            </CommandShortcut>
-          ) : null}
-        </CommandItem>
+      {hits.map((hit: SearchThreadHit) => (
+        <ThreadRow
+          key={hit.id}
+          value={`thread ${label} ${hit.title ?? ""} ${hit.identifier ?? ""} ${hit.id}`}
+          title={hit.title ?? "Untitled thread"}
+          unread={false}
+          trailing={formatTinyRelativeDate(hit.updatedAt)}
+          onSelect={() => onSelectThread({ id: hit.id, spaceId: hit.spaceId })}
+        />
       ))}
     </>
   );

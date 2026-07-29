@@ -161,10 +161,7 @@ function buildTfvars(config: Record<string, string>): string {
     `db_password     = "${config.db_password}"`,
     ``,
     `# ── Memory ────────────────────────────────────────────────────────`,
-    `# Hindsight is the canonical user and Space memory provider for full installs.`,
-    `# Set memory_engine = "agentcore" only for explicit low-cost/development mode.`,
-    `enable_hindsight = ${config.enable_hindsight === "true"}`,
-    `memory_engine    = ""`,
+    `# AgentCore managed memory is the only memory engine — nothing to set.`,
     ``,
     `# ── Managed Applications ──────────────────────────────────────────`,
     `# Twenty CRM is optional and disabled by default. Enabling it requires`,
@@ -391,7 +388,6 @@ export function registerInitCommand(program: Command): void {
             existing?.region ??
             (identity.region !== "unknown" ? identity.region : "us-east-1");
           config.database_engine = "aurora-serverless";
-          config.enable_hindsight = "true";
           config.google_oauth_client_id = "";
           config.google_oauth_client_secret = "";
           config.admin_url = "http://localhost:5174";
@@ -475,24 +471,6 @@ export function registerInitCommand(program: Command): void {
             ["aurora-serverless", "rds-postgres"],
             "aurora-serverless",
           );
-
-          console.log("");
-          console.log(chalk.dim("  ── Memory ──"));
-          console.log(
-            chalk.dim(
-              "  Hindsight is the canonical user and Space memory provider.",
-            ),
-          );
-          console.log(
-            chalk.dim("  AgentCore managed memory is available as an explicit"),
-          );
-          console.log(chalk.dim("  low-cost/development opt-out."));
-          const hindsightAnswer = await ask(
-            "Enable Hindsight long-term memory? (Y/n)",
-            "Y",
-          );
-          config.enable_hindsight =
-            hindsightAnswer.toLowerCase() === "n" ? "false" : "true";
 
           console.log("");
           console.log(chalk.dim("  ── Auth ──"));
@@ -668,11 +646,6 @@ variable "database_engine" {
   default = "aurora-serverless"
 }
 
-variable "enable_hindsight" {
-  type    = bool
-  default = true
-}
-
 variable "twenty_provisioned" {
   type    = bool
   default = false
@@ -781,11 +754,6 @@ variable "mobile_logout_urls" {
   default = ["exp://localhost:8081", "thinkwork://"]
 }
 
-variable "memory_engine" {
-  type    = string
-  default = ""
-}
-
 variable "customer_domain" {
   type    = string
   default = ""
@@ -862,7 +830,6 @@ module "thinkwork" {
   region     = var.region
   account_id = var.account_id
 
-  memory_engine             = var.memory_engine
   customer_domain           = var.customer_domain
   customer_domain_delegated = var.customer_domain_delegated
   platform_operator_emails  = var.platform_operator_emails
@@ -883,7 +850,6 @@ module "thinkwork" {
 
   db_password                = var.db_password
   database_engine            = var.database_engine
-  enable_hindsight           = var.enable_hindsight
   twenty_provisioned = var.twenty_provisioned
   twenty_runtime_enabled = var.twenty_runtime_enabled
   twenty_image_uri = var.twenty_image_uri
@@ -971,14 +937,6 @@ output "ecr_repository_url" {
   value = module.thinkwork.ecr_repository_url
 }
 
-output "hindsight_enabled" {
-  value = module.thinkwork.hindsight_enabled
-}
-
-output "hindsight_endpoint" {
-  value = module.thinkwork.hindsight_endpoint
-}
-
 output "twenty_provisioned" {
   value = module.thinkwork.twenty_provisioned
 }
@@ -1018,9 +976,7 @@ output "agentcore_memory_id" {
         console.log(
           `  ${chalk.bold("Database:")}        ${config.database_engine}`,
         );
-        console.log(
-          `  ${chalk.bold("Memory:")}          ${config.enable_hindsight === "true" ? "hindsight" : "agentcore"}`,
-        );
+        console.log(`  ${chalk.bold("Memory:")}          agentcore`);
         console.log(
           `  ${chalk.bold("Google OAuth:")}    ${config.google_oauth_client_id ? "enabled" : "disabled"}`,
         );
@@ -1073,7 +1029,6 @@ output "agentcore_memory_id" {
           accountId: config.account_id,
           terraformDir: tfDir,
           databaseEngine: config.database_engine,
-          enableHindsight: config.enable_hindsight === "true",
           createdAt: now,
           updatedAt: now,
         });

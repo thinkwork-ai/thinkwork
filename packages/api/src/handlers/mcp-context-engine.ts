@@ -28,7 +28,7 @@ export const TOOLS = [
   {
     name: "query_context",
     description:
-      "Search permissioned Thinkwork context across fast default providers: ontology Brain facets, workspace files, and approved context-safe MCP tools. Use query_memory_context for Hindsight user-carried or current-space long-term memory.",
+      "Search permissioned Thinkwork context across fast default providers: Brain facets, workspace files, and approved context-safe MCP tools. Use query_memory_context for user-carried or current-space long-term memory.",
     inputSchema: {
       type: "object",
       properties: {
@@ -55,14 +55,7 @@ export const TOOLS = [
               type: "array",
               items: {
                 type: "string",
-                enum: [
-                  "memory",
-                  "brain",
-                  "workspace",
-                  "knowledge-base",
-                  "mcp",
-                  "sub-agent",
-                ],
+                enum: ["memory", "brain", "workspace", "mcp", "sub-agent"],
               },
             },
           },
@@ -186,7 +179,7 @@ export const TOOLS = [
   {
     name: "query_brain_context",
     description:
-      "Search only tenant-shared ontology-shaped ThinkWork Brain pages and facets. Use this for business/domain context such as customers, opportunities, commitments, risks, relationships, and cited provenance.",
+      "Search only tenant-shared ThinkWork Brain pages and facets. Use this for business/domain context such as customers, opportunities, commitments, risks, relationships, and cited provenance.",
     inputSchema: {
       type: "object",
       properties: {

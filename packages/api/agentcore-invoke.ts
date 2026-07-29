@@ -278,7 +278,6 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     // forwarded explicitly or the Pi runtime never sees the pin (KTD2).
     if (body.pinned_skills) payload.pinned_skills = body.pinned_skills;
     if (body.pi_extensions) payload.pi_extensions = body.pi_extensions;
-    if (body.knowledge_bases) payload.knowledge_bases = body.knowledge_bases;
     if (body.mcp_servers) payload.mcp_servers = body.mcp_servers;
     if (body.mcp_base_url) payload.mcp_base_url = body.mcp_base_url;
     if (body.mcp_auth_secret) payload.mcp_auth_secret = body.mcp_auth_secret;
@@ -294,8 +293,6 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     if (body.workspace_files) payload.workspace_files = body.workspace_files;
     // PRD-38: sub_agents removed — skills with mode:agent handle sub-agent creation in runtime
     if (body.guardrail_config) payload.guardrail_config = body.guardrail_config;
-    if (body.hindsight_endpoint)
-      payload.hindsight_endpoint = body.hindsight_endpoint;
     // Forward prior conversation history (loaded from Aurora `messages` by
     // chat-agent-invoke). Without this the Strands runtime falls back to a
     // single-turn invocation with no session memory.
@@ -321,7 +318,7 @@ export async function handler(event: LambdaEvent): Promise<LambdaResult> {
     }
 
     console.log(
-      `AgentCore payload keys: ${Object.keys(payload).join(", ")} hindsight=${payload.hindsight_endpoint ? "YES" : "NO"} instance_id=${payload.instance_id || "EMPTY"} runtime_arn=${runtimeArn.split("/").pop()}`,
+      `AgentCore payload keys: ${Object.keys(payload).join(", ")} instance_id=${payload.instance_id || "EMPTY"} runtime_arn=${runtimeArn.split("/").pop()}`,
     );
     const result = await invokeAgentCore(payload, runtimeArn, sessionId);
 

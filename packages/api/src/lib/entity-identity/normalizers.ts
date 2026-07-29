@@ -16,7 +16,7 @@ import { createHash } from "node:crypto";
 
 export type IdentityNormalization = "name" | "domain" | "email" | "exact";
 
-/** Identity rule stored per ontology entity type (identity_rules jsonb). */
+/** Identity rule stored per entity type (identity_rules jsonb). */
 export interface IdentityRule {
   slug: string;
   keyKind: string;
@@ -33,7 +33,7 @@ export interface IdentityRule {
 }
 
 /**
- * Parse + validate the identity_rules jsonb from ontology.entity_types.
+ * Parse + validate an identity_rules jsonb payload.
  * Malformed entries are dropped (never thrown) — a bad operator edit must
  * not take down the ingest pipeline; the matcher just sees fewer rules.
  */

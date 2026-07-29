@@ -53,11 +53,6 @@ locals {
     : module.vpc.private_subnet_ids
   )
 
-  # Hindsight is the canonical user/Space memory provider for full ThinkWork
-  # installs. AgentCore managed memory remains available as an explicit
-  # low-cost/development opt-out. We still honor var.memory_engine == "hindsight"
-  # so existing tfvars keep working even when enable_hindsight was not set.
-  hindsight_enabled      = var.enable_hindsight || var.memory_engine == "hindsight"
   twenty_provisioned     = var.twenty_provisioned
   twenty_runtime_enabled = var.twenty_provisioned && var.twenty_runtime_enabled
   twenty_domain          = var.twenty_domain != "" ? var.twenty_domain : (var.www_domain != "" ? "crm.${var.www_domain}" : "")
@@ -106,19 +101,6 @@ locals {
       "bedrock-runtime",
     ],
   ))
-
-  # Canonical long-term memory engine for this deployment. Exactly one engine
-  # is active per deployment for recall/inspect/export. Empty selects
-  # Hindsight for full installs; callers can explicitly choose AgentCore for
-  # low-cost/development deployments. Legacy value "managed" maps to
-  # "agentcore".
-  resolved_memory_engine = (
-    var.memory_engine == "hindsight" || var.memory_engine == "agentcore"
-    ? var.memory_engine
-    : var.memory_engine == "managed"
-    ? "agentcore"
-    : local.hindsight_enabled ? "hindsight" : "agentcore"
-  )
 
   # Customer-domain namespace (<name>.thinkwork.ai). The zone is created as
   # soon as customer_domain is set; the cert/aliases/callback entries wait
@@ -560,9 +542,9 @@ resource "aws_security_group_rule" "okf_wiki_vpce_from_lambda" {
 # Interface endpoints with private DNS capture the WHOLE VPC's traffic to the
 # covered AWS APIs (logs, ssm, sts, bedrock, ...): every workload in the VPC
 # resolves those hostnames to the endpoint's private IP, so per-source-SG
-# rules silently black-hole anything not enumerated — harness cycle-7's
-# Hindsight tasks died on "cannot find the CloudWatch log group ... connection
-# issue" because only the Lambda SG was admitted. Allow the VPC CIDR.
+# rules silently black-hole anything not enumerated — harness cycle-7's ECS
+# tasks died on "cannot find the CloudWatch log group ... connection issue"
+# because only the Lambda SG was admitted. Allow the VPC CIDR.
 resource "aws_security_group_rule" "okf_wiki_vpce_from_vpc" {
   count = local.okf_wiki_private_endpoints_enabled ? 1 : 0
 
@@ -942,16 +924,6 @@ module "database" {
   enable_aws_s3      = var.database_engine == "aurora-serverless"
 }
 
-module "bedrock_kb" {
-  source = "../data/bedrock-knowledge-base"
-
-  stage                   = var.stage
-  account_id              = var.account_id
-  region                  = var.region
-  bucket_name             = module.s3.bucket_name
-  external_kb_source_arns = var.external_kb_source_arns
-}
-
 ################################################################################
 # App Tier
 ################################################################################
@@ -1150,8 +1122,6 @@ module "api" {
   appsync_api_id  = module.appsync.graphql_api_id
   appsync_api_url = module.appsync.graphql_api_url
 
-  kb_service_role_arn = module.bedrock_kb.kb_service_role_arn
-
   lambda_zips_dir                       = var.lambda_zips_dir
   api_auth_secret                       = var.api_auth_secret
   db_password                           = var.db_password
@@ -1159,10 +1129,7 @@ module "api" {
   agentcore_pi_function_name            = module.agentcore_pi.agentcore_pi_function_name
   agentcore_pi_function_arn             = module.agentcore_pi.agentcore_pi_function_arn
   enable_agentcore_pi_invoke_policy     = true
-  hindsight_endpoint                    = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
-  hindsight_database_name               = var.hindsight_database_name
   agentcore_memory_id                   = module.agentcore_memory.memory_id
-  memory_engine                         = local.resolved_memory_engine
   okf_efs_subnet_ids                    = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
   okf_efs_security_group_ids            = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
   # Company Brain U5: projector VPC attach only when the neptune-client SG
@@ -1220,12 +1187,9 @@ module "api" {
   enable_slack_workspace_app                    = var.enable_slack_workspace_app
   enable_msteams_app                            = var.enable_msteams_app
   agentcore_code_interpreter_id                 = var.agentcore_code_interpreter_id
-  ontology_scan_model_id                        = var.ontology_scan_model_id
   brain_source_agent_model_id                   = var.brain_source_agent_model_id
   wiki_aggregation_pass_enabled                 = var.wiki_aggregation_pass_enabled
   wiki_source                                   = var.wiki_source
-  knowledge_graph_observations_ingest_enabled   = var.knowledge_graph_observations_ingest_enabled
-  ontology_scan_sweep_enabled                   = var.ontology_scan_sweep_enabled
   identity_drift_match_enabled                  = var.identity_drift_match_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   enable_workspace_orchestration                = var.enable_workspace_orchestration
@@ -1302,10 +1266,7 @@ module "agentcore_pi" {
   source_image_uri   = var.agentcore_pi_source_image_uri
   async_dlq_arn      = module.agentcore_platform.agentcore_async_dlq_arn
 
-  hindsight_endpoint                     = local.hindsight_enabled ? module.hindsight[0].hindsight_endpoint : ""
-  hindsight_database_name                = var.hindsight_database_name
   agentcore_memory_id                    = module.agentcore_memory.memory_id
-  memory_engine                          = local.resolved_memory_engine
   requester_idle_memory_learning_enabled = var.requester_idle_memory_learning_enabled
 
   api_endpoint    = module.api.api_endpoint
@@ -1554,22 +1515,6 @@ module "workflow_interpreter_stepfunctions" {
   execution_callback_lambda_arn = module.api.workflow_execution_callback_fn_arn
 }
 
-module "hindsight" {
-  count  = local.hindsight_enabled ? 1 : 0
-  source = "../app/hindsight-memory"
-
-  stage                = var.stage
-  vpc_id               = module.vpc.vpc_id
-  subnet_ids           = module.vpc.public_subnet_ids
-  db_security_group_id = module.database.db_security_group_id
-  database_url         = module.database.database_url
-  database_name        = var.hindsight_database_name
-  image_tag            = var.hindsight_image_tag
-
-  enable_auto_consolidation     = var.hindsight_enable_auto_consolidation
-  consolidation_dedup_threshold = var.hindsight_consolidation_dedup_threshold
-  observations_mission          = var.hindsight_observations_mission
-}
 module "twenty" {
   count  = local.twenty_provisioned ? 1 : 0
   source = "../app/twenty"

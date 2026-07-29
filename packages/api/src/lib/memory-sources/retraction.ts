@@ -75,9 +75,8 @@ import {
   memorySourceConfigs,
 } from "@thinkwork/database-pg/schema";
 
-import type { MemoryAdapter } from "../memory/adapter.js";
 import { getConfig } from "@thinkwork/runtime-config";
-import { HindsightRetainError } from "../memory/adapters/hindsight-adapter.js";
+import type { RetractionCapableAdapter } from "./engine-capabilities.js";
 import { deactivateOrphanedClaims } from "./claims.js";
 import { SNAPSHOT_PREFIX } from "./snapshots.js";
 import type { DbHandle } from "./types.js";
@@ -300,16 +299,6 @@ function classifyRetractionError(err: unknown): RetractionFailure {
   if (err instanceof RetractionStepError) {
     return {
       errorClass: err.errorClass,
-      errorMessage: truncateError(err.message),
-      retryable: err.retryable,
-    };
-  }
-  if (err instanceof HindsightRetainError) {
-    return {
-      errorClass:
-        err.statusCode !== undefined
-          ? `hindsight_${err.statusCode}`
-          : "hindsight_transport",
       errorMessage: truncateError(err.message),
       retryable: err.retryable,
     };
@@ -1106,7 +1095,7 @@ export function createDrizzleRetractionStore(db: DbHandle): RetractionStore {
 
 export type ProcessRetractionDeps = {
   db: DbHandle;
-  adapter: Pick<MemoryAdapter, "deleteDocument" | "consolidateBankById">;
+  adapter: RetractionCapableAdapter;
   /** Overrides adapter.consolidateBankById when provided. */
   consolidate?: (tenantId: string, bankId: string) => Promise<void>;
   /** Test seam; defaults to the drizzle store over deps.db. */

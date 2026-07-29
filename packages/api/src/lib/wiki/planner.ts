@@ -20,12 +20,8 @@
  */
 
 import type { ThinkWorkMemoryRecord } from "../memory/types.js";
-import type { OntologyCompileSnapshot } from "../ontology/compile-snapshot.js";
 import { invokeClaudeJson, type BedrockCostContext } from "./bedrock.js";
-import {
-  describeAllPageTypes,
-  describeOntologyAwareWikiGuardrails,
-} from "./templates.js";
+import { describeAllPageTypes } from "./templates.js";
 import type { WikiPageType } from "./repository.js";
 
 // ---------------------------------------------------------------------------
@@ -56,7 +52,6 @@ export interface PlannerBatch {
   records: ThinkWorkMemoryRecord[];
   candidatePages: PlannerCandidatePage[];
   openMentions: PlannerOpenMention[];
-  ontologySnapshot?: OntologyCompileSnapshot;
 }
 
 export interface PlannedSectionUpdate {
@@ -218,10 +213,6 @@ You always belong to exactly **one (tenant, agent) scope**. All pages you refere
 
 ${describeAllPageTypes()}
 
-## Business ontology guardrails
-
-${describeOntologyAwareWikiGuardrails()}
-
 Type describes page *shape*, not sharing. All pages are owner-scoped.
 
 ## Output actions
@@ -250,20 +241,18 @@ Return a JSON object with these five arrays. Any can be empty. Bias toward \`unr
 6. Links should only reference \`(type, slug)\` pairs that exist in \`candidatePages\` OR are being created in this same response's \`newPages\`. Never invent pages by link alone.
 7. **Never write record IDs, UUIDs, hex identifiers, or internal keys into section prose.** Phrases like "see records 1c907c71-...", "id=abc-123", or dumps of Hindsight unit ids are forbidden in \`proposed_body_md\` / \`body_md\`. Provenance belongs in \`source_refs\` only; the body is for human-readable content.
 8. **Do NOT use \`[[Title]]\` wikilink syntax in section bodies.** Cross-page relationships are stored in \`pageLinks\` (which you still emit on the JSON root), not inline in prose. Write the entity name as plain prose — "Marco is an AI assistant powered by ThinkWork" — without any brackets. The rendered wiki hyperlinks via the Connected Pages section that reads from \`wiki_page_links\`.
-9. When an approved ontology snapshot is provided, every new durable page or promotion MUST carry an approved \`entityTypeSlug\`, and every page link MUST carry an approved \`relationshipTypeSlug\`. Use only the listed \`entityTypeSlug\`, \`facetSlug\`, and \`relationshipTypeSlug\` values. If the evidence does not fit an approved type/facet/relationship, emit \`unresolvedMentions\` instead of creating a generic entity/topic/reference.
-10. When an approved ontology snapshot is provided, every new durable page or promotion MUST participate in at least one approved pageLinks triple, either as \`from*\` or \`to*\`. A standalone ontology node is not useful; if you cannot connect it to an existing candidate page or another new page with an approved relationship, emit an \`unresolvedMentions\` observation instead.
-11. Output **only valid JSON**. No prose, no markdown fences.`;
+9. Output **only valid JSON**. No prose, no markdown fences.`;
 
 const PLANNER_OUTPUT_SCHEMA = `{
   "pageUpdates": [
     {
       "pageId": "<existing page id from input>",
-      "entityTypeSlug": "<approved ontology entity type slug, optional when updating ontology facets>",
+      "entityTypeSlug": "<approved entity type slug, optional when updating facets>",
       "aliases": ["<new alias strings to register, optional>"],
       "sections": [
         {
           "slug": "<section slug from the page type>",
-          "facetSlug": "<approved ontology facet slug, optional>",
+          "facetSlug": "<approved facet slug, optional>",
           "rationale": "<one sentence: why this section changes>",
           "proposed_body_md": "<full markdown body for the section>",
           "source_refs": ["<record id that inform THIS section>"]
@@ -274,7 +263,7 @@ const PLANNER_OUTPUT_SCHEMA = `{
   "newPages": [
     {
       "type": "entity | topic | decision",
-      "entityTypeSlug": "<approved ontology entity type slug; required when ontology is supplied>",
+      "entityTypeSlug": "<approved entity type slug, optional>",
       "slug": "<kebab-case slug>",
       "title": "<display title>",
       "aliases": ["<optional alternate names>"],
@@ -283,7 +272,7 @@ const PLANNER_OUTPUT_SCHEMA = `{
       "sections": [
         {
           "slug": "<section slug>",
-          "facetSlug": "<approved ontology facet slug, optional>",
+          "facetSlug": "<approved facet slug, optional>",
           "heading": "<section heading>",
           "body_md": "<section body markdown>",
           "source_refs": ["<record id that inform THIS section>"]
@@ -305,7 +294,7 @@ const PLANNER_OUTPUT_SCHEMA = `{
       "fromSlug": "<slug of source page; must exist in candidatePages or newPages>",
       "toType": "entity | topic | decision",
       "toSlug": "<slug of target page; must exist in candidatePages or newPages>",
-      "relationshipTypeSlug": "<approved ontology relationship type slug; required when ontology is supplied>",
+      "relationshipTypeSlug": "<approved relationship type slug, optional>",
       "context": "<one-line description of why the link exists; shown to the user on backlinks>"
     }
   ],
@@ -373,9 +362,6 @@ export function buildPlannerUserPrompt(batch: PlannerBatch): string {
     }
   }
 
-  lines.push("\n## Approved business ontology for structured candidates\n");
-  lines.push(describeOntologySnapshotForPrompt(batch.ontologySnapshot));
-
   lines.push("\n## Required output JSON shape\n");
   lines.push("```");
   lines.push(PLANNER_OUTPUT_SCHEMA);
@@ -383,82 +369,6 @@ export function buildPlannerUserPrompt(batch: PlannerBatch): string {
   lines.push(
     "\nReturn ONLY the JSON object. No prose, no fences. Include empty arrays for categories that don't apply.",
   );
-
-  return lines.join("\n");
-}
-
-export function describeOntologySnapshotForPrompt(
-  snapshot?: OntologyCompileSnapshot,
-): string {
-  if (!snapshot) {
-    return "(none supplied)\nDo not emit entityTypeSlug, facetSlug, or relationshipTypeSlug.";
-  }
-
-  if (snapshot.conservative) {
-    return [
-      "No active approved ontology version is available.",
-      "Do not emit entityTypeSlug, facetSlug, or relationshipTypeSlug. Prefer unresolvedMentions for business-domain observations that are not already covered by the page taxonomy.",
-    ].join("\n");
-  }
-
-  const lines: string[] = [];
-  lines.push(
-    `Active ontology version: ${snapshot.activeVersionNumber ?? "unknown"} (${snapshot.activeVersionId ?? "unknown id"})`,
-  );
-
-  lines.push("\nEntity types:");
-  const entityTypes = Array.from(snapshot.entityTypesBySlug.values()).sort(
-    (a, b) => a.slug.localeCompare(b.slug),
-  );
-  if (entityTypes.length === 0) {
-    lines.push("- (none)");
-  } else {
-    for (const entityType of entityTypes) {
-      lines.push(
-        `- ${entityType.slug}: ${entityType.name}` +
-          (entityType.description ? ` — ${entityType.description}` : "") +
-          (entityType.aliases.length > 0
-            ? ` aliases=${JSON.stringify(entityType.aliases.slice(0, 6))}`
-            : ""),
-      );
-    }
-  }
-
-  lines.push("\nFacet templates:");
-  const facetTemplates = Array.from(snapshot.facetTemplatesByKey.values()).sort(
-    (a, b) =>
-      a.entityTypeSlug.localeCompare(b.entityTypeSlug) ||
-      a.slug.localeCompare(b.slug),
-  );
-  if (facetTemplates.length === 0) {
-    lines.push("- (none)");
-  } else {
-    for (const facet of facetTemplates) {
-      lines.push(
-        `- ${facet.entityTypeSlug}:${facet.slug} heading=${JSON.stringify(facet.heading)}` +
-          ` facetSlug=${facet.slug}`,
-      );
-    }
-  }
-
-  lines.push("\nRelationship types:");
-  const relationshipTypes = Array.from(
-    snapshot.relationshipTypesBySlug.values(),
-  ).sort((a, b) => a.slug.localeCompare(b.slug));
-  if (relationshipTypes.length === 0) {
-    lines.push("- (none)");
-  } else {
-    for (const relationshipType of relationshipTypes) {
-      const sourceTypes = relationshipType.sourceTypeSlugs.join("|") || "*";
-      const targetTypes = relationshipType.targetTypeSlugs.join("|") || "*";
-      lines.push(
-        `- ${relationshipType.slug}: ${relationshipType.name} (${sourceTypes} -> ${targetTypes})` +
-          (relationshipType.description
-            ? ` — ${relationshipType.description}`
-            : ""),
-      );
-    }
-  }
 
   return lines.join("\n");
 }
@@ -576,7 +486,7 @@ export function validatePlannerResult(
       !isPageType(np.type) &&
       normalizeEntityTypePage(np, "sectionPromotions.newPage")
     ) {
-      // A model may put the ontology entity slug in `type`; normalize that
+      // A model may put the entity-type slug in `type`; normalize that
       // common shape to the wiki page taxonomy.
     } else if (!isPageType(np.type)) {
       throw new Error(`sectionPromotions.newPage.type invalid: ${np.type}`);
@@ -655,7 +565,7 @@ export function validatePlannerResult(
       throw new Error("newPages entry not object");
     const np = p as Record<string, unknown>;
     if (!isPageType(np.type) && normalizeEntityTypePage(np, "newPages")) {
-      // A model may put the ontology entity slug in `type`; normalize that
+      // A model may put the entity-type slug in `type`; normalize that
       // common shape to the wiki page taxonomy.
     } else if (!isPageType(np.type)) {
       throw new Error(`newPages.type invalid: ${np.type}`);
@@ -703,7 +613,7 @@ export function validatePlannerResult(
       continue;
     }
     if (!isPageType(p.type) && normalizeEntityTypePage(p, "promotions")) {
-      // A model may put the ontology entity slug in `type`; normalize that
+      // A model may put the entity-type slug in `type`; normalize that
       // common shape to the wiki page taxonomy.
     } else if (!isPageType(p.type)) {
       continue;
@@ -741,7 +651,7 @@ function isPageType(v: unknown): v is WikiPageType {
   return v === "entity" || v === "topic" || v === "decision";
 }
 
-const KNOWN_ONTOLOGY_ENTITY_TYPE_SLUGS = new Set([
+const KNOWN_ENTITY_TYPE_SLUGS = new Set([
   "customer",
   "person",
   "opportunity",
@@ -765,7 +675,7 @@ function normalizeEntityTypePage(
 ): boolean {
   if (typeof obj.type !== "string") return false;
   const type = obj.type.trim().toLowerCase();
-  if (!KNOWN_ONTOLOGY_ENTITY_TYPE_SLUGS.has(type)) return false;
+  if (!KNOWN_ENTITY_TYPE_SLUGS.has(type)) return false;
   if (obj.entityTypeSlug !== undefined && obj.entityTypeSlug !== null) {
     validateOptionalString(obj, "entityTypeSlug", label);
     if (obj.entityTypeSlug !== undefined && obj.entityTypeSlug !== type) {

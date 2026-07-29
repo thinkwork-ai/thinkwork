@@ -171,7 +171,7 @@ One of the four places a capability can be granted — agent root, sub-agent fol
 
 ### Context Plane vs Enforcement Plane
 
-The THINK-315 layer split: the workspace tree (`INSTRUCTIONS.md` + `skills/` + `agents/`) is the context plane — agent-shaping prose the model reads — while the capability registry + AgentCore Identity + AgentCore Gateway form the enforcement plane that decides every tool call. Tool, MCP, and connector grants are registry-only (no workspace folders; supersedes the THINK-302 `mcp/` folder and connector grants-by-presence direction for those classes), with mounted-vs-searchable tier as a binding attribute rather than a storage location. Spaces are context-first: they scope memory/KB/document access; space-scoped tool bindings stay legal but exceptional. The registry is the authored policy truth; the Gateway Policy engine is a compiled projection of it, never an authoring surface.
+The THINK-315 layer split: the workspace tree (`INSTRUCTIONS.md` + `skills/` + `agents/`) is the context plane — agent-shaping prose the model reads — while the capability registry + AgentCore Identity + AgentCore Gateway form the enforcement plane that decides every tool call. Tool, MCP, and connector grants are registry-only (no workspace folders; supersedes the THINK-302 `mcp/` folder and connector grants-by-presence direction for those classes), with mounted-vs-searchable tier as a binding attribute rather than a storage location. Spaces are context-first: they scope memory/document access; space-scoped tool bindings stay legal but exceptional. The registry is the authored policy truth; the Gateway Policy engine is a compiled projection of it, never an authoring surface.
 
 ### Approval Registry
 
@@ -205,27 +205,27 @@ The four-way taxonomy for workspace-defined tools (`tools/<slug>/TOOL.md`): `bin
 
 ### Tenant Brain
 
-The single tenant-level consolidated memory layer: a lightweight knowledge graph in plain Postgres plus the wiki pages materialized from it. Sits above the raw Hindsight user and Space banks. There is no separate team tier — Spaces are the team construct and Space banks are the team-scope memory store. At the company scope the Brain is anchored by the Tenant Bank (see below), which supersedes the earlier "team and space are scope attributes, not separate stores" framing at the tenant tier only.
+The single tenant-level consolidated memory layer: the wiki pages materialized from consolidated memory. It sits above per-requester AgentCore memory, which is the only raw memory store — there is no separate team tier and no company-scope bank. Requester scope is where facts land; the Brain is where they are consolidated for humans.
 
-### Tenant Bank
+### Tenant Bank — retired
 
-The single company-scope Hindsight bank per tenant — the only bank class beyond the existing user and Space banks. It holds evidence brought up from Space banks via Governed Promotion; distillation over that evidence stays vendor-native (Hindsight consolidation and mental models) rather than reimplemented. Piloted behind the mental-models spike gate.
+Retired with the Hindsight removal (THINK-406). A company-scope bank class distinct from requester memory no longer exists; AgentCore managed memory is the only store, scoped per requester. Historical plans and brainstorms that describe Tenant Banks describe a shipped-and-removed design.
 
-### Governed Promotion
+### Governed Promotion — retired
 
-Copying explicitly selected memories into a higher-scope bank as evidence, carrying source bank id, source memory id, and original timestamp in metadata — never re-summarizing on the way up, and never hollowing out the source bank (the source row stays put). Promotion is idempotent per source memory and audited with actor + justification. Higher scopes therefore stay auditable and re-derivable from their sources, avoiding lossy summary-of-summaries compounding. In the pilot, the only path is Space bank → Tenant Bank, manually initiated by a tenant operator.
+Retired with the Tenant Bank (THINK-406). There is no promotion path between memory scopes; the surviving consolidation path is the nightly dreaming pass writing requester-scope markdown, plus wiki compile over consolidated memory.
 
 ### Dream State
 
-The recurring background consolidation pass over memory banks. It does two jobs: hygiene on the banks in place (merge duplicates, resolve contradictions, decay or forget stale and junk memories, quarantine eval-test residue — real deletion, not view filtering) and distillation of consolidated facts into the Tenant Brain's knowledge graph as evidence. It is the only ingestion path into the Brain.
+The recurring nightly background pass over a requester's memory. It reads the requester's AgentCore memory records plus the idle learner's accumulated notes and rewrites the requester's markdown memory files in S3 under `memory/` — consolidating repeats, dropping stale notes, and sharpening what the agent should carry into the next session. It does not mutate AgentCore's own namespaces (semantic / preferences / summaries / episodes); AgentCore runs its own extraction and hygiene behind `retainTurn`.
 
 ### Evidence-Threshold Promotion
 
-The mechanical rule deciding which knowledge-graph entities earn wiki pages: an entity is promoted when it crosses observable evidence thresholds (distinct-thread mentions over time, relationship count, referenced by another page). Ontology types are optional labels and never gate promotion. Sub-threshold entities remain fully agent-queryable in the graph; promotion controls only the human wiki window.
+The mechanical rule deciding which entities earn wiki pages: an entity is promoted when it crosses observable evidence thresholds (distinct-thread mentions over time, relationship count, referenced by another page). Sub-threshold entities remain fully agent-queryable; promotion controls only the human wiki window.
 
 ### Progressive Discovery
 
-The agent's Brain-first memory read path: consult the compiled wiki and knowledge graph first, then drill down into raw Hindsight bank recall only when underlying detail is needed.
+The agent's Brain-first memory read path: consult the compiled wiki first, then drill down into raw AgentCore memory recall (`recall` / `memorySearch`) only when underlying detail is needed.
 
 ### External Research Loop
 
@@ -233,7 +233,7 @@ The event-triggered enrichment path that grows the Wiki from outside sources: a 
 
 ### Research Lot
 
-The recall unit for externally-sourced knowledge: every research run stamps its observation batch with a lot ID threaded through KG extraction into derived entity/relationship provenance. Recalling a lot tombstones it, removes or downgrades its derived graph state via merge-upsert, recompiles affected wiki pages, and discloses the recall in their coverage line.
+The recall unit for externally-sourced knowledge: every research run stamps its observation batch with a lot ID threaded through extraction into derived entity/relationship provenance. Recalling a lot tombstones it, removes or downgrades its derived graph state via merge-upsert, recompiles affected wiki pages, and discloses the recall in their coverage line.
 
 ### Graph Focus Mode
 
@@ -241,7 +241,7 @@ The force-graph exploration state entered by clicking a node: the node's 2-degre
 
 ### Memory Source Family
 
-One of the four V1 external-source integrations feeding compounding memory (THINK-193): `twenty` (CRM), `firecrawl` (web), `email` (Gmail behind a provider-neutral adapter), `bedrock_kb` (knowledge-base documents). Each family binds under a processor via a source config (boundary + enable flag + erase generation) and requires a separately persisted, versioned source grant (`memory_source_authorizations`) — credential ownership is never authorization. Families enable and fail independently; one adapter's outage never requires disabling the others.
+One of the V1 external-source integrations feeding compounding memory (THINK-193): `twenty` (CRM), `firecrawl` (web), and `email` (Gmail behind a provider-neutral adapter). The `bedrock_kb` family was removed with Knowledge Bases (THINK-402). Each family binds under a processor via a source config (boundary + enable flag + erase generation) and requires a separately persisted, versioned source grant (`memory_source_authorizations`) — credential ownership is never authorization. Families enable and fail independently; one adapter's outage never requires disabling the others.
 
 ### Processor Mode
 
@@ -249,7 +249,7 @@ The two-mode split of memory processors: `personal` (one per user, target scope 
 
 ### Claims / Evidence / Derivations
 
-The three-ledger provenance spine of external memory. **Evidence** (`memory_evidence_items`) is one acquired item edition — source id + content-sensitive version in a unique slot, bounded snapshot, lifecycle. **Claims** (`memory_claims`) are ontology-shaped facts (subject key, predicate, value + hash, effective interval, status active/superseded/retracted) supported by claim-evidence edges; single-valued predicates supersede, zero-support claims sweep closed. **Derivations** (`memory_derivations`) record evidence → Hindsight-document lineage so retraction can find and delete exactly what a source projected.
+The three-ledger provenance spine of external memory. **Evidence** (`memory_evidence_items`) is one acquired item edition — source id + content-sensitive version in a unique slot, bounded snapshot, lifecycle. **Claims** (`memory_claims`) are structured facts (subject key, predicate, value + hash, effective interval, status active/superseded/retracted) supported by claim-evidence edges; single-valued predicates supersede, zero-support claims sweep closed. **Derivations** (`memory_derivations`) record evidence → provider-document lineage so retraction can find and delete exactly what a source projected.
 
 ### Erase Epoch
 
@@ -261,7 +261,7 @@ The tenant-level entity resolution layer (`identity.*` schema): canonical entiti
 
 ### Type-Level Map
 
-The ontology's schema-level declaration of which attached source systems hold which facets of each entity type ("Customer invoices and orders live in lastmile; touchpoints live in Twenty"). Operator-authored and governed by the ontology change-set loop, it is the agent's answer to "where would I fetch this kind of information" — the counterpart to the Canonical Identity crosswalk, which answers "what does that system call this specific entity." Introduced by the identity-crosswalk arc (THINK-321).
+The schema-level declaration of which attached source systems hold which facets of each entity type ("Customer invoices and orders live in lastmile; touchpoints live in Twenty"). Operator-authored, it is the agent's answer to "where would I fetch this kind of information" — the counterpart to the Canonical Identity crosswalk, which answers "what does that system call this specific entity." Introduced by the identity-crosswalk arc (THINK-321).
 
 ### Routed Fetch
 
@@ -273,7 +273,7 @@ The identity graph projector's two write paths into the Neptune twin. The nudge 
 
 ### Company Brain (formerly Digital Twin)
 
-The deep-cloned instance graph of a tenant's structured world: ingestion pipelines materialize every declared facet of every entity type by default (per-facet limiting is the escape valve for very large data) into a Neptune Serverless graph shaped by the ontology — entity nodes with cloned facets, entity-to-entity edges populated deterministically from declared source foreign-key bindings, and external-system nodes whose incoming edges carry each system's external ID while the node carries fetch metadata. The graph is the agent's entire brain read surface; identity writes stay in the relational Canonical Identity machinery and project into the graph on every change. Inverts Routed Fetch's federation-over-replication stance at the brain layer — staleness is managed by sync cadence, not avoided by refusing to cache — while the crosswalk stays load-bearing for identity and live follow-out. Introduced by the company-brain arc (2026-07-21).
+The deep-cloned instance graph of a tenant's structured world: ingestion pipelines materialize every declared facet of every entity type by default (per-facet limiting is the escape valve for very large data) into a Neptune Serverless graph — entity nodes with cloned facets, entity-to-entity edges populated deterministically from declared source foreign-key bindings, and external-system nodes whose incoming edges carry each system's external ID while the node carries fetch metadata. The graph is the agent's entire brain read surface; identity writes stay in the relational Canonical Identity machinery and project into the graph on every change. Inverts Routed Fetch's federation-over-replication stance at the brain layer — staleness is managed by sync cadence, not avoided by refusing to cache — while the crosswalk stays load-bearing for identity and live follow-out. Introduced by the company-brain arc (2026-07-21).
 
 ### Context Tree
 
@@ -285,7 +285,7 @@ The aggregated neighbor group rendered during twin graph traversal: one node per
 
 ### Entity-Page Projection
 
-The wiki reimagined as a live projection of the Company Brain: per entity type, operators declare which sections a page shows — facet-backed (cached, freshness stamped), live-routed (fetched on view via the entity→system edge), or Knowledge (distilled memories from the soft kg/memory layer, joined by canonical ID and visibly distinct from source-backed fact). Topics and Decisions become node types with projected pages; nothing is hand-compiled into page storage.
+The wiki reimagined as a live projection of the Company Brain: per entity type, operators declare which sections a page shows — facet-backed (cached, freshness stamped), live-routed (fetched on view via the entity→system edge), or Knowledge (distilled memories from the memory layer, joined by canonical ID and visibly distinct from source-backed fact). Topics and Decisions become node types with projected pages; nothing is hand-compiled into page storage.
 
 ### External-Memory Rollout Gates
 
@@ -555,7 +555,7 @@ The policy for retroactively correcting historical cost events: backfilled/repri
 
 ### System Spend
 
-Per-tenant cost events written by background Bedrock consumers (wiki compile, conformance judge, KG extraction, model converse, dreaming), tagged with a source category naming the consumer rather than attributed to a thread or turn. Lets dashboards split conversation spend from background/system spend while keeping tenant totals reconcilable with AWS billing.
+Per-tenant cost events written by background Bedrock consumers (wiki compile, conformance judge, model converse, dreaming), tagged with a source category naming the consumer rather than attributed to a thread or turn. Lets dashboards split conversation spend from background/system spend while keeping tenant totals reconcilable with AWS billing.
 
 ### Suspense Entry
 
@@ -603,11 +603,11 @@ The three-rung Cmd+K contract (THINK-263): find (every keystroke, Postgres FTS f
 
 ### Search Broker
 
-The single fan-out `search` operation behind every rung: concurrent dispatch to the thread, wiki, memory, and knowledge-graph legs with source-tagged results and per-leg timeouts, exposed identically as a GraphQL query and a Pi agent tool. Legs are provider contracts added behind the broker without touching clients; every leg enforces caller scope (tenant-union wiki/KG, thread-permission-filtered memory).
+The single fan-out `search` operation behind every rung: concurrent dispatch to the thread, wiki, and memory legs with source-tagged results and per-leg timeouts, exposed identically as a GraphQL query and a Pi agent tool. Legs are provider contracts added behind the broker without touching clients; every leg enforces caller scope (tenant-union wiki, thread-permission-filtered memory).
 
 ### Entity Dossier
 
-The marquee search result for "pull everything we know about X": when a query matches a grounded KG entity alias, the top result is a live card aggregating the entity's wiki page, contributing memories, linked threads, and artifacts via provenance joins at query time. Permission-filtered like every leg — content from threads the viewer cannot open is hidden, not existence-flagged.
+The marquee search result for "pull everything we know about X": when a query matches a grounded entity alias, the top result is a live card aggregating the entity's wiki page, contributing memories, linked threads, and artifacts via provenance joins at query time. Permission-filtered like every leg — content from threads the viewer cannot open is hidden, not existence-flagged.
 
 ### Citation-or-Silence
 

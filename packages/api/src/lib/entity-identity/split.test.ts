@@ -23,7 +23,6 @@ const impact: SplitImpactPreview = {
   claimCountFollowingB: 1,
   claimCountRemainingA: 1,
   memoryClaimCount: 2,
-  graphEntityCount: 1,
 };
 
 describe("splitImpactMatches", () => {
@@ -36,7 +35,7 @@ describe("splitImpactMatches", () => {
       splitImpactMatches(impact, { ...impact, claimCountFollowingB: 0 }),
     ).toBe(false);
     expect(
-      splitImpactMatches(impact, { ...impact, graphEntityCount: 99 }),
+      splitImpactMatches(impact, { ...impact, memoryClaimCount: 99 }),
     ).toBe(false);
   });
 });

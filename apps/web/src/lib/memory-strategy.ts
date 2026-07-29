@@ -1,4 +1,4 @@
-/** Hindsight memory-strategy presentation helpers ported from admin. */
+/** Memory-strategy presentation helpers ported from admin. */
 
 export const STRATEGY_COLORS: Record<string, string> = {
   semantic: "bg-blue-500/20 text-blue-400",
@@ -28,7 +28,7 @@ export function inferStrategy(strategyId: string, namespace: string): string {
 }
 
 /**
- * Parse `<topic name="…">…</topic>` blocks (the format Hindsight's retain step
+ * Parse `<topic name="…">…</topic>` blocks (the format the retain step
  * emits) into structured sections. Handles both closed and unclosed tags.
  */
 export function parseMemoryTopics(

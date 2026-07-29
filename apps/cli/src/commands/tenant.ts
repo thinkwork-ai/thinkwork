@@ -537,7 +537,7 @@ Examples:
       `
 Examples:
   $ thinkwork tenant settings set --default-model claude-sonnet-4-6
-  $ thinkwork tenant settings set --monthly-budget-usd 5000 --feature hindsight=true
+  $ thinkwork tenant settings set --monthly-budget-usd 5000 --feature twenty=true
 `,
     )
     .action(runTenantSettingsSet);

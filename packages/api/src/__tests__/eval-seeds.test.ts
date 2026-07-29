@@ -4,7 +4,6 @@ import { EVAL_SEED_CATEGORIES, EVAL_SEEDS } from "../lib/eval-seeds";
 
 const LEGACY_CATEGORIES = [
   "email-calendar",
-  "knowledge-base",
   "mcp-gateway",
   "red-team",
   "sub-agents",
@@ -36,7 +35,7 @@ describe("eval seed pack", () => {
   });
 
   it("carries evaluator choices from seed content", () => {
-    expect(EVAL_SEEDS).toHaveLength(196);
+    expect(EVAL_SEEDS).toHaveLength(195);
     expect(
       EVAL_SEEDS.every((seed) => seed.agentcore_evaluator_ids?.length),
     ).toBe(true);

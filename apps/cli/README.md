@@ -82,7 +82,7 @@ No repo clone required — `thinkwork init` scaffolds all Terraform modules from
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `thinkwork plan -s <stage>`      | Preview infrastructure changes                                                                                                                                         |
 | `thinkwork deploy -s <stage>`    | Full deploy pipeline: preflight checks → terraform apply → release artifacts → schema migrations → post-deploy verification. Reruns converge from any partial failure. |
-| `thinkwork verify -s <stage>`    | Prove a deployed stage works: GraphQL, authenticated call, web, database schema, Hindsight, seeding, deployed-artifact evidence, pending-approvals checklist           |
+| `thinkwork verify -s <stage>`    | Prove a deployed stage works: GraphQL, authenticated call, web, database schema, seeding, deployed-artifact evidence, pending-approvals checklist                      |
 | `thinkwork bootstrap -s <stage>` | Seed workspace defaults and per-tenant workspace files                                                                                                                 |
 | `thinkwork destroy -s <stage>`   | Tear down to a redeployable clean slate: buckets pre-emptied (all versions), bounded retry, lingering secrets force-deleted, orphan scan                               |
 
@@ -173,7 +173,6 @@ prompt from `thinkwork login`) for those.
 
 - **AWS Region** — where to deploy (default: us-east-1)
 - **Database engine** — `aurora-serverless` (production) or `rds-postgres` (dev, cheaper)
-- **Hindsight add-on** — optional y/N (managed AgentCore memory with automatic per-turn retention is always on; Hindsight adds ECS Fargate semantic + entity-graph retrieval alongside it)
 - **Google OAuth** — optional social login for Cognito
 - **Admin UI URL** — callback URL for the admin dashboard
 - **Mobile app scheme** — deep link scheme for the mobile app
@@ -210,20 +209,10 @@ thinkwork status
   Lambda fns:      42
   AgentCore:       Active
   Memory:          managed (always on)
-  Hindsight:       healthy
   ...
 ```
 
 URLs are clickable in supported terminals (iTerm2, Windows Terminal, VS Code, etc.).
-
-### Enable the Hindsight memory add-on
-
-Managed AgentCore memory is always on. To also enable Hindsight (ECS Fargate
-service for semantic + entity-graph retrieval) alongside it:
-
-```bash
-thinkwork config set enable-hindsight true -s dev --apply
-```
 
 ### Deploy a specific tier
 
@@ -285,8 +274,8 @@ Thinkwork provisions a complete AI agent stack (~250 AWS resources):
 - **Database**: Aurora Serverless PostgreSQL with pgvector
 - **Auth**: Cognito user pool (admin + mobile clients)
 - **API**: API Gateway (REST + GraphQL), AppSync (WebSocket subscriptions)
-- **Storage**: S3 (workspace files, skills, knowledge bases)
-- **Memory**: Managed (built-in) or Hindsight (ECS Fargate with semantic + BM25 + entity graph retrieval)
+- **Storage**: S3 (workspace files, skills)
+- **Memory**: Bedrock AgentCore Memory (managed) — the only engine
 
 ## License
 

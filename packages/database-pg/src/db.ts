@@ -86,7 +86,9 @@ export async function resolveDatabaseUrlFromSecrets(
 ): Promise<string> {
   const secretArn = getConfig("DATABASE_SECRET_ARN");
   const host =
-    getConfig("DATABASE_HOST") || process.env.DB_CLUSTER_ENDPOINT || "localhost";
+    getConfig("DATABASE_HOST") ||
+    process.env.DB_CLUSTER_ENDPOINT ||
+    "localhost";
   const dbName = dbNameOverride || getConfig("DATABASE_NAME") || "thinkwork";
 
   if (!secretArn) {
@@ -95,8 +97,9 @@ export async function resolveDatabaseUrlFromSecrets(
     );
   }
 
-  const { SecretsManagerClient, GetSecretValueCommand } =
-    await import("@aws-sdk/client-secrets-manager");
+  const { SecretsManagerClient, GetSecretValueCommand } = await import(
+    "@aws-sdk/client-secrets-manager"
+  );
   const sm = new SecretsManagerClient({});
   const result = await sm.send(
     new GetSecretValueCommand({ SecretId: secretArn }),
@@ -164,7 +167,7 @@ export function createDb(
     pool.end().catch(() => {});
   });
   // Callers that pass onPoolError own their client's lifecycle (e.g. the
-  // hindsight pool) — don't adopt their pool as the primary singleton.
+  // secondary pool) — don't adopt their pool as the primary singleton.
   if (!onPoolError) _pool = pool;
   return drizzle(pool, { schema });
 }

@@ -12,7 +12,6 @@ vi.mock("./claims.js", () => ({
   boundedInlineText: (value: string) => value,
 }));
 
-import { HindsightRetainError } from "../memory/adapters/hindsight-adapter.js";
 import {
   enqueueDerivationRetraction,
   fenceMatches,
@@ -293,12 +292,7 @@ describe("processRetractionAttempt saga ordering (provider delete FIRST)", () =>
     const { store, events, derivation, row } = makeStore(makeAttempt());
     const adapter = makeAdapter();
     adapter.deleteDocument.mockRejectedValue(
-      new HindsightRetainError({
-        action: "deleteDocument",
-        statusCode: 503,
-        retryable: true,
-        message: "hindsight deleteDocument 503: upstream unavailable",
-      }),
+      new Error("deleteDocument failed: upstream unavailable"),
     );
 
     const result = await processRetractionAttempt(
@@ -307,7 +301,8 @@ describe("processRetractionAttempt saga ordering (provider delete FIRST)", () =>
     );
 
     expect(result.status).toBe("failed");
-    expect(result.error_class).toBe("hindsight_503");
+    // Unrecognized provider errors classify as retryable "unknown".
+    expect(result.error_class).toBe("unknown");
     // Nothing internal was retracted before the provider delete failed:
     // the derivation is still active and queryable, and no finalize ran.
     expect(derivation!.lifecycle).toBe("active");
@@ -472,12 +467,7 @@ describe("saga worker fencing", () => {
     const adapter = makeAdapter();
     adapter.deleteDocument.mockImplementation(async () => {
       fixture.steal("worker-b");
-      throw new HindsightRetainError({
-        action: "deleteDocument",
-        statusCode: 503,
-        retryable: true,
-        message: "boom",
-      });
+      throw new Error("boom");
     });
 
     const result = await processRetractionAttempt(
@@ -487,7 +477,7 @@ describe("saga worker fencing", () => {
     );
 
     // markFailed was attempted with A's stale fence and no-oped.
-    expect(fixture.events).toContain("staleMarkFailed:hindsight_503");
+    expect(fixture.events).toContain("staleMarkFailed:unknown");
     expect(fixture.row.status).toBe("running");
     expect(fixture.row.locked_by).toBe("worker-b");
     expect(result.locked_by).toBe("worker-b");
@@ -555,25 +545,20 @@ describe("processRetractionAttempt failure handling", () => {
     expect(result.status).toBe("retracted");
   });
 
-  it("dead-letters on a non-retryable 4xx", async () => {
-    const { store } = makeStore(makeAttempt());
-    const adapter = makeAdapter();
-    adapter.deleteDocument.mockRejectedValue(
-      new HindsightRetainError({
-        action: "deleteDocument",
-        statusCode: 403,
+  it("dead-letters non-retryable failures immediately, with no backoff", () => {
+    const transition = resolveFailureTransition(
+      makeAttempt({ attempt_count: 1, max_attempts: 5 }),
+      {
+        errorClass: "unsupported_engine",
+        errorMessage: "engine cannot delete documents",
         retryable: false,
-        message: "hindsight deleteDocument 403: forbidden",
-      }),
+      },
+      new Date("2026-07-11T12:00:00Z"),
     );
 
-    const result = await processRetractionAttempt(
-      { db: noDb, adapter, store },
-      ATTEMPT_ID,
-    );
-
-    expect(result.status).toBe("dead_lettered");
-    expect(result.error_class).toBe("hindsight_403");
+    expect(transition.status).toBe("dead_lettered");
+    expect(transition.nextRetryAt).toBeNull();
+    expect(transition.completedAt).not.toBeNull();
   });
 
   it("dead-letters when the derivation row is missing, WITHOUT provider delete", async () => {
@@ -596,12 +581,7 @@ describe("processRetractionAttempt failure handling", () => {
     );
     const adapter = makeAdapter();
     adapter.deleteDocument.mockRejectedValue(
-      new HindsightRetainError({
-        action: "deleteDocument",
-        statusCode: 503,
-        retryable: true,
-        message: "hindsight deleteDocument 503: down",
-      }),
+      new Error("deleteDocument failed: down"),
     );
 
     const result = await processRetractionAttempt(

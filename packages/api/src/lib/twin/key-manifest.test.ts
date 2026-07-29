@@ -51,7 +51,14 @@ function manifestBody(index = 0): {
   formatVersion: string;
   tenantId: string;
   generatedAt: string;
-  keys: Array<{ keyHash: string; createdAt: string | null }>;
+  keys: Array<{
+    keyHash: string;
+    keyId?: string;
+    name?: string;
+    createdAt: string | null;
+    securityGroups?: string[];
+    kbCollections?: string[];
+  }>;
 } {
   return JSON.parse(puts[index]!.Body!);
 }
@@ -89,8 +96,22 @@ describe("publishTwinKeyManifest", () => {
   it("publishes the format-gated manifest shape to twin-mcp-keys/<tenantId>/latest.json", async () => {
     const created = new Date("2026-07-01T00:00:00.000Z");
     selectQueue.push([
-      { key_hash: "a".repeat(64), created_at: created },
-      { key_hash: "b".repeat(64), created_at: null },
+      {
+        id: "key-a",
+        key_hash: "a".repeat(64),
+        name: "ChatGPT app",
+        created_at: created,
+        security_groups: ["FINANCE"],
+        kb_collections: ["handbook"],
+      },
+      {
+        id: "key-b",
+        key_hash: "b".repeat(64),
+        name: "default",
+        created_at: null,
+        security_groups: ["*"],
+        kb_collections: ["*"],
+      },
     ]);
     const now = new Date("2026-07-24T12:00:00.000Z");
     const result = await publishTwinKeyManifest(TENANT_ID, {
@@ -113,17 +134,47 @@ describe("publishTwinKeyManifest", () => {
     expect(puts[0]!.ContentType).toBe("application/json");
     const doc = manifestBody();
     expect(doc.formatVersion).toBe(TWIN_KEY_MANIFEST_FORMAT);
-    expect(doc.formatVersion).toBe("twin-mcp-keys/v1");
+    // Cross-repo contract with company-brain brain-mcp/src/auth.ts (#246).
+    expect(doc.formatVersion).toBe("twin-mcp-keys/v2");
     expect(doc.tenantId).toBe(TENANT_ID);
     expect(doc.generatedAt).toBe(now.toISOString());
     expect(doc.keys).toEqual([
       {
         keyHash: "a".repeat(64),
+        keyId: "key-a",
+        name: "ChatGPT app",
         createdAt: created.toISOString(),
         expiresAt: null,
+        securityGroups: ["FINANCE"],
+        kbCollections: ["handbook"],
       },
-      { keyHash: "b".repeat(64), createdAt: null, expiresAt: null },
+      {
+        keyHash: "b".repeat(64),
+        keyId: "key-b",
+        name: "default",
+        createdAt: null,
+        expiresAt: null,
+        securityGroups: ["*"],
+        kbCollections: ["*"],
+      },
     ]);
+  });
+
+  it("a key with no grants publishes empty lists — PUBLIC graph only, no KB", async () => {
+    selectQueue.push([
+      {
+        id: "key-c",
+        key_hash: "c".repeat(64),
+        name: "narrow",
+        created_at: null,
+        security_groups: [],
+        kb_collections: [],
+      },
+    ]);
+    await publishTwinKeyManifest(TENANT_ID, { s3, bucket: BUCKET });
+    const [entry] = manifestBody().keys;
+    expect(entry!.securityGroups).toEqual([]);
+    expect(entry!.kbCollections).toEqual([]);
   });
 
   it("queries ACTIVE keys only — the where clause pins tenant_id AND revoked_at IS NULL", async () => {

@@ -49,8 +49,8 @@ type MemorySearchResult {
 }
 
 """
-ThinkWork-owned ledger row for a Hindsight retain attempt.
-The retained memory record itself remains in Hindsight; this type exposes
+ThinkWork-owned ledger row for a memory retain attempt.
+The retained memory record itself lives in the memory engine; this type exposes
 retry, timeout, and dead-letter state for diagnostics.
 """
 type MemoryRetainAttempt {
@@ -82,78 +82,12 @@ type MemoryRetainAttempt {
 }
 
 """
-Dream-state run ledger row (THINK-133 U4). One row per (tenant, bank) dream
-run; per-action detail is summarized in plannedCounts/appliedCounts.
-"""
-type BrainDreamRun {
-  id: ID!
-  tenantId: ID!
-  bankId: String!
-  dedupeKey: String!
-  status: String!
-  plannedCounts: AWSJSON
-  appliedCounts: AWSJSON
-  errorMessage: String
-  startedAt: AWSDateTime
-  finishedAt: AWSDateTime
-  createdAt: AWSDateTime
-  updatedAt: AWSDateTime
-}
-
-type MemoryGraphNode {
-  id: ID!
-  label: String!
-  type: String!
-  strategy: String
-  entityType: String
-  edgeCount: Int!
-  latestThreadId: String
-  """
-  Hindsight bank the entity belongs to (populated when allTenantBanks is set).
-  """
-  bankId: String
-  """
-  Human label for the bank (space/user/agent name), for the Bank facet.
-  """
-  bankName: String
-}
-
-type MemoryGraphEdge {
-  source: String!
-  target: String!
-  type: String!
-  label: String
-  weight: Float!
-}
-
-"""
-A Hindsight bank enumerated from tenant tables (user / space / agent),
-independent of whether any of its entities appear in the returned graph.
-The Bank filter facet builds from this list, never from node data.
-"""
-type MemoryGraphBank {
-  id: String!
-  name: String!
-}
-
-type MemoryGraph {
-  nodes: [MemoryGraphNode!]!
-  edges: [MemoryGraphEdge!]!
-  """
-  All banks in scope for this graph (tenant-enumerated in allTenantBanks
-  mode), including banks with no visible nodes.
-  """
-  banks: [MemoryGraphBank!]!
-}
-
-"""
 Runtime memory system configuration exposed to the admin UI.
-Lets the UI decide which views to render (e.g. Knowledge Graph toggle is
-only meaningful when the active engine supports graph inspection).
+Lets the UI decide which views to render based on the active engine.
 """
 type MemorySystemConfig {
   """
-  Active long-term memory engine selected by MEMORY_ENGINE.
+  Active long-term memory engine. Always "agentcore" (THINK-406).
   """
   activeEngine: String!
   """
@@ -163,11 +97,6 @@ type MemorySystemConfig {
   """
   managedMemoryEnabled: Boolean!
   """
-  True when Hindsight is the active long-term memory engine for canonical
-  user and Space memory.
-  """
-  hindsightEnabled: Boolean!
-  """
   True when the active engine supports user-carried memory capture and recall.
   """
   userMemoryEnabled: Boolean!
@@ -176,57 +105,10 @@ type MemorySystemConfig {
   """
   spaceMemoryEnabled: Boolean!
   """
-  True when a Hindsight endpoint is configured while another engine is
-  active. Operators should treat it as non-canonical diagnostic evidence.
-  """
-  legacyHindsightAvailable: Boolean!
-  """
   ThinkWork Brain distillation is intentionally deferred from this memory
   provider pivot.
   """
   companyDistillationEnabled: Boolean!
-}
-
-input IngestSpaceMemoryDocumentInput {
-  tenantId: ID
-  spaceId: ID!
-  """
-  Stable caller document identity. When omitted, `path` is used. The resolver
-  prefixes the final Hindsight document id with the Space id to avoid
-  collisions inside the Space bank.
-  """
-  documentId: String
-  """
-  Stable document path/name from the source system. Required when `documentId`
-  is omitted.
-  """
-  path: String
-  title: String
-  content: String!
-  contentType: String
-  sourceUrl: AWSURL
-  """
-  Event timestamp for temporal extraction. Omit for timeless reference
-  material; the resolver sends Hindsight `timestamp: "unset"`.
-  """
-  timestamp: AWSDateTime
-  tags: [String!]
-  metadata: AWSJSON
-  """
-  Process through Hindsight async retain. Defaults to true for document-sized
-  ingest so user-facing flows are not held open by extraction work.
-  """
-  processAsync: Boolean = true
-}
-
-type SpaceMemoryDocumentIngest {
-  documentId: String!
-  spaceId: ID!
-  path: String!
-  status: String!
-  processAsync: Boolean!
-  context: String!
-  contentBytes: Int!
 }
 
 type ThreadIdleLearningChangedFile {
@@ -237,8 +119,6 @@ type ThreadIdleLearningChangedFile {
   beforeBytes: Int
   afterBytes: Int
   snapshotKey: String
-  hindsightDocumentId: String
-  hindsightStatus: String
 }
 
 type ThreadIdleLearningRun {
@@ -275,6 +155,19 @@ extend type Query {
     limit: Int
   ): [MemoryRecord!]!
   memoryRecordsByIds(tenantId: ID!, ids: [ID!]!): [MemoryRecord!]!
+  """
+  Session-scoped episodes plus the cross-session reflections filed alongside
+  them, for one user. Separate from `memoryRecords` on purpose: episodic
+  records are per-thread and would swamp the cross-thread listing, so the
+  Memory page loads them as their own facet. Engines with no episodic facet
+  return an empty list rather than erroring.
+  """
+  memoryEpisodicRecords(
+    tenantId: ID
+    userId: ID
+    assistantId: ID
+    limit: Int
+  ): [MemoryRecord!]!
   memorySearch(
     tenantId: ID
     userId: ID
@@ -283,22 +176,6 @@ extend type Query {
     strategy: MemoryStrategy
     limit: Int
   ): MemorySearchResult!
-  spaceMemorySearch(
-    tenantId: ID
-    spaceId: ID!
-    query: String!
-    limit: Int
-  ): MemorySearchResult!
-  memoryGraph(
-    tenantId: ID
-    userId: ID
-    assistantId: ID
-    """
-    When true (tenant admins only), span every bank in the tenant and tag
-    each node with its bank so the graph can be filtered by bank.
-    """
-    allTenantBanks: Boolean
-  ): MemoryGraph!
   memorySystemConfig: MemorySystemConfig!
   memoryRetainAttempts(
     tenantId: ID
@@ -308,12 +185,6 @@ extend type Query {
     status: String
     limit: Int = 50
   ): [MemoryRetainAttempt!]!
-  brainDreamRuns(
-    tenantId: ID
-    bankId: String
-    status: String
-    limit: Int = 50
-  ): [BrainDreamRun!]!
   threadIdleLearningRuns(
     tenantId: ID
     userId: ID
@@ -355,60 +226,11 @@ extend type Mutation {
     metadata: AWSJSON
     clientCaptureId: ID
   ): MobileMemoryCapture!
-  captureSpaceMemory(
-    tenantId: ID
-    spaceId: ID!
-    content: String!
-    metadata: AWSJSON
-    clientCaptureId: ID
-  ): MemoryRecord!
-  ingestSpaceMemoryDocument(
-    input: IngestSpaceMemoryDocumentInput!
-  ): SpaceMemoryDocumentIngest!
-  promoteSpaceMemoriesToTenant(
-    tenantId: ID
-    spaceId: ID!
-    memoryIds: [ID!]!
-    justification: String!
-  ): TenantMemoryPromotionResult!
-}
-
-"""
-Governed Promotion (company-brain plan U10): explicitly selected space-bank
-memories copied into the Tenant Bank with provenance intact. Idempotent per
-source memory; the source rows are untouched.
-"""
-type TenantMemoryPromotionResult {
-  promoted: [ID!]!
-  alreadyPromoted: [ID!]!
-  missing: [ID!]!
-}
-
-"""
-One Tenant Bank memory with its Governed Promotion provenance and consumption
-signal (company-brain plan U11 — provenance queryable in one step).
-"""
-type TenantBankMemory {
-  id: ID!
-  content: String!
-  factType: String
-  sourceBankId: String
-  sourceMemoryId: ID
-  sourceTimestamp: String
-  promotedBy: String
-  promotedAt: String
-  justification: String
-  accessCount: Int
-  createdAt: String
-}
-
-extend type Query {
-  tenantBankMemories(tenantId: ID, limit: Int): [TenantBankMemory!]!
 }
 
 """
 Fact-type picker values exposed to the mobile quick-capture footer. Maps to
-Hindsight's native fact_type via the resolver. FACT is the default when the
+the engine's native fact type via the resolver. FACT is the default when the
 user doesn't override.
 """
 enum MobileCaptureFactType {
@@ -438,8 +260,8 @@ extend type Query {
     limit: Int = 50
   ): [MobileMemoryCapture!]!
   """
-  Free-text search across the full Hindsight bank for the given user.
-  Hits Hindsight's recall endpoint (semantic + rerank) and normalizes results
+  Free-text search across the full memory bank for the given user.
+  Hits the engine's recall endpoint (semantic + rerank) and normalizes results
   back to MobileMemoryCapture so the Memories list can render search results
   with the same rows it uses for captures. Not filtered by capture_source —
   search is meant to answer "what does this user know?", including chat-
@@ -466,7 +288,7 @@ extend type Mutation {
 """
 External Memory Compounding (THINK-193 U2). Operator-only inspection and
 control surface for external memory sources: processor configs, source
-bindings, authorization grants, the evidence ledger, ontology claims, and
+bindings, authorization grants, the evidence ledger, durable claims, and
 the retraction ledger. Queries and mutations below require tenant admin,
 with one exception (THINK-193 U6): grantMemorySourceAuthorization and
 setMemorySourceConfig on a PERSONAL processor are owner self-service,
@@ -530,7 +352,7 @@ type MemoryEvidenceItemSummary {
 }
 
 """
-Durable ontology-shaped claim. supportCount is the number of ACTIVE
+Durable structured claim. supportCount is the number of ACTIVE
 evidence support edges (memory_claim_evidence status = 'active').
 """
 type MemoryClaim {
@@ -549,7 +371,7 @@ type MemoryClaim {
 }
 
 """
-Evidence → Hindsight projection lineage row.
+Evidence → memory-document projection lineage row.
 """
 type MemoryDerivation {
   id: ID!
@@ -821,7 +643,7 @@ extend type Mutation {
   ): MemorySourceConfig!
   revokeMemorySourceAuthorization(tenantId: ID, authorizationId: ID!): Boolean!
   """
-  Enqueue a retraction for one derivation's Hindsight document and process
+  Enqueue a retraction for one derivation's memory document and process
   it inline once (RequestResponse semantics — errors surface to the caller).
   """
   retractMemoryDerivation(

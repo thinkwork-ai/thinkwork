@@ -400,7 +400,7 @@ export interface RecordRunItemArgs {
 /**
  * Derivation upsert body, transaction-scoped. One active derivation per
  * (source_config_id, projection_key): if one exists it is updated in place
- * (same stable Hindsight document, new evidence version); otherwise a new
+ * (same stable memory document, new evidence version); otherwise a new
  * row is inserted. Uses SELECT … FOR UPDATE because drizzle's onConflict
  * targets can't address the partial unique index — the index still
  * backstops races as a hard constraint.
@@ -451,7 +451,7 @@ async function upsertDerivationInTx(
   return inserted;
 }
 
-/** Record evidence → Hindsight lineage (see upsertDerivationInTx). */
+/** Record evidence → memory-document lineage (see upsertDerivationInTx). */
 export async function recordDerivation(
   db: Database,
   args: RecordDerivationArgs,
@@ -461,7 +461,7 @@ export async function recordDerivation(
 
 /**
  * Codex F8: commit the derivation AND its stage run-item in ONE
- * transaction, called AFTER the (idempotent) Hindsight write. Committing
+ * transaction, called AFTER the (idempotent) memory write. Committing
  * them separately lets a crash land the derivation without the run item —
  * the staleness-based work list (listEvidenceForProjection) then sees an
  * active derivation and skips the evidence forever, while the run ledger

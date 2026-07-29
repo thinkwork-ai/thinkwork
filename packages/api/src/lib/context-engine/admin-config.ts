@@ -38,7 +38,6 @@ const BUILT_IN_PROVIDER_FAMILIES: Record<string, ContextProviderFamily> = {
   brain: "brain",
   wiki: "wiki",
   "workspace-files": "workspace",
-  "bedrock-knowledge-base": "knowledge-base",
 };
 
 export async function loadTenantContextProviderSettings(

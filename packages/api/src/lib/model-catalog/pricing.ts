@@ -30,7 +30,10 @@ interface PricingEntry {
   cacheWriteMultiplier: number;
 }
 
-const ANTHROPIC_CACHE = { cacheReadMultiplier: 0.1, cacheWriteMultiplier: 1.25 };
+const ANTHROPIC_CACHE = {
+  cacheReadMultiplier: 0.1,
+  cacheWriteMultiplier: 1.25,
+};
 const NO_CACHE = { cacheReadMultiplier: 0, cacheWriteMultiplier: 0 };
 
 /**
@@ -48,7 +51,7 @@ const PRICING_ENTRIES: ReadonlyArray<readonly [string, PricingEntry]> = [
   ["claude-haiku-4-5", { input: 0.8, output: 4.0, ...ANTHROPIC_CACHE }],
   ["claude-3-5-haiku", { input: 0.8, output: 4.0, ...ANTHROPIC_CACHE }],
   ["claude-3-haiku", { input: 0.25, output: 1.25, ...ANTHROPIC_CACHE }],
-  // Hindsight retain/reflect models (Bedrock-hosted GPT-OSS). No cache
+  // Memory retain/reflect models (Bedrock-hosted GPT-OSS). No cache
   // billing lines exist for these on Bedrock.
   ["gpt-oss-20b", { input: 0.05, output: 0.2, ...NO_CACHE }],
   ["gpt-oss-120b", { input: 0.15, output: 0.6, ...NO_CACHE }],

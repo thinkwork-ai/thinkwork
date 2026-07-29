@@ -196,6 +196,9 @@ describe("provisionTwinConnector", () => {
     // Key: one revoke (update) before one insert with a 64-hex hash.
     expect(updateCalls[0]).toHaveProperty("revoked_at");
     expect(insertCalls[0]!.key_hash).toMatch(/^[0-9a-f]{64}$/);
+    // The connector key backs the console proxy: wildcard grants, always.
+    expect(insertCalls[0]!.security_groups).toEqual(["*"]);
+    expect(insertCalls[0]!.kb_collections).toEqual(["*"]);
     // Secret written once with the raw key.
     expect(smSends.length).toBe(1);
     const secretString = (smSends[0] as { input: { SecretString: string } })
@@ -303,7 +306,14 @@ describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", (
     ]);
     selectQueue.push([]); // no agents
     selectQueue.push([
-      { key_hash: "new-hash", created_at: new Date("2026-07-24T00:00:00Z") },
+      {
+        id: "key-1",
+        key_hash: "new-hash",
+        name: "default",
+        created_at: new Date("2026-07-24T00:00:00Z"),
+        security_groups: ["*"],
+        kb_collections: ["*"],
+      },
     ]); // final publish active scan
 
     const result = await provisionTwinConnector(INPUT, {
@@ -317,11 +327,28 @@ describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", (
     expect(puts[0]!.Key).toBe(`twin-mcp-keys/${INPUT.tenantId}/latest.json`);
     expect(puts[0]!.ContentType).toBe("application/json");
     expect(manifestHashes(0)).toEqual(["new-hash"]);
+    // v2: the connector key publishes with the wildcard grants.
+    const doc = JSON.parse(puts[0]!.Body!) as {
+      formatVersion: string;
+      keys: Array<{ securityGroups: string[]; kbCollections: string[] }>;
+    };
+    expect(doc.formatVersion).toBe("twin-mcp-keys/v2");
+    expect(doc.keys[0]!.securityGroups).toEqual(["*"]);
+    expect(doc.keys[0]!.kbCollections).toEqual(["*"]);
   });
 
   it("rotation keeps BOTH hashes live: grace publish carries old+new, final publish is active-only", async () => {
     const oldCreated = new Date("2026-01-01T00:00:00Z");
-    selectQueue.push([{ key_hash: "old-hash", created_at: oldCreated }]); // outgoing scan
+    selectQueue.push([
+      {
+        id: "key-1",
+        key_hash: "old-hash",
+        name: "default",
+        created_at: oldCreated,
+        security_groups: ["*"],
+        kb_collections: ["*"],
+      },
+    ]); // outgoing scan
     returningQueue.push([{ id: "key-2" }]);
     selectQueue.push([
       { key_hash: "new-hash", created_at: new Date("2026-07-24T00:00:00Z") },
@@ -355,10 +382,18 @@ describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", (
     expect(manifestHashes(0).sort()).toEqual(["new-hash", "old-hash"]);
     const graceOld = (
       JSON.parse(puts[0]!.Body!) as {
-        keys: Array<{ keyHash: string; createdAt: string | null }>;
+        keys: Array<{
+          keyHash: string;
+          createdAt: string | null;
+          securityGroups: string[];
+          kbCollections: string[];
+        }>;
       }
     ).keys.find((k) => k.keyHash === "old-hash");
     expect(graceOld!.createdAt).toBe(oldCreated.toISOString());
+    // The rotated-out key keeps its grants for the cache overlap window.
+    expect(graceOld!.securityGroups).toEqual(["*"]);
+    expect(graceOld!.kbCollections).toEqual(["*"]);
     // Final publish: the rotated-out hash is gone.
     expect(manifestHashes(1)).toEqual(["new-hash"]);
   });

@@ -477,7 +477,7 @@ describe("AutomationFlowSection memory pipeline", () => {
     fireEvent.click(screen.getByTestId("canvas-node-memory-source-threads"));
     expect(screen.getByText("Always on")).toBeTruthy();
     expect(
-      screen.getByText(/Thread conversations are retained into Hindsight/),
+      screen.getByText(/Thread conversations are retained into memory/),
     ).toBeTruthy();
 
     fireEvent.click(screen.getByTestId("canvas-node-memory-source-twenty"));

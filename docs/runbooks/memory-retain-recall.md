@@ -1,9 +1,16 @@
 # Memory Retain/Recall Runbook
 
 Use this runbook after deploying memory runtime or retain-worker changes. The
-bar is the product path: a new thread states a high-confidence fact, the retain
-worker writes it to Hindsight-backed Memory, and a separate new thread recalls
-it from memory.
+bar is the product path: a new thread states a durable fact, the retain worker
+hands the turn to Bedrock AgentCore Memory, AgentCore extracts it in the
+background, and a separate new thread recalls it.
+
+AgentCore managed memory is the only memory engine. The Pi runtime invokes the
+`memory-retain` Lambda once per turn; the Lambda calls `adapter.retainTurn` and
+AgentCore runs its own extraction into the semantic, preferences, summaries, and
+episodes namespaces. There is no fact-extraction step we own, so retain success
+and record visibility are two separate events — extraction is asynchronous and a
+`retained` attempt can briefly precede a searchable record.
 
 ## Smoke
 
@@ -44,8 +51,9 @@ conversation context, not memory recall.
 
 - `queued`: an attempt exists and is waiting to run.
 - `running`: a worker claimed the attempt.
-- `retained`: Hindsight writes completed and Memory records should be visible.
-- `failed_timeout`: Hindsight timed out and product retry should run.
+- `retained`: `retainTurn` was accepted by AgentCore. Records appear once
+  AgentCore's background extraction completes — usually seconds, not instant.
+- `failed_timeout`: the AgentCore call timed out and product retry should run.
 - `failed_backend`: provider/backend failure; product retry should run.
 - `dead_lettered`: max attempts exceeded or terminal failure; inspect
   `errorClass`, `errorMessage`, and CloudWatch for the retain Lambda.
@@ -55,8 +63,11 @@ dead-letter counts appear only when there is operator action to take.
 
 ## Triage
 
-- Memory record missing but attempt retained: search by the exact token in
-  `/settings/memory`; then inspect `providerResult` on the retain attempt.
+- Memory record missing but attempt retained: give AgentCore extraction a few
+  seconds and refresh; then search by the exact token in `/settings/memory` and
+  inspect `providerResult` on the retain attempt. A durable gap means AgentCore
+  saw the turn but did not judge it worth extracting — check the turn actually
+  stated a fact rather than asking a question.
 - Attempt stuck in `queued`: check the retry drainer schedule and
   `memory-retain` Lambda invocations.
 - Attempt stuck in `running`: check lock age and retry-drainer lock expiry.

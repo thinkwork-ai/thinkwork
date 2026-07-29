@@ -23,10 +23,6 @@ export interface EnvironmentConfig {
   accountId: string;
   terraformDir: string;
   databaseEngine: string;
-  /** Whether the optional Hindsight memory add-on is enabled (managed memory is always on). */
-  enableHindsight: boolean;
-  /** @deprecated Use `enableHindsight` instead. Kept for backwards-compat reads of existing config.json files. */
-  memoryEngine?: string;
   /**
    * Set at U8 graduation: destroy's strongest guard keys on this persisted
    * identity, not on stage-name patterns (which false-match hprod-*).

@@ -57,7 +57,15 @@ export const memorySearch = async (
   });
 
   const rows = hits.map((h) => toSearchRow(h, `user_${userId}`));
-  const sorted = rows.sort((a, b) => b.score - a.score).slice(0, limit);
+  // The `strategy` facet filter is applied here rather than pushed into the
+  // engine: recall fans out over every namespace and only the normalized
+  // record knows which strategy it was actually filed under. Filtering before
+  // the slice keeps a narrow facet from returning fewer rows than it has.
+  const wanted = args.strategy ? args.strategy.toLowerCase() : null;
+  const filtered = wanted
+    ? rows.filter((r) => (r.strategy || "").toLowerCase() === wanted)
+    : rows;
+  const sorted = filtered.sort((a, b) => b.score - a.score).slice(0, limit);
 
   return {
     records: sorted,

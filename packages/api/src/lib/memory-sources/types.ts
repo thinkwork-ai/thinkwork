@@ -53,7 +53,7 @@ export interface EvidenceUpsert {
   /** sha256 hex of the stable-stringified normalized snapshot. */
   contentHash: string;
   normalizedSnapshot: Record<string, unknown> | null;
-  /** Recipe/model/ontology version used for extraction. */
+  /** Recipe/model/schema version used for extraction. */
   extractionRecipe: Record<string, unknown>;
   targetScope: EvidenceTargetScope;
   targetId: string;

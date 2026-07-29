@@ -37,7 +37,7 @@ describe("Context Engine provider normalization", () => {
       {
         id: "kb-1",
         providerId: "kb",
-        family: "knowledge-base",
+        family: "mcp",
         title: "Gamma",
         snippet: "g",
         score: 0.9,

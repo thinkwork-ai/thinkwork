@@ -340,7 +340,7 @@ async function main(): Promise<void> {
   // catches Pi-side regressions: missing MEMORY_RETAIN_FN_NAME env,
   // IAM revocation on MemoryRetainInvoke, LambdaClient construction
   // throwing, server.ts hook removed, await semantics broken. Does NOT
-  // verify Hindsight reflection latency or recall correctness — those
+  // verify memory reflection latency or recall correctness — those
   // are operator-driven full-loop checks (admin chat: "remember X" then
   // fresh thread "what's X?"), not deploy gates.
   const memoryBearing = await invokePi(

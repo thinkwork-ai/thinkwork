@@ -335,7 +335,7 @@ export const memoryEvidenceItems = pgTable(
       string,
       unknown
     > | null>(),
-    /** Recipe/model/ontology version used for extraction. */
+    /** Recipe/model/schema version used for extraction. */
     extraction_recipe: jsonb("extraction_recipe")
       .$type<Record<string, unknown>>()
       .notNull()
@@ -530,7 +530,7 @@ export const memorySourceAuthorizations = pgTable(
 );
 
 // ---------------------------------------------------------------------------
-// memory_claims — durable ontology-shaped claims
+// memory_claims — durable structured claims
 // ---------------------------------------------------------------------------
 
 export const memoryClaims = pgTable(
@@ -551,7 +551,7 @@ export const memoryClaims = pgTable(
     ),
     /** Pre-canonical stable subject, e.g. 'twenty:company:<id>'. */
     subject_key: text("subject_key").notNull(),
-    /** Ontology entity-type slug. */
+    /** Entity-type slug. */
     subject_entity_type: text("subject_entity_type")
       .notNull()
       .default("customer"),

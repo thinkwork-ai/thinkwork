@@ -52,7 +52,7 @@ export const plans: readonly Plan[] = Object.freeze([
       "Apache 2.0 — fork it, audit it, extend it",
       "Deploys into your AWS — no shared control plane",
       "All product capabilities — Threads, Memory, Agents, Connectors, Automations, Control",
-      "Portable memory contract — Hindsight or AgentCore Memory swappable underneath",
+      "Portable memory contract — AgentCore Memory behind a swappable adapter",
       "Same harness as For Business and Enterprise — no feature gates",
       "Community support (GitHub issues + discussions)",
     ]),

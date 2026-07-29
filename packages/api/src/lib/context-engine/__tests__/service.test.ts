@@ -165,7 +165,7 @@ describe("ContextEngineService", () => {
     expect(seenTenants).toEqual(["tenant-dynamic", "tenant-dynamic"]);
   });
 
-  it("can route ontology Brain independently from page/wiki providers", async () => {
+  it("can route the Brain provider independently from page/wiki providers", async () => {
     const service = createContextEngineService({
       providers: [
         provider,
@@ -173,7 +173,7 @@ describe("ContextEngineService", () => {
           id: "brain",
           family: "brain",
           sourceFamily: "brain",
-          displayName: "Ontology Brain",
+          displayName: "Brain",
           defaultEnabled: true,
           query: async (request) => ({
             hits: [
@@ -183,7 +183,7 @@ describe("ContextEngineService", () => {
                 family: "brain",
                 sourceFamily: "brain",
                 title: "Acme - Risks & Landmines",
-                snippet: `Ontology facet about ${request.query}`,
+                snippet: `Brain facet about ${request.query}`,
                 score: 0.8,
                 scope: request.scope,
                 provenance: {

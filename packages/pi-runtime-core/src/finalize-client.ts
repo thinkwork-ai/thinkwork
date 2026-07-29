@@ -128,7 +128,6 @@ export function buildFinalizeBody(
           ui_message_parts: runResult.uiMessageParts ?? [],
           model_routed_tool_calls: runResult.modelRoutedToolCalls ?? [],
           tool_costs: toolCosts,
-          hindsight_usage: [],
           ...(runResult.goalRun ? { goal_run: runResult.goalRun } : {}),
           ...(runResult.diagnostics
             ? { diagnostics: runResult.diagnostics }
@@ -140,7 +139,6 @@ export function buildFinalizeBody(
           runtime_host: asString(payload.runtime_host) || null,
           tools_called: [],
           tool_invocations: [],
-          hindsight_usage: [],
         },
   };
 }
@@ -188,8 +186,8 @@ export function isFinalizeCallbackConfigured(
 ): boolean {
   return Boolean(
     asString(payload.finalize_callback_url) &&
-    asString(payload.finalize_callback_secret) &&
-    asString(payload.thread_turn_id),
+      asString(payload.finalize_callback_secret) &&
+      asString(payload.thread_turn_id),
   );
 }
 

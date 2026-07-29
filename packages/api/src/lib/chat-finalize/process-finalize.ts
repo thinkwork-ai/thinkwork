@@ -14,7 +14,6 @@
  *   1. Resolve assistant response text + guardrail-block detection
  *   2. Insert guardrail-block row (if blocked + guardrail configured)
  *   3. Record Bedrock cost events + budget check + cost notification
- *   4. Record Hindsight phase costs
  *   5. Record tool costs (Nova Act, browser, etc.)
  *   6. Update the thread_turn (status, finished_at, usage_json,
  *      result_json) + notify subscribers
@@ -494,36 +493,6 @@ export async function processFinalize(
     cachedReadTokens: usage.cachedReadTokens,
     costUsd: parentCostUsd,
   });
-  // 3. Record Hindsight phase costs
-  const hindsightUsage = invokeResult.hindsight_usage ?? [];
-  if (hindsightUsage.length > 0) {
-    try {
-      const { recordHindsightCost } = await import("../hindsight-cost.js");
-      for (const entry of hindsightUsage) {
-        await recordHindsightCost({
-          tenantId,
-          agentId,
-          userId: costOwnerUserId,
-          bankId: agentSlug ?? "",
-          phase: entry.phase,
-          model: entry.model,
-          inputTokens: entry.input_tokens,
-          outputTokens: entry.output_tokens,
-          threadId,
-          traceId,
-          source: "agent_invoke",
-        });
-      }
-      console.log(
-        `[chat-finalize] Recorded ${hindsightUsage.length} Hindsight cost event(s)`,
-      );
-    } catch (hsCostErr) {
-      console.error(
-        `[chat-finalize] Hindsight cost recording failed:`,
-        hsCostErr,
-      );
-    }
-  }
 
   // 4. Record tool costs (Nova Act, browser sessions, etc.)
   const toolCosts = invokeResult.tool_costs ?? [];

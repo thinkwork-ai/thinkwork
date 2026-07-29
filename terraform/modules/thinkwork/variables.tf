@@ -379,15 +379,15 @@ variable "database_engine" {
 }
 
 variable "external_kb_source_arns" {
-  description = "Bucket ARNs of customer-owned S3 buckets connected as external Knowledge Base sources (s3-connect). Grants the KB service role read on each ARN and its objects. Empty by default — inert until a bucket is connected (external S3 KB source R20)."
+  description = "DEPRECATED (THINK-402): Knowledge Bases were removed from the product; this input is inert and ignored. Declaration retained so existing customer-stage -var passthroughs keep working."
   type        = list(string)
   default     = []
 }
 
 variable "enable_hindsight" {
-  description = "Enable Hindsight long-term memory. Full ThinkWork installs default this on because Hindsight is the canonical user and Space memory provider; set false only for explicit low-cost/development AgentCore-only deployments."
+  description = "DEPRECATED (THINK-407): the Hindsight memory engine and its infrastructure were removed; this input is inert and ignored. Declaration retained so existing customer-stage -var passthroughs and tfvars keep working."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "enable_agentcore_harness" {
@@ -433,45 +433,16 @@ variable "enable_capability_broker" {
 }
 
 variable "memory_engine" {
-  description = "Active long-term memory engine for canonical recall/inspect/export. Exactly one engine is authoritative per deployment. Empty auto-selects Hindsight for full installs. Accepted values: 'hindsight' (requires enable_hindsight = true) or 'agentcore' (explicit low-cost/development managed-memory mode). Legacy value 'managed' maps to 'agentcore'."
+  description = "DEPRECATED (THINK-407): AgentCore managed memory is the only engine; this input is inert and ignored. Declaration retained so existing customer-stage -var passthroughs and tfvars keep working. Legacy values ('hindsight', 'managed') are accepted and discarded."
   type        = string
   default     = ""
 
   validation {
     condition     = var.memory_engine == "" || contains(["managed", "hindsight", "agentcore"], var.memory_engine)
-    error_message = "memory_engine must be empty, 'hindsight', 'agentcore', or legacy 'managed'."
+    error_message = "memory_engine must be empty, 'agentcore', or a legacy value ('hindsight', 'managed'). The input is ignored either way."
   }
 }
 
-variable "hindsight_image_tag" {
-  description = "Hindsight Docker image tag (used when enable_hindsight = true). 0.8.4 upgrade validated 2026-07-06 (THINK-201): migration rehearsal over a dev-data copy passed (orphan-observation backsweep deletes ~650 broken-provenance rows — expected); retain/recall/consolidation verified; 0.8.4 fixes the Bedrock-Anthropic extraction tool schema AND fails retain loudly (500) instead of silently storing zero units. Known upstream gap: maintenance discovery routines (reconcile sweep, mental-model cron, llm_requests retention) expect functions in the public schema and no-op with warnings when HINDSIGHT_API_DATABASE_SCHEMA != public."
-  type        = string
-  default     = "0.8.4"
-}
-
-variable "hindsight_database_name" {
-  description = "Dedicated Hindsight database name on the primary Aurora cluster (THINK-220 cutover flag). Empty (default) = legacy layout: Hindsight lives in the `hindsight` schema of the primary database and its upstream maintenance discovery no-ops (see hindsight_image_tag note). Set to e.g. \"thinkwork_hindsight\" AFTER the database exists and its data is migrated (plan 2026-07-07-004): flips the Hindsight service, the api Lambdas, and the Pi runtime to that database's `public` schema in one apply."
-  type        = string
-  default     = ""
-}
-
-variable "hindsight_enable_auto_consolidation" {
-  description = "Run Hindsight's observation consolidation engine automatically after retain (used when enable_hindsight = true)."
-  type        = bool
-  default     = true
-}
-
-variable "hindsight_consolidation_dedup_threshold" {
-  description = "Cosine-similarity threshold for Hindsight near-duplicate observation reconciliation (0.0-1.0; 1.0 disables)."
-  type        = string
-  default     = "0.97"
-}
-
-variable "hindsight_observations_mission" {
-  description = "Service-level default observations mission for Hindsight consolidation. Empty string falls back to the image default. Per-bank config overrides apply on top."
-  type        = string
-  default     = "Synthesize durable, institutional facts about the business: customers, projects, decisions, processes, tools, relationships, and recurring patterns. Filter out ephemeral state, secrets, and personal small talk."
-}
 variable "twenty_provisioned" {
   description = "Provision the retained Twenty CRM managed-app substrate. Runtime can be parked independently with twenty_runtime_enabled."
   type        = bool
@@ -1388,7 +1359,7 @@ variable "cognito_invite_sms_message" {
 }
 
 variable "ontology_scan_model_id" {
-  description = "Bedrock model id the ontology-scan Lambda uses for suggestion scans. Any Converse-compatible model works. Override per-env to spike a different model without re-deploying code. (Named wiki_compile_model_id until the wiki backend was removed; ontology-scan was always its other consumer and is now its only one.)"
+  description = "DEPRECATED (THINK-408): the ontology / knowledge-graph subsystem was removed; this variable is accepted for compatibility and has no effect."
   type        = string
   default     = "openai.gpt-oss-120b-1:0"
 }
@@ -1400,13 +1371,13 @@ variable "brain_source_agent_model_id" {
 }
 
 variable "knowledge_graph_observations_ingest_enabled" {
-  description = "Enable the Brain distillation schedule (Hindsight observations -> knowledge graph). Ships disabled (plan 2026-07-03-005 U4)."
+  description = "DEPRECATED (THINK-408): the ontology / knowledge-graph subsystem was removed; this variable is accepted for compatibility and has no effect."
   type        = bool
   default     = false
 }
 
 variable "ontology_scan_sweep_enabled" {
-  description = "Enable the recurring per-tenant ontology suggestion scan sweep (THINK-320 U4/KTD-3). Ships disabled."
+  description = "DEPRECATED (THINK-408): the ontology / knowledge-graph subsystem was removed; this variable is accepted for compatibility and has no effect."
   type        = bool
   default     = false
 }

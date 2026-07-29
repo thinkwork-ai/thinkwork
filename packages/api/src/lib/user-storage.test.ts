@@ -31,7 +31,7 @@ describe("writeUserMemorySeed", () => {
     retainMock.mockReset();
   });
 
-  it("maps friction activation seeds to the legal Hindsight opinion fact type", async () => {
+  it("maps friction activation seeds to the legal opinion fact type", async () => {
     await writeUserMemorySeed({
       tenantId: "tenant-1",
       userId: "11111111-1111-4111-8111-111111111111",

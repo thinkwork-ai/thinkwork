@@ -17,9 +17,19 @@ import type {
 
 export type NormalizedInspectService = {
   inspect(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
+  /**
+   * Cross-owner tenant listing. No engine implements a tenant-wide inspect
+   * since Hindsight was retired (THINK-406), so this always resolves `[]`.
+   */
   inspectTenant(
     request: TenantInspectRequest,
   ): Promise<ThinkWorkMemoryRecord[]>;
+  /**
+   * Session-scoped episodes + reflections for one owner. Returns `[]` on
+   * engines that don't model an episodic facet — an absent capability is not
+   * an error, it just means the UI has nothing to show under that facet.
+   */
+  inspectEpisodic(request: InspectRequest): Promise<ThinkWorkMemoryRecord[]>;
   capabilities(): Promise<MemoryCapabilities>;
 };
 
@@ -36,10 +46,15 @@ export function createInspectService(
       );
     },
     async inspectTenant(
-      request: TenantInspectRequest,
+      _request: TenantInspectRequest,
     ): Promise<ThinkWorkMemoryRecord[]> {
-      if (!config.enabled || !adapter.inspectTenant) return [];
-      const records = await adapter.inspectTenant(request);
+      return [];
+    },
+    async inspectEpisodic(
+      request: InspectRequest,
+    ): Promise<ThinkWorkMemoryRecord[]> {
+      if (!config.enabled || !adapter.listEpisodicRecords) return [];
+      const records = await adapter.listEpisodicRecords(request);
       return [...records].sort((a, b) =>
         (b.createdAt || "").localeCompare(a.createdAt || ""),
       );

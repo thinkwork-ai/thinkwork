@@ -40,7 +40,6 @@ import {
   runAcquire,
   runCompound,
   runExtract,
-  runGraph,
   runProject,
   runResolve,
   runRetain,
@@ -274,10 +273,9 @@ async function executeStage(
       return runRetain(ctx);
     case "compound":
       return runCompound(ctx);
-    case "graph":
-      return runGraph(ctx);
-    // "wiki" remains in MEMORY_RUN_ITEM_STAGES for historic run-item rows,
-    // but the compile pipeline it drove is retired — it dispatches nowhere.
+    // "graph" and "wiki" remain in MEMORY_RUN_ITEM_STAGES for historic
+    // run-item rows, but the pipelines they drove are retired (the
+    // graph pipeline was removed in THINK-408) — they dispatch nowhere.
     default:
       return failed(
         event.stage,
@@ -287,11 +285,7 @@ async function executeStage(
 }
 
 /** Source families whose evidence/claims write shared scopes only (U3). */
-const SHARED_ONLY_SOURCE_FAMILIES = new Set([
-  "twenty",
-  "firecrawl",
-  "bedrock_kb",
-]);
+const SHARED_ONLY_SOURCE_FAMILIES = new Set(["twenty", "firecrawl"]);
 
 async function sendTaskSuccess(
   sfn: SFNClient,

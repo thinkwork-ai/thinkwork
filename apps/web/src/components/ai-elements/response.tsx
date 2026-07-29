@@ -7,7 +7,7 @@
  * a future v2 can swap the underlying renderer (e.g., add CJK / math
  * plugins consistently across the app) in one place.
  *
- * It is also where knowledge-base citations become interactive: pass the
+ * It is also where source citations become interactive: pass the
  * turn's `citations` and any `[n]` marker the model wrote is rendered as a
  * badge linking to that exact document and page.
  */

@@ -170,39 +170,6 @@ variable "appsync_api_id" {
   type        = string
 }
 
-variable "kb_service_role_arn" {
-  description = "Bedrock Knowledge Base service role ARN"
-  type        = string
-}
-
-variable "kb_transcribe_reserved_concurrency" {
-  description = <<-EOT
-    Reserved concurrent executions for the KB page transcriber. Each invocation
-    fans out KB_TRANSCRIBE_CONCURRENCY Bedrock calls, so total in-flight model
-    requests are the product of the two — and Bedrock's per-model
-    requests-per-minute quota is what a large corpus actually runs into.
-    A sync enqueues one invocation PER DOCUMENT at once, so without a reserve a
-    200-document corpus would open hundreds of parallel model calls and spend
-    most of its time in throttle backoff.
-
-    Raise this only alongside a verified requests-per-minute quota.
-  EOT
-  type        = number
-  default     = 2
-}
-
-variable "kb_transcribe_model_ladder" {
-  description = <<-EOT
-    Ordered, comma-separated Bedrock model ids the KB page transcriber tries.
-    The first model the ACCOUNT can actually call wins, and the worker records
-    which one ran. Model availability is per-account — the Opus tiers return
-    AccessDeniedException on accounts AWS has not allowlisted — so a single
-    pinned model would strand those tenants with no transcription at all.
-  EOT
-  type        = string
-  default     = "us.anthropic.claude-opus-5,us.anthropic.claude-opus-4-8,us.anthropic.claude-sonnet-4-6"
-}
-
 variable "agentcore_harness_execution_role_arn" {
   description = "Legacy Harness execution-role input retained for module compatibility. Request-path PassRole/control-plane grants were removed by THINK-316 U2."
   type        = string
@@ -371,32 +338,10 @@ variable "extension_proxy_signing_secret" {
   default     = ""
 }
 
-variable "hindsight_endpoint" {
-  description = "Hindsight API endpoint (empty when enable_hindsight = false)"
-  type        = string
-  default     = ""
-}
-
-variable "hindsight_database_name" {
-  description = "Dedicated Hindsight database name (THINK-220 cutover flag). Empty = Hindsight tables live in the `hindsight` schema of the primary database; set = the api reads them from this database's `public` schema. Rides the SSM runtime-config document (getConfig), not Lambda env."
-  type        = string
-  default     = ""
-}
-
 variable "agentcore_memory_id" {
   description = "Bedrock AgentCore Memory resource ID — used by the GraphQL memory resolvers to list records across tenant agents."
   type        = string
   default     = ""
-}
-
-variable "memory_engine" {
-  description = "Active long-term memory engine for this deployment. Exactly one engine is canonical for recall/inspect/export."
-  type        = string
-  default     = "hindsight"
-  validation {
-    condition     = contains(["hindsight", "agentcore"], var.memory_engine)
-    error_message = "memory_engine must be 'hindsight' or 'agentcore'."
-  }
 }
 
 variable "okf_efs_subnet_ids" {
@@ -603,22 +548,10 @@ variable "job_scheduler_role_arn" {
   default     = ""
 }
 
-variable "ontology_scan_model_id" {
-  description = "Bedrock model id the ontology-scan Lambda uses for suggestion scans. Any Converse-compatible model works. Override per-env to spike a different model without re-deploying code. (Named wiki_compile_model_id until the wiki backend was removed; ontology-scan was always its other consumer and is now its only one.)"
-  type        = string
-  default     = "openai.gpt-oss-120b-1:0"
-}
-
 variable "brain_source_agent_model_id" {
   description = "Bedrock model id the GraphQL context-engine Brain source-agent runtime uses for JSON tool/action turns. Kept separate from the high-throughput wiki compiler model so source agents can use a model tuned for reliable action JSON."
   type        = string
   default     = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-}
-
-variable "kg_obs_max_candidates_per_run" {
-  description = "Per-run candidate cap for the observations → Knowledge Graph ingest worker (KG_OBS_MAX_CANDIDATES_PER_RUN). Bounds the layered-gate classifier cost and lets truncated runs self-invoke to drain the remaining backlog. Stored as a string because the Lambda reads it verbatim from env."
-  type        = string
-  default     = "10"
 }
 
 variable "wiki_aggregation_pass_enabled" {
@@ -633,24 +566,6 @@ variable "wiki_deterministic_linking_enabled" {
   default     = "true"
 }
 
-variable "kg_extraction_model_id" {
-  description = "Bedrock model id for knowledge-graph entity/relationship extraction from observations (plan 2026-07-03-005). Defaults to a gpt-oss high-quota model; overridable per stage."
-  type        = string
-  default     = "openai.gpt-oss-120b-1:0"
-}
-
-variable "knowledge_graph_observations_ingest_enabled" {
-  description = "Enable the recurring Brain distillation schedule (Hindsight observations -> knowledge graph). Ships disabled; dev flips on after a golden-set-validated manual run (plan 2026-07-03-005 U4)."
-  type        = bool
-  default     = false
-}
-
-variable "ontology_scan_sweep_enabled" {
-  description = "Enable the recurring per-tenant ontology suggestion scan sweep (THINK-320 U4/KTD-3). Ships disabled; enabled per stage once the Living Map review surfaces land."
-  type        = bool
-  default     = false
-}
-
 variable "identity_drift_match_enabled" {
   description = "Enable the recurring per-tenant identity drift match sweep (THINK-321 U7/KTD-7 — R10). Ships disabled; enabled per stage once bootstrap matching has been proven there."
   type        = bool
@@ -658,7 +573,7 @@ variable "identity_drift_match_enabled" {
 }
 
 variable "wiki_source" {
-  description = "Wiki pipeline source dispatch (plan 2026-06-09-004 U10). 'planner' (default) runs the original LLM compile path; 'graph' runs the deterministic graph→wiki materializer over the knowledge-graph mirror and makes successful observation-ingest runs the compile trigger. Variable-ized (not hardcoded) per the wiki-compile env precedent so unrelated deploys don't reset the flag; the Lambda reads it verbatim from env and treats any value other than 'graph' as 'planner'."
+  description = "Wiki pipeline source dispatch (plan 2026-06-09-004 U10). 'planner' (default) runs the original LLM compile path; 'graph' runs the deterministic graph→wiki materializer. Variable-ized (not hardcoded) per the wiki-compile env precedent so unrelated deploys don't reset the flag; the Lambda reads it verbatim from env and treats any value other than 'graph' as 'planner'."
   type        = string
   default     = "planner"
 
@@ -876,12 +791,6 @@ variable "compliance_exports_runner_role_name" {
   description = "Name of the IAM role the U11 export runner Lambda assumes (extracted from the role resource for inline-policy attachments — DLQ SendMessage, SQS receive)."
   type        = string
   default     = ""
-}
-
-variable "knowledge_graph_tool_enabled" {
-  description = "Stage gate for the Pi knowledge_graph_search tool (plan 2026-06-09-004 U8). Per-agent tool policy gates on top."
-  type        = bool
-  default     = true
 }
 
 variable "identity_resolution_tool_enabled" {

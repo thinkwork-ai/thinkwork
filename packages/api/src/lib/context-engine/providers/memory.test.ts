@@ -1,20 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const reflectMock = vi.hoisted(() => vi.fn());
 const recallMock = vi.hoisted(() => vi.fn());
 const findPageSourcesAcrossSurfacesMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../../memory/index.js", () => ({
   getMemoryServices: () => ({
     adapter: {
-      kind: "hindsight",
-      reflect: reflectMock,
+      kind: "agentcore",
       capabilities: async () => ({
         retain: true,
         recall: true,
         inspect: true,
         export: true,
-        reflect: true,
+        reflect: false,
+        // The provider's Space fan-out is capability-gated, not engine-gated.
+        // AgentCore reports false in production; the flag is forced on here to
+        // exercise the branch.
         spaceMemory: true,
       }),
     },
@@ -32,15 +33,14 @@ describe("memory context provider", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.unstubAllEnvs();
-    reflectMock.mockReset();
     recallMock.mockReset();
     findPageSourcesAcrossSurfacesMock.mockReset();
     findPageSourcesAcrossSurfacesMock.mockResolvedValue([]);
   });
 
-  it("uses reflection text as the Context Engine snippet", async () => {
+  it("serves the reflect query mode through recall (no engine reflect)", async () => {
     vi.stubEnv("CONTEXT_ENGINE_MEMORY_QUERY_MODE", "reflect");
-    reflectMock.mockResolvedValueOnce([
+    recallMock.mockResolvedValueOnce([
       {
         record: {
           id: "reflection-1",
@@ -51,15 +51,15 @@ describe("memory context provider", () => {
           sourceType: "system_reflection",
           status: "active",
           content: {
-            summary: "Hindsight reflection",
+            summary: "Reflection summary",
             text: "Smoke test activity involved Codex, MCP checks, and wiki search.",
           },
-          backendRefs: [{ backend: "hindsight", ref: "user_user-1" }],
+          backendRefs: [{ backend: "agentcore", ref: "user_user-1" }],
           createdAt: "2026-04-29T00:00:00.000Z",
           metadata: {},
         },
         score: 1,
-        backend: "hindsight",
+        backend: "agentcore",
       },
     ]);
 
@@ -74,10 +74,9 @@ describe("memory context provider", () => {
       caller: { tenantId: "tenant-1", userId: "user-1" },
     });
 
-    expect(reflectMock).toHaveBeenCalledTimes(1);
-    expect(recallMock).not.toHaveBeenCalled();
+    expect(recallMock).toHaveBeenCalledTimes(1);
     expect(result.hits[0]).toMatchObject({
-      title: "Hindsight reflection",
+      title: "Reflection summary",
       snippet:
         "Smoke test activity involved Codex, MCP checks, and wiki search.",
       provenance: {
@@ -88,7 +87,7 @@ describe("memory context provider", () => {
 
   it("lets request options override the server memory query mode", async () => {
     vi.stubEnv("CONTEXT_ENGINE_MEMORY_QUERY_MODE", "recall");
-    reflectMock.mockResolvedValueOnce([
+    recallMock.mockResolvedValueOnce([
       {
         record: {
           id: "reflection-override",
@@ -102,12 +101,12 @@ describe("memory context provider", () => {
             summary: "Override reflection",
             text: "Reflect was selected for this test run.",
           },
-          backendRefs: [{ backend: "hindsight", ref: "user_user-1" }],
+          backendRefs: [{ backend: "agentcore", ref: "user_user-1" }],
           createdAt: "2026-04-29T00:00:00.000Z",
           metadata: {},
         },
         score: 1,
-        backend: "hindsight",
+        backend: "agentcore",
       },
     ]);
 
@@ -123,8 +122,7 @@ describe("memory context provider", () => {
       caller: { tenantId: "tenant-1", userId: "user-1" },
     });
 
-    expect(reflectMock).toHaveBeenCalledTimes(1);
-    expect(recallMock).not.toHaveBeenCalled();
+    expect(recallMock).toHaveBeenCalledTimes(1);
     expect(result.hits[0]?.provenance.metadata).toMatchObject({
       mode: "reflect",
     });
@@ -146,12 +144,12 @@ describe("memory context provider", () => {
             summary: "Favorite restaurant",
             text: "Auberge Bressane is a favorite restaurant in Paris.",
           },
-          backendRefs: [{ backend: "hindsight", ref: "user_user-1" }],
+          backendRefs: [{ backend: "agentcore", ref: "user_user-1" }],
           createdAt: "2026-04-29T00:00:00.000Z",
           metadata: {},
         },
         score: 0.8,
-        backend: "hindsight",
+        backend: "agentcore",
       },
     ]);
 
@@ -168,7 +166,6 @@ describe("memory context provider", () => {
     });
 
     expect(recallMock).toHaveBeenCalledTimes(1);
-    expect(reflectMock).not.toHaveBeenCalled();
     expect(result.hits[0]).toMatchObject({
       id: "memory:user:memory-override",
       title: "Favorite restaurant",
@@ -194,12 +191,12 @@ describe("memory context provider", () => {
             summary: "Launch checklist",
             text: "The launch checklist lives in the Space Brain.",
           },
-          backendRefs: [{ backend: "hindsight", ref: "space_space-1" }],
+          backendRefs: [{ backend: "agentcore", ref: "space_space-1" }],
           createdAt: "2026-06-27T00:00:00.000Z",
           metadata: {},
         },
         score: 0.9,
-        backend: "hindsight",
+        backend: "agentcore",
       },
     ]);
 
@@ -390,7 +387,7 @@ describe("memory context provider", () => {
     ]);
   });
 
-  it("returns compiled wiki pages that cite recalled Hindsight memory units", async () => {
+  it("returns compiled wiki pages that cite recalled memory units", async () => {
     recallMock.mockResolvedValueOnce([
       {
         record: {
@@ -405,12 +402,12 @@ describe("memory context provider", () => {
             summary: "Favorite restaurant",
             text: "Auberge Bressane is a favorite restaurant in Paris.",
           },
-          backendRefs: [{ backend: "hindsight", ref: "user_user-1" }],
+          backendRefs: [{ backend: "agentcore", ref: "user_user-1" }],
           createdAt: "2026-04-29T00:00:00.000Z",
           metadata: {},
         },
         score: 0.8,
-        backend: "hindsight",
+        backend: "agentcore",
       },
     ]);
     findPageSourcesAcrossSurfacesMock.mockResolvedValueOnce([
@@ -459,7 +456,7 @@ describe("memory context provider", () => {
           sourceId: "page-auberge-bressane",
           uri: "thinkwork://wiki/concept/auberge-bressane",
           metadata: expect.objectContaining({
-            bridge: "hindsight-memory-to-wiki",
+            bridge: "memory-to-wiki",
             memoryUnitId: "mem-restaurant",
           }),
         }),
@@ -482,12 +479,12 @@ describe("memory context provider", () => {
             summary: "Acme commitment",
             text: "Acme needs the renewal pricing before Tuesday.",
           },
-          backendRefs: [{ backend: "hindsight", ref: "user_user-1" }],
+          backendRefs: [{ backend: "agentcore", ref: "user_user-1" }],
           createdAt: "2026-05-17T00:00:00.000Z",
           metadata: {},
         },
         score: 0.8,
-        backend: "hindsight",
+        backend: "agentcore",
       },
     ]);
     findPageSourcesAcrossSurfacesMock.mockResolvedValueOnce([
@@ -544,12 +541,12 @@ describe("memory context provider", () => {
             summary: "Favorite restaurant",
             text: "Auberge Bressane is a favorite restaurant in Paris.",
           },
-          backendRefs: [{ backend: "hindsight", ref: "user_user-1" }],
+          backendRefs: [{ backend: "agentcore", ref: "user_user-1" }],
           createdAt: "2026-04-29T00:00:00.000Z",
           metadata: {},
         },
         score: 0.8,
-        backend: "hindsight",
+        backend: "agentcore",
       },
     ]);
     findPageSourcesAcrossSurfacesMock.mockRejectedValueOnce(

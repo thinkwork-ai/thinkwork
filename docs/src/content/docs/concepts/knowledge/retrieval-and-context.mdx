@@ -1,6 +1,6 @@
 ---
 title: Source Routing
-description: How thread history, Hindsight memory, Brain Sources, compiled pages, workspace files, and approved tools come together at turn time.
+description: How thread history, AgentCore memory, compiled pages, workspace files, and approved tools come together at turn time.
 ---
 
 import { Aside } from "@astrojs/starlight/components";
@@ -12,17 +12,15 @@ A ThinkWork turn is not just "user message goes to the model." Before the model 
 Any given turn can draw from:
 
 - **Thread history.** The recent conversation in this thread — prior user messages, agent responses, tool calls, and their outputs. This is the short-term context.
-- **Hindsight memory.** Facts, preferences, and source-backed Space records recalled or reflected from Hindsight banks. These are carry-forward learnings, not chat history.
-- **Brain Sources.** Authored Space documents retained into Hindsight with source evidence, tags, context, and observation scopes.
+- **Retained memory.** Facts, preferences, summaries, and episodes recalled from Bedrock AgentCore Memory. These are carry-forward learnings, not chat history.
 - **Compiled pages.** Relevant entity, topic, and decision pages produced by the Memory compile pipeline.
 - **OKF wiki traversal.** Explicitly enabled Pi runtimes can browse a generated
   read-only OKF projection with bounded wiki tools. This is traceable
   traversal, not the default compiled-page provider.
 - **Workspace files.** Files in the relevant agent, template, or tenant-default workspace.
 - **Approved MCP tools.** Search-safe external tools that an admin has made eligible.
-- **Legacy knowledge bases.** Explicitly attached Bedrock Knowledge Bases for compatibility deployments or external retrieval experiments.
 
-Not every source feeds every turn. A focused chatbot may use only thread history and Hindsight Space memory. A long-running research agent adds compiled pages and workspace files. A deployment that still needs Bedrock KB retrieval attaches that source explicitly.
+Not every source feeds every turn. A focused chatbot may use only thread history and retained memory. A long-running research agent adds compiled pages and workspace files.
 
 ## The assembly step
 
@@ -37,8 +35,7 @@ Load agent + template (which sources are enabled?)
         ▼
 Query the enabled sources in parallel:
   ├─ thread.getRecentTurns(threadId, limit)
-  ├─ hindsight.recall(query=message, userBank, spaceBank)
-  ├─ hindsight.reflect(query=message, spaceBank)
+  ├─ memory.recall(query=message, requesterScope)
   ├─ external.query_context(query=message, enabledSources)
   └─ wiki.recall(query=message, ownerId)
         │
@@ -63,16 +60,16 @@ The model's context window is a hard limit. Every token spent on retrieved conte
 - **System prompt** — template base + agent-specific prompt. Typically 500–2000 tokens.
 - **Tool definitions** — registered tools from skill packs, integrations, MCP. Typically 200–1500 tokens depending on agent surface.
 - **Response headroom** — `maxTokens` from the template, reserved so the model has room to generate.
-- **Retrieved context** — what's left after the above. Hindsight memory, Brain Sources, compiled pages, workspace files, and explicit external sources compete for this pool.
+- **Retrieved context** — what's left after the above. Retained memory, compiled pages, workspace files, and explicit external sources compete for this pool.
 
 When the retrieval layer produces more content than the budget allows, it truncates by priority:
 
 1. Most recent thread turns are kept in full.
-2. Top Hindsight source facts and authored-source evidence are kept while they fit.
+2. Top recalled memory records and authored-source hits are kept while they fit.
 3. Compiled pages and external provider results get summarized before being included.
 4. Older thread history is summarized or dropped.
 
-This priority is tunable through the runtime configuration surfaces that feed the current turn. In Space-aware operation, tune retrieval behavior for the Space that needs it: a Space that should lean heavily on retained source documents uses Hindsight source tags and observation scopes, while an agent that needs external data uses explicit Context Engine sources.
+This priority is tunable through the runtime configuration surfaces that feed the current turn. In Space-aware operation, tune retrieval behavior for the Space that needs it: a Space that should lean heavily on authored material puts that material in its workspace, while an agent that needs external data uses explicit Context Engine sources.
 
 <Aside type="tip">
   If an agent's responses feel "forgetful," check the context budget before
@@ -87,17 +84,17 @@ This priority is tunable through the runtime configuration surfaces that feed th
 It's tempting to collapse everything into one big "just feed the model context" blob. Three reasons not to:
 
 - **Separate cost accounting.** Tokens from source-backed memories vs. external retrieval vs. thread history show up separately in audit records. An operator debugging "why did this turn cost $2" can see whether source recall, external context, or thread history was too large.
-- **Separate failure modes.** If an external provider is down today, durable Hindsight memory still works. A single blob would fail the whole turn.
-- **Separate tuning knobs.** You change external source eligibility without touching Hindsight recall/reflect. Without the separation, tuning is all-or-nothing.
+- **Separate failure modes.** If an external provider is down today, durable memory recall still works. A single blob would fail the whole turn.
+- **Separate tuning knobs.** You change external source eligibility without touching memory recall. Without the separation, tuning is all-or-nothing.
 
 ## Short-term vs. long-term
 
 A distinction that bites people:
 
 - **Short-term context** = thread history. It's the canonical record of what happened _in this conversation_. The model reads it verbatim (within budget).
-- **Long-term memory** = facts and source-backed observations recalled or reflected from Hindsight. The model reads these as selective summaries and evidence, not verbatim chat logs.
+- **Long-term memory** = facts, preferences, summaries, and episodes recalled from AgentCore Memory. The model reads these as selective summaries, not verbatim chat logs.
 
-Long-term memory should never masquerade as the thread record. If an operator asks "what did the agent say in thread X," the answer is in the thread's turn rows, not in Hindsight. Memory is _derived_ context; the thread is _canonical_ record.
+Long-term memory should never masquerade as the thread record. If an operator asks "what did the agent say in thread X," the answer is in the thread's turn rows, not in memory. Memory is _derived_ context; the thread is _canonical_ record.
 
 ## Known limits
 
@@ -108,7 +105,7 @@ Long-term memory should never masquerade as the thread record. If an operator as
 ## Related pages
 
 - [Memory](/concepts/knowledge/) — the umbrella
-- [Brain Sources and Legacy Knowledge Bases](/concepts/knowledge/document-knowledge/) — the authored retrieval source
+- [Brain Sources](/concepts/knowledge/document-knowledge/) — the authored retrieval source
 - [Retained Memory](/concepts/knowledge/memory/) — the recall source
 - [Compiled Memory Pages](/concepts/knowledge/compounding-memory/) — the compiled page source
 - [Concepts: Managed Agents](/concepts/agents/managed-agents/) — where assembly sits in the invocation flow

@@ -26,6 +26,7 @@
 
 import type { GraphQLContext } from "../../context.js";
 import { getMemoryServices } from "../../../lib/memory/index.js";
+import type { DocumentCapableMemoryAdapter } from "../../../lib/memory-sources/engine-capabilities.js";
 import {
   beginSourceErase,
   runSourceErase,
@@ -43,7 +44,8 @@ export async function eraseMemorySource(
   if (!tenantId) throw new Error("Tenant context required");
   await requireTenantAdmin(ctx, tenantId);
 
-  const { adapter, config } = getMemoryServices();
+  const { adapter: baseAdapter, config } = getMemoryServices();
+  const adapter = baseAdapter as DocumentCapableMemoryAdapter;
   if (!adapter.deleteDocument) {
     throw new Error(
       `Memory source erase is not supported on engine "${config.engine}"`,
@@ -58,7 +60,7 @@ export async function eraseMemorySource(
   });
 
   // 2. Run the aggregate: enqueue children, drain a bounded batch inline
-  //    (Hindsight deletes — no S3), and report durable status. Destructive
+  //    (engine document deletes — no S3), and report durable status. Destructive
   //    S3 cleanup stays with the drainer (S2).
   const result = await runSourceErase(
     { db: ctx.db, adapter },

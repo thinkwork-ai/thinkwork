@@ -77,9 +77,9 @@ locals {
     # mcp-twin-provision registers the twin connector against it instead
     # of the product /mcp/twin route. Empty = legacy default.
     BRAIN_MCP_URL = var.brain_mcp_url
-    # Same class of bug, second instance (2026-07-22): the ontology-reprocess
-    # post-apply twin-export hook read BRAIN_ARTIFACTS_BUCKET from env it
-    # never had and silently returned skipped_no_bucket on every apply.
+    # Same class of bug, second instance (2026-07-22): a post-apply
+    # twin-export hook read BRAIN_ARTIFACTS_BUCKET from env it never had
+    # and silently returned skipped_no_bucket on every apply.
     # Document-served so every api handler resolves it via getConfig; the
     # handlers that already carry it as env keep winning.
     BRAIN_ARTIFACTS_BUCKET = aws_s3_bucket.brain_artifacts.bucket
@@ -143,13 +143,11 @@ locals {
     # WORKSPACE_RENDERER_FUNCTION_NAME is derived from the per-stage naming
     # convention by deriveFunctionName("workspace-renderer") — stored
     # nowhere (R7).
-    WORKSPACE_BUCKET   = var.bucket_name
-    HINDSIGHT_ENDPOINT = var.hindsight_endpoint
-    # THINK-220 cutover flag: empty = hindsight schema on the primary DB;
-    # set = that database's public schema via the database-pg seam.
-    HINDSIGHT_DATABASE_NAME = var.hindsight_database_name
-    AGENTCORE_MEMORY_ID     = var.agentcore_memory_id
-    MEMORY_ENGINE           = var.memory_engine
+    WORKSPACE_BUCKET    = var.bucket_name
+    AGENTCORE_MEMORY_ID = var.agentcore_memory_id
+    # AgentCore managed memory is the only engine (THINK-407). The env var
+    # stays so the API's memory config seam keeps an explicit value.
+    MEMORY_ENGINE = "agentcore"
     # CHAT_AGENT_INVOKE_FN_ARN (~112 serialized bytes) was dropped for the
     # 4KB env ceiling (#2375): getChatAgentInvokeFnArn and managed-dispatch
     # now derive the ARN from the deterministic naming pattern
@@ -329,9 +327,6 @@ locals {
       CAPABILITY_BROKER_VPCE_DNS      = var.capability_broker_vpce_dns
       CAPABILITY_BROKER_SESSION_TABLE = var.capability_broker_session_table
     }
-    "ontology-scan" = {
-      BEDROCK_MODEL_ID = var.ontology_scan_model_id
-    }
     # THINK-193 U1 (Codex F6): normalized evidence snapshots live in the
     # encrypted brain-artifacts bucket under evidence-snapshots/ — Postgres
     # keeps only the s3:// ref + hash. 30-day lifecycle expiration below.
@@ -362,12 +357,9 @@ locals {
       CONTEXT_ENGINE_MEMORY_QUERY_MODE = "reflect"
       CONTEXT_ENGINE_MEMORY_TIMEOUT_MS = "20000"
     }
-    # Agent graph access (plan 2026-06-09-004 U8): stage gate for the Pi
-    # knowledge_graph_search tool; the per-agent tool policy gates on top.
     "chat-agent-invoke" = {
       # THINK-324 C18: mint the signed-turn assertion with the active key.
       AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.turn_assertion_active_key_arn
-      KNOWLEDGE_GRAPH_TOOL_ENABLED        = tostring(var.knowledge_graph_tool_enabled)
       # THINK-321 U5: stage gate for the Pi identity-resolution tools; the
       # per-agent tool policy gates on top. Mirrored on wakeup-processor so
       # wakeup turns carry the same payload flag (env-gated feature is dead
@@ -407,55 +399,8 @@ locals {
     # THINK-316 U5: the runner reads the server-only attested profile and
     # invokes its named endpoint with a purpose-bound CUSTOM_JWT. It receives
     # no Harness control-plane inputs or permissions.
-    # 240s: sync Hindsight retain (LLM extraction + auto-consolidation) can
-    # exceed 60s; the client timeout must stay below the Lambda timeout (300s)
-    # and below the Hindsight ALB idle_timeout (300s) so failures classify as
-    # client timeouts, never ALB 504s.
-    "memory-retain" = {
-      HINDSIGHT_TIMEOUT_MS = "240000"
-    }
-    "brain-dream-state" = {
-      BRAIN_DREAM_STATE_ENABLED = tostring(var.brain_dream_state_enabled)
-    }
-    # Bedrock KB provisioning. Per-handler (not common_env) so these don't bloat
-    # the already-near-4KB graphql-http env. Bedrock's RDS-backed KB needs the
-    # cluster ARN + the KB service role (passed at CreateKnowledgeBase time).
-    "knowledge-base-manager" = {
-      KB_SERVICE_ROLE_ARN  = var.kb_service_role_arn
-      DATABASE_CLUSTER_ARN = var.db_cluster_arn
-    }
-    # View-URL presigning for s3-connect documents: customer buckets are
-    # granted only to the KB service role, so the files handler assumes it
-    # (same trust path as the manager's preflight) to presign GETs.
-    "knowledge-base-files" = {
-      KB_SERVICE_ROLE_ARN = var.kb_service_role_arn
-    }
-    # External S3 KB source U6 — scheduled access probes run AS the KB
-    # service role (STS assume), and sync mode resolves the kb-manager fn
-    # ARN from SSM.
-    "kb-source-reconciler" = {
-      KB_SERVICE_ROLE_ARN = var.kb_service_role_arn
-    }
-    # KB page transcription U3. Reads source documents AS the KB service role
-    # (connected customer buckets are granted to it, never to this Lambda's
-    # own role) and writes derived pages to the workspace bucket. The model
-    # ladder is walked in order and the first model the ACCOUNT can call
-    # wins — availability is per-account, so pinning one model strands
-    # tenants whose account lacks it.
-    # WORKSPACE_BUCKET comes from the shared env block above.
-    "kb-transcribe" = {
-      KB_SERVICE_ROLE_ARN        = var.kb_service_role_arn
-      KB_TRANSCRIBE_MODEL_LADDER = var.kb_transcribe_model_ladder
-      # In-flight Bedrock calls are this TIMES the reserved concurrency above.
-      # Kept low by default because a model's requests-per-minute quota, not
-      # Lambda, is the real ceiling — and an account can be provisioned with a
-      # far lower RPM limit than the AWS default.
-      KB_TRANSCRIBE_CONCURRENCY = "2"
-    }
-    # Observations → Knowledge Graph worker. Extraction is now a Bedrock
-    # structured-output call inside this Lambda. KG_EXTRACTION_MODEL_ID pins
-    # the gpt-oss extraction model (Bedrock IAM via the shared lambda_bedrock
-    # invoke policy, same as the promotion-gate classifier).
+    # 240s: a sync memory retain (LLM extraction + consolidation) can exceed
+    # 60s; the client timeout must stay below the Lambda timeout.
     # Company Brain U5: Neptune coordinates for the twin graph projector.
     # Empty endpoint leaves the projector inert (nudge helper skips too).
     "identity-graph-projector" = {
@@ -466,16 +411,6 @@ locals {
       # bulk-rebuild mode returns a structured "not configured" error.
       NEPTUNE_LOAD_BUCKET     = var.neptune_load_bucket
       NEPTUNE_LOADER_ROLE_ARN = var.neptune_loader_role_arn
-    }
-    "knowledge-graph-observations-ingest" = {
-      BRAIN_ARTIFACTS_BUCKET          = aws_s3_bucket.brain_artifacts.bucket
-      OBSERVATION_CLASSIFIER_MODEL_ID = var.observation_classifier_model_id
-      KG_EXTRACTION_MODEL_ID          = var.kg_extraction_model_id
-      # Per-run candidate cap bounds classifier + extraction cost; a
-      # truncated backlog drains via an in-process loop inside one
-      # invocation (never Lambda self-invoke — AWS recursive-loop
-      # detection terminates worker-to-self Event chains).
-      KG_OBS_MAX_CANDIDATES_PER_RUN = var.kg_obs_max_candidates_per_run
     }
     # routine-task-python (Phase B U6) needs the AgentCore code-interpreter
     # id + the per-stage S3 routine-output bucket. The interpreter id is
@@ -731,15 +666,6 @@ resource "aws_lambda_function" "handler" {
     # 2026-06-12-002 U4). Bearer API_AUTH_SECRET + x-tenant-id; the runtime
     # fetch tool authorizes here, then downloads the returned S3 keys itself.
     "workspace-fetch-source",
-    "knowledge-base-manager",
-    # External S3 KB source U6 — hourly access probe (fail closed to
-    # access_revoked) + daily sync dispatch for s3-connect sources.
-    "kb-source-reconciler",
-    # KB page transcription U3 — splits image-bearing PDFs page by page and
-    # transcribes each with a Claude vision model so scanned pages and
-    # embedded screenshots reach the index at all.
-    "kb-transcribe",
-    "knowledge-base-files",
     "email-send",
     "email-inbound",
     "email-provider-webhook",
@@ -750,9 +676,7 @@ resource "aws_lambda_function" "handler" {
     "msteams-install-complete",
     "msteams-account-link-complete",
     "github-app",
-    "memory",
     "memory-retain",
-    "brain-dream-state",
     "memory-stage-worker",
     # THINK-193 U2 (Codex P1 #3): scheduled retry drainer for the retraction
     # saga ledger. Claims due/stale memory_retraction_attempts rows with the
@@ -767,9 +691,6 @@ resource "aws_lambda_function" "handler" {
     # terminal step event + SendTaskFailure. rate(15 minutes) schedule
     # (dedicated resource below).
     "memory-stage-sweeper",
-    "knowledge-graph-observations-ingest",
-    "ontology-scan",
-    "ontology-reprocess",
     # THINK-321 U7: bootstrap/drift identity matching job. Event-invoked by
     # startIdentityMatchJob; the drift EventBridge Scheduler rule targets it
     # directly (identity_drift_match_enabled, ships DISABLED).
@@ -984,8 +905,8 @@ resource "aws_lambda_function" "handler" {
   # headroom for transient slowness.
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "knowledge-base-manager" ? 900 : each.key == "kb-transcribe" ? 900 : each.key == "eval-worker" ? 240 : each.key == "knowledge-graph-observations-ingest" ? 480 : each.key == "requester-memory-dreaming" ? 300 : each.key == "ontology-scan" ? 300 : each.key == "ontology-reprocess" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "brain-dream-state" ? 900 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "knowledge-graph-observations-ingest" ? 1024 : each.key == "requester-memory-dreaming" ? 512 : each.key == "ontology-scan" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(8192, var.lambda_max_memory_mb) : each.key == "folder-bundle-import" ? 1024 : each.key == "kb-transcribe" ? 2048 : 256
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "requester-memory-dreaming" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "requester-memory-dreaming" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(8192, var.lambda_max_memory_mb) : each.key == "folder-bundle-import" ? 1024 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
@@ -1003,8 +924,7 @@ resource "aws_lambda_function" "handler" {
   # document-conformance-judge is also a single-writer: direct
   # process-and-complete with no in-flight claim status depends on never
   # having two sweepers race the same pending rows (THINK-189 KTD4).
-  # kb-source-reconciler is capped at 1 for the same single-writer reason.
-  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : each.key == "kb-source-reconciler" ? 1 : each.key == "kb-transcribe" ? var.kb_transcribe_reserved_concurrency : -1
+  reserved_concurrent_executions = each.key == "compliance-outbox-drainer" ? 1 : each.key == "document-conformance-judge" ? 1 : each.key == "eval-worker" ? 40 : -1
 
   environment {
     variables = merge(
@@ -1053,34 +973,8 @@ resource "aws_lambda_function_event_invoke_config" "chat_agent_invoke" {
   maximum_event_age_in_seconds = 3600
 }
 
-# Ontology suggestion scans are durable-job driven. Disable AWS async
-# retries so duplicate scan invocations do not create duplicate review
-# proposals; the scan job row is the retry/observability surface.
-resource "aws_sqs_queue" "ontology_scan_dlq" {
-  count                     = local.deploy_lambda_handlers ? 1 : 0
-  name                      = "thinkwork-${var.stage}-ontology-scan-dlq"
-  message_retention_seconds = 1209600 # 14 days
-
-  tags = {
-    Name = "thinkwork-${var.stage}-ontology-scan-dlq"
-  }
-}
-
-resource "aws_lambda_function_event_invoke_config" "ontology_scan" {
-  count                        = local.deploy_lambda_handlers ? 1 : 0
-  function_name                = aws_lambda_function.handler["ontology-scan"].function_name
-  maximum_retry_attempts       = 0
-  maximum_event_age_in_seconds = 3600
-
-  destination_config {
-    on_failure {
-      destination = aws_sqs_queue.ontology_scan_dlq[0].arn
-    }
-  }
-}
-
-# Identity match jobs (THINK-321 U7) are durable-job driven like ontology
-# scans. Disable AWS async retries so duplicate match invocations do not
+# Identity match jobs (THINK-321 U7) are durable-job driven. Disable AWS
+# async retries so duplicate match invocations do not
 # double-write mappings/cases; identity.match_jobs is the retry/
 # observability surface.
 resource "aws_sqs_queue" "identity_match_dlq" {
@@ -1106,31 +1000,6 @@ resource "aws_lambda_function_event_invoke_config" "identity_match" {
   }
 }
 
-# Ontology reprocess jobs are row-ledger driven and explicitly claim work.
-# Disable AWS async retries to keep failure/retry state in ontology.reprocess_jobs.
-resource "aws_sqs_queue" "ontology_reprocess_dlq" {
-  count                     = local.deploy_lambda_handlers ? 1 : 0
-  name                      = "thinkwork-${var.stage}-ontology-reprocess-dlq"
-  message_retention_seconds = 1209600 # 14 days
-
-  tags = {
-    Name = "thinkwork-${var.stage}-ontology-reprocess-dlq"
-  }
-}
-
-resource "aws_lambda_function_event_invoke_config" "ontology_reprocess" {
-  count                        = local.deploy_lambda_handlers ? 1 : 0
-  function_name                = aws_lambda_function.handler["ontology-reprocess"].function_name
-  maximum_retry_attempts       = 0
-  maximum_event_age_in_seconds = 3600
-
-  destination_config {
-    on_failure {
-      destination = aws_sqs_queue.ontology_reprocess_dlq[0].arn
-    }
-  }
-}
-
 # Phase B U8: SFN's inbox_approval Task invokes routine-approval-callback
 # directly via .waitForTaskToken. Lambda's default async-retry policy
 # (2 attempts) is incompatible with the callback's two-insert flow —
@@ -1150,7 +1019,7 @@ resource "aws_lambda_function_event_invoke_config" "routine_approval_callback" {
 # memory-retain after every chat turn. AWS Lambda's default async-retry
 # policy is 2 attempts; without overriding it, a transient failure on the
 # canonical-transcript fetch or adapter write retries the entire writeback
-# and can multi-write the same per-turn document into Hindsight. The
+# and can multi-write the same per-turn document into memory. The
 # longest-suffix-prefix merge in memory-retain.ts dedupes content but the
 # retain-cost path (Bedrock tokens charged in adapter.retainConversation)
 # is NOT idempotent — retries multiply LLM cost. Per
@@ -1646,9 +1515,6 @@ locals {
       # Workspace files
       "ANY /api/workspaces/{proxy+}" = "workspace-files"
 
-      # Knowledge bases
-      "ANY /api/knowledge-bases/{proxy+}" = "knowledge-base-files"
-
       # Email
       "POST /api/email/send"                                 = "email-send"
       "POST /api/email/provider-webhook/{providerInstallId}" = "email-provider-webhook"
@@ -1670,7 +1536,6 @@ locals {
       "POST /msteams/account-link/complete" = "msteams-account-link-complete"
 
       # Memory
-      "ANY /api/memory/{proxy+}" = "memory"
 
       # Artifacts
       "POST /api/artifacts/{proxy+}" = "artifact-deliver"
@@ -1749,6 +1614,10 @@ locals {
       "GET /api/tenants/{tenantId}/brain-api-keys"            = "brain-api-keys"
       "OPTIONS /api/tenants/{tenantId}/brain-api-keys"        = "brain-api-keys"
       "DELETE /api/tenants/{tenantId}/brain-api-keys/{keyId}" = "brain-api-keys"
+      # Per-key grants edit (twin-mcp-keys/v2): securityGroups +
+      # kbCollections, republishing the manifest on change.
+      "PATCH /api/tenants/{tenantId}/brain-api-keys/{keyId}"   = "brain-api-keys"
+      "OPTIONS /api/tenants/{tenantId}/brain-api-keys/{keyId}" = "brain-api-keys"
 
       # One-shot tenant provisioning for the admin-ops MCP. Mints a fresh
       # tkm_ key + stores it in Secrets Manager at
@@ -1966,42 +1835,6 @@ resource "aws_scheduler_schedule" "webhook_deliveries_cleanup" {
 # Requester memory dreaming — broad per-user memory compaction/reflection sweep
 # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Brain dream state — per-bank Hindsight consolidation with audit ledger
-# (THINK-133 U4). Retries are the ledger's job (staged plan -> atomic apply
-# -> applied markers; unfinished runs resume on the next tick), so Lambda
-# async retries stay at 0, mirroring memory-retain.
-# ---------------------------------------------------------------------------
-
-resource "aws_lambda_function_event_invoke_config" "brain_dream_state" {
-  count                        = local.deploy_lambda_handlers ? 1 : 0
-  function_name                = aws_lambda_function.handler["brain-dream-state"].function_name
-  maximum_retry_attempts       = 0
-  maximum_event_age_in_seconds = 3600
-}
-
-resource "aws_scheduler_schedule" "brain_dream_state" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-brain-dream-state"
-  group_name          = "default"
-  schedule_expression = var.brain_dream_state_schedule_expression
-  state               = var.brain_dream_state_enabled ? "ENABLED" : "DISABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["brain-dream-state"].arn
-    role_arn = aws_iam_role.scheduler.arn
-
-    retry_policy {
-      maximum_retry_attempts = 0
-    }
-  }
-}
-
 resource "aws_scheduler_schedule" "requester_memory_dreaming" {
   count = local.deploy_lambda_handlers ? 1 : 0
 
@@ -2087,83 +1920,6 @@ resource "aws_scheduler_schedule" "skill_runs_reconciler" {
   target {
     arn      = aws_lambda_function.handler["skill-runs-reconciler"].arn
     role_arn = aws_iam_role.scheduler.arn
-  }
-}
-
-# ---------------------------------------------------------------------------
-# kb_source_reconciler — external S3 KB source U6. Two schedules over one
-# handler: an hourly as-role access probe for every s3-connect source (fail
-# closed to access_revoked; restores healthy when access returns — R10/AE7)
-# and a daily sync dispatch to the kb-manager for KBs with connected
-# sources (R13). retry-0 + DLQ: the next tick IS the retry.
-# ---------------------------------------------------------------------------
-
-resource "aws_sqs_queue" "kb_source_reconciler_dlq" {
-  count                     = local.deploy_lambda_handlers ? 1 : 0
-  name                      = "thinkwork-${var.stage}-kb-source-reconciler-dlq"
-  message_retention_seconds = 1209600 # 14 days
-
-  tags = {
-    Name = "thinkwork-${var.stage}-kb-source-reconciler-dlq"
-  }
-}
-
-resource "aws_lambda_function_event_invoke_config" "kb_source_reconciler" {
-  count                        = local.deploy_lambda_handlers ? 1 : 0
-  function_name                = aws_lambda_function.handler["kb-source-reconciler"].function_name
-  maximum_retry_attempts       = 0
-  maximum_event_age_in_seconds = 3600
-
-  destination_config {
-    on_failure {
-      destination = aws_sqs_queue.kb_source_reconciler_dlq[0].arn
-    }
-  }
-}
-
-resource "aws_scheduler_schedule" "kb_source_access_probe" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-kb-source-access-probe"
-  group_name          = "default"
-  schedule_expression = "rate(1 hour)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["kb-source-reconciler"].arn
-    role_arn = aws_iam_role.scheduler.arn
-    input    = jsonencode({ mode = "probe" })
-
-    retry_policy {
-      maximum_retry_attempts = 0
-    }
-  }
-}
-
-resource "aws_scheduler_schedule" "kb_source_daily_sync" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-kb-source-daily-sync"
-  group_name          = "default"
-  schedule_expression = "rate(1 day)"
-  state               = "ENABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["kb-source-reconciler"].arn
-    role_arn = aws_iam_role.scheduler.arn
-    input    = jsonencode({ mode = "sync" })
-
-    retry_policy {
-      maximum_retry_attempts = 0
-    }
   }
 }
 
@@ -2529,71 +2285,6 @@ resource "aws_scheduler_schedule" "stall_monitor" {
 # Compounding Memory — nightly hygiene + export
 # ---------------------------------------------------------------------------
 
-# Observations → Knowledge Graph sweep (plan 2026-06-09-004 U5). Enumerates
-# tenants and runs an incremental observations ingest per tenant; the stable
-# source_ref's active-run dedupe drops overlap with operator-started runs and
-# the in-handler stale-run reaper clears stranded rows past the run ceiling.
-resource "aws_scheduler_schedule" "knowledge_graph_observations_ingest" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-knowledge-graph-observations-ingest"
-  group_name          = "default"
-  schedule_expression = "rate(30 minutes)"
-  # Ships DISABLED (plan 2026-07-03-005 U4/KTD-6): the schedule enables on dev
-  # only after a manual golden-set-validated run. Driven by the GHA
-  # WIKI_KG_INGEST_ENABLED var.
-  state = var.knowledge_graph_observations_ingest_enabled ? "ENABLED" : "DISABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["knowledge-graph-observations-ingest"].arn
-    role_arn = aws_iam_role.scheduler.arn
-    input    = jsonencode({ sweep = true, trigger = "scheduled" })
-
-    # Periodic idempotent worker: the next 30-minute tick IS the retry.
-    # Scheduler-level retries stack extra invocations onto a cadence that
-    # already self-corrects (cursor-guarded), compounding the invocation
-    # volume that helped trip Lambda recursive-loop detection.
-    retry_policy {
-      maximum_retry_attempts = 0
-    }
-  }
-}
-
-# Ontology suggestion scan sweep (THINK-320 U4/KTD-3). Enumerates tenants and
-# starts a suggestion scan job per tenant; tenants with a pending/running scan
-# are skipped in the handler, and the scan-job dedupe key drops same-bucket
-# duplicate starts. Ships DISABLED — enabled per stage via
-# ontology_scan_sweep_enabled after the Living Map review surfaces land.
-resource "aws_scheduler_schedule" "ontology_scan_sweep" {
-  count = local.deploy_lambda_handlers ? 1 : 0
-
-  name                = "thinkwork-${var.stage}-ontology-scan-sweep"
-  group_name          = "default"
-  schedule_expression = "rate(1 days)"
-  state               = var.ontology_scan_sweep_enabled ? "ENABLED" : "DISABLED"
-
-  flexible_time_window {
-    mode = "OFF"
-  }
-
-  target {
-    arn      = aws_lambda_function.handler["ontology-scan"].arn
-    role_arn = aws_iam_role.scheduler.arn
-    input    = jsonencode({ sweep = true, trigger = "scheduled" })
-
-    # Periodic idempotent worker: the next daily tick IS the retry (mirrors
-    # the knowledge_graph_observations_ingest precedent — scheduler retries
-    # only stack invocations onto a self-correcting cadence).
-    retry_policy {
-      maximum_retry_attempts = 0
-    }
-  }
-}
-
 # Identity drift match sweep (THINK-321 U7 / KTD-7 — R10). Enumerates
 # tenants with registered identity sources and starts a per-tenant match
 # job; tenants with a pending/running job are skipped in the handler and
@@ -2617,9 +2308,9 @@ resource "aws_scheduler_schedule" "identity_drift_match" {
     role_arn = aws_iam_role.scheduler.arn
     input    = jsonencode({ drift = true, trigger = "scheduled" })
 
-    # Periodic idempotent worker: the next daily tick IS the retry (the
-    # ontology-scan sweep precedent — scheduler retries only stack
-    # invocations onto a self-correcting cadence).
+    # Periodic idempotent worker: the next daily tick IS the retry —
+    # scheduler retries only stack invocations onto a self-correcting
+    # cadence.
     retry_policy {
       maximum_retry_attempts = 0
     }
@@ -2749,7 +2440,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "brain_artifacts" {
 
   # THINK-193 U1 (Codex F6): normalized evidence snapshots are short-lived
   # working copies — the durable record is the evidence row (hash + ref) and
-  # the Hindsight projection. Expire content after 30 days; the app mirrors
+  # the memory projection. Expire content after 30 days; the app mirrors
   # this via memory_evidence_items.snapshot_expires_at.
   rule {
     id     = "expire-evidence-snapshots"
@@ -2917,7 +2608,6 @@ resource "aws_ssm_parameter" "cloudflare_namespace_token" {
 resource "aws_ssm_parameter" "lambda_arns" {
   for_each = local.deploy_lambda_handlers ? {
     "chat-agent-invoke-fn-arn"    = aws_lambda_function.handler["chat-agent-invoke"].arn
-    "kb-manager-fn-arn"           = aws_lambda_function.handler["knowledge-base-manager"].arn
     "job-schedule-manager-fn-arn" = aws_lambda_function.handler["job-schedule-manager"].arn
     "memory-retain-fn-arn"        = aws_lambda_function.handler["memory-retain"].arn
     "eval-runner-fn-arn"          = aws_lambda_function.handler["eval-runner"].arn

@@ -195,7 +195,6 @@ beforeEach(() => {
     guardrailId: null,
     guardrailConfig: undefined,
     skillsConfig: [],
-    knowledgeBasesConfig: undefined,
     mcpConfigs: [],
     agentProfilesConfig: [],
   });
@@ -321,7 +320,6 @@ describe("chat-agent-invoke runtime routing", () => {
       guardrailId: null,
       guardrailConfig: undefined,
       skillsConfig: [],
-      knowledgeBasesConfig: undefined,
       mcpConfigs: [],
       agentProfilesConfig: [],
     });
@@ -395,7 +393,6 @@ describe("chat-agent-invoke runtime routing", () => {
       guardrailId: null,
       guardrailConfig: undefined,
       skillsConfig: [],
-      knowledgeBasesConfig: undefined,
       mcpConfigs: [
         {
           name: "twenty--crm",
@@ -458,7 +455,6 @@ describe("chat-agent-invoke runtime routing", () => {
       guardrailId: null,
       guardrailConfig: undefined,
       skillsConfig: [],
-      knowledgeBasesConfig: undefined,
       mcpConfigs: [
         {
           name: "twenty--crm",
@@ -903,7 +899,6 @@ describe("chat-agent-invoke runtime routing", () => {
             "tenants/acme/agents/thinkwork/workspace/skills/custom-research-skill",
         },
       ],
-      knowledgeBasesConfig: undefined,
       mcpConfigs: [],
       agentProfilesConfig: [],
     });

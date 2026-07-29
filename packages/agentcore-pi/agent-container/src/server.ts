@@ -7,9 +7,7 @@
  *
  *   - U4: AuroraSessionStore — Pi's session-blob persistence.
  *   - U5: run_skill ToolDef   — subprocess bridge to Python script-skills.
- *   - U6: Memory ToolDefs     — AgentCore Managed OR Hindsight, selected by
- *                                MEMORY_ENGINE env. Both modules are imported;
- *                                only the active one's tools reach the agent.
+ *   - U6: Memory ToolDefs     — AgentCore managed memory (the only engine).
  *   - U7: HandleStore + buildMcpTools — handle-shaped Authorization, with the
  *                                       real `connectMcpServer` factory wired
  *                                       in here (no inert default).
@@ -54,10 +52,8 @@ import {
   createDocumentComposerExtension,
   createFetchWorkspaceSourceExtension,
   createIdentityResolutionExtension,
-  createKnowledgeGraphExtension,
   createSearchExtension,
   createSkillsExtension,
-  createMemoryExtension,
   createRequestIdentityExtension,
   createSendEmailExtension,
   buildTurnContextBlock,
@@ -181,15 +177,9 @@ import {
 } from "./runtime/pi-goal-adapter.js";
 import { createScrubbingFetch } from "./scrubbing-fetch.js";
 import { buildMemoryTools } from "./tools/memory.js";
-import { buildKnowledgeTools } from "./tools/knowledge.js";
-import {
-  directMemoryGroundingQuery,
-  explicitMemoryTurn,
-} from "./runtime/memory-question.js";
+import { explicitMemoryTurn } from "./runtime/memory-question.js";
 import { createApiCanvasProvider } from "./runtime/providers/canvas-provider.js";
-import { createHindsightMemoryProvider } from "./runtime/providers/hindsight-memory-provider.js";
 import { createApiIdentityResolutionProvider } from "./runtime/providers/identity-resolution-provider.js";
-import { createApiKnowledgeGraphProvider } from "./runtime/providers/knowledge-graph-provider.js";
 import { createApiSearchProvider } from "./runtime/providers/search-provider.js";
 import {
   AuroraSessionStore,
@@ -1258,9 +1248,9 @@ const defaultDependencies: HandlerDependencies = {
 export interface InvocationResourceBundle {
   tools: AgentTool<any>[];
   /**
-   * Per-turn built-in tool surface. Explicit memory turns are Hindsight-only,
-   * so the runtime withholds file/shell built-ins instead of relying on prompt
-   * compliance to avoid USER.md/SPACE.md shortcuts.
+   * Per-turn built-in tool surface. Explicit memory turns withhold
+   * file/shell built-ins instead of relying on prompt compliance to avoid
+   * USER.md/SPACE.md shortcuts.
    */
   builtinToolNames: string[];
   /**
@@ -1300,13 +1290,6 @@ export interface InvocationResourceBundle {
     status: "connected" | "rejected_url" | "connect_failed";
     reason?: string;
   }>;
-  /**
-   * THINK-261 #2 — per-turn memory signals, mutated by the memory extension
-   * as tools execute (same lifecycle pattern as `bedrockRequestIds`). The
-   * end-of-turn retain reads `reflectInvoked` to stamp the payload as
-   * reflect-exhaust so the retain door suppresses memory-question turns.
-   */
-  memorySignals: { reflectInvoked: boolean };
   /**
    * THINK-173 U6 — per-entry outcomes for manifest-mode capability
    * registration. Empty when the invocation is not in manifest mode.
@@ -1461,9 +1444,6 @@ export async function buildInvocationResources(
   const handleStore = args.handleStore;
   const extensionFactories: ExtensionFactory[] = [];
   const extensionToolNames: string[] = [];
-  // THINK-261 #2 — mutated by the memory extension's reflect tool; read at
-  // the end-of-turn retain to mark memory-question turns as reflect-exhaust.
-  const memorySignals = { reflectInvoked: false };
   // THINK-245 U4 — request identity for cost reconciliation: stamp Bedrock
   // Converse payloads with requestMetadata and collect response requestIds.
   // Hook-only extension (no tools), so it bypasses the addExtension helper.
@@ -1763,57 +1743,6 @@ export async function buildInvocationResources(
     );
   }
 
-  // Knowledge Graph (plan 2026-06-09-004 U8) — `knowledge_graph_search` over
-  // the API's GraphQL `knowledgeGraphSearch` query. Gated on the
-  // `knowledge_graph_enabled` payload flag; skipped in eval mode (user-less).
-  // Identity is turn-bound: the provider
-  // snapshots the thread-turn reference at entry and the API resolves the
-  // tenant server-side from it (R15) — no tenant assertion travels with the
-  // request. `addExtension` folds the tool name into the allowlist; omit
-  // that and the tool registers but is silently gated from the model.
-  if (
-    args.payload.eval_mode !== true &&
-    args.payload.knowledge_graph_enabled === true
-  ) {
-    const kgApiUrl = asString(args.payload.thinkwork_api_url);
-    const kgApiSecret = asString(args.payload.thinkwork_api_secret);
-    const kgThreadTurnId = asString(args.payload.thread_turn_id);
-    const kgThreadId = args.identity.threadId;
-    if (kgApiUrl && kgApiSecret && (kgThreadTurnId || kgThreadId)) {
-      addExtension(
-        createKnowledgeGraphExtension({
-          onError: (error, { phase }) =>
-            logStructured({
-              level: "warn",
-              event: "knowledge_graph_search_failed",
-              phase,
-              tenantId: args.identity.tenantId,
-              threadId: args.identity.threadId,
-              error: error instanceof Error ? error.message : String(error),
-            }),
-        }),
-        {
-          knowledgeGraph: createApiKnowledgeGraphProvider({
-            apiUrl: kgApiUrl,
-            apiSecret: kgApiSecret,
-            threadTurnId: kgThreadTurnId || undefined,
-            threadId: kgThreadId || undefined,
-          }),
-        },
-      );
-    } else {
-      logStructured({
-        level: "warn",
-        event: "knowledge_graph_skipped_missing_wiring",
-        tenantId: args.identity.tenantId,
-        threadId: args.identity.threadId,
-        hasApiUrl: Boolean(kgApiUrl),
-        hasApiSecret: Boolean(kgApiSecret),
-        hasTurnReference: Boolean(kgThreadTurnId || kgThreadId),
-      });
-    }
-  }
-
   // Identity Resolution (THINK-321 U5+U6) — `resolve_entities` /
   // `propose_mapping_candidates` / `confirm_mapping` /
   // `decline_mapping_candidates` over the API's entity-identity GraphQL
@@ -1930,71 +1859,10 @@ export async function buildInvocationResources(
     });
   }
 
-  // Knowledge (external S3 KB source U7) — search_knowledge assembles ONLY
-  // when the payload carries bound KB IDs (agent/Space bindings resolved
-  // API-side, KTD6). No bindings ⇒ no tool ⇒ byte-identical behavior (AE3).
-  const boundKnowledgeBases = Array.isArray(args.payload.bound_knowledge_bases)
-    ? (
-        args.payload.bound_knowledge_bases as Array<{
-          awsKbId?: unknown;
-          name?: unknown;
-          description?: unknown;
-          retrieval?: unknown;
-        }>
-      )
-        .map((kb) => {
-          const retrieval = kb?.retrieval as
-            | { mode?: unknown; url?: unknown; toolName?: unknown }
-            | undefined;
-          const mcpRetrieval =
-            retrieval &&
-            retrieval.mode === "mcp" &&
-            typeof retrieval.url === "string" &&
-            retrieval.url &&
-            typeof retrieval.toolName === "string" &&
-            retrieval.toolName
-              ? (kb.retrieval as import("./tools/knowledge.js").BoundKbMcpRetrieval)
-              : undefined;
-          const awsKbId =
-            typeof kb?.awsKbId === "string" && kb.awsKbId
-              ? kb.awsKbId
-              : undefined;
-          if (!awsKbId && !mcpRetrieval) return null;
-          return {
-            ...(awsKbId ? { awsKbId } : {}),
-            ...(mcpRetrieval ? { retrieval: mcpRetrieval } : {}),
-            name: typeof kb.name === "string" ? kb.name : null,
-            description:
-              typeof kb.description === "string" ? kb.description : null,
-          };
-        })
-        .filter((kb): kb is NonNullable<typeof kb> => kb !== null)
-    : [];
-  if (boundKnowledgeBases.length > 0) {
-    tools.push(
-      ...buildKnowledgeTools({
-        knowledgeBases: boundKnowledgeBases,
-        tenantId: args.identity.tenantId,
-      }),
-    );
-    logStructured({
-      level: "info",
-      event: "knowledge_tool_enabled",
-      tenantId: args.identity.tenantId,
-      threadId: args.identity.threadId,
-      detail: `bound KBs: ${boundKnowledgeBases.length}`,
-    });
-  }
-
-  // Memory — engine selector lives in env. Eval-mode and system-originated
-  // invocations can be user-less by construction, so user-scoped memory is
-  // skipped entirely when no invoking user exists.
-  //
-  // The hosted Brain path is Hindsight-native: a Hindsight-backed
-  // MemoryProvider wrapped by `createMemoryExtension`, loaded via the resource
-  // loader's `extensionFactories` instead of hand-assembled recall/reflect
-  // AgentTools. Managed AgentCore memory stays as the explicit compatibility
-  // mode; it is not the default user/Space Brain substrate.
+  // Memory — AgentCore managed memory is the only engine (THINK-406).
+  // Eval-mode and system-originated invocations can be user-less by
+  // construction, so user-scoped memory is skipped entirely when no invoking
+  // user exists.
   const evalMode = args.payload.eval_mode === true;
   if (evalMode) {
     logStructured({
@@ -2010,88 +1878,23 @@ export async function buildInvocationResources(
       tenantId: args.identity.tenantId,
       threadId: args.identity.threadId,
     });
-  } else if (args.env.memoryEngine === "agentcore") {
-    if (args.env.agentCoreMemoryId) {
-      tools.push(
-        ...buildMemoryTools({
-          client: args.agentCoreClient,
-          memoryId: args.env.agentCoreMemoryId,
-          tenantId: args.identity.tenantId,
-          userId: args.identity.userId,
-          threadId: args.identity.threadId,
-        }),
-      );
-    } else {
-      logStructured({
-        level: "warn",
-        event: "memory_skipped_no_id",
-        tenantId: args.identity.tenantId,
-        threadId: args.identity.threadId,
-      });
-    }
-  } else if (args.env.memoryEngine === "hindsight") {
-    if (args.env.hindsightEndpoint) {
-      const memoryProvider = createHindsightMemoryProvider({
-        endpoint: args.env.hindsightEndpoint,
+  } else if (args.env.agentCoreMemoryId) {
+    tools.push(
+      ...buildMemoryTools({
+        client: args.agentCoreClient,
+        memoryId: args.env.agentCoreMemoryId,
         tenantId: args.identity.tenantId,
         userId: args.identity.userId,
-        spaceId: args.identity.spaceId,
-        // THINK-261 #6 — recall/reflect fan out to every member space's bank.
-        memberSpaces: args.identity.memberSpaces,
-        dbClusterArn: args.env.dbClusterArn,
-        dbSecretArn: args.env.dbSecretArn,
-        dbName: args.env.dbName,
-      });
-      const groundingQuery = directMemoryGroundingQuery(args.payload.message);
-      // Keep long-term memory available as an explicit tool, and only run
-      // proactive grounding for direct memory questions. Requester profile
-      // facts are already mounted as `/workspace/User/USER.md`; this focused
-      // preflight covers questions like "what's my dog's name?" without making
-      // ordinary turns pay the recall cost.
-      const memoryExtension = createMemoryExtension({
-        ...(groundingQuery ? { groundingQuery } : {}),
-        onReflectInvoked: () => {
-          memorySignals.reflectInvoked = true;
-        },
-        onGrounding: ({ phase, count }) =>
-          logStructured({
-            level: "info",
-            event: "memory_grounding_completed",
-            phase,
-            count,
-            tenantId: args.identity.tenantId,
-            threadId: args.identity.threadId,
-          }),
-        onError: (error, { phase }) =>
-          logStructured({
-            level: "warn",
-            event: "memory_grounding_failed",
-            phase,
-            tenantId: args.identity.tenantId,
-            threadId: args.identity.threadId,
-            error: error instanceof Error ? error.message : String(error),
-          }),
-      });
-      extensionFactories.push(
-        toExtensionFactory(memoryExtension, { memory: memoryProvider }),
-      );
-      // Fold the extension's tool names into the allowlist or recall/reflect
-      // register but never reach the model (the SDK gates to the allowlist).
-      extensionToolNames.push(...(memoryExtension.toolNames ?? []));
-      logStructured({
-        level: "info",
-        event: "memory_extension_loaded",
-        tenantId: args.identity.tenantId,
         threadId: args.identity.threadId,
-      });
-    } else {
-      logStructured({
-        level: "warn",
-        event: "hindsight_skipped_no_endpoint",
-        tenantId: args.identity.tenantId,
-        threadId: args.identity.threadId,
-      });
-    }
+      }),
+    );
+  } else {
+    logStructured({
+      level: "warn",
+      event: "memory_skipped_no_id",
+      tenantId: args.identity.tenantId,
+      threadId: args.identity.threadId,
+    });
   }
 
   // Workspace skills — the prompt lists installed skills, while the extension
@@ -2270,7 +2073,6 @@ export async function buildInvocationResources(
     mcpLoadRecord,
     capabilityLoadRecord,
     bedrockRequestIds,
-    memorySignals,
   };
 }
 
@@ -4486,8 +4288,8 @@ export async function handleInvocation(
 
   // End-of-turn auto-retain — fire-and-forget invoke of the memory-retain
   // Lambda with the per-turn transcript. The receiving Lambda routes through
-  // the API's normalized memory layer (Hindsight or AgentCore depending on
-  // engine). Awaited so the Event invoke is queued before HTTP response —
+  // the API's normalized memory layer (AgentCore managed memory).
+  // Awaited so the Event invoke is queued before HTTP response —
   // Lambda Web Adapter's in-flight Promise lifecycle is undocumented in our
   // institutional record, so we trade ~tens of ms for guaranteed delivery.
   // Failures are logged but never bubble to the user (retain is best-effort).
@@ -4497,9 +4299,6 @@ export async function handleInvocation(
     env,
     assistantContent: runResult.content,
     lambdaClient: deps.lambdaClientFactory(env.awsRegion),
-    // THINK-261 #2 — turns that invoked `reflect` are memory questions; the
-    // retain door suppresses them so synthesized answers don't loop back in.
-    reflectExhaust: bundle.memorySignals.reflectInvoked,
   });
   if (retainOutcome.retained) {
     logStructured({
@@ -4579,12 +4378,6 @@ export async function handleInvocation(
     fetchImpl,
   });
 
-  // The placeholder dispatch in U9 has no Hindsight retain pipeline yet;
-  // U16's worker integration will populate this. Pass an empty array so
-  // chat-agent-invoke's `responseData?.hindsight_usage || invokeResult.hindsight_usage || []`
-  // fallback (chat-agent-invoke.ts:629) keeps working.
-  const hindsightUsage: unknown[] = [];
-
   const responseBody: InvocationResponse = {
     runtime: "pi",
     composed_system_prompt: composedSystemPrompt,
@@ -4601,7 +4394,6 @@ export async function handleInvocation(
     ui_message_parts: runResult.uiMessageParts ?? [],
     model_routed_tool_calls: runResult.modelRoutedToolCalls ?? [],
     agent_profile_runs: runResult.agentProfileRuns ?? [],
-    hindsight_usage: hindsightUsage,
     ...(runResult.goalRun ? { goal_run: runResult.goalRun } : {}),
     response: {
       role: "assistant",
@@ -4619,7 +4411,6 @@ export async function handleInvocation(
         runResult.toolInvocations.flatMap((invocation) =>
           collectToolCosts(invocation.result),
         ),
-      hindsight_usage: hindsightUsage,
       ...(runResult.goalRun ? { goal_run: runResult.goalRun } : {}),
     },
   };

@@ -194,7 +194,7 @@ async function main() {
         name: "Memory: Twenty proving slice (U1)",
         slug: WORKFLOW_SLUG,
         description:
-          "THINK-193 U1 — bounded Twenty company acquisition into a shared Hindsight bank (acquire → project → retain → compound).",
+          "THINK-193 U1 — bounded Twenty company acquisition into a shared memory bank (acquire → project → retain → compound).",
         lifecycle_status: "active",
         primary_trigger_family: "manual",
       })

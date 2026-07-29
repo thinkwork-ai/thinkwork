@@ -32,7 +32,6 @@ import { registerAgentCommand } from "./commands/agent.js";
 import { registerComputerCommand } from "./commands/computer.js";
 import { registerTenantCommand } from "./commands/tenant.js";
 import { registerMemberCommand } from "./commands/member.js";
-import { registerKbCommand } from "./commands/kb.js";
 // Phase-3 (automation / integrations).
 import { registerRoutineCommand } from "./commands/routine.js";
 import { registerScheduledJobCommand } from "./commands/scheduled-job.js";
@@ -58,7 +57,6 @@ import { registerMigrateFolderCanonCommand } from "./commands/migrate-folder-can
 import { registerMigrateAgentFoldersCommand } from "./commands/migrate-agent-folders.js";
 import { registerMigrateConnectorsCommand } from "./commands/migrate-connectors.js";
 import { registerSidecarRetirementMoverCommand } from "./commands/sidecar-retirement-mover.js";
-import { registerCleanupSpaceHindsightBanksCommand } from "./commands/cleanup-space-hindsight-banks.js";
 import { stripForwardedSeparator } from "./lib/argv.js";
 
 const program = new Command();
@@ -133,7 +131,6 @@ registerAgentCommand(program);
 registerComputerCommand(program);
 registerTenantCommand(program);
 registerMemberCommand(program);
-registerKbCommand(program);
 
 // Phase-3 stubs
 registerRoutineCommand(program);
@@ -161,7 +158,6 @@ registerMigrateFolderCanonCommand(program);
 registerMigrateAgentFoldersCommand(program);
 registerMigrateConnectorsCommand(program);
 registerSidecarRetirementMoverCommand(program);
-registerCleanupSpaceHindsightBanksCommand(program);
 
 // Company Brain white-glove installation (THINK-334) — engineer-run.
 registerTwinCommand(program);

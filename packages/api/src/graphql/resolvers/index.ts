@@ -14,7 +14,6 @@ import { threadQueries } from "./threads/index.js";
 import { inboxQueries } from "./inbox/index.js";
 import { triggerQueries } from "./triggers/index.js";
 import { costQueries } from "./costs/index.js";
-import { knowledgeQueries } from "./knowledge/index.js";
 import {
   artifactQueries,
   artifactTypeResolvers,
@@ -44,11 +43,6 @@ import { triggerMutations } from "./triggers/index.js";
 import { threadMutations } from "./threads/index.js";
 import { inboxMutations } from "./inbox/index.js";
 import { costMutations } from "./costs/index.js";
-import { knowledgeMutations } from "./knowledge/index.js";
-import {
-  knowledgeGraphMutations,
-  knowledgeGraphQueries,
-} from "./knowledge-graph/index.js";
 import { artifactMutations } from "./artifacts/index.js";
 import { orchestrationMutations } from "./orchestration/index.js";
 import { webhookMutations } from "./webhooks/index.js";
@@ -122,7 +116,6 @@ import {
 import { customizeQueries, customizeMutations } from "./customize/index.js";
 import { complianceQueries, complianceMutations } from "./compliance/index.js";
 import { slackQueries, slackMutations } from "./slack/index.js";
-import { ontologyQueries, ontologyMutations } from "./ontology/index.js";
 import { observabilityQueries } from "./observability/index.js";
 import {
   linkedTaskMutations,
@@ -168,8 +161,6 @@ export const queryResolvers: Record<string, any> = {
   ...inboxQueries,
   ...triggerQueries,
   ...costQueries,
-  ...knowledgeQueries,
-  ...knowledgeGraphQueries,
   ...artifactQueries,
   ...appletQueries,
   ...orchestrationQueries,
@@ -202,7 +193,6 @@ export const queryResolvers: Record<string, any> = {
   ...customizeQueries,
   ...complianceQueries,
   ...slackQueries,
-  ...ontologyQueries,
   ...observabilityQueries,
   ...spaceQueries,
   ...linkedTaskQueries,
@@ -224,8 +214,6 @@ export const mutationResolvers: Record<string, any> = {
   ...threadMutations,
   ...inboxMutations,
   ...costMutations,
-  ...knowledgeMutations,
-  ...knowledgeGraphMutations,
   ...artifactMutations,
   ...appletMutations,
   ...orchestrationMutations,
@@ -256,7 +244,6 @@ export const mutationResolvers: Record<string, any> = {
   ...customizeMutations,
   ...complianceMutations,
   ...slackMutations,
-  ...ontologyMutations,
   ...spaceMutations,
   ...linkedTaskMutations,
   ...workItemMutations,
@@ -272,7 +259,6 @@ import {
 } from "./threads/types.js";
 import { routineExecutionTypeResolvers } from "./routines/types.js";
 import { tenantTypeResolvers } from "./core/types.js";
-import { knowledgeBaseTypeResolvers } from "./knowledge/types.js";
 
 export const typeResolvers: Record<string, Record<string, any>> = {
   Tenant: tenantTypeResolvers,
@@ -288,7 +274,6 @@ export const typeResolvers: Record<string, Record<string, any>> = {
   EvalResult: evalResultTypeResolvers,
   EvalRun: evalRunTypeResolvers,
   SkillEvalScore: skillEvalScoreTypeResolvers,
-  KnowledgeBase: knowledgeBaseTypeResolvers,
   RoutineExecution: routineExecutionTypeResolvers,
   Workflow: workflowTypeResolvers,
   WorkflowVersion: workflowVersionTypeResolvers,

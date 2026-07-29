@@ -43,18 +43,6 @@ variable "async_dlq_arn" {
   type        = string
 }
 
-variable "hindsight_endpoint" {
-  description = "Hindsight API endpoint. Empty string (default) disables Hindsight tools in the container; set to an endpoint URL to enable Hindsight as an add-on alongside the always-on managed memory."
-  type        = string
-  default     = ""
-}
-
-variable "hindsight_database_name" {
-  description = "Dedicated Hindsight database name (THINK-220 cutover flag). Empty = the provider's direct SQL (high-confidence-fact recall, access-count writes) targets the `hindsight` schema of the primary database; set = that database's `public` schema."
-  type        = string
-  default     = ""
-}
-
 variable "agentcore_memory_id" {
   description = "AgentCore Memory resource ID. Populated automatically by the agentcore-memory module; injected into the container as AGENTCORE_MEMORY_ID for auto-retention."
   type        = string
@@ -72,16 +60,6 @@ variable "api_auth_secret" {
   type        = string
   default     = ""
   sensitive   = true
-}
-
-variable "memory_engine" {
-  description = "Active long-term memory engine ('hindsight' or 'agentcore'). Surfaced to the runtime as MEMORY_ENGINE for telemetry/debugging only; engine selection itself happens in the API's normalized memory layer when memory-retain is invoked."
-  type        = string
-  default     = "hindsight"
-  validation {
-    condition     = contains(["hindsight", "agentcore"], var.memory_engine)
-    error_message = "memory_engine must be 'hindsight' or 'agentcore'."
-  }
 }
 
 variable "requester_idle_memory_learning_enabled" {

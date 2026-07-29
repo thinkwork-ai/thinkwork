@@ -94,7 +94,6 @@ describe("operator callers pass through to the lib", () => {
       sourceSystem: "lastmile",
       connectorSlug: "lastmile-pg",
       entityTypeSlugs: ["customer"],
-      routingMap: { agents: 3, written: 2 },
     });
     const result = await registerIdentitySource(
       null,
@@ -115,8 +114,7 @@ describe("operator callers pass through to the lib", () => {
     );
     expect(result).toMatchObject({
       sourceSystem: "lastmile",
-      routingMapAgents: 3,
-      routingMapWritten: 2,
+      entityTypeSlugs: ["customer"],
     });
   });
 

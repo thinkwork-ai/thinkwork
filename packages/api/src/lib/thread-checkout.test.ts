@@ -27,6 +27,20 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+/** Render a drizzle sql`` object as text with `?` for each bound parameter. */
+function flattenSql(query: unknown): string {
+  const chunks = (query as { queryChunks?: unknown[] }).queryChunks ?? [];
+  return chunks
+    .map((chunk) => {
+      const value = (chunk as { value?: unknown }).value;
+      if (Array.isArray(value) && value.every((v) => typeof v === "string")) {
+        return value.join("");
+      }
+      return "?";
+    })
+    .join("");
+}
+
 describe("claimThreadCheckout", () => {
   it("returns true when the UPDATE claims the row", async () => {
     mocks.execute.mockResolvedValue({ rows: [{ id: "thread-1" }] });
@@ -42,6 +56,28 @@ describe("claimThreadCheckout", () => {
   it("propagates claim-infra errors (callers decide fail-open)", async () => {
     mocks.execute.mockRejectedValue(new Error("db down"));
     await expect(claimThreadCheckout(CLAIM)).rejects.toThrow("db down");
+  });
+
+  it("never compares the text checkout_run_id column against a uuid value", async () => {
+    // threads.checkout_run_id is a TEXT column. Casting the run-id parameter
+    // to ::uuid made every claim/release fail with 42883 "operator does not
+    // exist: text = uuid" — silently, because claim fails open and release is
+    // best-effort, so the single-writer lease never actually engaged.
+    mocks.execute.mockResolvedValue({ rows: [] });
+    await claimThreadCheckout(CLAIM);
+    await releaseThreadCheckout({ threadId: "thread-1", runId: CLAIM.runId });
+    for (const call of mocks.execute.mock.calls) {
+      const sqlText = flattenSql(call[0]);
+      expect(sqlText).not.toMatch(/checkout_run_id = \?::uuid/);
+    }
+  });
+
+  it("guards the liveness join so a non-uuid checkout_run_id cannot crash the cast", async () => {
+    mocks.execute.mockResolvedValue({ rows: [] });
+    await claimThreadCheckout(CLAIM);
+    const sqlText = flattenSql(mocks.execute.mock.calls[0][0]);
+    expect(sqlText).toContain("CASE");
+    expect(sqlText).toContain("checkout_run_id ~");
   });
 
   it("steals only from dead holders: the guard checks running, unfinalized, and recent activity", async () => {

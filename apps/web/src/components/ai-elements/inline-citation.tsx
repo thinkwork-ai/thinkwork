@@ -2,11 +2,10 @@ import { useCallback, useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
-import { getDocumentViewUrlByKey } from "@/lib/kb-files-api";
 import type { KnowledgeCitation } from "./sources";
 
 /**
- * Inline knowledge-base citations, following the AI Elements InlineCitation
+ * Inline source citations, following the AI Elements InlineCitation
  * shape: a citation *pill naming the source* sits inline with the sentence it
  * supports, and hovering it reveals the document and the quoted passage.
  *
@@ -93,11 +92,11 @@ export function InlineCitation({
     // Open synchronously — popup blockers kill window.open after an await.
     const tab = window.open("about:blank", "_blank");
     try {
-      // A retrieval-supplied URL wins: MCP knowledge servers presign access
-      // to their own documents, which this deployment's KB Files API cannot
-      // resolve (the key is not in its document store).
-      const url =
-        citation.documentUrl ?? (await getDocumentViewUrlByKey(citation.key));
+      // Only retrieval-supplied URLs are resolvable: MCP knowledge servers
+      // presign access to their own documents. (THINK-402 removed the KB
+      // Files API, which was the only other resolver.)
+      const url = citation.documentUrl;
+      if (!url) throw new Error("Source document is not viewable");
       const target = citation.page ? `${url}#page=${citation.page}` : url;
       if (tab) tab.location.href = target;
       else window.location.href = target;
@@ -135,7 +134,9 @@ export function InlineCitation({
           )}
           {/* 75px keeps the pill from swallowing the sentence it annotates —
               the full name and page are one hover away in the card. */}
-          <span className="max-w-[75px] truncate">{citationLabel(primary)}</span>
+          <span className="max-w-[75px] truncate">
+            {citationLabel(primary)}
+          </span>
           {rest.length > 0 ? (
             <span className="shrink-0 tabular-nums opacity-70">
               +{rest.length}

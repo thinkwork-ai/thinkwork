@@ -265,7 +265,7 @@ const entityRefSchema = Type.Union([
       description: "Entity display name to look up (exact, normalized).",
     }),
     entity_type_slug: Type.String({
-      description: 'Ontology entity type slug (e.g. "customer").',
+      description: 'Entity type slug (e.g. "customer").',
     }),
   }),
 ]);

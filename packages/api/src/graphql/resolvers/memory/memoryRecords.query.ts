@@ -4,12 +4,12 @@
  * Reads through the normalized memory inspect service (see
  * `packages/api/src/lib/memory/inspect-service.ts`). The active long-term
  * engine is selected once per deployment via `MEMORY_ENGINE`; the resolver
- * no longer branches on backend-native shapes. Hindsight-specific details
+ * no longer branches on backend-native shapes. Backend-specific details
  * (fact_type, tags, occurred_* dates) are surfaced via the record's
  * `metadata` map and mapped back onto the GraphQL `MemoryRecord` shape
  * here so the admin UI continues to work unchanged.
  *
- * Supports listing records for the authenticated user's Hindsight bank.
+ * Supports listing records for the authenticated user's memory bank.
  */
 
 import type { GraphQLContext } from "../../context.js";

@@ -1,6 +1,6 @@
 /**
  * mobileMemorySearch — semantic search over the user's
- * Hindsight bank via the recall service. One endpoint call, no
+ * memory bank via the recall service. One endpoint call, no
  * client-side filtering or DB scraping. Results mapped back into
  * MobileMemoryCapture so the Memories list can render them with
  * the same row component it uses for captures.
@@ -20,7 +20,7 @@ type MobileCaptureFactType =
   | "EXPERIENCE"
   | "OBSERVATION";
 
-const FACT_TYPE_FROM_HINDSIGHT: Record<string, MobileCaptureFactType> = {
+const FACT_TYPE_FROM_ENGINE: Record<string, MobileCaptureFactType> = {
   world: "FACT",
   opinion: "PREFERENCE",
   experience: "EXPERIENCE",
@@ -76,8 +76,8 @@ function recordToMobileCapture(
   const nativeFactType =
     typeof meta.factType === "string" ? meta.factType : null;
   const resolvedFactType: MobileCaptureFactType =
-    (factTypeOverride && FACT_TYPE_FROM_HINDSIGHT[factTypeOverride]) ||
-    (nativeFactType && FACT_TYPE_FROM_HINDSIGHT[nativeFactType]) ||
+    (factTypeOverride && FACT_TYPE_FROM_ENGINE[factTypeOverride]) ||
+    (nativeFactType && FACT_TYPE_FROM_ENGINE[nativeFactType]) ||
     "FACT";
 
   const capturedAt =
