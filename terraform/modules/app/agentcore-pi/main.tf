@@ -265,9 +265,8 @@ resource "aws_iam_role_policy" "agentcore_pi" {
         ]
       },
       {
-        # Aurora Data API — U4 SessionStore and Hindsight exact-memory recall
-        # read/write via the RDS Data API rather than long-lived Postgres
-        # connections. Cover both the canonical cluster name and suffixed
+        # Aurora Data API — U4 SessionStore reads/writes via the RDS Data
+        # API rather than long-lived Postgres connections. Cover both the canonical cluster name and suffixed
         # replacement names.
         Sid    = "AuroraDataAPI"
         Effect = "Allow"
@@ -381,18 +380,15 @@ resource "aws_lambda_function" "agentcore_pi" {
       AWS_LWA_PORT                           = "8080"
       AGENTCORE_MEMORY_ID                    = var.agentcore_memory_id
       AGENTCORE_FILES_BUCKET                 = var.bucket_name
-      MEMORY_ENGINE                          = var.memory_engine
+      MEMORY_ENGINE                          = "agentcore"
       REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
       MEMORY_RETAIN_FN_NAME                  = local.memory_retain_fn_name
       CHAT_AGENT_FINALIZE_FN_NAME            = local.chat_agent_finalize_fn_name
       CHAT_AGENT_ACTIVITY_FN_NAME            = local.chat_agent_activity_fn_name
       MANIFEST_LOG_FUNCTION_NAME             = local.manifest_log_fn_name
       TOOL_EXECUTIONS_FUNCTION_NAME          = local.tool_executions_fn_name
-      HINDSIGHT_ENDPOINT                     = var.hindsight_endpoint
-      # THINK-220 cutover flag — see the variable description.
-      HINDSIGHT_DATABASE_NAME = var.hindsight_database_name
-      THINKWORK_API_URL       = var.api_endpoint
-      API_AUTH_SECRET         = var.api_auth_secret
+      THINKWORK_API_URL                      = var.api_endpoint
+      API_AUTH_SECRET                        = var.api_auth_secret
       # Plan §005 U4 — AuroraSessionStore uses the RDS Data API to persist
       # Pi's SessionData blobs against threads.session_data. Empty during
       # the first greenfield apply (DB cluster doesn't exist yet); the

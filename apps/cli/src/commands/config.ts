@@ -30,7 +30,15 @@ function readTfVar(tfvarsPath: string, key: string): string | null {
 }
 
 /** Keys whose tfvars representation is a bare bool/number, not a quoted string. */
-const BARE_KEYS = new Set(["enable_hindsight"]);
+const BARE_KEYS = new Set<string>([]);
+
+/**
+ * Inputs the platform no longer declares (THINK-407: the Hindsight engine and
+ * its infrastructure were removed). `config set` accepts them so old runbooks
+ * and scripts do not hard-fail, but never writes them into terraform.tfvars —
+ * a stale value there would fail apply as an undeclared variable.
+ */
+const RETIRED_KEYS = new Set(["enable_hindsight", "memory_engine"]);
 
 function setTfVar(tfvarsPath: string, key: string, value: string): void {
   if (!existsSync(tfvarsPath)) {
@@ -200,7 +208,7 @@ export function registerConfigCommand(program: Command): void {
   config
     .command("get <key>")
     .description(
-      "Get a configuration value (e.g. enable-hindsight). Prompts for stage in a TTY when omitted.",
+      "Get a configuration value (e.g. database-engine). Prompts for stage in a TTY when omitted.",
     )
     .option("-s, --stage <name>", "Deployment stage")
     .action(async (key: string, opts: { stage?: string }) => {
@@ -245,30 +253,17 @@ export function registerConfigCommand(program: Command): void {
           throw err;
         }
 
-        let tfKey = key.replace(/-/g, "_");
-        let tfValue = value;
+        const tfKey = key.replace(/-/g, "_");
+        const tfValue = value;
 
-        if (tfKey === "memory_engine") {
-          // AgentCore managed memory is the only engine (THINK-406). Legacy
-          // values are accepted and normalized rather than rejected so
-          // existing stage configs keep working.
-          if (value !== "agentcore") {
-            printWarning(
-              `memory_engine value "${value}" is retired — storing it as 'agentcore'.`,
-            );
-          }
-          tfValue = "agentcore";
-        }
-
-        if (
-          tfKey === "enable_hindsight" &&
-          tfValue !== "true" &&
-          tfValue !== "false"
-        ) {
-          printError(
-            `Invalid enable_hindsight value "${tfValue}". Must be 'true' or 'false'.`,
+        if (RETIRED_KEYS.has(tfKey)) {
+          // AgentCore managed memory is the only engine (THINK-407). Accept
+          // and warn instead of failing so existing stage runbooks keep
+          // working, but do not persist a value the module ignores.
+          printWarning(
+            `${tfKey} is retired and ignored — AgentCore managed memory is the only engine. Nothing was changed.`,
           );
-          process.exit(1);
+          return;
         }
 
         const identity = getAwsIdentity();

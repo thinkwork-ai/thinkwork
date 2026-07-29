@@ -26,12 +26,6 @@ variable "bucket_name" {
   type        = string
 }
 
-variable "hindsight_endpoint" {
-  description = "Hindsight API endpoint. Empty string (default) disables Hindsight tools in the container; set to an endpoint URL to enable Hindsight as an add-on alongside the always-on managed memory."
-  type        = string
-  default     = ""
-}
-
 variable "agentcore_memory_id" {
   description = "AgentCore Memory resource ID. Populated automatically by the agentcore-memory module; injected into the container as AGENTCORE_MEMORY_ID for auto-retention."
   type        = string
@@ -56,16 +50,6 @@ variable "nova_act_api_key" {
   type        = string
   default     = ""
   sensitive   = true
-}
-
-variable "memory_engine" {
-  description = "Active long-term memory engine ('hindsight' or 'agentcore'). Surfaced to the runtime as MEMORY_ENGINE for telemetry/debugging only; engine selection itself happens in the API's normalized memory layer when memory-retain is invoked."
-  type        = string
-  default     = "hindsight"
-  validation {
-    condition     = contains(["hindsight", "agentcore"], var.memory_engine)
-    error_message = "memory_engine must be 'hindsight' or 'agentcore'."
-  }
 }
 
 variable "requester_idle_memory_learning_enabled" {
@@ -302,9 +286,9 @@ resource "aws_iam_role_policy" "agentcore" {
       },
       {
         # Async-invoke the memory-retain Lambda after every chat turn so
-        # the API's normalized memory layer can run the active engine's
-        # retainTurn() path (Hindsight POST /memories or AgentCore
-        # CreateEvent). InvocationType=Event from the Python client; this
+        # the API's normalized memory layer can run the AgentCore
+        # CreateEvent retainTurn() path. InvocationType=Event from the
+        # Python client; this
         # Lambda is the only target.
         Sid      = "MemoryRetainInvoke"
         Effect   = "Allow"
@@ -346,7 +330,7 @@ resource "aws_lambda_function" "agentcore" {
       AWS_LWA_PORT                           = "8080"
       AGENTCORE_MEMORY_ID                    = var.agentcore_memory_id
       AGENTCORE_FILES_BUCKET                 = var.bucket_name
-      MEMORY_ENGINE                          = var.memory_engine
+      MEMORY_ENGINE                          = "agentcore"
       REQUESTER_IDLE_MEMORY_LEARNING_ENABLED = tostring(var.requester_idle_memory_learning_enabled)
       MEMORY_RETAIN_FN_NAME                  = local.memory_retain_fn_name
       # Needed by run_skill_dispatch.py to POST terminal state back to

@@ -64,18 +64,6 @@ variable "database_engine" {
   default     = "aurora-serverless"
 }
 
-variable "enable_hindsight" {
-  description = "Enable Hindsight canonical user and Space memory. Full ThinkWork installs default this on; set false only for explicit low-cost/development AgentCore-only deployments."
-  type        = bool
-  default     = true
-}
-
-variable "memory_engine" {
-  description = "Active long-term memory engine. Empty selects Hindsight when enable_hindsight = true. Use 'agentcore' only for explicit low-cost/development managed-memory deployments."
-  type        = string
-  default     = ""
-}
-
 variable "twenty_provisioned" {
   description = "Provision the retained Twenty CRM managed-app substrate. Runtime can be parked independently with twenty_runtime_enabled."
   type        = bool
@@ -164,8 +152,6 @@ module "thinkwork" {
   db_password     = var.db_password
   api_auth_secret = var.api_auth_secret
 
-  enable_hindsight                           = var.enable_hindsight
-  memory_engine                              = var.memory_engine
   twenty_provisioned                         = var.twenty_provisioned
   twenty_runtime_enabled                     = var.twenty_runtime_enabled
   twenty_image_uri                           = var.twenty_image_uri

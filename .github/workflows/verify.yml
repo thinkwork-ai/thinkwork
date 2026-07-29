@@ -277,12 +277,9 @@ jobs:
             fi
           fi
 
-          # AgentCore managed memory is the active engine (THINK-404).
-          # Hindsight infra stays provisioned during the migration window
-          # (enable_hindsight=true below) but no longer wins selection.
-          # Must match scripts/deploy/terraform-vars.sh or plan drifts
-          # from apply.
-          memory_engine="agentcore"
+          # AgentCore managed memory is the only engine (THINK-407); the
+          # selection flags are gone. Must match
+          # scripts/deploy/terraform-vars.sh or plan drifts from apply.
 
           set +e
           terraform plan \
@@ -294,8 +291,6 @@ jobs:
             -var "account_id=${{ secrets.AWS_ACCOUNT_ID }}" \
             -var "db_password=${{ secrets.DB_PASSWORD }}" \
             -var "database_engine=aurora-serverless" \
-            -var "enable_hindsight=true" \
-            -var "memory_engine=$memory_engine" \
             -var "twenty_provisioned=$twenty_provisioned" \
             -var "twenty_runtime_enabled=$twenty_runtime_enabled" \
             -var "twenty_image_uri=$twenty_image_uri" \

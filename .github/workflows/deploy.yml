@@ -1356,7 +1356,6 @@ jobs:
           ENABLE_AGENTCORE_MULTIPLAYER_PROOF: ${{ vars.ENABLE_AGENTCORE_MULTIPLAYER_PROOF || 'false' }}
           BRAIN_MCP_URL: ${{ vars.BRAIN_MCP_URL || '' }}
           EXTERNAL_KB_SOURCE_ARNS_JSON: ${{ vars.EXTERNAL_KB_SOURCE_ARNS_JSON || '[]' }}
-          HINDSIGHT_DATABASE_NAME: ${{ vars.HINDSIGHT_DATABASE_NAME || '' }}
           NEPTUNE_CLIENT_SG_ID: ${{ vars.NEPTUNE_CLIENT_SG_ID || '' }}
           NEPTUNE_CLUSTER_RESOURCE_ID: ${{ vars.NEPTUNE_CLUSTER_RESOURCE_ID || '' }}
           NEPTUNE_ENDPOINT: ${{ vars.NEPTUNE_ENDPOINT || '' }}
@@ -2466,12 +2465,10 @@ jobs:
           echo "║ Docs Site:  $(tf_output_raw docs_url || echo 'N/A')"
           echo "║ API:        $(tf_output_raw api_endpoint || echo 'N/A')"
           echo "║ AppSync:    $(tf_output_raw appsync_api_url || echo 'N/A')"
-          echo "║ Hindsight:  $(tf_output_raw hindsight_endpoint || echo 'N/A')"
           echo "║ S3 Bucket:  $(tf_output_raw bucket_name || echo 'N/A')"
           echo "║ Database:   $(tf_output_raw db_cluster_endpoint || echo 'N/A')"
           echo "║ ECR:        $(tf_output_raw ecr_repository_url || echo 'N/A')"
           echo "║ Memory:     managed (always on)"
-          echo "║ Hindsight:  $(tf_output_raw hindsight_enabled || echo 'N/A')"
           echo "║"
           echo "║ Job Results:"
           echo "║   Terraform Apply:        ${{ needs.terraform-apply.result }}"

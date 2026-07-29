@@ -161,10 +161,7 @@ function buildTfvars(config: Record<string, string>): string {
     `db_password     = "${config.db_password}"`,
     ``,
     `# ── Memory ────────────────────────────────────────────────────────`,
-    `# AgentCore managed memory is the only memory engine.`,
-    `# The Hindsight add-on is retired; new stacks never provision it.`,
-    `enable_hindsight = false`,
-    `memory_engine    = "agentcore"`,
+    `# AgentCore managed memory is the only memory engine — nothing to set.`,
     ``,
     `# ── Managed Applications ──────────────────────────────────────────`,
     `# Twenty CRM is optional and disabled by default. Enabling it requires`,
@@ -391,7 +388,6 @@ export function registerInitCommand(program: Command): void {
             existing?.region ??
             (identity.region !== "unknown" ? identity.region : "us-east-1");
           config.database_engine = "aurora-serverless";
-          config.enable_hindsight = "false";
           config.google_oauth_client_id = "";
           config.google_oauth_client_secret = "";
           config.admin_url = "http://localhost:5174";
@@ -475,9 +471,6 @@ export function registerInitCommand(program: Command): void {
             ["aurora-serverless", "rds-postgres"],
             "aurora-serverless",
           );
-
-          console.log("");
-          config.enable_hindsight = "false";
 
           console.log("");
           console.log(chalk.dim("  ── Auth ──"));
@@ -653,11 +646,6 @@ variable "database_engine" {
   default = "aurora-serverless"
 }
 
-variable "enable_hindsight" {
-  type    = bool
-  default = true
-}
-
 variable "twenty_provisioned" {
   type    = bool
   default = false
@@ -766,11 +754,6 @@ variable "mobile_logout_urls" {
   default = ["exp://localhost:8081", "thinkwork://"]
 }
 
-variable "memory_engine" {
-  type    = string
-  default = ""
-}
-
 variable "customer_domain" {
   type    = string
   default = ""
@@ -847,7 +830,6 @@ module "thinkwork" {
   region     = var.region
   account_id = var.account_id
 
-  memory_engine             = var.memory_engine
   customer_domain           = var.customer_domain
   customer_domain_delegated = var.customer_domain_delegated
   platform_operator_emails  = var.platform_operator_emails
@@ -868,7 +850,6 @@ module "thinkwork" {
 
   db_password                = var.db_password
   database_engine            = var.database_engine
-  enable_hindsight           = var.enable_hindsight
   twenty_provisioned = var.twenty_provisioned
   twenty_runtime_enabled = var.twenty_runtime_enabled
   twenty_image_uri = var.twenty_image_uri
@@ -954,14 +935,6 @@ output "db_secret_arn" {
 
 output "ecr_repository_url" {
   value = module.thinkwork.ecr_repository_url
-}
-
-output "hindsight_enabled" {
-  value = module.thinkwork.hindsight_enabled
-}
-
-output "hindsight_endpoint" {
-  value = module.thinkwork.hindsight_endpoint
 }
 
 output "twenty_provisioned" {
@@ -1056,7 +1029,6 @@ output "agentcore_memory_id" {
           accountId: config.account_id,
           terraformDir: tfDir,
           databaseEngine: config.database_engine,
-          enableHindsight: config.enable_hindsight === "true",
           createdAt: now,
           updatedAt: now,
         });

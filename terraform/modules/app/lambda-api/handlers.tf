@@ -143,13 +143,11 @@ locals {
     # WORKSPACE_RENDERER_FUNCTION_NAME is derived from the per-stage naming
     # convention by deriveFunctionName("workspace-renderer") — stored
     # nowhere (R7).
-    WORKSPACE_BUCKET   = var.bucket_name
-    HINDSIGHT_ENDPOINT = var.hindsight_endpoint
-    # THINK-220 cutover flag: empty = hindsight schema on the primary DB;
-    # set = that database's public schema via the database-pg seam.
-    HINDSIGHT_DATABASE_NAME = var.hindsight_database_name
-    AGENTCORE_MEMORY_ID     = var.agentcore_memory_id
-    MEMORY_ENGINE           = var.memory_engine
+    WORKSPACE_BUCKET    = var.bucket_name
+    AGENTCORE_MEMORY_ID = var.agentcore_memory_id
+    # AgentCore managed memory is the only engine (THINK-407). The env var
+    # stays so the API's memory config seam keeps an explicit value.
+    MEMORY_ENGINE = "agentcore"
     # CHAT_AGENT_INVOKE_FN_ARN (~112 serialized bytes) was dropped for the
     # 4KB env ceiling (#2375): getChatAgentInvokeFnArn and managed-dispatch
     # now derive the ARN from the deterministic naming pattern
@@ -401,8 +399,8 @@ locals {
     # THINK-316 U5: the runner reads the server-only attested profile and
     # invokes its named endpoint with a purpose-bound CUSTOM_JWT. It receives
     # no Harness control-plane inputs or permissions.
-    # 240s: sync Hindsight retain (LLM extraction + auto-consolidation) can
-    # exceed 60s; the client timeout must stay below the Lambda timeout.
+    # 240s: a sync memory retain (LLM extraction + consolidation) can exceed
+    # 60s; the client timeout must stay below the Lambda timeout.
     # Company Brain U5: Neptune coordinates for the twin graph projector.
     # Empty endpoint leaves the projector inert (nudge helper skips too).
     "identity-graph-projector" = {
@@ -1021,7 +1019,7 @@ resource "aws_lambda_function_event_invoke_config" "routine_approval_callback" {
 # memory-retain after every chat turn. AWS Lambda's default async-retry
 # policy is 2 attempts; without overriding it, a transient failure on the
 # canonical-transcript fetch or adapter write retries the entire writeback
-# and can multi-write the same per-turn document into Hindsight. The
+# and can multi-write the same per-turn document into memory. The
 # longest-suffix-prefix merge in memory-retain.ts dedupes content but the
 # retain-cost path (Bedrock tokens charged in adapter.retainConversation)
 # is NOT idempotent — retries multiply LLM cost. Per
@@ -2442,7 +2440,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "brain_artifacts" {
 
   # THINK-193 U1 (Codex F6): normalized evidence snapshots are short-lived
   # working copies — the durable record is the evidence row (hash + ref) and
-  # the Hindsight projection. Expire content after 30 days; the app mirrors
+  # the memory projection. Expire content after 30 days; the app mirrors
   # this via memory_evidence_items.snapshot_expires_at.
   rule {
     id     = "expire-evidence-snapshots"

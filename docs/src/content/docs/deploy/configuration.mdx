@@ -45,8 +45,6 @@ These must be set in every deployment. There are no defaults.
 | Variable                         | Type   | Default                                       | Description                                                                                                                                                                                |
 | -------------------------------- | ------ | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `database_engine`                | string | `"aurora-serverless"`                         | `aurora-serverless` (Aurora Serverless v2) or `rds-postgres` (provisioned RDS). Use `aurora-serverless` for dev/staging and variable workloads.                                            |
-| `enable_hindsight`               | bool   | `false`                                       | **Deprecated no-op.** Retained only for customer stages still running an older release. Set `false` on new stacks; scheduled for removal.                                                  |
-| `memory_engine`                  | string | `"agentcore"`                                 | **Deprecated no-op.** AgentCore is the only memory engine; any other value is normalized to `agentcore`. Scheduled for removal.                                                            |
 | `enable_workspace_orchestration` | bool   | `false`                                       | Deploy S3 EventBridge/SQS routing and the workspace event dispatcher for async folder-native agent work. Also enable `tenants.workspace_orchestration_enabled` per tenant after migration. |
 | `default_model_id`               | string | `"anthropic.claude-3-5-sonnet-20241022-v2:0"` | Bedrock model ID for the default Agent Template created on first deploy.                                                                                                                   |
 | `log_retention_days`             | number | `30`                                          | CloudWatch log group retention in days. Set to `0` for never expire (not recommended for production).                                                                                      |
@@ -119,22 +117,25 @@ choose. The runtime hands each completed turn to the `memory-retain` Lambda,
 which calls `retainTurn`; AgentCore then runs its own background extraction into
 the semantic, preferences, summaries, and episodes namespaces.
 
-| Variable              | Type   | Default | Description                                                                       |
-| --------------------- | ------ | ------- | --------------------------------------------------------------------------------- |
+| Variable              | Type   | Default | Description                                                                          |
+| --------------------- | ------ | ------- | ------------------------------------------------------------------------------------ |
 | `agentcore_memory_id` | string | `""`    | Optional pre-existing AgentCore Memory resource ID to reuse instead of creating one. |
 
 ### Deprecated memory inputs
 
-These variables no longer select anything. They survive only because customer
-stages still run an older release that reads them, and they are scheduled for
-removal. New stacks should set `enable_hindsight = false` and either omit
-`memory_engine` or set it to `"agentcore"`.
+The Hindsight memory engine and all of its infrastructure were removed in
+THINK-407. Two inputs are still **declared and ignored** so existing tfvars and
+`-var` passthroughs keep applying; new stacks should omit both.
 
-| Variable                                                                                   | Status                                                                    |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `enable_hindsight`                                                                         | Deprecated no-op on current releases. Set `false`.                        |
-| `memory_engine`                                                                            | Deprecated no-op. Any legacy value is normalized to `agentcore`.          |
-| `hindsight_image_tag`, `hindsight_retain_interval_hours`, `hindsight_reflect_interval_hours`, `hindsight_task_cpu`, `hindsight_task_memory` | Deprecated. Ignored unless a stage is pinned to a pre-removal release. |
+| Variable           | Status                                                                                   |
+| ------------------ | ---------------------------------------------------------------------------------------- |
+| `enable_hindsight` | Declared no-op. Accepted, never read. Omit on new stacks.                                |
+| `memory_engine`    | Declared no-op. Legacy values (`hindsight`, `managed`) still validate and are discarded. |
+
+The `hindsight_image_tag`, `hindsight_database_name`,
+`hindsight_enable_auto_consolidation`, `hindsight_consolidation_dedup_threshold`,
+and `hindsight_observations_mission` inputs were **removed** — a tfvars file
+that still sets them fails with "Value for undeclared variable".
 
 ## Email (SES)
 

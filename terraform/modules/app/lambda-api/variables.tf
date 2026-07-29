@@ -338,32 +338,10 @@ variable "extension_proxy_signing_secret" {
   default     = ""
 }
 
-variable "hindsight_endpoint" {
-  description = "Hindsight API endpoint (empty when enable_hindsight = false)"
-  type        = string
-  default     = ""
-}
-
-variable "hindsight_database_name" {
-  description = "Dedicated Hindsight database name (THINK-220 cutover flag). Empty = Hindsight tables live in the `hindsight` schema of the primary database; set = the api reads them from this database's `public` schema. Rides the SSM runtime-config document (getConfig), not Lambda env."
-  type        = string
-  default     = ""
-}
-
 variable "agentcore_memory_id" {
   description = "Bedrock AgentCore Memory resource ID — used by the GraphQL memory resolvers to list records across tenant agents."
   type        = string
   default     = ""
-}
-
-variable "memory_engine" {
-  description = "Active long-term memory engine for this deployment. Exactly one engine is canonical for recall/inspect/export."
-  type        = string
-  default     = "hindsight"
-  validation {
-    condition     = contains(["hindsight", "agentcore"], var.memory_engine)
-    error_message = "memory_engine must be 'hindsight' or 'agentcore'."
-  }
 }
 
 variable "okf_efs_subnet_ids" {
