@@ -13,7 +13,6 @@ import {
   ComputerMemoryRecordsQuery,
   ComputerMemoryRetainAttemptsQuery,
   ComputerMemorySearchQuery,
-  ComputerMemorySystemConfigQuery,
 } from "@/lib/graphql-queries";
 import { SettingsTenantMembersQuery } from "@/lib/settings-queries";
 import { SettingsMemory } from "./SettingsMemory";
@@ -41,8 +40,54 @@ vi.mock("@/components/LoadingShimmer", () => ({
   LoadingShimmer: () => <div>Loading…</div>,
 }));
 
-vi.mock("@thinkwork/ui", () => ({
+vi.mock("@thinkwork/ui", async () => {
+  // The filter predicates and value guard must be real — client-side type
+  // filtering is part of what these tests exercise.
+  const actual =
+    await vi.importActual<typeof import("@thinkwork/ui")>("@thinkwork/ui");
+  return {
   cn: (...classes: unknown[]) => classes.filter(Boolean).join(" "),
+  dataTableTokenFilterFns: actual.dataTableTokenFilterFns,
+  isDataTableTokenFilterValue: actual.isDataTableTokenFilterValue,
+  // One toggle button per option instead of the popover chrome (the real
+  // component is exercised in the UI package); clicking mirrors the real
+  // apply semantics onto the passed table.
+  DataTableTokenFilter: ({ table, columns }: any) => (
+    <div data-testid="memory-token-filter">
+      {columns.flatMap((column: any) =>
+        (column.options ?? []).map((option: any) => (
+          <button
+            key={`${column.id}-${option.value}`}
+            type="button"
+            data-testid={`token-filter-${column.id}-${option.value}`}
+            onClick={() => {
+              const current = table.getColumn(column.id)?.getFilterValue();
+              const values =
+                actual.isDataTableTokenFilterValue(current) &&
+                Array.isArray(current.value)
+                  ? (current.value as string[])
+                  : [];
+              const next = values.includes(option.value)
+                ? values.filter((value) => value !== option.value)
+                : column.singleSelect
+                  ? [option.value]
+                  : [...values, option.value];
+              table.getColumn(column.id)?.setFilterValue(
+                next.length
+                  ? {
+                      operator: column.singleSelect ? "is" : "is_any_of",
+                      value: next,
+                    }
+                  : undefined,
+              );
+            }}
+          >
+            {option.label}
+          </button>
+        )),
+      )}
+    </div>
+  ),
   Badge: ({ children }: { children?: React.ReactNode }) => (
     <span>{children}</span>
   ),
@@ -61,17 +106,6 @@ vi.mock("@thinkwork/ui", () => ({
   }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button {...props}>{children}</button>
   ),
-  Select: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-  SelectContent: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SelectItem: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SelectTrigger: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  SelectValue: () => null,
   Sheet: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
   SheetContent: ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
@@ -151,7 +185,8 @@ vi.mock("@thinkwork/ui", () => ({
       </tbody>
     </table>
   ),
-}));
+  };
+});
 
 const useQueryMock = vi.mocked(useQuery);
 const useMutationMock = vi.mocked(useMutation);
@@ -243,20 +278,6 @@ function installQueryMock() {
         vi.fn(),
       ] as any;
     }
-    if (query === ComputerMemorySystemConfigQuery) {
-      return [
-        {
-          data: {
-            memorySystemConfig: {
-              activeEngine: "agentcore",
-              managedMemoryEnabled: true,
-            },
-          },
-          fetching: false,
-        },
-        vi.fn(),
-      ] as any;
-    }
     // MemoryDetailSheet's source-thread lookup.
     return [{ data: undefined, fetching: false }, vi.fn()] as any;
   });
@@ -275,11 +296,10 @@ describe("SettingsMemory", () => {
     vi.clearAllMocks();
   });
 
-  it("shows the active engine banner from memorySystemConfig", () => {
+  it("shows no engine banner — AgentCore is the only engine", () => {
     render(<SettingsMemory />);
-    expect(screen.getByTestId("memory-engine-banner").textContent).toContain(
-      "AgentCore managed memory",
-    );
+    expect(screen.queryByTestId("memory-engine-banner")).toBeNull();
+    expect(screen.queryByText(/Active engine/)).toBeNull();
   });
 
   it("merges the actor-scoped and episodic reads into one listing", () => {
@@ -297,22 +317,25 @@ describe("SettingsMemory", () => {
     );
   });
 
-  it("filters the listing by facet chip", () => {
+  it("filters the listing by memory type", () => {
     render(<SettingsMemory />);
-    fireEvent.click(screen.getByTestId("memory-facet-preferences"));
+    fireEvent.click(
+      screen.getByTestId("token-filter-memoryType-preferences"),
+    );
     expect(screen.getByTestId("memory-row-rec-pref")).toBeTruthy();
     expect(screen.queryByTestId("memory-row-rec-semantic")).toBeNull();
     expect(screen.queryByTestId("memory-row-rec-episode")).toBeNull();
   });
 
-  it("keeps facet counts from the browse listing, not the active facet", () => {
+  it("restores the full listing when the type filter is toggled off", () => {
     render(<SettingsMemory />);
-    expect(screen.getByTestId("memory-facet-all").textContent).toContain("3");
-    expect(screen.getByTestId("memory-facet-episodes").textContent).toContain(
-      "1",
-    );
-    fireEvent.click(screen.getByTestId("memory-facet-episodes"));
-    expect(screen.getByTestId("memory-facet-all").textContent).toContain("3");
+    fireEvent.click(screen.getByTestId("token-filter-memoryType-episodes"));
+    expect(screen.getByTestId("memory-row-rec-episode")).toBeTruthy();
+    expect(screen.queryByTestId("memory-row-rec-semantic")).toBeNull();
+    fireEvent.click(screen.getByTestId("token-filter-memoryType-episodes"));
+    expect(screen.getByTestId("memory-row-rec-semantic")).toBeTruthy();
+    expect(screen.getByTestId("memory-row-rec-pref")).toBeTruthy();
+    expect(screen.getByTestId("memory-row-rec-episode")).toBeTruthy();
   });
 
   it("runs the semantic search only on submit", () => {
@@ -327,7 +350,12 @@ describe("SettingsMemory", () => {
       },
     ];
     render(<SettingsMemory />);
-    const input = screen.getByLabelText("Search memory");
+    // The search starts collapsed to an icon button, like the Workflows
+    // toolbar — expand it first.
+    fireEvent.click(screen.getByRole("button", { name: "Search memory" }));
+    const input = screen.getByPlaceholderText(
+      "Search memory and press Enter...",
+    );
 
     fireEvent.change(input, { target: { value: "summaries" } });
     // Typing alone must not fire the search — the query stays paused.
@@ -352,11 +380,13 @@ describe("SettingsMemory", () => {
 
   it("passes the selected facet to memorySearch as a strategy filter", () => {
     render(<SettingsMemory />);
-    fireEvent.click(screen.getByTestId("memory-facet-preferences"));
-    fireEvent.change(screen.getByLabelText("Search memory"), {
-      target: { value: "dark" },
-    });
-    fireEvent.submit(screen.getByLabelText("Search memory").closest("form")!);
+    fireEvent.click(screen.getByTestId("token-filter-memoryType-preferences"));
+    fireEvent.click(screen.getByRole("button", { name: "Search memory" }));
+    const input = screen.getByPlaceholderText(
+      "Search memory and press Enter...",
+    );
+    fireEvent.change(input, { target: { value: "dark" } });
+    fireEvent.submit(input.closest("form")!);
     expect(useQueryMock).toHaveBeenCalledWith(
       expect.objectContaining({
         query: ComputerMemorySearchQuery,

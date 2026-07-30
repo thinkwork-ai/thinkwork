@@ -86,11 +86,11 @@ export function SpacesSidebar() {
             >
               <img
                 src="/logo.png"
-                alt="ThinkWork"
+                alt="ThinkWork Harness"
                 className="h-7 w-7 shrink-0 object-contain"
               />
               <span className="truncate text-base font-semibold leading-none tracking-tight group-data-[collapsible=icon]:hidden">
-                ThinkWork
+                ThinkWork Harness
               </span>
             </Link>
           </div>

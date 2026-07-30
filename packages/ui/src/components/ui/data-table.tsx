@@ -352,11 +352,31 @@ export function DataTable<TData, TValue>({
               ? "overflow-x-auto"
               : "overflow-hidden",
           !frameless && "rounded-md border",
-          renderEmptyContainer && "flex items-center justify-center",
+          renderEmptyContainer && !headerRow && "flex items-center justify-center",
         )}
       >
         {renderEmptyContainer ? (
-          emptyState
+          headerRow ? (
+            // Keep the column headers visible and center the empty state in
+            // the remaining body space, with no empty table row (and no row
+            // border) underneath the header.
+            <div className="flex h-full min-h-0 flex-col">
+              <Table
+                className={tableClassName}
+                containerClassName={
+                  allowHorizontalScroll ? undefined : "overflow-hidden"
+                }
+              >
+                {colgroup}
+                {headerRow}
+              </Table>
+              <div className="flex flex-1 items-center justify-center">
+                {emptyState}
+              </div>
+            </div>
+          ) : (
+            emptyState
+          )
         ) : (
           <Table
             className={tableClassName}

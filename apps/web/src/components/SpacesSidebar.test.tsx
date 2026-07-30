@@ -213,8 +213,8 @@ describe("SpacesSidebar", () => {
     render(<SpacesSidebar />);
 
     expect(screen.getByTestId("sidebar-header")).toBeTruthy();
-    expect(screen.getByText("ThinkWork")).toBeTruthy();
-    expect(screen.getByAltText("ThinkWork")).toBeTruthy();
+    expect(screen.getByText("ThinkWork Harness")).toBeTruthy();
+    expect(screen.getByAltText("ThinkWork Harness")).toBeTruthy();
   });
 
   it("confirms before logging out instead of signing out immediately", () => {
