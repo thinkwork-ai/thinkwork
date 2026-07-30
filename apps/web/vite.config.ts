@@ -153,6 +153,14 @@ export default defineConfig(({ mode }) => {
       // configuration — defined in vite.iframe-shell.config.ts only.
       // The host bundle does not need it.
     },
+    optimizeDeps: {
+      // Zrimo's Office engines resolve their WASM via
+      // new URL("*.wasm", import.meta.url); prebundling relocates the JS
+      // into .vite/deps where no WASM exists, so dev serves index.html as
+      // "wasm" (CompileError: expected magic word). Production builds are
+      // unaffected.
+      exclude: ["@zrimo/viewer", "@silurus/ooxml"],
+    },
     server: {
       port:
         Number.isFinite(devServerPort) && devServerPort > 0

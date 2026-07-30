@@ -184,3 +184,25 @@
 .dark-blue .tw-thread-info-panel {
   color: hsl(213 31% 91%) !important;
 }
+
+/* Knowledge document viewer (Zrimo) — retint the third-party chrome with the
+   app's own tokens so the toolbar/sheet-tabs read as product UI, not an
+   embedded widget. The document canvas itself stays paper-white on purpose.
+   Button names ride data-action (see @zrimo/viewer dist/ui.js #button). */
+.knowledge-doc-viewer .zrimo-ui {
+  --zrimo-background: var(--background);
+  --zrimo-surface: var(--card);
+  --zrimo-text: var(--foreground);
+  --zrimo-muted: var(--muted-foreground);
+  --zrimo-border: var(--border);
+  --zrimo-primary: var(--primary);
+  --zrimo-primary-contrast: var(--primary-foreground);
+  --zrimo-highlight: rgb(255 215 0 / 45%);
+  --zrimo-radius: var(--radius-md);
+  font-family: var(--font-sans);
+}
+/* Download lives in the page header (product header-action pattern) —
+   Zrimo's own button would be a duplicate. */
+.knowledge-doc-viewer .zrimo-ui [data-action="download"] {
+  display: none !important;
+}
