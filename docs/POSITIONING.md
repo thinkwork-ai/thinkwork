@@ -6,9 +6,18 @@ This is the durable artifact derived from the 2026-04-25 messaging-feedback memo
 
 ---
 
+## Product naming
+
+Decided 2026-07-29. Two products, two brands:
+
+- **ThinkWork Harness** — this product and this repo. The open Agent Harness for Business. Not "ThinkWork Agent" — the harness is the engineered structure around agents (threads, memory, tools, controls, cost, evaluations, audit), not an agent.
+- **ThinkWork Brain** — the company brain as a separate product with its own repo (the ontology / knowledge-graph capability lives there, not here). The Harness consumes the Brain; it does not contain it.
+
+"ThinkWork" alone refers to the company or the product family. When one product must be named, name it.
+
 ## Category
 
-**ThinkWork is the open Agent Harness for Business.**
+**ThinkWork Harness is the open Agent Harness for Business.**
 
 The harness is the engineered runtime around the model — threads, memory, sandboxing, tools, controls, cost, evaluations, and audit, deployed in the customer's AWS account. It turns raw model capability into production-grade agent work.
 
@@ -58,6 +67,8 @@ If a paragraph could describe any AI vendor with a few words swapped out, it isn
 
 The vocabulary the rest of the surface should pull from. Use these verbatim where they fit; rephrase only when copy demands it.
 
+- **ThinkWork Harness** — the product name (never "ThinkWork Agent")
+- **ThinkWork Brain** — the sibling company-brain product (separate repo)
 - **Agent Harness for Business** — the category line
 - **The harness stays yours** — the strategic refrain
 - **Production-grade AI work, on AWS you own** — the headline promise
@@ -89,6 +100,7 @@ CI-enforced and review-enforced. Edits that introduce these fail the build or fa
 
 **Generic-platform traps:**
 
+- **"ThinkWork Agent"** as a product name — the harness is more than an agent; the product is ThinkWork Harness.
 - **"AI platform" / "AI infrastructure"** without "agent harness" anchoring it. Generic descriptors that describe any vendor.
 - **"AI adoption journey"** — retired category framing. The rollout-path framing replaced it.
 - **"AgentCore platform"** — AgentCore is an adapter, not the product.
@@ -106,11 +118,14 @@ CI-enforced and review-enforced. Edits that introduce these fail the build or fa
 
 Added 2026-07-22, following the Company Brain arc (THINK-325); product noun updated to **Company Brain** 2026-07-23 (user-directed reversal of the earlier Digital Twin decision). This section governs every surface that talks about the graph or company knowledge.
 
+**Updated 2026-07-29:** the company brain ships as **ThinkWork Brain**, a separate product with its own repo (the ontology / knowledge-graph capability moved out of this repo). Harness surfaces that mention the brain are describing a sibling product, not a Harness feature. This section stays here as the naming contract until the Brain repo carries its own positioning doc.
+
 ### The naming contract
 
-Three terms, three jobs. Copy that blurs them is wrong.
+Four terms, four jobs. Copy that blurs them is wrong.
 
-- **Company Brain** (formerly Digital Twin) — the product noun. The living graph of the customer's business: entities, relationships, and operating knowledge, projected from their systems into Neptune in their account. When one name has to stand for the whole capability, this is it. "A company brain for your business" / "your company's brain" are the approved long forms.
+- **ThinkWork Brain** — the product brand (2026-07-29). Use it when naming the product; use the descriptive long forms below when explaining what it is.
+- **Company Brain** (formerly Digital Twin) — the descriptive noun. The living graph of the customer's business: entities, relationships, and operating knowledge, projected from their systems into Neptune in their account. When one name has to stand for the whole capability and the brand is too formal, this is it. "A company brain for your business" / "your company's brain" are the approved long forms.
 - **Knowledge** — the user-facing umbrella in the product UI (nav item; tabs Memory / Pages / KBs). UI copy says Knowledge; marketing copy says Company Brain. Do not swap them.
 - **Digital Twin** — retired product noun (2026-07-23). Do not use in new copy; a one-line "formerly Digital Twin" parenthetical is allowed where continuity matters. Runtime identifiers that carry `twin` (`twin-mapping/v1`, S3 prefixes, module paths, the `thinkwork twin` CLI command) are unaffected — identifier migration is a separate program.
 
