@@ -750,12 +750,16 @@ locals {
       ]
     },
     # (was inline policy "agentcore-memory-rw")
-    # AgentCore Memory read access for the GraphQL memory resolvers.
-    # memoryRecords / memorySearch call ListMemoryRecordsCommand to fetch
-    # records across the tenant's agents.
+    # AgentCore Memory access for the GraphQL memory resolvers and the
+    # memory-retain handler. memoryRecords / memorySearch call
+    # ListMemoryRecordsCommand to fetch records across the tenant's agents;
+    # memory-retain calls CreateEventCommand to land the turn in the managed
+    # memory (before the agentcore engine flip that write went to Hindsight
+    # over HTTP, so no IAM action existed for it).
     {
       Effect = "Allow"
       Action = [
+        "bedrock-agentcore:CreateEvent",
         "bedrock-agentcore:ListMemoryRecords",
         "bedrock-agentcore:RetrieveMemoryRecords",
         "bedrock-agentcore:GetMemoryRecord",
