@@ -447,9 +447,8 @@ export async function handler(
       } catch {
         return error("invalid JSON body", 400);
       }
-      const { runCapabilityFolderBackfill } = await import(
-        "../lib/capabilities/backfill.js"
-      );
+      const { runCapabilityFolderBackfill } =
+        await import("../lib/capabilities/backfill.js");
       const report = await runCapabilityFolderBackfill({
         tenantId,
         apply: body.apply === true,
@@ -805,6 +804,28 @@ export async function handler(
       const principal = resolveUserMcpPrincipal(_v, event.headers);
       if (!principal.ok) return error(principal.reason, principal.status);
       return mcpClearUserToken(principal.userId, _v.tenantId, mcpServerId);
+    }
+
+    // PUT /api/skills/user-mcp-keys/:mcpServerId — save the CALLER's personal
+    // API key for a per_user_api_key MCP server. Same user-self-service
+    // posture as the token-clear route above (member-level, row scoped to
+    // the caller); the key is validated against the server before custody.
+    const userKeyMatch = path.match(/^\/api\/skills\/user-mcp-keys\/([^/]+)$/);
+    if (userKeyMatch && method === "PUT") {
+      const tenantIdHeader = event.headers["x-tenant-id"];
+      if (!tenantIdHeader) return error("x-tenant-id header required", 400);
+      const _v = await requireTenantMembership(event, tenantIdHeader, {
+        requiredRoles: ["owner", "admin", "member"],
+      });
+      if (!_v.ok) return error(_v.reason, _v.status);
+      const principal = resolveUserMcpPrincipal(_v, event.headers);
+      if (!principal.ok) return error(principal.reason, principal.status);
+      return mcpSetUserApiKey(
+        principal.userId,
+        _v.tenantId,
+        userKeyMatch[1],
+        event,
+      );
     }
 
     // POST /api/skills/start — service-to-service wrapper around startSkillRun.
@@ -1827,9 +1848,8 @@ async function mcpDeleteServer(
   // Bucket-gated; null (no DB read) in DB-mocked tests.
   let folderSnapshot: { slug: string; agentIds: string[] } | null = null;
   try {
-    const { snapshotMcpServerAttachment } = await import(
-      "../lib/mcp/assignment-state.js"
-    );
+    const { snapshotMcpServerAttachment } =
+      await import("../lib/mcp/assignment-state.js");
     folderSnapshot = await snapshotMcpServerAttachment({
       tenantId,
       registryServerId: serverId,
@@ -1964,13 +1984,11 @@ async function mcpDeleteServer(
 
   if (folderSnapshot && folderSnapshot.agentIds.length > 0) {
     try {
-      const { removeMcpAssignmentFoldersForAgents } = await import(
-        "../lib/mcp/assignment-state.js"
-      );
+      const { removeMcpAssignmentFoldersForAgents } =
+        await import("../lib/mcp/assignment-state.js");
       await removeMcpAssignmentFoldersForAgents(folderSnapshot);
-      const { removeConnectionFoldersForAgents } = await import(
-        "../lib/capabilities/reconcile-connection-folders.js"
-      );
+      const { removeConnectionFoldersForAgents } =
+        await import("../lib/capabilities/reconcile-connection-folders.js");
       await removeConnectionFoldersForAgents({
         agentIds: folderSnapshot.agentIds,
         registry: { slug: folderSnapshot.slug, name: folderSnapshot.slug },
@@ -2853,9 +2871,8 @@ async function readAgentMcpAssignments(agentId: string): Promise<Array<{
     // THINK-190: the connection sidecar is the single assignment record.
     // Synthesize the state shape callers consume (enabled/enabledTools);
     // display fields come from the registry join below either way.
-    const { listConnectionAssignments } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { listConnectionAssignments } =
+      await import("../lib/capabilities/connection-assignments.js");
     const records = await listConnectionAssignments(targetPrefix);
     if (records === null) return null;
     for (const record of records) {
@@ -2994,9 +3011,8 @@ async function mcpAssignToAgent(
     : null;
   let existed = false;
   if (flipped && connectionSlug) {
-    const { readConnectionAssignment } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../lib/capabilities/connection-assignments.js");
     existed =
       (await readConnectionAssignment(targetPrefix, connectionSlug)) != null;
   } else if (folderSlug != null) {
@@ -3020,9 +3036,8 @@ async function mcpAssignToAgent(
   // For a flipped agent this write IS the assignment, so its failure is
   // the request's failure; for un-flipped it stays a best-effort shadow.
   try {
-    const { writeConnectionFoldersForAgents } = await import(
-      "../lib/capabilities/reconcile-connection-folders.js"
-    );
+    const { writeConnectionFoldersForAgents } =
+      await import("../lib/capabilities/reconcile-connection-folders.js");
     const allowlist = (config as { toolAllowlist?: unknown } | null)
       ?.toolAllowlist;
     await writeConnectionFoldersForAgents({
@@ -3047,9 +3062,8 @@ async function mcpAssignToAgent(
     // The shared writer is best-effort by contract (it swallows per-agent
     // failures), but for a flipped agent this write IS the assignment —
     // read the record back and fail the request if it did not land.
-    const { readConnectionAssignment } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../lib/capabilities/connection-assignments.js");
     const landed = connectionSlug
       ? await readConnectionAssignment(targetPrefix, connectionSlug)
       : null;
@@ -3093,9 +3107,8 @@ async function mcpUnassignFromAgent(
   const flipped = await agentUsesFolderDispatch(agentId);
   const connectionSlug = folderSlug.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
   if (flipped) {
-    const { readConnectionAssignment } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../lib/capabilities/connection-assignments.js");
     const existing = await readConnectionAssignment(
       targetPrefix,
       connectionSlug,
@@ -3117,9 +3130,8 @@ async function mcpUnassignFromAgent(
   // Remove the signed connection folder — the record itself for a flipped
   // agent (verified below), a Composer-detach-parity shadow otherwise.
   try {
-    const { removeConnectionFoldersForAgents } = await import(
-      "../lib/capabilities/reconcile-connection-folders.js"
-    );
+    const { removeConnectionFoldersForAgents } =
+      await import("../lib/capabilities/reconcile-connection-folders.js");
     await removeConnectionFoldersForAgents({
       agentIds: [agentId],
       registry: { slug: serverRow.slug, name: serverRow.name },
@@ -3132,9 +3144,8 @@ async function mcpUnassignFromAgent(
     );
   }
   if (flipped) {
-    const { readConnectionAssignment } = await import(
-      "../lib/capabilities/connection-assignments.js"
-    );
+    const { readConnectionAssignment } =
+      await import("../lib/capabilities/connection-assignments.js");
     if (await readConnectionAssignment(targetPrefix, connectionSlug)) {
       return error("Failed to remove MCP assignment from agent workspace", 500);
     }
@@ -3294,9 +3305,8 @@ async function mcpClearUserToken(
   // Delete the secret from Secrets Manager if it exists
   if (tokenRow.secret_ref) {
     try {
-      const { SecretsManagerClient, DeleteSecretCommand } = await import(
-        "@aws-sdk/client-secrets-manager"
-      );
+      const { SecretsManagerClient, DeleteSecretCommand } =
+        await import("@aws-sdk/client-secrets-manager");
       const sm = new SecretsManagerClient({
         region: process.env.AWS_REGION || "us-east-1",
       });
@@ -3318,6 +3328,137 @@ async function mcpClearUserToken(
   await db.delete(userMcpTokens).where(eq(userMcpTokens.id, tokenRow.id));
 
   return json({ ok: true, cleared: true });
+}
+
+/**
+ * Save the CALLER's personal API key for a `per_user_api_key` MCP server
+ * (e.g. ThinkWork Brain per-user tkt_ keys). Mirrors the OAuth callback's
+ * custody exactly — Secrets Manager secret at
+ * thinkwork/{stage}/mcp-tokens/{userId}/{mcpServerId} plus a user_mcp_tokens
+ * row with no expiry — so dispatch resolution (resolveUserMcpBearerToken)
+ * and token clearing work unchanged. The key is validated with a live
+ * tools/list BEFORE anything is stored: a wrong key never lands in custody,
+ * preserving the per-user OAuth invariant that an unconnected user's server
+ * simply doesn't register.
+ */
+async function mcpSetUserApiKey(
+  userId: string,
+  tenantId: string,
+  mcpServerId: string,
+  event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyStructuredResultV2> {
+  const badUuid = requireUuid(mcpServerId);
+  if (badUuid) return badUuid;
+
+  let body: { apiKey?: unknown } = {};
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch {
+    return error("invalid JSON body", 400);
+  }
+  const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+  if (!apiKey) return error("apiKey is required", 400);
+  // Header-injection guard — same class of check HandleStore applies runtime-side.
+  if (/[\r\n\0]/.test(apiKey)) {
+    return error("apiKey contains invalid characters", 400);
+  }
+
+  const [row] = await db
+    .select({
+      id: tenantMcpServers.id,
+      name: tenantMcpServers.name,
+      slug: tenantMcpServers.slug,
+      url: tenantMcpServers.url,
+      auth_type: tenantMcpServers.auth_type,
+    })
+    .from(tenantMcpServers)
+    .where(
+      and(
+        eq(tenantMcpServers.id, mcpServerId),
+        eq(tenantMcpServers.tenant_id, tenantId),
+      ),
+    );
+  if (!row) return notFound("MCP server not found");
+  if (row.auth_type !== "per_user_api_key") {
+    return error(
+      `MCP server auth type is ${row.auth_type ?? "none"} — personal keys only apply to per-user API key servers`,
+      400,
+    );
+  }
+
+  try {
+    await mcpListTools(
+      { url: row.url, name: row.slug || row.name, token: apiKey },
+      { timeoutMs: 10000 },
+    );
+  } catch (err: any) {
+    return json(
+      {
+        ok: false,
+        error: `API key validation failed: ${err?.message || "connection failed"}`,
+      },
+      502,
+    );
+  }
+
+  const secretName = `thinkwork/${STAGE}/mcp-tokens/${userId}/${mcpServerId}`;
+  const secretValue = JSON.stringify({
+    access_token: apiKey,
+    token_type: "Bearer",
+    obtained_at: new Date().toISOString(),
+  });
+  try {
+    await sm.send(
+      new UpdateSecretCommand({
+        SecretId: secretName,
+        SecretString: secretValue,
+      }),
+    );
+  } catch (err: any) {
+    if (err instanceof ResourceNotFoundException) {
+      await sm.send(
+        new CreateSecretCommand({
+          Name: secretName,
+          SecretString: secretValue,
+        }),
+      );
+    } else {
+      throw err;
+    }
+  }
+
+  const { userMcpTokens } = await import("@thinkwork/database-pg/schema");
+  const [existing] = await db
+    .select({ id: userMcpTokens.id })
+    .from(userMcpTokens)
+    .where(
+      and(
+        eq(userMcpTokens.user_id, userId),
+        eq(userMcpTokens.mcp_server_id, mcpServerId),
+      ),
+    );
+  if (existing) {
+    await db
+      .update(userMcpTokens)
+      .set({
+        secret_ref: secretName,
+        expires_at: null,
+        status: "active",
+        updated_at: new Date(),
+      })
+      .where(eq(userMcpTokens.id, existing.id));
+  } else {
+    await db.insert(userMcpTokens).values({
+      user_id: userId,
+      tenant_id: tenantId,
+      mcp_server_id: mcpServerId,
+      secret_ref: secretName,
+      expires_at: null,
+      status: "active",
+    });
+  }
+
+  return json({ ok: true, authStatus: "active", lastFour: apiKey.slice(-4) });
 }
 
 async function serviceCredentialAuthStatus(
@@ -3348,13 +3489,25 @@ async function serviceCredentialAuthStatus(
   }
 }
 
+/**
+ * Auth types whose credential is a per-user user_mcp_tokens row: OAuth (both
+ * spellings) and per_user_api_key (a personal key stored via mcpSetUserApiKey).
+ * user_headers is per-user too but never has a stored server-side credential.
+ */
+function isPerUserMcpAuthType(authType: string | null | undefined): boolean {
+  return (
+    authType === "oauth" ||
+    authType === "per_user_oauth" ||
+    authType === "per_user_api_key"
+  );
+}
+
 async function mcpListUserServers(
   tenantId: string,
   userId: string,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  const { agents, userMcpTokens } = await import(
-    "@thinkwork/database-pg/schema"
-  );
+  const { agents, userMcpTokens } =
+    await import("@thinkwork/database-pg/schema");
 
   // Find all agents paired with this user. Agent assignments describe runtime
   // availability, but enabled tenant OAuth connectors also need to be
@@ -3431,9 +3584,7 @@ async function mcpListUserServers(
   const rows = [
     ...assignedRows,
     ...tenantOauthRows
-      .filter(
-        (r) => r.auth_type === "oauth" || r.auth_type === "per_user_oauth",
-      )
+      .filter((r) => isPerUserMcpAuthType(r.auth_type))
       .map((r) => ({
         ...r,
         assignment_id: null,
@@ -3442,13 +3593,12 @@ async function mcpListUserServers(
       })),
   ];
 
-  // For OAuth servers, check if user has an active token in user_mcp_tokens
+  // For per-user-auth servers (OAuth or personal API key), check if the user
+  // has an active token in user_mcp_tokens
   const oauthServerIds = [
     ...new Set(
       rows
-        .filter(
-          (r) => r.auth_type === "oauth" || r.auth_type === "per_user_oauth",
-        )
+        .filter((r) => isPerUserMcpAuthType(r.auth_type))
         .map((r) => r.mcp_server_id),
     ),
   ];
@@ -3482,7 +3632,7 @@ async function mcpListUserServers(
     })
     .map((r) => {
       let authStatus: "active" | "not_connected" | "expired" = "active";
-      if (r.auth_type === "oauth" || r.auth_type === "per_user_oauth") {
+      if (isPerUserMcpAuthType(r.auth_type)) {
         const tok = tokenByServer.get(r.mcp_server_id);
         if (!tok) authStatus = "not_connected";
         else if (tok.status !== "active") authStatus = "expired";
@@ -4158,9 +4308,8 @@ async function invokeAgentcoreRunSkill(payload: {
   if (!fnName)
     return { ok: false, error: "AGENTCORE_PI_FUNCTION_NAME env var not set" };
   try {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     // Plan §U4: kind=run_skill uses InvocationType: Event so the agent
     // loop has the full 900s AgentCore Lambda budget rather than the
     // 28s socket cap RequestResponse required. Execution result comes

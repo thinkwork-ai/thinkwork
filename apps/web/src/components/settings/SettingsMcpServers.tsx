@@ -144,7 +144,9 @@ export function SettingsMcpServers() {
         cell: ({ row }) => {
           const server = row.original;
           const requiresUserAuth =
-            server.authType === "oauth" || server.authType === "per_user_oauth";
+            server.authType === "oauth" ||
+            server.authType === "per_user_oauth" ||
+            server.authType === "per_user_api_key";
           const authStatus =
             server.authStatus ??
             (requiresUserAuth ? "not_connected" : undefined);
@@ -432,7 +434,10 @@ function NewMcpServerDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None</SelectItem>
-                <SelectItem value="tenant_api_key">API key</SelectItem>
+                <SelectItem value="tenant_api_key">API key (tenant)</SelectItem>
+                <SelectItem value="per_user_api_key">
+                  API key (per user)
+                </SelectItem>
                 <SelectItem value="oauth">OAuth</SelectItem>
               </SelectContent>
             </Select>
@@ -452,6 +457,13 @@ function NewMcpServerDialog({
             <p className="text-xs text-muted-foreground">
               Connect this server&apos;s OAuth from its detail page after adding
               it.
+            </p>
+          ) : null}
+          {authType === "per_user_api_key" ? (
+            <p className="text-xs text-muted-foreground">
+              Each member saves their own API key from this server&apos;s detail
+              page. The server stays inactive for anyone who hasn&apos;t added a
+              key.
             </p>
           ) : null}
           {errorMsg ? (
