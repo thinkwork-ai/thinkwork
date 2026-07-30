@@ -76,7 +76,10 @@ async function resolveServer(
 
 function formatAuth(s: McpServer): string {
   if (s.authType === "per_user_oauth") return `OAuth (${s.oauthProvider})`;
-  if (s.authType === "tenant_api_key") return "API Key";
+  if (s.authType === "oauth") return "OAuth";
+  if (s.authType === "tenant_api_key") return "API Key (tenant)";
+  if (s.authType === "per_user_api_key") return "API Key (per user)";
+  if (s.authType === "service_credential") return "Service credential";
   return "none";
 }
 
@@ -158,7 +161,7 @@ Examples:
     )
     .option(
       "--auth-type <type>",
-      "Auth type (none|tenant_api_key|per_user_oauth)",
+      "Auth type (none|tenant_api_key|per_user_api_key|per_user_oauth)",
       "none",
     )
     .option("--api-key <token>", "API key (for tenant_api_key auth)")
@@ -260,7 +263,10 @@ Examples:
     .option("-t, --tenant <slug>", "Tenant slug")
     .option("--url <url>", "New URL")
     .option("--transport <type>", "streamable-http | sse")
-    .option("--auth-type <type>", "none | tenant_api_key | per_user_oauth")
+    .option(
+      "--auth-type <type>",
+      "none | tenant_api_key | per_user_api_key | per_user_oauth",
+    )
     .option("--api-key <token>", "API key (for tenant_api_key auth)")
     .option(
       "--oauth-provider <name>",

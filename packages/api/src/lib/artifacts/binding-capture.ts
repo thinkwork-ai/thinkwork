@@ -49,9 +49,9 @@ type AuthContext = "tenant_mcp" | "per_user_oauth";
 
 /**
  * Classify a binding's refresh identity from the tenant's MCP server registry.
- * `oauth` auth_type is the per-user OAuth pattern (resolved via user_mcp_tokens
- * at refresh time); everything else (none / tenant_api_key / service_credential)
- * is tenant-scoped and refreshable unattended. An unresolved server name is
+ * `oauth` and `per_user_api_key` auth_types are per-user patterns (resolved via
+ * user_mcp_tokens at refresh time); everything else (none / tenant_api_key /
+ * service_credential) is tenant-scoped and refreshable unattended. An unresolved server name is
  * treated as tenant_mcp — the missing-server case degrades to a terminal BAD
  * state at refresh time (U6), not a mis-scoped credential.
  *
@@ -79,7 +79,9 @@ async function classifyAuthContext(
       ),
     )
     .limit(1);
-  return row?.auth_type === "oauth" ? "per_user_oauth" : "tenant_mcp";
+  return row?.auth_type === "oauth" || row?.auth_type === "per_user_api_key"
+    ? "per_user_oauth"
+    : "tenant_mcp";
 }
 
 /**

@@ -168,6 +168,28 @@ export function listUserMcpServers(
   });
 }
 
+/**
+ * Save the signed-in user's personal API key for a per_user_api_key MCP
+ * server. The API validates the key with a live tools/list before storing,
+ * so a rejection means the key never landed anywhere.
+ */
+export function saveUserMcpApiKey(
+  tenantId: string,
+  userId: string,
+  serverId: string,
+  apiKey: string,
+): Promise<{ ok: boolean; authStatus?: string; lastFour?: string }> {
+  return request(`/api/skills/user-mcp-keys/${serverId}`, {
+    method: "PUT",
+    tenantSlug: "",
+    body: JSON.stringify({ apiKey }),
+    extraHeaders: {
+      "x-tenant-id": tenantId,
+      "x-principal-id": userId,
+    },
+  });
+}
+
 export function clearUserMcpToken(
   tenantId: string,
   userId: string,

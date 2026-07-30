@@ -6,7 +6,9 @@
  * files (flag-off agents), joins the approved+enabled `tenant_mcp_servers`
  * credential registry, resolves auth (tenant_api_key → auth_config,
  * per_user_oauth → user_mcp_tokens + Secrets Manager, with
- * refresh-on-expiry), and returns the list of servers the runtime
+ * refresh-on-expiry; per_user_api_key → the same user_mcp_tokens +
+ * Secrets Manager rows, minus any refresh — the stored key IS the
+ * bearer), and returns the list of servers the runtime
  * container should connect to. Servers whose auth can't be resolved are
  * logged and skipped. The `agent_mcp_servers` dispatch read is RETIRED
  * (THINK-173 U11) — that table is a derived index only.
@@ -810,6 +812,33 @@ export async function buildMcpConfigs(
         mcpConfigs.push(probeMcpServerConfig(mcp, status));
         continue;
       }
+      if (mcp.auth_type === "per_user_api_key") {
+        const keyUserId = requesterUserId ?? humanPairId;
+        if (!keyUserId) {
+          dropDiag(
+            mcp,
+            "credential_missing",
+            "no requesting user and no human pair to resolve a personal API key for this server",
+          );
+          continue;
+        }
+        const status = await probeUserMcpTokenStatus({
+          userId: keyUserId,
+          mcpServerId: mcp.mcp_server_id,
+        });
+        if (status === "missing") {
+          dropDiag(
+            mcp,
+            "credential_missing",
+            requesterUserId
+              ? "requester has not saved a personal API key for this server"
+              : "human pair has not saved a personal API key for this server",
+          );
+          continue;
+        }
+        mcpConfigs.push(probeMcpServerConfig(mcp, status));
+        continue;
+      }
       mcpConfigs.push(probeMcpServerConfig(mcp));
       continue;
     }
@@ -832,6 +861,18 @@ export async function buildMcpConfigs(
           deps.userOAuth,
         );
       }
+    } else if (mcp.auth_type === "per_user_api_key") {
+      // Same user_mcp_tokens + Secrets Manager custody as per-user OAuth,
+      // but never the external OAuth resolver: the stored key IS the
+      // bearer, and rows carry no expiry so the refresh path is inert.
+      const keyUserId = requesterUserId ?? humanPairId;
+      if (keyUserId) {
+        token = await resolveUserMcpBearerToken({
+          userId: keyUserId,
+          mcp,
+          logPrefix,
+        });
+      }
     }
 
     if (mcp.auth_type === "tenant_api_key" && !token) {
@@ -849,6 +890,17 @@ export async function buildMcpConfigs(
         `${logPrefix} Skipping MCP ${mcp.slug}: user has not completed OAuth`,
       );
       dropDiag(mcp, "oauth_missing", "user has not completed OAuth");
+      continue;
+    }
+    if (mcp.auth_type === "per_user_api_key" && !token) {
+      console.warn(
+        `${logPrefix} Skipping MCP ${mcp.slug}: user has not saved a personal API key`,
+      );
+      dropDiag(
+        mcp,
+        "credential_missing",
+        "user has not saved a personal API key for this server",
+      );
       continue;
     }
 
@@ -1941,8 +1993,8 @@ export async function resolveTenantMcpServerTarget(input: {
     if (resolved.headers) target.headers = resolved.headers;
     return { kind: "ok", target, authType };
   }
-  // oauth / per_user_oauth / user_headers → requires a per-user handle that a
-  // headless refresh does not have.
+  // oauth / per_user_oauth / per_user_api_key / user_headers → requires a
+  // per-user handle that a headless refresh does not have.
   return {
     kind: "needs_user",
     reason: `auth_type ${authType} requires a signed-in user`,
@@ -2009,6 +2061,7 @@ export async function resolveTenantMcpServerTargetForUser(input: {
   if (
     authType !== "oauth" &&
     authType !== "per_user_oauth" &&
+    authType !== "per_user_api_key" &&
     authType !== "user_headers"
   ) {
     return resolveTenantMcpServerTarget(input);

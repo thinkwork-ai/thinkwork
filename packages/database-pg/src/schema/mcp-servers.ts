@@ -13,6 +13,10 @@
  *   - 'oauth': server-managed OAuth per RFC 9728; the MCP server advertises its own
  *     auth requirements via /.well-known/oauth-protected-resource. Per-user tokens
  *     stored in user_mcp_tokens after the user completes the OAuth flow.
+ *   - 'per_user_api_key': each member saves their OWN key (e.g. ThinkWork Brain
+ *     tkt_ keys). Same custody as per-user OAuth — a user_mcp_tokens row +
+ *     per-user Secrets Manager secret, minus refresh (no expiry). Users without
+ *     a saved key simply don't get the server at dispatch time.
  */
 
 import {
@@ -52,7 +56,7 @@ export const tenantMcpServers = pgTable(
     url: text("url").notNull(),
     /** Transport type: 'streamable-http' | 'sse' */
     transport: text("transport").notNull().default("streamable-http"),
-    /** Auth pattern: 'none' | 'tenant_api_key' | 'service_credential' | 'oauth' */
+    /** Auth pattern: 'none' | 'tenant_api_key' | 'service_credential' | 'oauth' | 'per_user_api_key' */
     auth_type: text("auth_type").notNull().default("none"),
     /** For tenant_api_key/service_credential: { secretRef: "arn:..." }. */
     auth_config: jsonb("auth_config"),

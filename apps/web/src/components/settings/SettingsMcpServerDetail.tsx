@@ -31,6 +31,7 @@ import {
   listUserMcpServers,
   resolveMcpOAuthAuthorizeUrl,
   saveMcpServiceCredential,
+  saveUserMcpApiKey,
   setMcpServerEnabled,
   type McpServer,
   type McpServiceCredentialStatus,
@@ -86,6 +87,8 @@ export function SettingsMcpServerDetail() {
   const [serviceCredentialError, setServiceCredentialError] = useState<
     string | null
   >(null);
+  const [personalApiKey, setPersonalApiKey] = useState("");
+  const [personalKeyError, setPersonalKeyError] = useState<string | null>(null);
   const [{ data: agentData }] = useQuery({
     query: SettingsTenantAgentQuery,
     variables: { tenantId: tenantId ?? "" },
@@ -231,7 +234,9 @@ export function SettingsMcpServerDetail() {
       runtimeAgentId &&
       server.enabled &&
       server.runtimeEnabled !== false &&
-      (server.authType === "oauth" || server.authType === "per_user_oauth"
+      (server.authType === "oauth" ||
+      server.authType === "per_user_oauth" ||
+      server.authType === "per_user_api_key"
         ? server.authStatus === "active"
         : true);
     if (!canImport) return;
@@ -318,6 +323,39 @@ export function SettingsMcpServerDetail() {
       setNotice("Authentication removed.");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to clear credentials");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function savePersonalApiKey() {
+    if (!tenantId || !oauthUserId || !server) return;
+    setPending(true);
+    setNotice(null);
+    setPersonalKeyError(null);
+    try {
+      await saveUserMcpApiKey(
+        tenantId,
+        oauthUserId,
+        server.id,
+        personalApiKey.trim(),
+      );
+      setPersonalApiKey("");
+      setUserServers((prev) => {
+        const existing = prev.find((s) => s.id === server.id);
+        if (existing) {
+          return prev.map((s) =>
+            s.id === server.id ? { ...s, authStatus: "active" as const } : s,
+          );
+        }
+        return [...prev, { ...server, authStatus: "active" as const }];
+      });
+      setNotice("API key saved.");
+      if (runtimeAgentId) void loadRuntimeTools();
+    } catch (e) {
+      setPersonalKeyError(
+        e instanceof Error ? e.message : "Failed to save API key",
+      );
     } finally {
       setPending(false);
     }
@@ -480,6 +518,88 @@ export function SettingsMcpServerDetail() {
                   Clear
                 </Button>
               ) : null}
+            </SettingsRow>
+          </SettingsSection>
+        ) : null}
+
+        {server.authType === "per_user_api_key" ? (
+          <SettingsSection label="Authentication">
+            <SettingsRow
+              label="Your API key"
+              description="Each member saves their own key. The key is verified against the server, then stored server-side for your user only — agents acting for you use it as the Authorization header."
+              layout="stacked"
+            >
+              <div className="w-full space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge
+                    variant={
+                      server.authStatus === "active" ? "outline" : "secondary"
+                    }
+                    className={
+                      server.authStatus === "active"
+                        ? "border-emerald-500/40 text-emerald-400"
+                        : undefined
+                    }
+                  >
+                    {server.authStatus === "active"
+                      ? "Connected"
+                      : server.authStatus === "expired"
+                        ? "Expired"
+                        : "Not connected"}
+                  </Badge>
+                  {server.authStatus === "active" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={pending || Boolean(authUnavailableReason)}
+                      title={authUnavailableReason ?? undefined}
+                      onClick={clearAuthentication}
+                      className="gap-2"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Clear
+                    </Button>
+                  ) : null}
+                </div>
+                {personalKeyError ? (
+                  <p className="text-sm text-destructive">{personalKeyError}</p>
+                ) : null}
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <Input
+                    aria-label="Personal API key"
+                    type="password"
+                    autoComplete="off"
+                    value={personalApiKey}
+                    placeholder={
+                      server.authStatus === "active"
+                        ? "Paste replacement API key"
+                        : "Paste your API key"
+                    }
+                    disabled={pending}
+                    onChange={(event) =>
+                      setPersonalApiKey(event.currentTarget.value)
+                    }
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={
+                      pending ||
+                      Boolean(authUnavailableReason) ||
+                      !personalApiKey.trim()
+                    }
+                    title={authUnavailableReason ?? undefined}
+                    onClick={() => void savePersonalApiKey()}
+                  >
+                    {pending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <KeyRound className="h-4 w-4" />
+                    )}
+                    Save key
+                  </Button>
+                </div>
+              </div>
             </SettingsRow>
           </SettingsSection>
         ) : null}
