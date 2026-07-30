@@ -158,6 +158,25 @@ export async function approveMcpServer(
     `[mcp-approval] approve tenant=${tenantId} server=${serverId} admin=${adminUserId}`,
   );
 
+  // Approval makes the row dispatchable — attach it to the tenant's
+  // platform-default agent(s) so an approved+enabled server works without
+  // a separate Composer assignment step. Best-effort: the folder write
+  // never fails the approval, and the next reconcile converges.
+  try {
+    const { attachServerToPlatformDefaultAgents } =
+      await import("../lib/capabilities/reconcile-connection-folders.js");
+    await attachServerToPlatformDefaultAgents({
+      tenantId,
+      registryServerId: serverId,
+      signedBy: `operator:${adminUserId}`,
+    });
+  } catch (err) {
+    console.warn(
+      "[mcp-approval] default-agent auto-attach failed:",
+      err instanceof Error ? err.message : err,
+    );
+  }
+
   return json({
     id: serverId,
     status: "approved",

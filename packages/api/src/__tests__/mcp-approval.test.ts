@@ -10,16 +10,26 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockAuthenticate, mockServerRow, mockMemberRows, mockUpdate } =
-  vi.hoisted(() => ({
-    mockAuthenticate: vi.fn(),
-    mockServerRow: vi.fn(),
-    mockMemberRows: vi.fn(),
-    mockUpdate: vi.fn(),
-  }));
+const {
+  mockAuthenticate,
+  mockServerRow,
+  mockMemberRows,
+  mockUpdate,
+  mockAttach,
+} = vi.hoisted(() => ({
+  mockAuthenticate: vi.fn(),
+  mockServerRow: vi.fn(),
+  mockMemberRows: vi.fn(),
+  mockUpdate: vi.fn(),
+  mockAttach: vi.fn(async () => undefined),
+}));
 
 vi.mock("../lib/cognito-auth.js", () => ({
   authenticate: mockAuthenticate,
+}));
+
+vi.mock("../lib/capabilities/reconcile-connection-folders.js", () => ({
+  attachServerToPlatformDefaultAgents: mockAttach,
 }));
 
 vi.mock("@thinkwork/database-pg", () => ({
@@ -130,6 +140,23 @@ describe("POST /approve", () => {
     expect(lastUpdate.payload.status).toBe("approved");
     expect(lastUpdate.payload.approved_by).toBe(ADMIN_USER);
     expect(lastUpdate.payload.url_hash).toBe(body.url_hash);
+    // Approval attaches the server to the tenant's platform-default
+    // agent(s) — Settings-registered servers work without a separate
+    // Composer assignment step.
+    expect(mockAttach).toHaveBeenCalledWith({
+      tenantId: TENANT_A,
+      registryServerId: SERVER_ID,
+      signedBy: `operator:${ADMIN_USER}`,
+    });
+  });
+
+  it("still returns 200 when the default-agent attach fails", async () => {
+    mockAttach.mockRejectedValueOnce(new Error("S3 down"));
+    const res = await handler(
+      event(`/api/tenants/${TENANT_A}/mcp-servers/${SERVER_ID}/approve`),
+    );
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body as string).status).toBe("approved");
   });
 
   it("403 when caller is not admin/owner", async () => {
@@ -198,6 +225,7 @@ describe("POST /reject", () => {
     const body = JSON.parse(res.body as string);
     expect(body.status).toBe("rejected");
     expect(body.reason).toBe("duplicate of existing server");
+    expect(mockAttach).not.toHaveBeenCalled();
     const lastUpdate = mockUpdate.mock.calls.at(-1)?.[0];
     expect(lastUpdate.payload.status).toBe("rejected");
     expect(lastUpdate.payload.url_hash).toBeNull();
