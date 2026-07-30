@@ -252,6 +252,26 @@ describe("buildBulkLoadCsvFiles", () => {
     );
   });
 
+  // THINK-432: the obvious "fix" for the ungrouped nodes this lane creates is
+  // to add the column the nudge lane's ON CREATE sets. It must NOT be added.
+  // The loader runs with updateSingleCardinalityProperties: true, so every
+  // column present overwrites that property on nodes that already exist — a
+  // blanket securityGroup would reset the REAL group on every previously
+  // projected node at each rebuild, blanking the graph for every scoped key.
+  // The platform's hourly sweep covers what this lane creates instead.
+  it("omits securityGroup from every CSV, which the loader would overwrite", () => {
+    const { files } = buildBulkLoadCsvFiles({
+      tenantId: "tenant-1",
+      canonicals: [activeCanonical],
+      mappingsByCanonical: mapOf([["can-777", twoMappings]]),
+    });
+
+    for (const file of files) {
+      expect(file.content).not.toContain("securityGroup");
+      expect(file.content).not.toContain("UNASSIGNED");
+    }
+  });
+
   it("is deterministic — same input rows yield identical CSV bytes (AE3)", () => {
     const build = () =>
       buildBulkLoadCsvFiles({

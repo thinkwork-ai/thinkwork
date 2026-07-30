@@ -55,6 +55,24 @@ type DbLike = typeof defaultDb;
 
 export const IDENTITY_SNAPSHOT_FORMAT = "identity-mapping-snapshot/v1";
 
+/**
+ * The security group a writer stamps when it creates a node WITHOUT knowing
+ * the entity type's real assignment — this lane's case (THINK-432).
+ *
+ * Mirrors `UNASSIGNED_SECURITY_GROUP` in the platform repo
+ * (etl-platform/pipelines/mapspec/neptune_target.py), which is where it is
+ * enforced: no spec, mapping export or registry entry may assign it, so no
+ * API key can ever be granted it.
+ *
+ * Deliberately NOT "PUBLIC". PUBLIC is fail-OPEN the moment an entity type is
+ * restricted — a newly minted node would be visible to every key until the
+ * platform's projection restamped it. A node on the sentinel is exactly as
+ * invisible as an unstamped one, while being findable, countable and
+ * alarmable, which a missing property is not. The platform's hourly sweep
+ * resolves it to the real group.
+ */
+const UNASSIGNED_SECURITY_GROUP = "UNASSIGNED";
+
 const EVENT_PAGE_SIZE = 200;
 const RESYNC_CHUNK = 50;
 const SLUG_RE = /^[a-zA-Z][a-zA-Z0-9_]{0,62}$/;
@@ -179,6 +197,23 @@ export function buildCanonicalResyncOps(args: {
   ops.push({
     query:
       `MERGE (n:${label} {\`~id\`: $nodeId}) ` +
+      // The Brain's query guard filters every node pattern to the calling
+      // key's granted security groups plus PUBLIC, and a node with no group
+      // matches nothing — so an unstamped node is invisible to every scoped
+      // key. That is silent data loss, not a leak, which is why it went
+      // unnoticed until TEI had accumulated 12,129 of them (THINK-432).
+      //
+      // This lane cannot know the real group: the assignment lives in the
+      // platform's twin-mapping export, per entity type, and reading it from
+      // this hot path would couple the two repos through an artifact that has
+      // already proven it can go stale. So it stamps the sentinel and the
+      // platform's projection resolves it to the real group on its next pass.
+      //
+      // ON CREATE, never on match: once the projection has stamped the real
+      // group, a resync must not push the node back to UNASSIGNED. The rest
+      // of this statement stays an unconditional SET — display name and state
+      // ARE this lane's to own.
+      `ON CREATE SET n.securityGroup = '${UNASSIGNED_SECURITY_GROUP}' ` +
       "SET n.tenantId = $tenantId, n.canonicalId = $canonicalId, " +
       "n.displayName = $displayName, n.state = $state " +
       "REMOVE n.mergedInto",
@@ -209,6 +244,10 @@ export function buildCanonicalResyncOps(args: {
     ops.push({
       query:
         "MERGE (sys:ExternalSystem {`~id`: $sysId}) " +
+        // Same reasoning as the entity node above: an ExternalSystem node
+        // with no group is invisible to every scoped key, which would break
+        // provenance traversal rather than protect anything (THINK-432).
+        `ON CREATE SET sys.securityGroup = '${UNASSIGNED_SECURITY_GROUP}' ` +
         "SET sys.tenantId = $tenantId, sys.systemSlug = $system " +
         "WITH sys MATCH (n {`~id`: $nodeId}) " +
         "MERGE (n)-[x:external_identity {`~id`: $edgeId}]->(sys) " +

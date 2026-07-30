@@ -88,6 +88,48 @@ describe("buildCanonicalResyncOps", () => {
     ]);
   });
 
+  // THINK-432: the Brain's guard filters every node pattern to the caller's
+  // granted groups plus PUBLIC, so a node with no group is invisible to every
+  // scoped key. This lane mints canonicals the platform's projection has not
+  // reached yet, and left them unstamped — TEI accumulated 12,129.
+  it("stamps a security group on every node it can create", () => {
+    const ops = buildCanonicalResyncOps({
+      tenantId: "tenant-1",
+      canonical: activeCanonical,
+      mappings: [
+        {
+          source_system: "twenty",
+          namespace: "",
+          external_id: "cmp_889",
+          visibility: "tenant",
+        },
+      ],
+    });
+
+    const creating = ops.filter((op) => op.query.includes("MERGE ("));
+    expect(creating.length).toBeGreaterThan(0);
+    for (const op of creating) {
+      expect(op.query).toContain("securityGroup = 'UNASSIGNED'");
+      // ON CREATE, never on match: once the platform's projection has
+      // stamped the real group, a resync must not undo it.
+      expect(op.query).toContain("ON CREATE SET");
+      // …and never an UNCONDITIONAL set, which would undo it.
+      expect(op.query).not.toMatch(/(?<!ON CREATE )SET [a-z]+\.securityGroup/);
+    }
+  });
+
+  it("never stamps PUBLIC, which would be fail-open", () => {
+    // PUBLIC on create would make a newly minted node of a RESTRICTED entity
+    // type visible to every key until the next projection restamped it. The
+    // sentinel is a group no key can be granted, so it is fail-closed.
+    const ops = buildCanonicalResyncOps({
+      tenantId: "tenant-1",
+      canonical: activeCanonical,
+      mappings: [],
+    });
+    expect(ops[0].query).not.toContain("PUBLIC");
+  });
+
   it("excludes private-visibility mappings from the graph", () => {
     const ops = buildCanonicalResyncOps({
       tenantId: "tenant-1",
