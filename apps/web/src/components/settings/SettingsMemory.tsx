@@ -32,6 +32,7 @@ import {
   cn,
   isDataTableTokenFilterValue,
   type DataTableTokenFilterColumn,
+  type DataTableTokenFilterValue,
 } from "@thinkwork/ui";
 import {
   ComputerMemoryEpisodicRecordsQuery,
@@ -87,6 +88,28 @@ const MEMORY_FILTER_COLUMNS = {
   bank: "memoryBank",
   type: "memoryType",
 } as const;
+
+/**
+ * Default toolbar state: scoped to the signed-in user's own bank with every
+ * memory type selected, so the page opens showing "my memory, all types"
+ * instead of a blank filter row.
+ */
+const DEFAULT_COLUMN_FILTERS: ColumnFiltersState = [
+  {
+    id: MEMORY_FILTER_COLUMNS.bank,
+    value: {
+      operator: "is",
+      value: [SCOPE_SELF],
+    } satisfies DataTableTokenFilterValue,
+  },
+  {
+    id: MEMORY_FILTER_COLUMNS.type,
+    value: {
+      operator: "is_any_of",
+      value: FACETS.map((f) => f.value),
+    } satisfies DataTableTokenFilterValue,
+  },
+];
 
 function StrategyBadge({ strategy }: { strategy: string | null }) {
   if (!strategy) return null;
@@ -152,7 +175,9 @@ export function SettingsMemory() {
   const { tenantId, userId: callerUserId } = useTenant();
   const effectiveTenantId = tenantId ?? null;
 
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>(
+    DEFAULT_COLUMN_FILTERS,
+  );
   const [searchInput, setSearchInput] = useState("");
   const [activeSearch, setActiveSearch] = useState("");
   const [selectedRecord, setSelectedRecord] = useState<MemoryRow | null>(null);
@@ -292,7 +317,18 @@ export function SettingsMemory() {
       {
         id: MEMORY_FILTER_COLUMNS.type,
         accessorFn: (row: MemoryRow) => row.strategy ?? "semantic",
-        filterFn: dataTableTokenFilterFns.option,
+        // Every facet selected means "all types" — pass rows whose strategy
+        // has no facet chip (e.g. summaries) instead of hiding them.
+        filterFn: (row, columnId, filterValue) => {
+          if (
+            isDataTableTokenFilterValue(filterValue) &&
+            Array.isArray(filterValue.value) &&
+            filterValue.value.length >= FACETS.length
+          ) {
+            return true;
+          }
+          return dataTableTokenFilterFns.option(row, columnId, filterValue);
+        },
       },
       {
         // Query-scope only — never filters rows (see scopedUserId above).
@@ -609,7 +645,10 @@ export function SettingsMemory() {
             emptyState={
               <MemoryEmptyState
                 searching={searching}
-                filtered={selectedTypes.length > 0}
+                filtered={
+                  selectedTypes.length > 0 &&
+                  selectedTypes.length < FACETS.length
+                }
               />
             }
           />

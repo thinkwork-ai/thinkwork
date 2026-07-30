@@ -317,21 +317,29 @@ describe("SettingsMemory", () => {
     );
   });
 
+  it("defaults to every memory type — the full listing shows on load", () => {
+    render(<SettingsMemory />);
+    expect(screen.getByTestId("memory-row-rec-semantic")).toBeTruthy();
+    expect(screen.getByTestId("memory-row-rec-pref")).toBeTruthy();
+    expect(screen.getByTestId("memory-row-rec-episode")).toBeTruthy();
+  });
+
   it("filters the listing by memory type", () => {
     render(<SettingsMemory />);
-    fireEvent.click(
-      screen.getByTestId("token-filter-memoryType-preferences"),
-    );
+    // All types start selected — narrow to preferences by deselecting the rest.
+    fireEvent.click(screen.getByTestId("token-filter-memoryType-semantic"));
+    fireEvent.click(screen.getByTestId("token-filter-memoryType-episodes"));
+    fireEvent.click(screen.getByTestId("token-filter-memoryType-reflections"));
     expect(screen.getByTestId("memory-row-rec-pref")).toBeTruthy();
     expect(screen.queryByTestId("memory-row-rec-semantic")).toBeNull();
     expect(screen.queryByTestId("memory-row-rec-episode")).toBeNull();
   });
 
-  it("restores the full listing when the type filter is toggled off", () => {
+  it("restores the full listing when the type filter is toggled back on", () => {
     render(<SettingsMemory />);
     fireEvent.click(screen.getByTestId("token-filter-memoryType-episodes"));
-    expect(screen.getByTestId("memory-row-rec-episode")).toBeTruthy();
-    expect(screen.queryByTestId("memory-row-rec-semantic")).toBeNull();
+    expect(screen.queryByTestId("memory-row-rec-episode")).toBeNull();
+    expect(screen.getByTestId("memory-row-rec-semantic")).toBeTruthy();
     fireEvent.click(screen.getByTestId("token-filter-memoryType-episodes"));
     expect(screen.getByTestId("memory-row-rec-semantic")).toBeTruthy();
     expect(screen.getByTestId("memory-row-rec-pref")).toBeTruthy();
@@ -380,7 +388,10 @@ describe("SettingsMemory", () => {
 
   it("passes the selected facet to memorySearch as a strategy filter", () => {
     render(<SettingsMemory />);
-    fireEvent.click(screen.getByTestId("token-filter-memoryType-preferences"));
+    // Narrow the default all-types selection down to preferences only.
+    fireEvent.click(screen.getByTestId("token-filter-memoryType-semantic"));
+    fireEvent.click(screen.getByTestId("token-filter-memoryType-episodes"));
+    fireEvent.click(screen.getByTestId("token-filter-memoryType-reflections"));
     fireEvent.click(screen.getByRole("button", { name: "Search memory" }));
     const input = screen.getByPlaceholderText(
       "Search memory and press Enter...",
