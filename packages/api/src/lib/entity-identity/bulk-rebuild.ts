@@ -182,6 +182,17 @@ export function createBulkRowBuilderState(): BulkRowBuilderState {
  * malformed entity_type_slug falls back to the generic `Entity` label. Rows
  * for one canonical are bounded by its mapping count, so the return array is
  * safe to materialize at any tenant size.
+ *
+ * NO securityGroup column, deliberately (THINK-432). The nudge lane stamps
+ * the UNASSIGNED sentinel `ON CREATE`, but this lane cannot do the equivalent:
+ * the loader runs with `updateSingleCardinalityProperties: true`, so every
+ * column present OVERWRITES that property on nodes that already exist. A
+ * blanket `securityGroup=UNASSIGNED` would therefore reset the real group on
+ * every previously projected node at each rebuild — briefly blanking the
+ * whole graph for every scoped key, which is worse than the gap it closes.
+ * Omitting the column leaves existing groups untouched and the nodes this
+ * lane CREATES unstamped; the platform's hourly sweep resolves those, and its
+ * `ungrouped_nodes_found` alarm is what keeps the gap from going quiet again.
  */
 export function bulkCsvRowsForCanonical(args: {
   tenantId: string;
