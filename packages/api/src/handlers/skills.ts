@@ -1762,8 +1762,9 @@ async function mcpRegisterServer(
 /**
  * Best-effort auto-attach of a registry server to the tenant's
  * platform-default agent(s). Safe on every register/update transition: the
- * underlying writer skips rows that are not approved+enabled, and a failure
- * never fails the registry write it rides — the next reconcile converges.
+ * attach helper skips rows that are not approved+enabled before writing
+ * anything (legacy or folder-dispatch), and a failure never fails the
+ * registry write it rides — the next reconcile converges.
  */
 async function autoAttachMcpServer(
   tenantId: string,

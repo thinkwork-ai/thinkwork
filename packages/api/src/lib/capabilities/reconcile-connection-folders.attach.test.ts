@@ -2,8 +2,8 @@
  * attachServerToPlatformDefaultAgents — the Settings → Connectors
  * auto-attach helper. Pins: (1) only platform-default agents are targeted,
  * (2) the connection folder is written from the registry row for each of
- * them, (3) a pending or disabled row writes nothing (the shared
- * approved+enabled guard), (4) a tenant with no platform-default agent is
+ * them, (3) a pending, disabled, or missing row writes nothing —
+ * including the legacy materialization, which has no guard of its own, (4) a tenant with no platform-default agent is
  * a clean no-op.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -111,6 +111,9 @@ function approvedServerRow(): Record<string, unknown> {
     transport: "streamable-http",
     tools: null,
     status: "approved",
+    // Both column spellings: the attach guard selects `enabled`, the
+    // folder writer aliases the same column to `server_enabled`.
+    enabled: true,
     server_enabled: true,
   };
 }
@@ -162,12 +165,15 @@ describe("attachServerToPlatformDefaultAgents", () => {
       deps: { bucket: "test-bucket" },
     });
 
+    expect(mockMaterialize).not.toHaveBeenCalled();
     expect(mockPutFolder).not.toHaveBeenCalled();
   });
 
   it("writes nothing for a disabled row", async () => {
     dbState.agentRows = [{ id: "agent-1" }];
-    dbState.serverRows = [{ ...approvedServerRow(), server_enabled: false }];
+    dbState.serverRows = [
+      { ...approvedServerRow(), enabled: false, server_enabled: false },
+    ];
 
     await attachServerToPlatformDefaultAgents({
       tenantId: TENANT,
@@ -176,6 +182,22 @@ describe("attachServerToPlatformDefaultAgents", () => {
       deps: { bucket: "test-bucket" },
     });
 
+    expect(mockMaterialize).not.toHaveBeenCalled();
+    expect(mockPutFolder).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing when the registry row is missing", async () => {
+    dbState.agentRows = [{ id: "agent-1" }];
+    dbState.serverRows = [];
+
+    await attachServerToPlatformDefaultAgents({
+      tenantId: TENANT,
+      registryServerId: SERVER,
+      signedBy: "plugin-reconciler",
+      deps: { bucket: "test-bucket" },
+    });
+
+    expect(mockMaterialize).not.toHaveBeenCalled();
     expect(mockPutFolder).not.toHaveBeenCalled();
   });
 

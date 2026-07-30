@@ -202,10 +202,11 @@ export async function writeConnectionFoldersForAgents(input: {
  * the Settings → Connectors contract: an approved+enabled registry row IS
  * the intent to use the server, with no separate Composer assignment step.
  * Same shape as the managed-application provisioner's default-agent
- * assignment. Rides writeConnectionFoldersForAgents' approved+enabled
- * guard, so calling this on a pending/disabled row is a no-op — callers on
- * the register/enable/approve transitions can invoke it unconditionally.
- * Never throws.
+ * assignment. Approved+enabled is checked here, BEFORE either writer runs —
+ * the legacy `mcp/<slug>/` materialization has no guard of its own, so the
+ * gate cannot be left to writeConnectionFoldersForAgents. Calling this on a
+ * pending/disabled row is a no-op — callers on the register/enable/approve
+ * transitions can invoke it unconditionally. Never throws.
  */
 export async function attachServerToPlatformDefaultAgents(input: {
   tenantId: string;
@@ -214,6 +215,29 @@ export async function attachServerToPlatformDefaultAgents(input: {
   deps?: CapabilityFolderWriteDeps;
 }): Promise<void> {
   if (!input.deps?.bucket && !workspaceBucketConfigured()) return;
+  try {
+    const [server] = await db
+      .select({
+        status: tenantMcpServers.status,
+        enabled: tenantMcpServers.enabled,
+      })
+      .from(tenantMcpServers)
+      .where(
+        and(
+          eq(tenantMcpServers.id, input.registryServerId),
+          eq(tenantMcpServers.tenant_id, input.tenantId),
+        ),
+      )
+      .limit(1);
+    if (!server || server.status !== "approved" || server.enabled === false)
+      return;
+  } catch (err) {
+    console.warn(
+      `${LOG_PREFIX} registry read failed server=${input.registryServerId}:`,
+      err instanceof Error ? err.message : err,
+    );
+    return;
+  }
   let agentIds: string[];
   try {
     const rows = await db
