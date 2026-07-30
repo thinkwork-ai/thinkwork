@@ -83,10 +83,8 @@ const RAW_SETTINGS_NAV_ITEMS: SettingsNavItem[] = [
     icon: FileBox,
     operatorOnly: true,
   },
-  // "Knowledge" is the user-facing umbrella for the memory/pages/KBs
-  // surfaces (Company Brain U9 naming decision — never "Company Brain" in UI).
   {
-    label: "Knowledge",
+    label: "Memory",
     to: "/settings/memory",
     icon: Brain,
     operatorOnly: true,
