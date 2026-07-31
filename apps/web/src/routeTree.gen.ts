@@ -30,6 +30,7 @@ import { Route as AuthedSettingsBillingRouteImport } from "./routes/_authed/sett
 import { Route as AuthedSettingsArtifactsRouteImport } from "./routes/_authed/settings.artifacts";
 import { Route as AuthedSettingsAnalyticsRouteImport } from "./routes/_authed/settings.analytics";
 import { Route as AuthedSettingsActivityRouteImport } from "./routes/_authed/settings.activity";
+import { Route as AuthedDocumentsViewRouteImport } from "./routes/_authed/documents.view";
 import { Route as AuthedShellProfileRouteImport } from "./routes/_authed/_shell/profile";
 import { Route as AuthedShellNewRouteImport } from "./routes/_authed/_shell/new";
 import { Route as AuthedShellCustomizeRouteImport } from "./routes/_authed/_shell/customize";
@@ -203,6 +204,11 @@ const AuthedSettingsActivityRoute = AuthedSettingsActivityRouteImport.update({
   id: "/activity",
   path: "/activity",
   getParentRoute: () => AuthedSettingsRoute,
+} as any);
+const AuthedDocumentsViewRoute = AuthedDocumentsViewRouteImport.update({
+  id: "/documents/view",
+  path: "/documents/view",
+  getParentRoute: () => AuthedRoute,
 } as any);
 const AuthedShellProfileRoute = AuthedShellProfileRouteImport.update({
   id: "/profile",
@@ -612,6 +618,7 @@ export interface FileRoutesByFullPath {
   "/customize": typeof AuthedShellCustomizeRouteWithChildren;
   "/new": typeof AuthedShellNewRoute;
   "/profile": typeof AuthedShellProfileRoute;
+  "/documents/view": typeof AuthedDocumentsViewRoute;
   "/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
@@ -697,6 +704,7 @@ export interface FileRoutesByTo {
   "/onboarding/welcome": typeof OnboardingWelcomeRoute;
   "/new": typeof AuthedShellNewRoute;
   "/profile": typeof AuthedShellProfileRoute;
+  "/documents/view": typeof AuthedDocumentsViewRoute;
   "/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/settings/billing": typeof AuthedSettingsBillingRoute;
@@ -787,6 +795,7 @@ export interface FileRoutesById {
   "/_authed/_shell/customize": typeof AuthedShellCustomizeRouteWithChildren;
   "/_authed/_shell/new": typeof AuthedShellNewRoute;
   "/_authed/_shell/profile": typeof AuthedShellProfileRoute;
+  "/_authed/documents/view": typeof AuthedDocumentsViewRoute;
   "/_authed/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/_authed/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
   "/_authed/settings/artifacts": typeof AuthedSettingsArtifactsRouteWithChildren;
@@ -877,6 +886,7 @@ export interface FileRouteTypes {
     | "/customize"
     | "/new"
     | "/profile"
+    | "/documents/view"
     | "/settings/activity"
     | "/settings/analytics"
     | "/settings/artifacts"
@@ -962,6 +972,7 @@ export interface FileRouteTypes {
     | "/onboarding/welcome"
     | "/new"
     | "/profile"
+    | "/documents/view"
     | "/settings/activity"
     | "/settings/analytics"
     | "/settings/billing"
@@ -1051,6 +1062,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/customize"
     | "/_authed/_shell/new"
     | "/_authed/_shell/profile"
+    | "/_authed/documents/view"
     | "/_authed/settings/activity"
     | "/_authed/settings/analytics"
     | "/_authed/settings/artifacts"
@@ -1286,6 +1298,13 @@ declare module "@tanstack/react-router" {
       fullPath: "/settings/activity";
       preLoaderRoute: typeof AuthedSettingsActivityRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
+    };
+    "/_authed/documents/view": {
+      id: "/_authed/documents/view";
+      path: "/documents/view";
+      fullPath: "/documents/view";
+      preLoaderRoute: typeof AuthedDocumentsViewRouteImport;
+      parentRoute: typeof AuthedRoute;
     };
     "/_authed/_shell/profile": {
       id: "/_authed/_shell/profile";
@@ -2037,12 +2056,14 @@ const AuthedSettingsRouteWithChildren = AuthedSettingsRoute._addFileChildren(
 interface AuthedRouteChildren {
   AuthedShellRoute: typeof AuthedShellRouteWithChildren;
   AuthedSettingsRoute: typeof AuthedSettingsRouteWithChildren;
+  AuthedDocumentsViewRoute: typeof AuthedDocumentsViewRoute;
   AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute: typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedShellRoute: AuthedShellRouteWithChildren,
   AuthedSettingsRoute: AuthedSettingsRouteWithChildren,
+  AuthedDocumentsViewRoute: AuthedDocumentsViewRoute,
   AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute:
     AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute,
 };

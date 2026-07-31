@@ -8,3 +8,6 @@ dist/
 
 # Vite cache
 node_modules/.vite/
+
+# Zrimo viewer assets (copied by the vendor-assets script)
+public/vendor/zrimo/

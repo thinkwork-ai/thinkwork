@@ -1,7 +1,8 @@
 import { useCallback, useState } from "react";
-import { FileText, Loader2 } from "lucide-react";
+import { FileText } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
+import { openKnowledgeDocument } from "@/lib/knowledge-doc-viewer";
 import type { KnowledgeCitation } from "./sources";
 
 /**
@@ -43,11 +44,9 @@ export function citationLabel(citation: KnowledgeCitation): string {
 function CitationSource({
   citation,
   onOpen,
-  opening,
 }: {
   citation: KnowledgeCitation;
   onOpen: (citation: KnowledgeCitation) => void;
-  opening: boolean;
 }) {
   return (
     <div className="grid gap-1.5">
@@ -67,9 +66,7 @@ function CitationSource({
         onClick={() => onOpen(citation)}
         className="justify-self-start text-primary hover:underline"
       >
-        {opening
-          ? "Opening…"
-          : `Open document${citation.page ? ` at page ${citation.page}` : ""}`}
+        {`Open document${citation.page ? ` at page ${citation.page}` : ""}`}
       </button>
     </div>
   );
@@ -83,28 +80,18 @@ export function InlineCitation({
   citations: KnowledgeCitation[];
   className?: string;
 }) {
-  const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const open = useCallback(async (citation: KnowledgeCitation) => {
+  // Only retrieval-supplied URLs are resolvable: MCP knowledge servers
+  // presign access to their own documents. (THINK-402 removed the KB
+  // Files API, which was the only other resolver.) Office formats route to
+  // the in-app viewer tab; native formats open the URL directly.
+  const open = useCallback((citation: KnowledgeCitation) => {
     setError(null);
-    setOpening(true);
-    // Open synchronously — popup blockers kill window.open after an await.
-    const tab = window.open("about:blank", "_blank");
     try {
-      // Only retrieval-supplied URLs are resolvable: MCP knowledge servers
-      // presign access to their own documents. (THINK-402 removed the KB
-      // Files API, which was the only other resolver.)
-      const url = citation.documentUrl;
-      if (!url) throw new Error("Source document is not viewable");
-      const target = citation.page ? `${url}#page=${citation.page}` : url;
-      if (tab) tab.location.href = target;
-      else window.location.href = target;
+      openKnowledgeDocument(citation);
     } catch (e) {
-      tab?.close();
       setError(e instanceof Error ? e.message : "Failed to open source");
-    } finally {
-      setOpening(false);
     }
   }, []);
 
@@ -116,7 +103,7 @@ export function InlineCitation({
       <HoverCardTrigger asChild>
         <button
           type="button"
-          onClick={() => void open(primary)}
+          onClick={() => open(primary)}
           aria-label={`Open source ${citationLabel(primary)}`}
           className={cn(
             "mx-0.5 inline-flex shrink-0 items-center gap-1",
@@ -127,11 +114,7 @@ export function InlineCitation({
             className,
           )}
         >
-          {opening ? (
-            <Loader2 className="h-2.5 w-2.5 shrink-0 animate-spin" />
-          ) : (
-            <FileText className="h-2.5 w-2.5 shrink-0" />
-          )}
+          <FileText className="h-2.5 w-2.5 shrink-0" />
           {/* 75px keeps the pill from swallowing the sentence it annotates —
               the full name and page are one hover away in the card. */}
           <span className="max-w-[75px] truncate">
@@ -150,8 +133,7 @@ export function InlineCitation({
             <CitationSource
               key={citation.n}
               citation={citation}
-              onOpen={(c) => void open(c)}
-              opening={opening}
+              onOpen={open}
             />
           ))}
           {error ? <p className="text-destructive">{error}</p> : null}

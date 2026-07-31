@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
-import { BookOpen, ChevronDown, Loader2 } from "lucide-react";
+import { BookOpen, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { openKnowledgeDocument } from "@/lib/knowledge-doc-viewer";
 
 /**
  * Source citations for one agent turn (AI-Elements-style Sources
  * block): "Used N sources" collapsible, one row per distinct document the
  * turn's retrieval calls returned passages from. Clicking a row opens the
- * retrieval-supplied document URL when one is present.
+ * document when a retrieval-supplied URL is present — Office formats in
+ * the in-app viewer, native formats via the URL itself.
  */
 
 /**
@@ -90,8 +92,7 @@ function mcpKnowledgeRows(
   if (!/knowledge_search|search_knowledge/i.test(mcpTool)) return [];
   const raw = details?.raw as Record<string, unknown> | undefined;
   const structured = raw?.structuredContent as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   const rows = structured?.results ?? structured?.hits;
   if (!Array.isArray(rows)) return [];
   return rows.filter(
@@ -321,7 +322,6 @@ export function KnowledgeSourcesCard({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [opening, setOpening] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const names = useMemo(
@@ -335,29 +335,16 @@ export function KnowledgeSourcesCard({
     [sources],
   );
 
+  // Office formats route to the in-app viewer tab; native formats open the
+  // retrieval-supplied URL directly (PDF viewers honour #page=). Synchronous
+  // on purpose — popup blockers kill tabs opened after an await.
   const openSource = useCallback(
-    async (documentKey: string, page?: number, documentUrl?: string) => {
+    (documentKey: string, page?: number, documentUrl?: string) => {
       setError(null);
-      setOpening(documentKey);
-      // Open the tab synchronously — popup blockers kill window.open calls
-      // issued after an await.
-      const tab = window.open("about:blank", "_blank");
       try {
-        const url = documentUrl;
-        if (!url) throw new Error("Source document is not viewable");
-        // PDF viewers honour the #page= fragment, so a citation lands on the
-        // page the passage was actually read from.
-        const target = page ? `${url}#page=${page}` : url;
-        if (tab) {
-          tab.location.href = target;
-        } else {
-          window.location.href = target;
-        }
+        openKnowledgeDocument({ key: documentKey, page, documentUrl });
       } catch (e) {
-        tab?.close();
         setError(e instanceof Error ? e.message : "Failed to open source");
-      } finally {
-        setOpening(null);
       }
     },
     [],
@@ -388,13 +375,9 @@ export function KnowledgeSourcesCard({
                 type="button"
                 className="flex min-w-0 max-w-full items-center gap-1.5 text-left text-xs text-primary hover:underline"
                 title={page ? `${key} (page ${page})` : key}
-                onClick={() => void openSource(key, page, documentUrl)}
+                onClick={() => openSource(key, page, documentUrl)}
               >
-                {opening === key ? (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                ) : (
-                  <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                )}
+                <BookOpen className="h-3.5 w-3.5 shrink-0" />
                 <span className="truncate">{name}</span>
                 {page ? (
                   <span className="shrink-0 text-muted-foreground">
