@@ -41,7 +41,14 @@ import {
   ExecuteOpenCypherQueryCommand,
   NeptunedataClient,
 } from "@aws-sdk/client-neptunedata";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
+  PutObjectCommand,
+  S3Client,
+  UploadPartCommand,
+} from "@aws-sdk/client-s3";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   canonicalEntities,
@@ -360,31 +367,168 @@ export async function buildIdentitySnapshot(args: {
 
 type SnapshotS3Client = Pick<S3Client, "send">;
 
+/** S3 multipart minimum part size is 5MB (the last part is exempt); 8MB
+ * matches the bulk-rebuild CSV stager and keeps part counts low. */
+const SNAPSHOT_PART_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Serializes the snapshot as compact JSON in pieces, ONE ROW AT A TIME.
+ *
+ * The document emitted here is byte-identical to `JSON.stringify(snapshot)`
+ * for a snapshot whose keys are in declaration order: the twin writer
+ * `json.loads`es it and the schema must not move.
+ */
+export function* iterateIdentitySnapshotJson(
+  snapshot: IdentitySnapshotDoc,
+): Generator<string> {
+  yield (
+    `{"format":${JSON.stringify(snapshot.format)},` +
+    `"tenantId":${JSON.stringify(snapshot.tenantId)},` +
+    `"cursor":${JSON.stringify(snapshot.cursor)},` +
+    `"cutAt":${JSON.stringify(snapshot.cutAt)},` +
+    `"mappings":[`
+  );
+  for (let i = 0; i < snapshot.mappings.length; i += 1) {
+    yield (i === 0 ? "" : ",") + JSON.stringify(snapshot.mappings[i]);
+  }
+  yield `],"redirects":[`;
+  for (let i = 0; i < snapshot.redirects.length; i += 1) {
+    yield (i === 0 ? "" : ",") + JSON.stringify(snapshot.redirects[i]);
+  }
+  yield "]}";
+}
+
+/**
+ * Write the identity snapshot to S3 WITHOUT ever holding the whole document
+ * as a single JavaScript string.
+ *
+ * History, because the ceiling here moves with tenant size and the next
+ * person will otherwise re-learn it the hard way: this call used to be
+ * `JSON.stringify(snapshot, null, 2)`, which blew V8's maximum string length
+ * (~512MB) once TEI reached ~800k canonicals. Dropping the pretty-print
+ * (#4157) roughly halved the string and bought headroom — but only headroom.
+ * When TEI's identity registration then grew by ~1.36M order_item mappings,
+ * the COMPACT string exceeded the cap too and every bulk-rebuild died with
+ * "Invalid string length" again (24s in, 2.8GB of an 8GB heap — memory was
+ * never the constraint; the single-string cap was).
+ *
+ * So the document is streamed: `iterateIdentitySnapshotJson` stringifies each
+ * mapping/redirect row on its own (a few hundred characters, never anywhere
+ * near the cap), pieces accumulate into a ~8MB buffer, and each full buffer
+ * is flushed as an S3 multipart part. Nothing scales with tenant size except
+ * the number of parts. Snapshots small enough never to fill a part take a
+ * plain PutObject — one round trip instead of three, and no multipart
+ * bookkeeping for the tenants that are the common case.
+ *
+ * The row ARRAYS still materialize in `buildIdentitySnapshot`; that is fine
+ * (2.8GB of 8GB at TEI scale) and deliberately left alone.
+ */
 export async function uploadIdentitySnapshot(args: {
   snapshot: IdentitySnapshotDoc;
   s3?: SnapshotS3Client;
   bucket?: string;
+  /** Bytes buffered before a multipart part is flushed (tests use tiny parts). */
+  partBytes?: number;
 }): Promise<{ uploaded: boolean; key?: string }> {
   const bucket = args.bucket ?? getConfig("BRAIN_ARTIFACTS_BUCKET") ?? null;
   if (!bucket) return { uploaded: false };
   const s3 = args.s3 ?? new S3Client({});
   const key = `twin-identity/${args.snapshot.tenantId}/latest.json`;
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      // COMPACT, not pretty-printed: at TEI's ~800k canonicals the 2-space
-      // indentation multiplied the serialized snapshot past V8's maximum
-      // string length, and every bulk-rebuild died with "Invalid string
-      // length" (TEI reload, 2026-08-01). Nothing reads this file with human
-      // eyes at that size; the twin writer parses it. Compact form halves
-      // the string and keeps stringify under the cap with headroom.
-      Body: JSON.stringify(args.snapshot),
-      ContentType: "application/json",
-      Metadata: { identity_snapshot_cursor: args.snapshot.cursor },
-    }),
-  );
-  return { uploaded: true, key };
+  const partBytes = args.partBytes ?? SNAPSHOT_PART_BYTES;
+  const contentType = "application/json";
+  const metadata = { identity_snapshot_cursor: args.snapshot.cursor };
+
+  let buffer: string[] = [];
+  let bufferBytes = 0;
+  let uploadId: string | null = null;
+  const parts: Array<{ ETag: string; PartNumber: number }> = [];
+
+  const takeBuffer = (): string => {
+    const body = buffer.join("");
+    buffer = [];
+    bufferBytes = 0;
+    return body;
+  };
+
+  const flushPart = async (): Promise<void> => {
+    if (uploadId === null) {
+      const created = (await s3.send(
+        new CreateMultipartUploadCommand({
+          Bucket: bucket,
+          Key: key,
+          ContentType: contentType,
+          Metadata: metadata,
+        }),
+      )) as { UploadId?: string };
+      if (!created.UploadId) {
+        throw new Error(`CreateMultipartUpload returned no UploadId for ${key}`);
+      }
+      uploadId = created.UploadId;
+    }
+    const partNumber = parts.length + 1;
+    const uploaded = (await s3.send(
+      new UploadPartCommand({
+        Bucket: bucket,
+        Key: key,
+        UploadId: uploadId,
+        PartNumber: partNumber,
+        Body: takeBuffer(),
+      }),
+    )) as { ETag?: string };
+    parts.push({ ETag: uploaded.ETag ?? "", PartNumber: partNumber });
+  };
+
+  try {
+    for (const chunk of iterateIdentitySnapshotJson(args.snapshot)) {
+      buffer.push(chunk);
+      bufferBytes += Buffer.byteLength(chunk);
+      if (bufferBytes >= partBytes) await flushPart();
+    }
+
+    if (uploadId === null) {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: takeBuffer(),
+          ContentType: contentType,
+          Metadata: metadata,
+        }),
+      );
+      return { uploaded: true, key };
+    }
+
+    if (bufferBytes > 0) await flushPart();
+    await s3.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: bucket,
+        Key: key,
+        UploadId: uploadId,
+        MultipartUpload: { Parts: parts },
+      }),
+    );
+    return { uploaded: true, key };
+  } catch (err) {
+    // An abandoned multipart upload keeps billable parts around until the
+    // bucket lifecycle reaps it. Best-effort teardown, then rethrow.
+    if (uploadId !== null) {
+      try {
+        await s3.send(
+          new AbortMultipartUploadCommand({
+            Bucket: bucket,
+            Key: key,
+            UploadId: uploadId,
+          }),
+        );
+      } catch (abortErr) {
+        console.warn("[identity-graph-projector] snapshot abort failed", {
+          key,
+          error: abortErr instanceof Error ? abortErr.message : String(abortErr),
+        });
+      }
+    }
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------

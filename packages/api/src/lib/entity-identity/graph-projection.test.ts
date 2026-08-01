@@ -23,6 +23,7 @@ import {
   readSingleCount,
   systemEdgeId,
   systemNodeId,
+  uploadIdentitySnapshot,
   type GraphOp,
   type NeptuneQueryClient,
 } from "./graph-projection.js";
@@ -413,6 +414,163 @@ describe("buildIdentitySnapshot", () => {
     expect(snapshot.redirects).toEqual([
       { fromCanonicalEntityId: "can-loser", toCanonicalEntityId: "can-777" },
     ]);
+  });
+});
+
+describe("uploadIdentitySnapshot", () => {
+  const makeSnapshot = (mappingCount: number, redirectCount = 0) => ({
+    format: "identity-mapping-snapshot/v1" as const,
+    tenantId: "tenant-1",
+    cursor: "2026-08-01T00:00:00.000Z#evt-9",
+    cutAt: "2026-08-01T00:00:01.000Z",
+    mappings: Array.from({ length: mappingCount }, (_, i) => ({
+      sourceSystem: "p21",
+      externalId: `order_item:${i}`,
+      canonicalEntityId: `00000000-0000-0000-0000-${String(i).padStart(12, "0")}`,
+      entityTypeSlug: "order_item",
+    })),
+    redirects: Array.from({ length: redirectCount }, (_, i) => ({
+      fromCanonicalEntityId: `loser-${i}`,
+      toCanonicalEntityId: `survivor-${i}`,
+    })),
+  });
+
+  /** Reassemble the object body from whatever S3 calls were made. */
+  type S3Call = [{ constructor: { name: string }; input: Record<string, unknown> }];
+  const bodyFromCalls = (calls: S3Call[]) => {
+    const put = calls.find((c) => c[0].constructor.name === "PutObjectCommand");
+    if (put) return put[0].input.Body as string;
+    return calls
+      .filter((c) => c[0].constructor.name === "UploadPartCommand")
+      .map((c) => c[0].input.Body as string)
+      .join("");
+  };
+
+  it("writes one compact JSON document, byte-identical to JSON.stringify", async () => {
+    const snapshot = makeSnapshot(3, 2);
+    const s3Send = vi.fn().mockResolvedValue({});
+
+    const result = await uploadIdentitySnapshot({
+      snapshot,
+      s3: { send: s3Send } as never,
+    });
+
+    expect(result).toEqual({
+      uploaded: true,
+      key: "twin-identity/tenant-1/latest.json",
+    });
+    // Small snapshot → single PutObject, no multipart bookkeeping.
+    expect(s3Send).toHaveBeenCalledTimes(1);
+    const put = s3Send.mock.calls[0][0];
+    expect(put.constructor.name).toBe("PutObjectCommand");
+    expect(put.input.ContentType).toBe("application/json");
+    expect(put.input.Metadata).toEqual({
+      identity_snapshot_cursor: snapshot.cursor,
+    });
+    const body = put.input.Body as string;
+    expect(body).toBe(JSON.stringify(snapshot));
+    // Compact: no pretty-print indentation (that is what blew the cap).
+    expect(body).not.toContain("\n");
+    expect(JSON.parse(body)).toEqual(snapshot);
+  });
+
+  it("round-trips thousands of mappings through streamed multipart parts", async () => {
+    const snapshot = makeSnapshot(5000, 40);
+    const s3Send = vi.fn().mockImplementation(async (command: unknown) => {
+      const name = (command as { constructor: { name: string } }).constructor
+        .name;
+      if (name === "CreateMultipartUploadCommand") return { UploadId: "u-1" };
+      if (name === "UploadPartCommand") return { ETag: "etag" };
+      return {};
+    });
+
+    // Tiny parts force the multipart path with a handful of parts.
+    const result = await uploadIdentitySnapshot({
+      snapshot,
+      s3: { send: s3Send } as never,
+      partBytes: 64 * 1024,
+    });
+
+    expect(result.uploaded).toBe(true);
+
+    const names = s3Send.mock.calls.map(
+      (c) => (c[0] as { constructor: { name: string } }).constructor.name,
+    );
+    expect(names[0]).toBe("CreateMultipartUploadCommand");
+    expect(
+      names.filter((n) => n === "UploadPartCommand").length,
+    ).toBeGreaterThan(1);
+    expect(names[names.length - 1]).toBe("CompleteMultipartUploadCommand");
+    expect(names).not.toContain("PutObjectCommand");
+
+    const create = s3Send.mock.calls[0][0];
+    expect(create.input.ContentType).toBe("application/json");
+    expect(create.input.Metadata).toEqual({
+      identity_snapshot_cursor: snapshot.cursor,
+    });
+
+    const complete = s3Send.mock.calls[s3Send.mock.calls.length - 1][0];
+    expect(complete.input.UploadId).toBe("u-1");
+    const partNumbers = complete.input.MultipartUpload.Parts.map(
+      (p: { PartNumber: number }) => p.PartNumber,
+    );
+    expect(partNumbers).toEqual(partNumbers.map((_: number, i: number) => i + 1));
+
+    // The concatenated parts are exactly one valid compact JSON document.
+    const body = bodyFromCalls(s3Send.mock.calls as never);
+    expect(body).toBe(JSON.stringify(snapshot));
+    expect(JSON.parse(body)).toEqual(snapshot);
+  });
+
+  it("handles an empty snapshot (no mappings, no redirects)", async () => {
+    const snapshot = makeSnapshot(0);
+    const s3Send = vi.fn().mockResolvedValue({});
+    await uploadIdentitySnapshot({
+      snapshot,
+      s3: { send: s3Send } as never,
+    });
+    const body = s3Send.mock.calls[0][0].input.Body as string;
+    expect(body).toBe(JSON.stringify(snapshot));
+    expect(JSON.parse(body).mappings).toEqual([]);
+  });
+
+  it("aborts an in-flight multipart upload when a part fails", async () => {
+    const snapshot = makeSnapshot(5000);
+    const s3Send = vi.fn().mockImplementation(async (command: unknown) => {
+      const name = (command as { constructor: { name: string } }).constructor
+        .name;
+      if (name === "CreateMultipartUploadCommand") return { UploadId: "u-1" };
+      if (name === "UploadPartCommand") throw new Error("part exploded");
+      return {};
+    });
+
+    await expect(
+      uploadIdentitySnapshot({
+        snapshot,
+        s3: { send: s3Send } as never,
+        partBytes: 64 * 1024,
+      }),
+    ).rejects.toThrow("part exploded");
+
+    const names = s3Send.mock.calls.map(
+      (c) => (c[0] as { constructor: { name: string } }).constructor.name,
+    );
+    expect(names).toContain("AbortMultipartUploadCommand");
+  });
+
+  it("skips the upload entirely when no artifacts bucket is configured", async () => {
+    const s3Send = vi.fn();
+    delete process.env.BRAIN_ARTIFACTS_BUCKET;
+    try {
+      const result = await uploadIdentitySnapshot({
+        snapshot: makeSnapshot(1),
+        s3: { send: s3Send } as never,
+      });
+      expect(result).toEqual({ uploaded: false });
+    } finally {
+      process.env.BRAIN_ARTIFACTS_BUCKET = "test-brain-artifacts";
+    }
+    expect(s3Send).not.toHaveBeenCalled();
   });
 });
 
