@@ -373,7 +373,13 @@ export async function uploadIdentitySnapshot(args: {
     new PutObjectCommand({
       Bucket: bucket,
       Key: key,
-      Body: JSON.stringify(args.snapshot, null, 2),
+      // COMPACT, not pretty-printed: at TEI's ~800k canonicals the 2-space
+      // indentation multiplied the serialized snapshot past V8's maximum
+      // string length, and every bulk-rebuild died with "Invalid string
+      // length" (TEI reload, 2026-08-01). Nothing reads this file with human
+      // eyes at that size; the twin writer parses it. Compact form halves
+      // the string and keeps stringify under the cap with headroom.
+      Body: JSON.stringify(args.snapshot),
       ContentType: "application/json",
       Metadata: { identity_snapshot_cursor: args.snapshot.cursor },
     }),
