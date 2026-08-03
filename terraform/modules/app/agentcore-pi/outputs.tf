@@ -23,16 +23,16 @@ output "agentcore_pi_log_group_name" {
 }
 
 output "okf_wiki_mount_enabled" {
-  description = "Whether the OKF wiki EFS view is mounted into the Pi Lambda."
+  description = "DEPRECATED (THINK-589): always false — the OKF wiki EFS view is never mounted into the Pi Lambda. Removal pending (PR 2)."
   value       = local.okf_efs_mount_enabled
 }
 
 output "okf_wiki_mount_path" {
-  description = "Pi local mount path for the OKF wiki EFS view."
+  description = "DEPRECATED (THINK-589): inert echo of the deprecated okf_efs_mount_path input; nothing is mounted. Removal pending (PR 2)."
   value       = var.okf_efs_mount_path
 }
 
 output "okf_wiki_read_access_point_arn" {
-  description = "EFS access point ARN mounted by Pi for read-only OKF wiki traversal."
+  description = "DEPRECATED (THINK-589): inert echo of the deprecated okf_efs_read_access_point_arn input; nothing is mounted. Removal pending (PR 2)."
   value       = var.okf_efs_read_access_point_arn
 }

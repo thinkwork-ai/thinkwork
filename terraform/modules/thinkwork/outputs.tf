@@ -212,23 +212,23 @@ output "brain_artifacts_bucket_arn" {
 }
 
 output "okf_wiki_efs_enabled" {
-  description = "Whether the OKF Wiki Navigator EFS current-view substrate is provisioned and wired."
-  value       = var.okf_wiki_efs_enabled
+  description = "DEPRECATED (THINK-589): always false — the OKF wiki EFS substrate is no longer wired to any consumer. Removal pending (PR 2)."
+  value       = false
 }
 
 output "okf_wiki_efs_file_system_id" {
-  description = "EFS file system ID for the OKF wiki current view, or null when disabled."
+  description = "DEPRECATED (THINK-589): ID of the orphaned OKF wiki EFS filesystem retained for PR 2's gated delete, or null. No consumer mounts it."
   value       = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].id : null
 }
 
 output "okf_wiki_refresh_access_point_arn" {
-  description = "EFS access point ARN used by the okf-efs-refresh hydrator, or null when disabled."
-  value       = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_refresh[0].arn : null
+  description = "DEPRECATED (THINK-589): always null — the hydrator access point is removed. Removal pending (PR 2)."
+  value       = null
 }
 
 output "okf_wiki_pi_read_access_point_arn" {
-  description = "EFS access point ARN mounted by Pi for read-only OKF wiki traversal, or null when disabled."
-  value       = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_pi_read[0].arn : null
+  description = "DEPRECATED (THINK-589): always null — the Pi read access point is removed. Removal pending (PR 2)."
+  value       = null
 }
 
 output "twenty_provisioned" {

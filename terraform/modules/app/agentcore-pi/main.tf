@@ -31,26 +31,14 @@ locals {
   # Release-backed deployments use an immutable, source-derived target tag so
   # changing the release image also changes aws_lambda_function.image_uri.
   # Reusing pi-latest lets Terraform miss the update even after ECR is retagged.
-  pi_image_tag               = var.source_image_uri != "" ? "pi-${substr(sha256(var.source_image_uri), 0, 16)}" : "pi-latest"
-  pi_image_uri               = "${var.ecr_repository_url}:${local.pi_image_tag}"
-  okf_efs_vpc_enabled        = var.okf_efs_enabled && length(var.okf_efs_subnet_ids) > 0 && length(var.okf_efs_security_group_ids) > 0
-  private_vpc_enabled        = local.okf_efs_vpc_enabled
-  private_subnet_ids         = var.okf_efs_subnet_ids
-  private_security_group_ids = var.okf_efs_security_group_ids
-  okf_efs_mount_enabled      = local.okf_efs_vpc_enabled && var.okf_efs_file_system_arn != "" && var.okf_efs_read_access_point_arn != ""
-  okf_efs_iam_statements = local.okf_efs_mount_enabled ? [
-    {
-      Sid      = "OkfWikiEfsReadOnlyMount"
-      Effect   = "Allow"
-      Action   = ["elasticfilesystem:ClientMount"]
-      Resource = var.okf_efs_file_system_arn
-      Condition = {
-        StringEquals = {
-          "elasticfilesystem:AccessPointArn" = var.okf_efs_read_access_point_arn
-        }
-      }
-    },
-  ] : []
+  pi_image_tag = var.source_image_uri != "" ? "pi-${substr(sha256(var.source_image_uri), 0, 16)}" : "pi-latest"
+  pi_image_uri = "${var.ecr_repository_url}:${local.pi_image_tag}"
+  # THINK-589 PR 1 (deprecate-to-no-op): the OKF wiki EFS feature is dead. The
+  # okf_efs_* inputs remain declared as deprecated no-ops so customer-stage
+  # passthroughs keep working, but nothing is wired regardless of their
+  # values: no VPC attach, no EFS mount, no OKF env, no EFS IAM grant.
+  # PR 2 deletes the variables outright.
+  okf_efs_mount_enabled = false
 }
 
 ################################################################################
@@ -80,7 +68,7 @@ resource "aws_iam_role_policy" "agentcore_pi" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = concat([
+    Statement = [
       {
         Sid    = "S3Access"
         Effect = "Allow"
@@ -295,12 +283,15 @@ resource "aws_iam_role_policy" "agentcore_pi" {
         ]
         Resource = "arn:aws:secretsmanager:${var.region}:${var.account_id}:secret:thinkwork-${var.stage}-*"
       },
-    ], local.okf_efs_iam_statements)
+    ]
   })
 }
 
+# THINK-589: the OKF wiki EFS mount was Pi's only VPC attachment, so the
+# AWSLambdaVPCAccessExecutionRole attachment is retired with it. Conditioned
+# off (never created) until PR 2 deletes it.
 resource "aws_iam_role_policy_attachment" "agentcore_pi_vpc_access" {
-  count = local.private_vpc_enabled ? 1 : 0
+  count = 0
 
   role       = aws_iam_role.agentcore_pi.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
@@ -393,13 +384,11 @@ resource "aws_lambda_function" "agentcore_pi" {
       # Pi's SessionData blobs against threads.session_data. Empty during
       # the first greenfield apply (DB cluster doesn't exist yet); the
       # constructor fail-closes if either is missing at runtime.
-      DB_CLUSTER_ARN             = var.db_cluster_arn
-      DB_SECRET_ARN              = var.db_secret_arn
-      OKF_WIKI_NAVIGATOR_ENABLED = tostring(local.okf_efs_mount_enabled)
+      DB_CLUSTER_ARN = var.db_cluster_arn
+      DB_SECRET_ARN  = var.db_secret_arn
       # THINK-173 U6: PUBLIC key only — the container verifies capability
       # manifests and must never hold signing material (KTD-3).
       CAPABILITY_SIGNING_PUBLIC_KEY = var.capability_signing_public_key
-      OKF_WIKI_ROOT                 = var.okf_efs_mount_path
       # Per-model Bedrock region overrides, honored by the patched pi-ai
       # provider (patches/@earendil-works__pi-ai). SigV4 signing and endpoint
       # selection both follow the override.
@@ -411,23 +400,8 @@ resource "aws_lambda_function" "agentcore_pi" {
     }
   }
 
-  dynamic "vpc_config" {
-    for_each = local.private_vpc_enabled ? [1] : []
-
-    content {
-      subnet_ids         = local.private_subnet_ids
-      security_group_ids = local.private_security_group_ids
-    }
-  }
-
-  dynamic "file_system_config" {
-    for_each = local.okf_efs_vpc_enabled ? [1] : []
-
-    content {
-      arn              = var.okf_efs_read_access_point_arn
-      local_mount_path = var.okf_efs_mount_path
-    }
-  }
+  # THINK-589: the OKF wiki EFS mount (and the VPC attachment that existed
+  # solely to reach it) is removed — no vpc_config, no file_system_config.
 
   logging_config {
     log_group  = aws_cloudwatch_log_group.agentcore_pi.name
