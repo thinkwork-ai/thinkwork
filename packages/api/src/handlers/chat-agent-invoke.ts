@@ -116,6 +116,14 @@ import {
   recordDispatchWorkspaceProjectionSnapshot,
   type WorkspaceProjectionManifestLike,
 } from "../lib/workspace-projection-snapshot.js";
+import {
+  computeRoutingSignature,
+  evaluateRenderSkip,
+  readThreadLastRender,
+  writeThreadLastRender,
+  THREAD_LAST_RENDER_VERSION,
+  type ThreadLastRenderMarker,
+} from "../lib/workspace-render-skip.js";
 
 /**
  * Extract or generate a trace ID for correlating CloudWatch/X-Ray traces.
@@ -362,7 +370,10 @@ export interface RenderWorkspaceTupleForInvokeInput {
 export interface RenderWorkspaceTupleForInvokeResult {
   rendered: boolean;
   renderedPrefix?: string;
-  cacheStatus?: "hit" | "miss";
+  /** "skip" = renderer invoke skipped, values carried from the thread's last render (U2, plan 2026-08-03-001). */
+  cacheStatus?: "hit" | "miss" | "skip";
+  /** Source prefixes the renderer listed — persisted for the render-skip freshness probe. */
+  sourcePrefixes?: string[];
   activeSpace?: {
     id: string;
     slug: string;
@@ -465,6 +476,50 @@ export async function renderWorkspaceTupleForInvoke(
       parsed.cacheStatus === "hit" || parsed.cacheStatus === "miss"
         ? parsed.cacheStatus
         : undefined,
+    sourcePrefixes: isStringArray(parsed.sourcePrefixes)
+      ? parsed.sourcePrefixes
+      : undefined,
+  };
+}
+
+/**
+ * Rebuild a render result from the thread's persisted last-render marker
+ * (render-skip, U2 of plan 2026-08-03-001). Every carried value re-validates
+ * through the same parsers the live renderer response goes through, so a
+ * corrupt marker degrades to `rendered: false` and the caller falls back to
+ * a full render — never a stale/empty prefix.
+ */
+export function renderResultFromLastRenderMarker(
+  marker: ThreadLastRenderMarker,
+): RenderWorkspaceTupleForInvokeResult | null {
+  if (!marker.renderedPrefix) return null;
+  const capabilities =
+    marker.capabilities && typeof marker.capabilities.fingerprint === "string"
+      ? {
+          fingerprint: marker.capabilities.fingerprint,
+          manifest: parseCapabilitiesManifest(
+            marker.capabilities.manifest === undefined ||
+              marker.capabilities.manifest === null
+              ? null
+              : JSON.stringify(marker.capabilities.manifest),
+          ),
+        }
+      : undefined;
+  return {
+    rendered: true,
+    renderedPrefix: marker.renderedPrefix,
+    cacheStatus: "skip",
+    sourcePrefixes: marker.sourcePrefixes,
+    activeSpace: isActiveSpacePayload(marker.activeSpace)
+      ? marker.activeSpace
+      : undefined,
+    capabilities,
+    effectivePolicy: isEffectiveWorkspacePolicy(marker.effectivePolicy)
+      ? marker.effectivePolicy
+      : undefined,
+    hydrateManifest: isWorkspaceProjectionManifestLike(marker.hydrateManifest)
+      ? marker.hydrateManifest
+      : undefined,
   };
 }
 
@@ -766,18 +821,28 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
   let turnId: string | undefined = existingThreadTurnId || undefined;
   try {
     const desktopDelegation = event.desktopDelegation;
+    // U2 (plan 2026-08-03-001, R12): data-independent setup reads start
+    // together. Document plates depend on tenantId alone; the helper
+    // try/catches internally so this promise never rejects unhandled.
+    const documentPlatesPromise = documentPlatesForDispatch(tenantId);
     // 1. Resolve per-invoker identity. This is the PER-TURN piece that the
     //    shared `resolveAgentRuntimeConfig` helper does NOT own — it's specific
     //    to the triggering chat event. Human/user messages and user-created
     //    threads keep their direct actor. Connector-created threads use the
     //    target agent's paired human as the trusted user context so Pi receives
     //    the required user_id without giving generic wakeups a fake invoker.
-    const identity = await resolveChatInvokeIdentity({
-      threadId,
-      tenantId,
-      agentId,
-      messageId: event.messageId,
-    });
+    const [identity, spaceContextResolved, priorMessageRows, lastRenderMarker] =
+      await Promise.all([
+        resolveChatInvokeIdentity({
+          threadId,
+          tenantId,
+          agentId,
+          messageId: event.messageId,
+        }),
+        resolveThreadSpaceContext({ tenantId, threadId }),
+        loadPriorMessageRows({ threadId, messageId: event.messageId }),
+        readThreadLastRender({ tenantId, threadId }),
+      ]);
     const currentUserEmail = identity.currentUserEmail;
     const currentUserId = identity.currentUserId;
     if (identity.source !== "none") {
@@ -796,12 +861,14 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       detail: identity.source,
     });
 
-    const spaceContext = await resolveThreadSpaceContext({
+    const spaceId = spaceContextResolved?.spaceId ?? null;
+    const spaceSlug = spaceContextResolved?.spaceSlug ?? null;
+    // Member spaces need only identity — start now, await at the builder.
+    // The helper try/catches internally (never rejects unhandled).
+    const memberSpacesPromise = memberSpacesForDispatch(
       tenantId,
-      threadId,
-    });
-    const spaceId = spaceContext?.spaceId ?? null;
-    const spaceSlug = spaceContext?.spaceSlug ?? null;
+      identity.currentUserId,
+    );
 
     // 2. Resolve agent runtime config (agent + template + tenant + skills +
     //    KBs + MCP + guardrail + sandbox template). Shared with the
@@ -1134,10 +1201,15 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           .where(eq(threadTurns.thread_id, threadId));
         const turnNumber = (countRow?.count || 0) + 1;
 
+        // U2 (plan 2026-08-03-001): the id is always client-generated so
+        // wakeup_request_id (= turn id, for cost lookup) folds into this
+        // insert instead of a separate follow-up UPDATE.
+        const newTurnId = claimEligible ? candidateTurnId : randomUUID();
         const [turnRow] = await db
           .insert(threadTurns)
           .values({
-            id: claimEligible ? candidateTurnId : undefined,
+            id: newTurnId,
+            wakeup_request_id: newTurnId,
             tenant_id: tenantId,
             agent_id: agentId,
             thread_id: threadId,
@@ -1184,14 +1256,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           })
           .returning({ id: threadTurns.id });
         turnId = turnRow?.id;
-
-        // Set wakeup_request_id = turn ID so cost lookup works
-        if (turnId) {
-          await db
-            .update(threadTurns)
-            .set({ wakeup_request_id: turnId })
-            .where(eq(threadTurns.id, turnId));
-        }
 
         // Notify subscribers that a turn started
         await notifyThreadTurnUpdate({
@@ -1281,31 +1345,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       }
     }
 
-    // 2c. Load prior conversation history for this thread from Aurora.
-    // The runtime container no longer has a working source of session memory
-    // (AgentCore Memory was retired in PRD-41B Phase 3 — store_turn became a
-    // no-op, so list_events returns nothing). The `messages` table is now
-    // the source of truth, and we ship history inline in the invoke payload.
-    // Cap at 30 turns: long enough for real conversation memory, short enough
-    // to keep payloads reasonable.
-    const HISTORY_LIMIT = 30;
-    const historyConditions = [eq(messages.thread_id, threadId)];
-    if (event.messageId) {
-      // ne() generates a properly-typed uuid comparison; raw sql interpolation
-      // would bind the messageId as `text`, which Postgres rejects against the
-      // uuid column with `operator does not exist: uuid <> text`.
-      historyConditions.push(ne(messages.id, event.messageId));
-    }
-    const priorMessageRows = await db
-      .select({
-        role: messages.role,
-        content: messages.content,
-      })
-      .from(messages)
-      .where(and(...historyConditions))
-      .orderBy(sql`${messages.created_at} desc`)
-      .limit(HISTORY_LIMIT);
-
+    // 2c. Prior conversation history (loaded concurrently in the stage-1
+    // Promise.all above — see loadPriorMessageRows for the sourcing notes).
     const messagesHistory = priorMessageRows
       .reverse()
       .filter(
@@ -1354,18 +1395,173 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       reason: "not_attempted",
     };
     let renderedWorkspacePrefix: string | undefined;
+    // U2 (plan 2026-08-03-001, R12): sandbox pre-flight and the turn
+    // assertion depend only on state known before the render, so both start
+    // here and resolve concurrently with it. Neither promise can reject:
+    // the pre-flight wraps its own try/catch and mintTurnAssertion is
+    // fail-open (returns null).
+    const sandboxPreflightPromise: Promise<SandboxPreflightResult | null> =
+      currentUserId && runtimeConfig.sandboxTemplate
+        ? (async () => {
+            // Sandbox pre-flight (plan Unit 9). Decides whether to register
+            // the execute_code tool for this turn. R15-consistent: we use the
+            // actual invoker (currentUserId), not agent.human_pair_id — a
+            // wakeup-style fallback would hand every webhook-triggered run
+            // the agent owner's sandbox tokens.
+            try {
+              const preflight = await checkSandboxPreflight({
+                stage: STAGE,
+                tenantId,
+                agentId,
+                userId: currentUserId,
+                templateSandbox: runtimeConfig.sandboxTemplate,
+              });
+              console.log(
+                `[chat-agent-invoke] sandbox pre-flight: ${preflight.status}`,
+              );
+              logAgentCorePhase({
+                source: "chat-agent-invoke",
+                phase: "api.sandbox_preflight",
+                status: "completed",
+                traceId,
+                tenantId,
+                agentId,
+                threadId,
+                threadTurnId: turnId,
+                runtimeType,
+                detail: preflight.status,
+              });
+              return preflight;
+            } catch (err) {
+              console.error(
+                `[chat-agent-invoke] sandbox pre-flight failed:`,
+                err,
+              );
+              logAgentCorePhase({
+                source: "chat-agent-invoke",
+                phase: "api.sandbox_preflight",
+                status: "failed",
+                traceId,
+                tenantId,
+                agentId,
+                threadId,
+                threadTurnId: turnId,
+                runtimeType,
+                errorType: err instanceof Error ? err.name : "Error",
+              });
+              return null;
+            }
+          })()
+        : Promise.resolve(null);
+    const turnAssertionPromise = mintTurnAssertion({
+      tenant_id: tenantId,
+      thread_id: threadId ?? "",
+      turn_id: turnId ?? "",
+    });
     if (spaceId) {
       const workspaceRenderStart = Date.now();
       try {
-        renderedWorkspace = await renderWorkspaceTupleForInvoke({
+        // Render-skip (U2, plan 2026-08-03-001 / KTD7, R11): reuse the
+        // thread's persisted last render only when ALL of (a) the DB-derived
+        // routing signature, (b) the config fingerprint computed against the
+        // carried manifest, and (c) the S3 mtime probe over the render's own
+        // source prefixes agree nothing changed. Any mismatch — or any probe
+        // failure — renders exactly as before (fail-closed to render).
+        const routingSignaturePromise = computeRoutingSignature({
           tenantId,
           agentId,
           spaceId,
-          threadId,
-          threadSlug: threadId,
           userId: currentUserId || null,
-          agentBlockedTools: runtimeConfig.blockedTools,
         });
+        let carriedRender: RenderWorkspaceTupleForInvokeResult | null = null;
+        if (lastRenderMarker) {
+          const candidate = renderResultFromLastRenderMarker(lastRenderMarker);
+          if (candidate) {
+            const decision = await evaluateRenderSkip({
+              marker: lastRenderMarker,
+              bucket: workspaceBucket() || undefined,
+              currentRoutingSignature: await routingSignaturePromise,
+              currentConfigFingerprint: computeConfigFingerprint(
+                {
+                  tenantId,
+                  agentId,
+                  spaceId,
+                  agentProfileId: null,
+                  perspectiveUserId: currentUserId || null,
+                },
+                {
+                  ...fingerprintInputsFromRuntimeConfig(runtimeConfig),
+                  ...fingerprintInputsFromCapabilitiesManifest(
+                    candidate.capabilities?.manifest ?? null,
+                  ),
+                },
+              ),
+            });
+            if (decision.skip) {
+              carriedRender = candidate;
+            } else {
+              console.log(
+                `[chat-agent-invoke] render-skip declined: ${decision.reason}`,
+              );
+            }
+          }
+        }
+        renderedWorkspace =
+          carriedRender ??
+          (await renderWorkspaceTupleForInvoke({
+            tenantId,
+            agentId,
+            spaceId,
+            threadId,
+            threadSlug: threadId,
+            userId: currentUserId || null,
+            agentBlockedTools: runtimeConfig.blockedTools,
+          }));
+        if (
+          !carriedRender &&
+          renderedWorkspace.rendered &&
+          renderedWorkspace.renderedPrefix &&
+          (renderedWorkspace.sourcePrefixes?.length ?? 0) > 0
+        ) {
+          // Persist the marker that makes the NEXT turn skip-eligible.
+          // Best-effort (writeThreadLastRender swallows errors): a lost
+          // marker only means the next turn renders.
+          await writeThreadLastRender({
+            tenantId,
+            threadId,
+            marker: {
+              version: THREAD_LAST_RENDER_VERSION,
+              generatedAt: new Date().toISOString(),
+              renderedPrefix: renderedWorkspace.renderedPrefix,
+              sourcePrefixes: renderedWorkspace.sourcePrefixes ?? [],
+              activeSpace: renderedWorkspace.activeSpace,
+              effectivePolicy: renderedWorkspace.effectivePolicy,
+              capabilities: renderedWorkspace.capabilities
+                ? {
+                    fingerprint: renderedWorkspace.capabilities.fingerprint,
+                    manifest: renderedWorkspace.capabilities.manifest,
+                  }
+                : undefined,
+              hydrateManifest: renderedWorkspace.hydrateManifest,
+              routingSignature: await routingSignaturePromise,
+              configFingerprint: computeConfigFingerprint(
+                {
+                  tenantId,
+                  agentId,
+                  spaceId,
+                  agentProfileId: null,
+                  perspectiveUserId: currentUserId || null,
+                },
+                {
+                  ...fingerprintInputsFromRuntimeConfig(runtimeConfig),
+                  ...fingerprintInputsFromCapabilitiesManifest(
+                    renderedWorkspace.capabilities?.manifest ?? null,
+                  ),
+                },
+              ),
+            } satisfies ThreadLastRenderMarker,
+          });
+        }
         if (renderedWorkspace.rendered) {
           renderedWorkspacePrefix = renderedWorkspace.renderedPrefix;
           effectiveToolPolicy =
@@ -1607,53 +1803,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
 
     let workflowSkill: unknown = undefined;
 
-    // Sandbox pre-flight (plan Unit 9). Decides whether to register the
-    // execute_code tool for this turn. R15-consistent: we use the actual
-    // invoker (currentUserId), not agent.human_pair_id — a wakeup-style
-    // fallback would hand every webhook-triggered run the agent owner's
-    // sandbox tokens.
-    let sandboxPreflight: SandboxPreflightResult | null = null;
-    if (currentUserId && runtimeConfig.sandboxTemplate) {
-      try {
-        sandboxPreflight = await checkSandboxPreflight({
-          stage: STAGE,
-          tenantId,
-          agentId,
-          userId: currentUserId,
-          templateSandbox: runtimeConfig.sandboxTemplate,
-        });
-        console.log(
-          `[chat-agent-invoke] sandbox pre-flight: ${sandboxPreflight.status}`,
-        );
-        logAgentCorePhase({
-          source: "chat-agent-invoke",
-          phase: "api.sandbox_preflight",
-          status: "completed",
-          traceId,
-          tenantId,
-          agentId,
-          threadId,
-          threadTurnId: turnId,
-          runtimeType,
-          detail: sandboxPreflight.status,
-        });
-      } catch (err) {
-        console.error(`[chat-agent-invoke] sandbox pre-flight failed:`, err);
-        sandboxPreflight = null;
-        logAgentCorePhase({
-          source: "chat-agent-invoke",
-          phase: "api.sandbox_preflight",
-          status: "failed",
-          traceId,
-          tenantId,
-          agentId,
-          threadId,
-          threadTurnId: turnId,
-          runtimeType,
-          errorType: err instanceof Error ? err.name : "Error",
-        });
-      }
-    }
+    // Started before the render (U2) — resolves concurrently with it.
+    const sandboxPreflight: SandboxPreflightResult | null =
+      await sandboxPreflightPromise;
 
     const invokeStart = Date.now();
     const invokePayload = {
@@ -1797,9 +1949,13 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       // dispatch-critical field inline here — add it to the helper so the
       // wakeup paths get it too (the parity test enforces this).
       ...buildAgentDispatchControlFields({
-        documentPlates: await documentPlatesForDispatch(tenantId),
+        // U2: both promises started in the setup stages above; the values
+        // still come exclusively from documentPlatesForDispatch(tenantId) /
+        // memberSpacesForDispatch(tenantId, currentUserId) — the dispatch-
+        // parity test pins the assignment sites.
+        documentPlates: await documentPlatesPromise,
         // THINK-261 #6: member spaces for recall fan-out + scope labels.
-        memberSpaces: await memberSpacesForDispatch(tenantId, currentUserId),
+        memberSpaces: await memberSpacesPromise,
         thinkworkApiUrl: thinkworkApiUrl(),
         apiAuthSecret,
         threadId,
@@ -1826,11 +1982,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           runtimeConfig.capabilityFolderDispatch && renderedWorkspace.rendered
             ? renderedWorkspace.capabilities?.fingerprint
             : undefined,
-        turnAssertion: await mintTurnAssertion({
-          tenant_id: tenantId,
-          thread_id: threadId ?? "",
-          turn_id: turnId ?? "",
-        }),
+        turnAssertion: await turnAssertionPromise,
         configFingerprint: computeConfigFingerprint(
           {
             tenantId,
@@ -1992,6 +2144,38 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     }
     return;
   }
+}
+
+/**
+ * Load prior conversation history for a thread from Aurora. The runtime
+ * container no longer has a working source of session memory (AgentCore
+ * Memory was retired in PRD-41B Phase 3 — store_turn became a no-op, so
+ * list_events returns nothing). The `messages` table is the source of truth,
+ * and history ships inline in the invoke payload. Cap at 30 turns: long
+ * enough for real conversation memory, short enough to keep payloads
+ * reasonable.
+ */
+async function loadPriorMessageRows(input: {
+  threadId: string;
+  messageId?: string;
+}): Promise<Array<{ role: string | null; content: string | null }>> {
+  const HISTORY_LIMIT = 30;
+  const historyConditions = [eq(messages.thread_id, input.threadId)];
+  if (input.messageId) {
+    // ne() generates a properly-typed uuid comparison; raw sql interpolation
+    // would bind the messageId as `text`, which Postgres rejects against the
+    // uuid column with `operator does not exist: uuid <> text`.
+    historyConditions.push(ne(messages.id, input.messageId));
+  }
+  return db
+    .select({
+      role: messages.role,
+      content: messages.content,
+    })
+    .from(messages)
+    .where(and(...historyConditions))
+    .orderBy(sql`${messages.created_at} desc`)
+    .limit(HISTORY_LIMIT);
 }
 
 async function resolveThreadSpaceContext(input: {

@@ -28,15 +28,16 @@ Reproduce with `scripts/latency-dashboard.sh --stage dev` (U1). Baseline full ev
 
 ## Current Unit
 
-- **U1 — Baseline latency dashboards and measurement pack (THINK-582)**
-- Branch: `feat/think-582-latency-measurement-pack`
-- Worktree: `.claude/worktrees/agentcore-u1`
+- **U2 — chat-agent-invoke setup diet (THINK-583)**
+- Branch: `feat/think-583-setup-diet`
+- Worktree: `.claude/worktrees/agentcore-u2`
 - Status: In progress
 
 ## Progress Log
 
-| Date | Unit | Branch | PR  | Status | Verification | Notes |
-| ---- | ---- | ------ | --- | ------ | ------------ | ----- |
+| Date       | Unit                | Branch                                    | PR                                                           | Status                                | Verification                                                                                                                                                                                                                                                                                                                                                                                                      | Notes                                                                                                                                                                                                                                                                                                   |
+| ---------- | ------------------- | ----------------------------------------- | ------------------------------------------------------------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-08-03 | U1 measurement pack | `feat/think-582-latency-measurement-pack` | [#4163](https://github.com/thinkwork-ai/thinkwork/pull/4163) | Merged and deployed (run 30857381970) | Pack reproduces dev baselines: chat-agent-invoke p50 10 308 ms / 59% cold; render p50 5 031 ms; agent_loop p50 9 609 ms; follow-up cohort (≤15 min gap) harness overhead **p50 12.9 s / p90 19.1 s**, first/idle p50 32.2 s; 75% of follow-ups arrive within 15 min. Baseline eval run `2c2ceb89-f637-4fed-b4dc-958698efb902`: 124 tests, 116 pass / 7 fail / 1 error (94.31%) — per-category table in THINK-582. | Cohort join: finalize→invoke by threadId (invoke.received has no threadTurnId), finalize→agent_loop by threadTurnId. Known-fail baseline: agentcore-smoke 0/1, flagged-thread 0/2 predate this project. Eval start needed admin-equivalent path (CLI session is api-key; no tenant-admin user session). |
 
 ## Blockers
 

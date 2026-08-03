@@ -219,14 +219,20 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     const wakeupSource = handlerSource("wakeup-processor.ts");
     const chatSource = handlerSource("chat-agent-invoke.ts");
     // Both wakeup builders (initial + turn-loop re-invoke) reuse the one
-    // effectiveDocumentPlates read; chat resolves per dispatch.
+    // effectiveDocumentPlates read; chat resolves per dispatch. Chat's read
+    // starts early as documentPlatesPromise (setup-diet U2, plan
+    // 2026-08-03-001) but the value must still come exclusively from
+    // documentPlatesForDispatch(tenantId).
     expect(
       wakeupSource.match(/documentPlates: effectiveDocumentPlates,/g),
     ).toHaveLength(2);
     expect(
       chatSource.match(
-        /documentPlates: await documentPlatesForDispatch\(tenantId\),/g,
+        /const documentPlatesPromise = documentPlatesForDispatch\(tenantId\);/g,
       ),
+    ).toHaveLength(1);
+    expect(
+      chatSource.match(/documentPlates: await documentPlatesPromise,/g),
     ).toHaveLength(1);
   });
 
