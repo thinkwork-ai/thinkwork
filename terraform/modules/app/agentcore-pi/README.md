@@ -8,7 +8,7 @@ This module owns the dedicated Pi Lambda + log group + IAM role + event-invoke c
 
 - `aws_iam_role.agentcore_pi` (`thinkwork-${stage}-agentcore-pi-role`) — assumed by Lambda + Bedrock AgentCore Runtime principals.
 - `aws_iam_role_policy.agentcore_pi` — baseline permissions (S3 skill catalog, Bedrock model invoke, AgentCore Memory + Code Interpreter, CloudWatch Logs, X-Ray ingestion, ECR pull, SSM parameter access, memory-retain Lambda invoke). Forward-compat additions for U4-U8: Aurora Data API + Secrets Manager scoped to `thinkwork-${stage}-*`.
-- `aws_iam_role_policy_attachment.agentcore_pi_vpc_access` — attached when Pi needs private-network access for the OKF EFS mount.
+- `aws_iam_role_policy_attachment.agentcore_pi_vpc_access` — retired (THINK-589): the OKF wiki EFS mount is removed, Pi is not VPC-attached, and the attachment is conditioned off pending deletion in the follow-up PR.
 - `aws_iam_role_policy.agentcore_pi_dlq_send` — `sqs:SendMessage` against the shared async DLQ (injected via `var.async_dlq_arn`).
 - `aws_cloudwatch_log_group.agentcore_pi` (`/thinkwork/${stage}/agentcore-pi`).
 - `aws_lambda_function.agentcore_pi` (`thinkwork-${stage}-agentcore-pi`) — `package_type = "Image"`, pulls `${ecr_repository_url}:pi-latest`.

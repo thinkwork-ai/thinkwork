@@ -81,37 +81,37 @@ variable "db_secret_arn" {
 }
 
 variable "okf_efs_enabled" {
-  description = "When true, mount the generated OKF wiki EFS view into Pi. Requires subnet/security-group inputs and an access point ARN."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature is dead; this input is ignored — Pi is never VPC-attached and never mounts EFS. Declaration retained so existing passthroughs and tfvars keep working until PR 2 deletes it."
   type        = bool
   default     = false
 }
 
 variable "okf_efs_subnet_ids" {
-  description = "Subnet IDs for the Pi Lambda VPC attachment used by the OKF wiki EFS mount."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature is dead; this input is ignored — Pi is never VPC-attached and never mounts EFS. Declaration retained so existing passthroughs and tfvars keep working until PR 2 deletes it."
   type        = list(string)
   default     = []
 }
 
 variable "okf_efs_security_group_ids" {
-  description = "Security group IDs for the Pi Lambda VPC attachment used by the OKF wiki EFS mount."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature is dead; this input is ignored — Pi is never VPC-attached and never mounts EFS. Declaration retained so existing passthroughs and tfvars keep working until PR 2 deletes it."
   type        = list(string)
   default     = []
 }
 
 variable "okf_efs_file_system_arn" {
-  description = "EFS file system ARN for read-only Pi OKF wiki access."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature is dead; this input is ignored — Pi is never VPC-attached and never mounts EFS. Declaration retained so existing passthroughs and tfvars keep working until PR 2 deletes it."
   type        = string
   default     = ""
 }
 
 variable "okf_efs_read_access_point_arn" {
-  description = "EFS access point ARN mounted read-only by Pi for OKF wiki traversal."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature is dead; this input is ignored — Pi is never VPC-attached and never mounts EFS. Declaration retained so existing passthroughs and tfvars keep working until PR 2 deletes it."
   type        = string
   default     = ""
 }
 
 variable "okf_efs_mount_path" {
-  description = "Local Lambda mount path for the OKF wiki EFS view. Must be under /mnt."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature is dead; this input is ignored — Pi is never VPC-attached and never mounts EFS. Declaration retained so existing passthroughs and tfvars keep working until PR 2 deletes it."
   type        = string
   default     = "/mnt/thinkwork-okf"
 }

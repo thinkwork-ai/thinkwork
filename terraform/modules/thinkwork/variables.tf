@@ -134,19 +134,19 @@ variable "platform_operator_emails" {
 }
 
 variable "okf_wiki_efs_enabled" {
-  description = "Provision the OKF Wiki Navigator EFS current-view substrate and mount it into the okf-efs-refresh Lambda plus Pi."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature is dead — no mount, access point, mount target, or client security group is created regardless of this value. It currently only retains the already-provisioned EFS filesystem (PR 2 deletes it behind the destructive-step gates) and, with okf_wiki_create_nat_gateway, the shared NAT egress that non-OKF VPC workloads still ride. Declaration retained so customer-stage passthroughs and tfvars keep working."
   type        = bool
   default     = true
 }
 
 variable "okf_wiki_create_vpc_endpoints" {
-  description = "Create private AWS service VPC endpoints required by VPC-attached OKF hydrator and Pi Lambdas. Disable only when equivalent NAT or endpoints already exist."
+  description = "DEPRECATED (THINK-589): no-op for OKF, removal pending. The OKF hydrator and Pi are no longer VPC-attached. The private VPC endpoints this gates are retained unchanged in PR 1 because their private DNS serves the whole VPC (Neptune twin Lambdas, Twenty); PR 2 re-homes or deletes them."
   type        = bool
   default     = true
 }
 
 variable "okf_wiki_create_nat_gateway" {
-  description = "Create NAT egress for private subnets when OKF EFS attaches Pi to the VPC. Disable only when equivalent public egress already exists."
+  description = "DEPRECATED (THINK-589): removal pending. Pi no longer attaches to the VPC for OKF EFS. NAT egress is retained unchanged in PR 1 because Neptune twin Lambdas and other VPC-attached workloads route through it; PR 2 re-homes the gate onto the surviving VPC consumers."
   type        = bool
   default     = true
 }

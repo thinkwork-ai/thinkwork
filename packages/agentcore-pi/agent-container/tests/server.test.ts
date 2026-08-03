@@ -145,17 +145,6 @@ function getTool(tools: RegisteredTool[], name: string): RegisteredTool {
   return tool;
 }
 
-async function createOkfFixtureRoot(tenantSlug = "acme"): Promise<string> {
-  if (!defaultWorkspaceRoot) {
-    throw new Error("default workspace root was not initialized");
-  }
-  const okfRoot = path.join(defaultWorkspaceRoot, "okf-root");
-  const currentRoot = path.join(okfRoot, "tenants", tenantSlug, "current");
-  await mkdir(currentRoot, { recursive: true });
-  await writeFile(path.join(currentRoot, "index.md"), "# OKF Index\n");
-  return okfRoot;
-}
-
 // Stub out the env so MEMORY_ENGINE doesn't try to actually wire anything.
 beforeEach(async () => {
   delete process.env.MEMORY_ENGINE;

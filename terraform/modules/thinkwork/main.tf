@@ -78,6 +78,18 @@ locals {
     module.vpc.private_route_table_ids,
     module.vpc.public_route_table_ids,
   )
+  # THINK-589 PR 1 (deprecate-to-no-op): the OKF wiki EFS feature is dead.
+  # Every EFS consumer below (client/EFS security groups, NFS rule, mount
+  # targets, access points, Pi/hydrator wiring) is hard-conditioned off via
+  # this local regardless of the deprecated okf_wiki_* inputs. The EFS
+  # filesystem itself, plus the NAT gateway and the okf_wiki_* VPC endpoints,
+  # are intentionally NOT conditioned off in this PR: destroying the
+  # filesystem is PR 2's gated delete, and the NAT/VPC-endpoint group is
+  # shared VPC egress that live non-OKF workloads still ride (Neptune twin
+  # Lambdas route through the NAT-routed private subnets; private-DNS
+  # interface endpoints capture the whole VPC's AWS API traffic — see the
+  # okf_wiki_vpce_from_vpc comment). PR 2 re-homes or deletes those.
+  okf_wiki_efs_consumers_active      = false
   okf_wiki_private_endpoints_enabled = var.okf_wiki_efs_enabled && var.okf_wiki_create_vpc_endpoints
   okf_wiki_interface_endpoint_services = toset(concat(
     [
@@ -490,7 +502,7 @@ resource "aws_security_group" "twin_lambda_egress" {
 }
 
 resource "aws_security_group" "okf_wiki_lambda" {
-  count = var.okf_wiki_efs_enabled ? 1 : 0
+  count = local.okf_wiki_efs_consumers_active ? 1 : 0 # THINK-589: always off
 
   name_prefix = "thinkwork-${var.stage}-okf-wiki-lambda-"
   description = "OKF wiki EFS clients for hydrator and Pi"
@@ -508,7 +520,7 @@ resource "aws_security_group" "okf_wiki_lambda" {
 }
 
 resource "aws_security_group" "okf_wiki_efs" {
-  count = var.okf_wiki_efs_enabled ? 1 : 0
+  count = local.okf_wiki_efs_consumers_active ? 1 : 0 # THINK-589: always off
 
   name_prefix = "thinkwork-${var.stage}-okf-wiki-efs-"
   description = "NFS ingress for OKF wiki current-view EFS"
@@ -530,7 +542,9 @@ resource "aws_security_group" "okf_wiki_vpc_endpoint" {
 }
 
 resource "aws_security_group_rule" "okf_wiki_vpce_from_lambda" {
-  count = local.okf_wiki_private_endpoints_enabled ? 1 : 0
+  # THINK-589: always off — the OKF client SG no longer exists; VPC workloads
+  # reach the retained endpoints via okf_wiki_vpce_from_vpc (VPC CIDR).
+  count = local.okf_wiki_efs_consumers_active ? 1 : 0
 
   type                     = "ingress"
   from_port                = 443
@@ -598,7 +612,7 @@ resource "aws_vpc_endpoint" "okf_wiki_s3" {
   }
 }
 resource "aws_security_group_rule" "okf_wiki_efs_from_lambda" {
-  count = var.okf_wiki_efs_enabled ? 1 : 0
+  count = local.okf_wiki_efs_consumers_active ? 1 : 0 # THINK-589: always off
 
   type                     = "ingress"
   from_port                = 2049
@@ -608,6 +622,10 @@ resource "aws_security_group_rule" "okf_wiki_efs_from_lambda" {
   security_group_id        = aws_security_group.okf_wiki_efs[0].id
 }
 
+# THINK-589 PR 1: deliberately NOT conditioned off — flipping this count to 0
+# would DESTROY the filesystem (and its data) on the next apply. All consumers
+# (mount targets, access points, Lambda mounts, IAM) are detached below; the
+# filesystem delete happens in PR 2 behind the destructive-step gates.
 resource "aws_efs_file_system" "okf_wiki" {
   count = var.okf_wiki_efs_enabled ? 1 : 0
 
@@ -625,7 +643,7 @@ resource "aws_efs_file_system" "okf_wiki" {
 }
 
 resource "aws_efs_mount_target" "okf_wiki" {
-  count = var.okf_wiki_efs_enabled ? length(local.okf_wiki_subnet_ids) : 0
+  count = local.okf_wiki_efs_consumers_active ? length(local.okf_wiki_subnet_ids) : 0 # THINK-589: always off
 
   file_system_id  = aws_efs_file_system.okf_wiki[0].id
   subnet_id       = local.okf_wiki_subnet_ids[count.index]
@@ -633,7 +651,7 @@ resource "aws_efs_mount_target" "okf_wiki" {
 }
 
 resource "aws_efs_access_point" "okf_wiki_refresh" {
-  count = var.okf_wiki_efs_enabled ? 1 : 0
+  count = local.okf_wiki_efs_consumers_active ? 1 : 0 # THINK-589: always off
 
   file_system_id = aws_efs_file_system.okf_wiki[0].id
 
@@ -658,7 +676,7 @@ resource "aws_efs_access_point" "okf_wiki_refresh" {
 }
 
 resource "aws_efs_access_point" "okf_wiki_pi_read" {
-  count = var.okf_wiki_efs_enabled ? 1 : 0
+  count = local.okf_wiki_efs_consumers_active ? 1 : 0 # THINK-589: always off
 
   file_system_id = aws_efs_file_system.okf_wiki[0].id
 
@@ -696,7 +714,12 @@ module "vpc" {
   existing_private_subnet_ids      = var.existing_private_subnet_ids
   existing_public_route_table_ids  = var.existing_public_route_table_ids
   existing_private_route_table_ids = var.existing_private_route_table_ids
-  enable_nat_gateway               = var.okf_wiki_efs_enabled && var.okf_wiki_create_nat_gateway
+  # THINK-589 PR 1: NAT egress historically rode the OKF EFS flags but is
+  # shared VPC plumbing — Neptune twin Lambdas (and any other VPC-attached
+  # workload) depend on the NAT-routed private subnets. Left gated as before
+  # so PR 1 changes no networking; PR 2 re-homes this onto the surviving VPC
+  # consumers (the lambda_vpc_access precedent in lambda-api/main.tf).
+  enable_nat_gateway = var.okf_wiki_efs_enabled && var.okf_wiki_create_nat_gateway
 }
 
 module "kms" {
@@ -1130,8 +1153,9 @@ module "api" {
   agentcore_pi_function_arn             = module.agentcore_pi.agentcore_pi_function_arn
   enable_agentcore_pi_invoke_policy     = true
   agentcore_memory_id                   = module.agentcore_memory.memory_id
-  okf_efs_subnet_ids                    = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
-  okf_efs_security_group_ids            = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
+  # THINK-589: OKF EFS inputs are deprecated no-ops — always pass empty.
+  okf_efs_subnet_ids         = []
+  okf_efs_security_group_ids = []
   # Company Brain U5: projector VPC attach only when the neptune-client SG
   # is configured (the twin's Neptune cluster lives in this same VPC). The
   # client SG only opens 8182→Neptune, so twin Lambdas ALSO attach the
@@ -1149,9 +1173,10 @@ module "api" {
   neptune_load_bucket     = var.neptune_load_bucket
   neptune_loader_role_arn = var.neptune_loader_role_arn
   # Company Brain U7: twin tool seam flag (KTD-5 rollout posture).
-  okf_efs_mount_target_ids         = var.okf_wiki_efs_enabled ? aws_efs_mount_target.okf_wiki[*].id : []
-  okf_efs_file_system_arn          = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
-  okf_efs_refresh_access_point_arn = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_refresh[0].arn : ""
+  # THINK-589: OKF EFS inputs are deprecated no-ops — always pass empty.
+  okf_efs_mount_target_ids         = []
+  okf_efs_file_system_arn          = ""
+  okf_efs_refresh_access_point_arn = ""
   twenty_provisioned               = local.twenty_provisioned
   twenty_runtime_enabled           = local.twenty_runtime_enabled
   twenty_url                       = local.twenty_provisioned ? module.twenty[0].twenty_url : ""
@@ -1278,11 +1303,12 @@ module "agentcore_pi" {
   db_cluster_arn = module.database.db_cluster_arn
   db_secret_arn  = module.database.graphql_db_secret_arn
 
-  okf_efs_enabled               = var.okf_wiki_efs_enabled
-  okf_efs_subnet_ids            = var.okf_wiki_efs_enabled ? local.okf_wiki_subnet_ids : []
-  okf_efs_security_group_ids    = var.okf_wiki_efs_enabled ? [aws_security_group.okf_wiki_lambda[0].id] : []
-  okf_efs_file_system_arn       = var.okf_wiki_efs_enabled ? aws_efs_file_system.okf_wiki[0].arn : ""
-  okf_efs_read_access_point_arn = var.okf_wiki_efs_enabled ? aws_efs_access_point.okf_wiki_pi_read[0].arn : ""
+  # THINK-589: OKF EFS inputs are deprecated no-ops — always pass disabled.
+  okf_efs_enabled               = false
+  okf_efs_subnet_ids            = []
+  okf_efs_security_group_ids    = []
+  okf_efs_file_system_arn       = ""
+  okf_efs_read_access_point_arn = ""
 }
 
 # THINK-316 U1 proof-only Identity and Gateway plane. These resources use the

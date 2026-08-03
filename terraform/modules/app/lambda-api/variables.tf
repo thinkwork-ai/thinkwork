@@ -345,37 +345,37 @@ variable "agentcore_memory_id" {
 }
 
 variable "okf_efs_subnet_ids" {
-  description = "Subnet IDs for the OKF EFS hydrator Lambda VPC attachment. Leave empty to deploy the hydrator without an EFS mount."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature (okf-efs-refresh hydrator mount) is dead and this module no longer consumes the input. Declaration retained so existing passthroughs keep working until the follow-up PR deletes it."
   type        = list(string)
   default     = []
 }
 
 variable "okf_efs_security_group_ids" {
-  description = "Security group IDs for the OKF EFS hydrator Lambda VPC attachment. Leave empty to deploy the hydrator without an EFS mount."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature (okf-efs-refresh hydrator mount) is dead and this module no longer consumes the input. Declaration retained so existing passthroughs keep working until the follow-up PR deletes it."
   type        = list(string)
   default     = []
 }
 
 variable "okf_efs_mount_target_ids" {
-  description = "EFS mount target IDs that must exist before creating the OKF EFS hydrator Lambda."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature (okf-efs-refresh hydrator mount) is dead and this module no longer consumes the input. Declaration retained so existing passthroughs keep working until the follow-up PR deletes it."
   type        = list(string)
   default     = []
 }
 
 variable "okf_efs_file_system_arn" {
-  description = "EFS file system ARN for the OKF wiki current view. Empty disables EFS IAM grants."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature (okf-efs-refresh hydrator mount) is dead and this module no longer consumes the input. Declaration retained so existing passthroughs keep working until the follow-up PR deletes it."
   type        = string
   default     = ""
 }
 
 variable "okf_efs_refresh_access_point_arn" {
-  description = "EFS access point ARN mounted by the okf-efs-refresh Lambda. Empty disables the mount."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature (okf-efs-refresh hydrator mount) is dead and this module no longer consumes the input. Declaration retained so existing passthroughs keep working until the follow-up PR deletes it."
   type        = string
   default     = ""
 }
 
 variable "okf_efs_mount_path" {
-  description = "Local Lambda mount path for the OKF wiki EFS view. Must be under /mnt."
+  description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature (okf-efs-refresh hydrator mount) is dead and this module no longer consumes the input. Declaration retained so existing passthroughs keep working until the follow-up PR deletes it."
   type        = string
   default     = "/mnt/thinkwork-okf"
 }
