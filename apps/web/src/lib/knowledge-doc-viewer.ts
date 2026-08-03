@@ -75,6 +75,58 @@ export interface OpenableKnowledgeDocument {
   documentUrl?: string;
 }
 
+/** File name shown for a cited document (the key's last path segment). */
+export function knowledgeDocumentFileName(documentKey: string): string {
+  const base = documentKey.slice(documentKey.lastIndexOf("/") + 1);
+  return base || documentKey;
+}
+
+/**
+ * Cited documents open in the thread's docked artifact panel (THINK-168)
+ * rather than a new tab. The panel store only holds a string "artifact id",
+ * so a cited document rides through it as a `kb-doc:` id carrying the
+ * signed link, key, and page. Only the signed doc-link shape is ever
+ * encoded — the same gate `openKnowledgeDocument` applies — so a parsed id
+ * is safe to hand to the viewer/iframe.
+ */
+export const KB_DOC_PANEL_ID_PREFIX = "kb-doc:";
+
+export interface KbDocPanelTarget {
+  key: string;
+  /** Signed /kb/doc link (validated by isSignedDocLink on both ends). */
+  src: string;
+  page?: number;
+}
+
+/** Panel-store id for a cited document, or null when the citation cannot be
+ * panel-rendered (no URL, or not the signed doc-link shape). */
+export function kbDocPanelId(source: OpenableKnowledgeDocument): string | null {
+  const url = source.documentUrl;
+  if (!url || !isSignedDocLink(url)) return null;
+  const target: KbDocPanelTarget = { key: source.key, src: url };
+  if (source.page) target.page = source.page;
+  return `${KB_DOC_PANEL_ID_PREFIX}${encodeURIComponent(JSON.stringify(target))}`;
+}
+
+export function parseKbDocPanelId(id: string): KbDocPanelTarget | null {
+  if (!id.startsWith(KB_DOC_PANEL_ID_PREFIX)) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(
+      decodeURIComponent(id.slice(KB_DOC_PANEL_ID_PREFIX.length)),
+    );
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const { key, src, page } = parsed as Record<string, unknown>;
+  if (typeof key !== "string" || !key) return null;
+  if (typeof src !== "string" || !isSignedDocLink(src)) return null;
+  const target: KbDocPanelTarget = { key, src };
+  if (typeof page === "number" && Number.isFinite(page)) target.page = page;
+  return target;
+}
+
 /**
  * Open a cited document in a new tab: Office formats via the in-app
  * viewer, everything else via the raw retrieval-supplied URL (native
