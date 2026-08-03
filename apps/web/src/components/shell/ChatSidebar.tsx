@@ -27,6 +27,7 @@ import {
   BellOff,
   CheckCheck,
   ChevronDown,
+  CircleCheck,
   ChevronsDown,
   ChevronsUp,
   Clock,
@@ -87,6 +88,7 @@ import {
 import { useTenant } from "@/context/TenantContext";
 import { useThreadNotifications } from "@/hooks/useThreadNotifications";
 import {
+  ComputerApprovalsQuery,
   ComputerThreadQuery,
   DeleteThreadMutation,
   MarkThreadsReadMutation,
@@ -205,6 +207,7 @@ export function ChatSidebar() {
   useThreadNotifications({ onActivity: handleThreadActivity });
   const isNewThreadRoute = location.pathname === "/new";
   const isWorkItemsRoute = location.pathname.startsWith("/work-items");
+  const isApprovalsRoute = location.pathname.startsWith("/approvals");
   const isAgentLoopsRoute = location.pathname.startsWith("/automations");
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
@@ -516,6 +519,24 @@ export function ChatSidebar() {
       (item) => item.ownerUserId === userId && isOpenSidebarWorkItem(item),
     ).length;
   }, [userId, workItemsData?.workItems]);
+
+  // Approvals stay out of the nav until the platform is actually waiting on
+  // a decision — then the entry appears with a pending count.
+  const [{ data: approvalsData }] = useQuery<{
+    inboxItems: Array<{ id: string; type: string }>;
+  }>({
+    query: ComputerApprovalsQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+    requestPolicy: "cache-and-network",
+  });
+  const pendingApprovalCount = useMemo(
+    () =>
+      (approvalsData?.inboxItems ?? []).filter(
+        (item) => item.type === "computer_approval",
+      ).length,
+    [approvalsData?.inboxItems],
+  );
 
   const [
     { data: recentData, fetching: recentFetching, error: recentError },
@@ -1260,6 +1281,26 @@ export function ChatSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
+            {pendingApprovalCount > 0 || isApprovalsRoute ? (
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isApprovalsRoute}
+                  tooltip="Approvals"
+                >
+                  <Link to="/approvals">
+                    <CircleCheck />
+                    <span className="min-w-0 truncate">Approvals</span>
+                    {pendingApprovalCount > 0 ? (
+                      <SidebarCountBadge
+                        count={pendingApprovalCount}
+                        className="border border-transparent transition-colors group-hover/menu-button:border-white/35 group-data-[active=true]/menu-button:border-white/45"
+                      />
+                    ) : null}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ) : null}
           </SidebarMenu>
         </SidebarGroupContent>
       </SidebarGroup>
