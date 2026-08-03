@@ -1635,14 +1635,33 @@ locals {
   # Host CSP for the Computer SPA (plan-012 U10 / contract v1 §CSP profile).
   # Generated apps always execute in the sandbox iframe shell, so the parent
   # origin never needs blob: script/worker execution for transformed modules.
-  computer_host_script_src = "'self'"
+  #
+  # 'wasm-unsafe-eval' permits WebAssembly compilation only (not JS eval) —
+  # the in-app knowledge document viewer (Zrimo) renders Office files with
+  # client-side WASM.
+  computer_host_script_src = "'self' 'wasm-unsafe-eval'"
   computer_host_worker_src = "'self'"
-  computer_host_frame_src  = local.computer_sandbox_enabled ? "https://${var.computer_sandbox_domain}" : "'none'"
+  # frame-src carries the sandbox shell plus the cited-knowledge-document
+  # frames: browser-native formats (pdf/txt/md) render in an iframe on the
+  # signed /kb/doc link — a *.thinkwork.ai brain host that 302s to the
+  # customer's evidence bucket presign, and CSP re-checks every redirect
+  # hop, so both origins must be allowed (mirroring what connect-src
+  # already trusts for the Zrimo fetch path).
+  computer_host_frame_src = join(" ", compact([
+    local.computer_sandbox_enabled ? "https://${var.computer_sandbox_domain}" : "",
+    "https://*.thinkwork.ai",
+    "https://*.s3.${var.region}.amazonaws.com",
+    "https://s3.${var.region}.amazonaws.com",
+  ]))
   computer_host_frame_ancestors = join(" ", compact([
     "'self'",
   ]))
 
-  computer_host_csp = "default-src 'self'; script-src ${local.computer_host_script_src}; style-src 'self' 'unsafe-inline'; worker-src ${local.computer_host_worker_src}; frame-src ${local.computer_host_frame_src}; connect-src 'self' https://*.execute-api.${var.region}.amazonaws.com https://*.appsync-api.${var.region}.amazonaws.com wss://*.appsync-realtime-api.${var.region}.amazonaws.com https://cognito-idp.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com https://*.s3.${var.region}.amazonaws.com https://s3.${var.region}.amazonaws.com; img-src 'self' data: blob: ${local.computer_sandbox_map_img_src}; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors ${local.computer_host_frame_ancestors};"
+  # connect-src includes https://*.thinkwork.ai for the knowledge document
+  # viewer: signed /kb/doc citation links live on brain MCP hosts
+  # (mcp.brain.<customer>.thinkwork.ai), and a tenant may register another
+  # stage's brain, so the host cannot be pinned per-stage.
+  computer_host_csp = "default-src 'self'; script-src ${local.computer_host_script_src}; style-src 'self' 'unsafe-inline'; worker-src ${local.computer_host_worker_src}; frame-src ${local.computer_host_frame_src}; connect-src 'self' https://*.thinkwork.ai https://*.execute-api.${var.region}.amazonaws.com https://*.appsync-api.${var.region}.amazonaws.com wss://*.appsync-realtime-api.${var.region}.amazonaws.com https://cognito-idp.${var.region}.amazonaws.com https://*.auth.${var.region}.amazoncognito.com https://*.s3.${var.region}.amazonaws.com https://s3.${var.region}.amazonaws.com; img-src 'self' data: blob: ${local.computer_sandbox_map_img_src}; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors ${local.computer_host_frame_ancestors};"
 }
 
 module "computer_site" {
