@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getTableName } from "drizzle-orm";
 
 const mocks = vi.hoisted(() => {
   class FakeAgentNotFoundError extends Error {
@@ -25,7 +26,10 @@ const mocks = vi.hoisted(() => {
     assertUserModelApproved: vi.fn(),
     listApprovedModelCatalog: vi.fn(),
     lambdaSend: vi.fn(),
-    selectRows: [] as Array<Array<Record<string, unknown>>>,
+    // Rows served by the db.select() mock, keyed by query shape (table name
+    // + selected fields) instead of call order — the handler runs several
+    // selects concurrently (setup-diet U2), so ordered queues misroute rows.
+    rowsByKey: {} as Record<string, Array<Record<string, unknown>>>,
     insertValues: [] as Array<Record<string, unknown>>,
     updateValues: [] as Array<Record<string, unknown>>,
     notifyThreadTurnUpdate: vi.fn(),
@@ -38,7 +42,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("@thinkwork/database-pg", () => ({
   getDb: () => ({
-    select: () => queryRows(),
+    select: (fields?: Record<string, unknown>) => queryRows(fields),
     insert: () => ({
       values: (value: Record<string, unknown>) => {
         mocks.insertValues.push(value);
@@ -99,10 +103,59 @@ vi.mock("../lib/model-approvals.js", () => ({
   ModelApprovalError: mocks.FakeModelApprovalError,
 }));
 
-function queryRows() {
-  const rows = () => Promise.resolve(mocks.selectRows.shift() ?? []);
+/**
+ * Dispatch mock rows by query shape (drizzle table + selected field keys)
+ * rather than call order. Table identity is compared via getTableName —
+ * vi.resetModules() re-instantiates the schema module per test, so object
+ * identity against the test's own imports would never match.
+ */
+function resolveRowsFor(
+  table: unknown,
+  fields?: Record<string, unknown>,
+): Array<Record<string, unknown>> {
+  let tableName = "";
+  try {
+    if (table) {
+      tableName = getTableName(table as Parameters<typeof getTableName>[0]);
+    }
+  } catch {
+    tableName = "";
+  }
+  const fieldKeys = fields ? Object.keys(fields) : [];
+  const has = (key: string) => fieldKeys.includes(key);
+  const rows = (key: string) => mocks.rowsByKey[key] ?? [];
+  switch (tableName) {
+    case "messages":
+      // Prior-conversation history vs the identity sender lookup.
+      return has("role") && has("content")
+        ? rows("messages.history")
+        : rows("messages.sender");
+    case "threads":
+      // Last-render marker read (workspace-render-skip) vs space context.
+      if (has("metadata")) return rows("threads.lastRender");
+      if (has("spaceId")) return rows("threads.space");
+      return [];
+    case "spaces":
+      return has("slug") ? rows("spaces.slug") : [];
+    case "thread_turns":
+      return rows("thread_turns.count");
+    case "users":
+      return has("email") ? rows("users.email") : [];
+    case "skill_catalog":
+      return rows("skill_catalog");
+    default:
+      return has("email") ? rows("users.email") : [];
+  }
+}
+
+function queryRows(fields?: Record<string, unknown>) {
+  let table: unknown;
+  const rows = () => Promise.resolve(resolveRowsFor(table, fields));
   const chain = {
-    from: () => chain,
+    from: (fromTable: unknown) => {
+      table = fromTable;
+      return chain;
+    },
     where: () => chain,
     orderBy: () => chain,
     limit: () => rows(),
@@ -148,13 +201,16 @@ beforeEach(() => {
   vi.stubEnv("WORKSPACE_RENDERER_FUNCTION_NAME", "");
   vi.stubEnv("THINKWORK_API_URL", "https://api.example.com");
   vi.stubEnv("THINKWORK_API_SECRET", "test-secret");
-  mocks.selectRows = [
-    [{ sender_id: "user-1", sender_type: "human" }],
-    [{ email: "user-1@example.com" }],
-    [{ spaceId: null }],
-    [{ count: 0 }],
-    [],
-  ];
+  mocks.rowsByKey = {
+    "messages.sender": [{ sender_id: "user-1", sender_type: "human" }],
+    "messages.history": [],
+    "users.email": [{ email: "user-1@example.com" }],
+    "threads.space": [{ spaceId: null }],
+    "threads.lastRender": [],
+    "spaces.slug": [],
+    "thread_turns.count": [{ count: 0 }],
+    skill_catalog: [],
+  };
   mocks.insertValues = [];
   mocks.updateValues = [];
   mocks.lambdaSend.mockResolvedValue({});
@@ -202,8 +258,9 @@ beforeEach(() => {
 
 describe("chat-agent-invoke runtime routing", () => {
   it("honors an explicit Pi thread pin while the configured runtime is Harness", async () => {
-    const { resolveChatInvocationRuntimeType } =
-      await import("./chat-agent-invoke.js");
+    const { resolveChatInvocationRuntimeType } = await import(
+      "./chat-agent-invoke.js"
+    );
 
     expect(
       resolveChatInvocationRuntimeType({
@@ -214,8 +271,9 @@ describe("chat-agent-invoke runtime routing", () => {
   });
 
   it("resolves legacy harness requests and configs to Pi (THINK-324)", async () => {
-    const { resolveChatInvocationRuntimeType } =
-      await import("./chat-agent-invoke.js");
+    const { resolveChatInvocationRuntimeType } = await import(
+      "./chat-agent-invoke.js"
+    );
     expect(
       resolveChatInvocationRuntimeType({
         configuredRuntimeType: "agentcore",
@@ -550,14 +608,8 @@ describe("chat-agent-invoke runtime routing", () => {
   });
 
   it("passes active Space context even when workspace rendering is skipped", async () => {
-    mocks.selectRows = [
-      [{ sender_id: "user-1", sender_type: "human" }],
-      [{ email: "user-1@example.com" }],
-      [{ spaceId: "space-1" }],
-      [{ slug: "customer-onboarding" }],
-      [{ count: 0 }],
-      [],
-    ];
+    mocks.rowsByKey["threads.space"] = [{ spaceId: "space-1" }];
+    mocks.rowsByKey["spaces.slug"] = [{ slug: "customer-onboarding" }];
     const { handler } = await import("./chat-agent-invoke.js");
 
     await handler({
@@ -656,14 +708,8 @@ describe("chat-agent-invoke runtime routing", () => {
 
   it("passes effective TOOLS.md model routes and approved model ids to Pi", async () => {
     vi.stubEnv("WORKSPACE_RENDERER_FUNCTION_NAME", "workspace-renderer-fn");
-    mocks.selectRows = [
-      [{ sender_id: "user-1", sender_type: "human" }],
-      [{ email: "user-1@example.com" }],
-      [{ spaceId: "space-1" }],
-      [{ slug: "research" }],
-      [{ count: 0 }],
-      [],
-    ];
+    mocks.rowsByKey["threads.space"] = [{ spaceId: "space-1" }];
+    mocks.rowsByKey["spaces.slug"] = [{ slug: "research" }];
     mocks.lambdaSend
       .mockResolvedValueOnce({
         Payload: new TextEncoder().encode(
@@ -768,12 +814,8 @@ describe("chat-agent-invoke runtime routing", () => {
   });
 
   it("dispatches managed mobile handoff using the existing thread turn id", async () => {
-    mocks.selectRows = [
-      [{ sender_id: "user-1", sender_type: "human" }],
-      [{ email: "user-1@example.com" }],
-      [{ spaceId: null }],
-      [],
-    ];
+    // Keyed defaults from beforeEach already cover this scenario: human
+    // sender, resolvable email, no space, empty history.
     const { handler } = await import("./chat-agent-invoke.js");
 
     const result = await handler({
@@ -845,14 +887,8 @@ describe("chat-agent-invoke runtime routing", () => {
 
   it("passes Web Extraction config only when Space allowed-tools policy permits its alias", async () => {
     vi.stubEnv("WORKSPACE_RENDERER_FUNCTION_NAME", "workspace-renderer-fn");
-    mocks.selectRows = [
-      [{ sender_id: "user-1", sender_type: "human" }],
-      [{ email: "user-1@example.com" }],
-      [{ spaceId: "space-1" }],
-      [{ slug: "research" }],
-      [{ count: 0 }],
-      [],
-    ];
+    mocks.rowsByKey["threads.space"] = [{ spaceId: "space-1" }];
+    mocks.rowsByKey["spaces.slug"] = [{ slug: "research" }];
     mocks.resolveAgentRuntimeConfig.mockResolvedValueOnce({
       tenantId: "tenant-1",
       agentId: "agent-1",

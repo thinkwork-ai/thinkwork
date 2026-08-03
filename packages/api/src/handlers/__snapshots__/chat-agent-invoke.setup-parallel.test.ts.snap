@@ -1,0 +1,658 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`chat-agent-invoke — R12 dispatch payload characterization > dispatches the pinned payload for the rendered-workspace fixture 1`] = `
+{
+  "activity_callback_secret": "test-secret",
+  "activity_callback_url": "https://api.example.com/api/threads/thread-1/activity",
+  "agent_name": "ThinkWork",
+  "agent_profiles": [],
+  "agent_profiles_authority": "manifest",
+  "assistant_id": "agent-1",
+  "browser_automation_enabled": true,
+  "budget_monthly_cents": null,
+  "budget_paused": false,
+  "computer_response_mode": "thread_turn",
+  "config_fingerprint": "d609146555fdc9966b241c428f2d0f72094f0e6a984f34d4ed20c0d402f37946",
+  "cost_owner_user_id": "user-1",
+  "current_user_email": "user-1@example.com",
+  "document_plates": [
+    {
+      "displayName": "Report",
+      "slug": "report",
+      "useFor": "General findings and analysis presented as a narrative with evidence.",
+    },
+    {
+      "displayName": "Plan",
+      "slug": "plan",
+      "useFor": "A course of action: phases, workstreams, owners, and sequencing.",
+    },
+    {
+      "displayName": "Decision Brief",
+      "slug": "brief",
+      "useFor": "A decision brief: options, tradeoffs, and a recommendation.",
+    },
+    {
+      "displayName": "Ideation",
+      "slug": "ideation",
+      "useFor": "Exploratory thinking: directions, concepts, and open questions.",
+    },
+    {
+      "analyses": [
+        {
+          "inputHint": "ordered points: [{ label, value }], 3-24 points",
+          "key": "usage-trend",
+          "op": "trend",
+        },
+        {
+          "inputHint": "current + prior numbers, optional label",
+          "key": "outcome-variance",
+          "op": "variance_vs_prior",
+        },
+      ],
+      "displayName": "QBR",
+      "sections": [
+        {
+          "guidance": "The quarter's goals against results — what was committed, what landed, and the delta, stated in the client's terms.",
+          "id": "business-outcomes",
+          "suggestedDirectives": [
+            {
+              "kind": "stats",
+            },
+          ],
+          "tier": "required",
+          "title": "Business Outcomes",
+        },
+        {
+          "guidance": "Adoption or usage over the quarter as an ordered series (monthly or weekly). Waive if no usage telemetry exists for this account.",
+          "id": "usage-trend",
+          "suggestedDirectives": [
+            {
+              "chartType": "line",
+              "kind": "chart",
+            },
+          ],
+          "tier": "required-if-material",
+          "title": "Usage Trend",
+        },
+        {
+          "guidance": "Relationship, risk, and renewal posture — a verdict per dimension with a one-line justification.",
+          "id": "account-health",
+          "suggestedDirectives": [
+            {
+              "kind": "verdict-grid",
+            },
+          ],
+          "tier": "required",
+          "title": "Account Health",
+        },
+        {
+          "guidance": "Commitments for the coming quarter: owners, milestones, and the success measure for each.",
+          "id": "next-quarter-plan",
+          "suggestedDirectives": [
+            {
+              "kind": "timeline",
+            },
+          ],
+          "tier": "required",
+          "title": "Next Quarter Plan",
+        },
+      ],
+      "slug": "qbr",
+      "useFor": "Quarterly business review of goals, results, and account health for a client or business unit.",
+    },
+    {
+      "analyses": [
+        {
+          "inputHint": "numerator + denominator (nonzero), optional label",
+          "key": "discount-rate",
+          "op": "ratio_pct",
+        },
+      ],
+      "displayName": "Proposal",
+      "sections": [
+        {
+          "guidance": "What is being delivered, phase by phase, with what is explicitly out of scope.",
+          "id": "scope-of-work",
+          "suggestedDirectives": [
+            {
+              "kind": "timeline",
+            },
+          ],
+          "tier": "required",
+          "title": "Scope of Work",
+        },
+        {
+          "guidance": "The commercial terms as a table: line items, quantities, and totals. Headline figures work well as stat tiles.",
+          "id": "pricing",
+          "suggestedDirectives": [
+            {
+              "kind": "stats",
+            },
+          ],
+          "tier": "required",
+          "title": "Pricing",
+        },
+        {
+          "guidance": "Assumptions the pricing depends on, payment terms, and validity window. Waive only when the engagement letter carries them.",
+          "id": "terms-and-assumptions",
+          "tier": "required-if-material",
+          "title": "Terms and Assumptions",
+        },
+      ],
+      "slug": "proposal",
+      "useFor": "A commercial proposal or statement of work: scope, approach, pricing, and terms.",
+    },
+    {
+      "analyses": [
+        {
+          "inputHint": "current + prior numbers, optional label",
+          "key": "metrics-vs-prior",
+          "op": "variance_vs_prior",
+        },
+      ],
+      "displayName": "Weekly Status",
+      "sections": [
+        {
+          "guidance": "What moved this week against the plan — shipped, advanced, or decided.",
+          "id": "progress",
+          "tier": "required",
+          "title": "Progress",
+        },
+        {
+          "guidance": "The week's numbers against the prior period. Waive when no metrics source is connected for this workstream.",
+          "id": "metrics",
+          "suggestedDirectives": [
+            {
+              "kind": "stats",
+            },
+          ],
+          "tier": "required-if-material",
+          "title": "Metrics",
+        },
+        {
+          "guidance": "What is stuck, who can unstick it, and what was already tried. 'None' is a valid entry — say it explicitly.",
+          "id": "blockers",
+          "tier": "required",
+          "title": "Blockers",
+        },
+        {
+          "guidance": "Concrete commitments for next week with owners.",
+          "id": "next-steps",
+          "tier": "required",
+          "title": "Next Steps",
+        },
+      ],
+      "slug": "weekly-status",
+      "useFor": "A weekly status update: progress, metrics, blockers, and next steps.",
+    },
+    {
+      "analyses": [
+        {
+          "inputHint": "ordered stages: [{ label, count }], >=2 stages",
+          "key": "pipeline-conversion",
+          "op": "funnel_conversion",
+        },
+        {
+          "inputHint": "numerator + denominator (nonzero), optional label",
+          "key": "quota-attainment",
+          "op": "ratio_pct",
+        },
+      ],
+      "displayName": "Sales Rep Review",
+      "sections": [
+        {
+          "guidance": "Attainment against target for the period, computed — not narrated from memory. Waive when no quota target is set for this rep.",
+          "id": "quota-attainment",
+          "suggestedDirectives": [
+            {
+              "kind": "stats",
+            },
+          ],
+          "tier": "required-if-material",
+          "title": "Quota Attainment",
+        },
+        {
+          "guidance": "The rep's pipeline as an ordered funnel with stage-to-stage conversion. Waive when stage-level pipeline data is unavailable.",
+          "id": "pipeline-health",
+          "suggestedDirectives": [
+            {
+              "chartType": "funnel",
+              "kind": "chart",
+            },
+          ],
+          "tier": "required-if-material",
+          "title": "Pipeline Health",
+        },
+        {
+          "guidance": "Specific, observable behaviors to keep or change, each tied to evidence from the period.",
+          "id": "coaching-notes",
+          "tier": "required",
+          "title": "Coaching Notes",
+        },
+      ],
+      "slug": "sales-rep-review",
+      "useFor": "A sales rep performance review: quota attainment, pipeline health, and coaching points.",
+    },
+    {
+      "analyses": [
+        {
+          "inputHint": "current + prior numbers, optional label",
+          "key": "value-vs-initial",
+          "op": "variance_vs_prior",
+        },
+      ],
+      "displayName": "Opportunity Review",
+      "sections": [
+        {
+          "guidance": "Stage, value, close date, and how each has moved since the last review.",
+          "id": "deal-snapshot",
+          "suggestedDirectives": [
+            {
+              "kind": "stats",
+            },
+          ],
+          "tier": "required",
+          "title": "Deal Snapshot",
+        },
+        {
+          "guidance": "Who decides, who champions, who blocks — and the engagement state of each.",
+          "id": "stakeholders",
+          "tier": "required",
+          "title": "Stakeholders",
+        },
+        {
+          "guidance": "What could kill the deal, with a verdict per risk and the mitigation in play.",
+          "id": "risks",
+          "suggestedDirectives": [
+            {
+              "kind": "verdict-grid",
+            },
+          ],
+          "tier": "required",
+          "title": "Risks",
+        },
+        {
+          "guidance": "The path to signature: remaining steps, owners on both sides, and dates.",
+          "id": "close-plan",
+          "tier": "required",
+          "title": "Close Plan",
+        },
+      ],
+      "slug": "opportunity-review",
+      "useFor": "A single-opportunity deal review: stage, stakeholders, risks, and the close plan.",
+    },
+  ],
+  "fetch_workspace_source_enabled": true,
+  "finalize_callback_secret": "test-secret",
+  "finalize_callback_url": "https://api.example.com/api/threads/thread-1/finalize",
+  "human_name": "Eric",
+  "instance_id": "thinkwork",
+  "message": "characterization fixture message",
+  "messages_history": [
+    {
+      "content": "earlier reply",
+      "role": "assistant",
+    },
+    {
+      "content": "earlier question",
+      "role": "user",
+    },
+  ],
+  "model": "moonshotai.kimi-k2.5",
+  "rendered_workspace_prefix": "tenants/acme/threads/thread-1/",
+  "runtime_type": "pi",
+  "skills": [
+    {
+      "s3Key": "tenants/acme/skill-catalog/meeting-notes",
+      "skillId": "meeting-notes",
+    },
+  ],
+  "system_prompt": "You are the fixture agent.",
+  "tenant_id": "tenant-1",
+  "tenant_slug": "acme",
+  "thinkwork_api_secret": "test-secret",
+  "thinkwork_api_url": "https://api.example.com",
+  "thread_id": "thread-1",
+  "thread_turn_id": "<turn-id>",
+  "trace_id": "1-fixed-trace",
+  "trigger_channel": "chat",
+  "trusted_skill_ids": [
+    "meeting-notes",
+  ],
+  "turn_context": {
+    "renderedWorkspacePrefix": "tenants/acme/threads/thread-1/",
+    "spaceId": "space-1",
+    "spaceSlug": "main-space",
+    "tenantSlug": "acme",
+  },
+  "use_memory": true,
+  "user_id": "user-1",
+  "workspace_bucket": "workspace-bucket-test",
+  "workspace_tenant_id": "tenant-1",
+}
+`;
+
+exports[`chat-agent-invoke — R12 dispatch payload characterization > dispatches the pinned payload when the thread has no space (no render) 1`] = `
+{
+  "activity_callback_secret": "test-secret",
+  "activity_callback_url": "https://api.example.com/api/threads/thread-1/activity",
+  "agent_name": "ThinkWork",
+  "agent_profiles": [],
+  "agent_profiles_authority": "manifest",
+  "assistant_id": "agent-1",
+  "browser_automation_enabled": true,
+  "budget_monthly_cents": null,
+  "budget_paused": false,
+  "computer_response_mode": "thread_turn",
+  "config_fingerprint": "ac287f3a4938c28a051c335d1688973949a471b52dfb030de185b60cae0d89df",
+  "cost_owner_user_id": "user-1",
+  "current_user_email": "user-1@example.com",
+  "document_plates": [
+    {
+      "displayName": "Report",
+      "slug": "report",
+      "useFor": "General findings and analysis presented as a narrative with evidence.",
+    },
+    {
+      "displayName": "Plan",
+      "slug": "plan",
+      "useFor": "A course of action: phases, workstreams, owners, and sequencing.",
+    },
+    {
+      "displayName": "Decision Brief",
+      "slug": "brief",
+      "useFor": "A decision brief: options, tradeoffs, and a recommendation.",
+    },
+    {
+      "displayName": "Ideation",
+      "slug": "ideation",
+      "useFor": "Exploratory thinking: directions, concepts, and open questions.",
+    },
+    {
+      "analyses": [
+        {
+          "inputHint": "ordered points: [{ label, value }], 3-24 points",
+          "key": "usage-trend",
+          "op": "trend",
+        },
+        {
+          "inputHint": "current + prior numbers, optional label",
+          "key": "outcome-variance",
+          "op": "variance_vs_prior",
+        },
+      ],
+      "displayName": "QBR",
+      "sections": [
+        {
+          "guidance": "The quarter's goals against results — what was committed, what landed, and the delta, stated in the client's terms.",
+          "id": "business-outcomes",
+          "suggestedDirectives": [
+            {
+              "kind": "stats",
+            },
+          ],
+          "tier": "required",
+          "title": "Business Outcomes",
+        },
+        {
+          "guidance": "Adoption or usage over the quarter as an ordered series (monthly or weekly). Waive if no usage telemetry exists for this account.",
+          "id": "usage-trend",
+          "suggestedDirectives": [
+            {
+              "chartType": "line",
+              "kind": "chart",
+            },
+          ],
+          "tier": "required-if-material",
+          "title": "Usage Trend",
+        },
+        {
+          "guidance": "Relationship, risk, and renewal posture — a verdict per dimension with a one-line justification.",
+          "id": "account-health",
+          "suggestedDirectives": [
+            {
+              "kind": "verdict-grid",
+            },
+          ],
+          "tier": "required",
+          "title": "Account Health",
+        },
+        {
+          "guidance": "Commitments for the coming quarter: owners, milestones, and the success measure for each.",
+          "id": "next-quarter-plan",
+          "suggestedDirectives": [
+            {
+              "kind": "timeline",
+            },
+          ],
+          "tier": "required",
+          "title": "Next Quarter Plan",
+        },
+      ],
+      "slug": "qbr",
+      "useFor": "Quarterly business review of goals, results, and account health for a client or business unit.",
+    },
+    {
+      "analyses": [
+        {
+          "inputHint": "numerator + denominator (nonzero), optional label",
+          "key": "discount-rate",
+          "op": "ratio_pct",
+        },
+      ],
+      "displayName": "Proposal",
+      "sections": [
+        {
+          "guidance": "What is being delivered, phase by phase, with what is explicitly out of scope.",
+          "id": "scope-of-work",
+          "suggestedDirectives": [
+            {
+              "kind": "timeline",
+            },
+          ],
+          "tier": "required",
+          "title": "Scope of Work",
+        },
+        {
+          "guidance": "The commercial terms as a table: line items, quantities, and totals. Headline figures work well as stat tiles.",
+          "id": "pricing",
+          "suggestedDirectives": [
+            {
+              "kind": "stats",
+            },
+          ],
+          "tier": "required",
+          "title": "Pricing",
+        },
+        {
+          "guidance": "Assumptions the pricing depends on, payment terms, and validity window. Waive only when the engagement letter carries them.",
+          "id": "terms-and-assumptions",
+          "tier": "required-if-material",
+          "title": "Terms and Assumptions",
+        },
+      ],
+      "slug": "proposal",
+      "useFor": "A commercial proposal or statement of work: scope, approach, pricing, and terms.",
+    },
+    {
+      "analyses": [
+        {
+          "inputHint": "current + prior numbers, optional label",
+          "key": "metrics-vs-prior",
+          "op": "variance_vs_prior",
+        },
+      ],
+      "displayName": "Weekly Status",
+      "sections": [
+        {
+          "guidance": "What moved this week against the plan — shipped, advanced, or decided.",
+          "id": "progress",
+          "tier": "required",
+          "title": "Progress",
+        },
+        {
+          "guidance": "The week's numbers against the prior period. Waive when no metrics source is connected for this workstream.",
+          "id": "metrics",
+          "suggestedDirectives": [
+            {
+              "kind": "stats",
+            },
+          ],
+          "tier": "required-if-material",
+          "title": "Metrics",
+        },
+        {
+          "guidance": "What is stuck, who can unstick it, and what was already tried. 'None' is a valid entry — say it explicitly.",
+          "id": "blockers",
+          "tier": "required",
+          "title": "Blockers",
+        },
+        {
+          "guidance": "Concrete commitments for next week with owners.",
+          "id": "next-steps",
+          "tier": "required",
+          "title": "Next Steps",
+        },
+      ],
+      "slug": "weekly-status",
+      "useFor": "A weekly status update: progress, metrics, blockers, and next steps.",
+    },
+    {
+      "analyses": [
+        {
+          "inputHint": "ordered stages: [{ label, count }], >=2 stages",
+          "key": "pipeline-conversion",
+          "op": "funnel_conversion",
+        },
+        {
+          "inputHint": "numerator + denominator (nonzero), optional label",
+          "key": "quota-attainment",
+          "op": "ratio_pct",
+        },
+      ],
+      "displayName": "Sales Rep Review",
+      "sections": [
+        {
+          "guidance": "Attainment against target for the period, computed — not narrated from memory. Waive when no quota target is set for this rep.",
+          "id": "quota-attainment",
+          "suggestedDirectives": [
+            {
+              "kind": "stats",
+            },
+          ],
+          "tier": "required-if-material",
+          "title": "Quota Attainment",
+        },
+        {
+          "guidance": "The rep's pipeline as an ordered funnel with stage-to-stage conversion. Waive when stage-level pipeline data is unavailable.",
+          "id": "pipeline-health",
+          "suggestedDirectives": [
+            {
+              "chartType": "funnel",
+              "kind": "chart",
+            },
+          ],
+          "tier": "required-if-material",
+          "title": "Pipeline Health",
+        },
+        {
+          "guidance": "Specific, observable behaviors to keep or change, each tied to evidence from the period.",
+          "id": "coaching-notes",
+          "tier": "required",
+          "title": "Coaching Notes",
+        },
+      ],
+      "slug": "sales-rep-review",
+      "useFor": "A sales rep performance review: quota attainment, pipeline health, and coaching points.",
+    },
+    {
+      "analyses": [
+        {
+          "inputHint": "current + prior numbers, optional label",
+          "key": "value-vs-initial",
+          "op": "variance_vs_prior",
+        },
+      ],
+      "displayName": "Opportunity Review",
+      "sections": [
+        {
+          "guidance": "Stage, value, close date, and how each has moved since the last review.",
+          "id": "deal-snapshot",
+          "suggestedDirectives": [
+            {
+              "kind": "stats",
+            },
+          ],
+          "tier": "required",
+          "title": "Deal Snapshot",
+        },
+        {
+          "guidance": "Who decides, who champions, who blocks — and the engagement state of each.",
+          "id": "stakeholders",
+          "tier": "required",
+          "title": "Stakeholders",
+        },
+        {
+          "guidance": "What could kill the deal, with a verdict per risk and the mitigation in play.",
+          "id": "risks",
+          "suggestedDirectives": [
+            {
+              "kind": "verdict-grid",
+            },
+          ],
+          "tier": "required",
+          "title": "Risks",
+        },
+        {
+          "guidance": "The path to signature: remaining steps, owners on both sides, and dates.",
+          "id": "close-plan",
+          "tier": "required",
+          "title": "Close Plan",
+        },
+      ],
+      "slug": "opportunity-review",
+      "useFor": "A single-opportunity deal review: stage, stakeholders, risks, and the close plan.",
+    },
+  ],
+  "fetch_workspace_source_enabled": false,
+  "finalize_callback_secret": "test-secret",
+  "finalize_callback_url": "https://api.example.com/api/threads/thread-1/finalize",
+  "human_name": "Eric",
+  "instance_id": "thinkwork",
+  "message": "characterization fixture message",
+  "messages_history": [
+    {
+      "content": "earlier reply",
+      "role": "assistant",
+    },
+    {
+      "content": "earlier question",
+      "role": "user",
+    },
+  ],
+  "model": "moonshotai.kimi-k2.5",
+  "runtime_type": "pi",
+  "skills": [
+    {
+      "s3Key": "tenants/acme/skill-catalog/meeting-notes",
+      "skillId": "meeting-notes",
+    },
+  ],
+  "system_prompt": "You are the fixture agent.",
+  "tenant_id": "tenant-1",
+  "tenant_slug": "acme",
+  "thinkwork_api_secret": "test-secret",
+  "thinkwork_api_url": "https://api.example.com",
+  "thread_id": "thread-1",
+  "thread_turn_id": "<turn-id>",
+  "trace_id": "1-fixed-trace",
+  "trigger_channel": "chat",
+  "trusted_skill_ids": [
+    "meeting-notes",
+  ],
+  "use_memory": true,
+  "user_id": "user-1",
+  "workspace_bucket": "workspace-bucket-test",
+  "workspace_tenant_id": "tenant-1",
+}
+`;
