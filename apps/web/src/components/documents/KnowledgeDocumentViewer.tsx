@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Download, FileText, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, FileText, Loader2 } from "lucide-react";
 import { ViewerClient } from "@zrimo/viewer";
 import "@zrimo/viewer/styles.css";
 import { Button } from "@thinkwork/ui";
+import { cn } from "@/lib/utils";
 import { isSignedDocLink } from "@/lib/knowledge-doc-viewer";
 import { openInNewTab } from "@/lib/open-in-new-tab";
 
@@ -42,11 +43,20 @@ export function KnowledgeDocumentViewer({
   src,
   documentKey,
   page,
+  embedded = false,
+  onBack,
 }: {
   /** Signed doc-link URL the citation carried (validated before fetching). */
   src?: string;
   documentKey?: string;
   page?: number;
+  /** Docked inside the thread artifact panel (THINK-168): fill the host
+   * instead of the viewport, and skip the page chrome (context strip,
+   * document.title) — the panel header carries title and actions. */
+  embedded?: boolean;
+  /** Full-screen view reached by same-tab navigation from a thread: renders
+   * a back affordance in the context strip. Page mode only. */
+  onBack?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   // The fetched bytes, kept for the Download action — no second presign.
@@ -73,8 +83,9 @@ export function KnowledgeDocumentViewer({
   }, [src, fileName]);
 
   useEffect(() => {
+    if (embedded) return;
     document.title = fileName ? `${fileName} · ThinkWork` : "ThinkWork";
-  }, [fileName]);
+  }, [embedded, fileName]);
 
   useEffect(() => {
     if (!src || !documentKey) {
@@ -146,31 +157,50 @@ export function KnowledgeDocumentViewer({
   }, [src, documentKey, fileName]);
 
   return (
-    // Full-bleed focused tab: the viewer IS the page — no app shell, just a
-    // slim context strip over the document. This tab is a focused artifact;
-    // the thread that spawned it is already open in another tab, so there
-    // are deliberately no links back into the app.
-    <div className="knowledge-doc-viewer flex h-dvh min-h-0 flex-col bg-background text-foreground">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border px-4">
-        <div className="flex min-w-0 items-center gap-1.5 text-sm">
-          <FileText
-            className="size-4 shrink-0 text-muted-foreground"
-            aria-hidden
-          />
-          <span className="truncate font-medium">{fileName || "…"}</span>
-          {page ? (
-            <span className="shrink-0 text-muted-foreground">p.{page}</span>
-          ) : null}
-        </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label="Download original"
-          onClick={onDownload}
-        >
-          <Download className="size-4" aria-hidden />
-        </Button>
-      </header>
+    // Full-bleed focused view: the viewer IS the page — no app shell, just a
+    // slim context strip over the document (back affordance only when the
+    // host navigated here in-tab). Embedded (thread panel), the strip is
+    // dropped — the panel header owns title and actions.
+    <div
+      className={cn(
+        "knowledge-doc-viewer flex min-h-0 flex-col bg-background text-foreground",
+        embedded ? "h-full" : "h-dvh",
+      )}
+    >
+      {embedded ? null : (
+        <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-border px-4">
+          <div className="flex min-w-0 items-center gap-1.5 text-sm">
+            {onBack ? (
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                aria-label="Back"
+                className="-ml-2 mr-0.5 shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={onBack}
+                data-testid="document-view-back"
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+              </Button>
+            ) : null}
+            <FileText
+              className="size-4 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+            <span className="truncate font-medium">{fileName || "…"}</span>
+            {page ? (
+              <span className="shrink-0 text-muted-foreground">p.{page}</span>
+            ) : null}
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label="Download original"
+            onClick={onDownload}
+          >
+            <Download className="size-4" aria-hidden />
+          </Button>
+        </header>
+      )}
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div
           ref={containerRef}

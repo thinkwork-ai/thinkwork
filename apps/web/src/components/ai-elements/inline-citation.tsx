@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { FileText } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
-import { openKnowledgeDocument } from "@/lib/knowledge-doc-viewer";
+import { useKnowledgeDocumentOpener } from "@/components/documents/knowledge-doc-open-context";
 import type { KnowledgeCitation } from "./sources";
 
 /**
@@ -84,16 +84,21 @@ export function InlineCitation({
 
   // Only retrieval-supplied URLs are resolvable: MCP knowledge servers
   // presign access to their own documents. (THINK-402 removed the KB
-  // Files API, which was the only other resolver.) Office formats route to
-  // the in-app viewer tab; native formats open the URL directly.
-  const open = useCallback((citation: KnowledgeCitation) => {
-    setError(null);
-    try {
-      openKnowledgeDocument(citation);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to open source");
-    }
-  }, []);
+  // Files API, which was the only other resolver.) Inside a thread the
+  // opener docks the document in the artifact side panel; elsewhere it
+  // falls back to the new-tab flow.
+  const openDocument = useKnowledgeDocumentOpener();
+  const open = useCallback(
+    (citation: KnowledgeCitation) => {
+      setError(null);
+      try {
+        openDocument(citation);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to open source");
+      }
+    },
+    [openDocument],
+  );
 
   const [primary, ...rest] = citations;
   if (!primary) return null;

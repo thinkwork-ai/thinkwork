@@ -21,7 +21,7 @@
 
 import { useCallback, useEffect, useMemo } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, SquareArrowOutUpRight, X } from "lucide-react";
+import { ArrowLeft, Maximize2, SquareArrowOutUpRight, X } from "lucide-react";
 import { useQuery } from "urql";
 import { TooltipIconButton } from "@thinkwork/ui";
 import {
@@ -36,8 +36,14 @@ import {
   type ArtifactCardData,
 } from "@/components/artifacts/ArtifactCard";
 import { CanvasHeaderActions } from "@/components/artifacts/canvas/CanvasHeaderActions";
+import { KnowledgeDocumentViewer } from "@/components/documents/KnowledgeDocumentViewer";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { THREAD_ARTIFACT_PANEL_LIST } from "@/components/artifacts/thread-artifact-panel-store";
+import {
+  knowledgeDocumentFileName,
+  opensInDocumentViewer,
+  parseKbDocPanelId,
+} from "@/lib/knowledge-doc-viewer";
 import {
   ArtifactDetailForRouteQuery,
   DocumentArtifactForPanelQuery,
@@ -81,21 +87,24 @@ export function ThreadArtifactPanel({
   jsonRenderPartVersions?: ReadonlyMap<string, number>;
 }) {
   const isListState = artifactId === THREAD_ARTIFACT_PANEL_LIST;
+  // Cited knowledge documents ride through the store as `kb-doc:` ids — no
+  // artifact row exists for them, so both queries stay paused.
+  const kbDoc = useMemo(() => parseKbDocPanelId(artifactId), [artifactId]);
   const [{ data, fetching, error }, reexecuteQuery] =
     useQuery<PanelArtifactResult>({
       query: ArtifactDetailForRouteQuery,
       variables: { id: artifactId },
       requestPolicy: "cache-and-network",
-      pause: isListState,
+      pause: isListState || !!kbDoc,
     });
-  const primaryMissing = !isListState && !fetching && !data?.artifact;
+  const primaryMissing = !isListState && !kbDoc && !fetching && !data?.artifact;
   const [{ data: fallbackData, fetching: fallbackFetching }] = useQuery<{
     documentArtifact?: (ArtifactBodyNode & { threadId?: string | null }) | null;
   }>({
     query: DocumentArtifactForPanelQuery,
     variables: { documentId: fallbackDocumentId ?? "" },
     requestPolicy: "cache-and-network",
-    pause: isListState || !fallbackDocumentId || !primaryMissing,
+    pause: isListState || !!kbDoc || !fallbackDocumentId || !primaryMissing,
   });
   const artifact = isListState
     ? null
@@ -156,7 +165,11 @@ export function ThreadArtifactPanel({
           className="min-w-0 flex-1 truncate pl-2 text-sm font-medium text-foreground"
           data-testid="thread-artifact-panel-title"
         >
-          {isListState ? "Artifacts" : (artifact?.title ?? "Artifact")}
+          {isListState
+            ? "Artifacts"
+            : kbDoc
+              ? `${knowledgeDocumentFileName(kbDoc.key)}${kbDoc.page ? ` · p.${kbDoc.page}` : ""}`
+              : (artifact?.title ?? "Artifact")}
         </h2>
         {artifact && isCanvas ? (
           <CanvasHeaderActions
@@ -171,7 +184,26 @@ export function ThreadArtifactPanel({
             onChanged={refetch}
           />
         ) : null}
-        {!isListState ? (
+        {kbDoc ? (
+          <TooltipIconButton
+            asChild
+            size="icon"
+            className="text-muted-foreground hover:text-foreground"
+            label="Full screen"
+          >
+            <Link
+              to="/documents/view"
+              search={{
+                src: kbDoc.src,
+                key: kbDoc.key,
+                ...(kbDoc.page ? { page: kbDoc.page } : {}),
+              }}
+              data-testid="thread-artifact-panel-full-page"
+            >
+              <Maximize2 className="size-4" />
+            </Link>
+          </TooltipIconButton>
+        ) : !isListState ? (
           <TooltipIconButton
             asChild
             size="icon"
@@ -199,7 +231,28 @@ export function ThreadArtifactPanel({
         </TooltipIconButton>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {isListState ? (
+        {kbDoc ? (
+          opensInDocumentViewer(kbDoc.key) ? (
+            // Office/CSV: no native browser renderer — embedded Zrimo viewer.
+            <KnowledgeDocumentViewer
+              embedded
+              src={kbDoc.src}
+              documentKey={kbDoc.key}
+              page={kbDoc.page}
+            />
+          ) : (
+            // pdf/txt/md…: the browser renders the signed link natively, and
+            // its PDF viewer honours the #page= deep link. Not sandboxed —
+            // sandbox would disable the PDF viewer; the content is
+            // cross-origin (S3 presign) so it gets no app privileges.
+            <iframe
+              title={knowledgeDocumentFileName(kbDoc.key)}
+              src={kbDoc.page ? `${kbDoc.src}#page=${kbDoc.page}` : kbDoc.src}
+              className="h-full w-full border-0"
+              data-testid="thread-artifact-panel-doc-frame"
+            />
+          )
+        ) : isListState ? (
           <div
             className="grid content-start gap-1 p-3"
             data-testid="thread-artifact-panel-list"

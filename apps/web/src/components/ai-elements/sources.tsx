@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { BookOpen, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { openKnowledgeDocument } from "@/lib/knowledge-doc-viewer";
+import { useKnowledgeDocumentOpener } from "@/components/documents/knowledge-doc-open-context";
 
 /**
  * Source citations for one agent turn (AI-Elements-style Sources
@@ -335,19 +335,20 @@ export function KnowledgeSourcesCard({
     [sources],
   );
 
-  // Office formats route to the in-app viewer tab; native formats open the
-  // retrieval-supplied URL directly (PDF viewers honour #page=). Synchronous
-  // on purpose — popup blockers kill tabs opened after an await.
+  // Inside a thread the opener docks the document in the artifact side
+  // panel; elsewhere it falls back to the new-tab flow. Synchronous on
+  // purpose — popup blockers kill tabs opened after an await.
+  const openDocument = useKnowledgeDocumentOpener();
   const openSource = useCallback(
     (documentKey: string, page?: number, documentUrl?: string) => {
       setError(null);
       try {
-        openKnowledgeDocument({ key: documentKey, page, documentUrl });
+        openDocument({ key: documentKey, page, documentUrl });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to open source");
       }
     },
-    [],
+    [openDocument],
   );
 
   if (sources.length === 0) return null;

@@ -2,8 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   documentViewerHref,
   isSignedDocLink,
+  KB_DOC_PANEL_ID_PREFIX,
+  kbDocPanelId,
+  knowledgeDocumentFileName,
   openKnowledgeDocument,
   opensInDocumentViewer,
+  parseKbDocPanelId,
 } from "./knowledge-doc-viewer";
 
 const DOC_LINK =
@@ -121,5 +125,59 @@ describe("openKnowledgeDocument", () => {
     expect(() => openKnowledgeDocument({ key: "hr/Handbook.docx" })).toThrow(
       /not viewable/,
     );
+  });
+});
+
+describe("kbDocPanelId / parseKbDocPanelId", () => {
+  it("round-trips a signed citation through the panel-id encoding", () => {
+    const id = kbDocPanelId({
+      key: "hr/Handbook.docx",
+      page: 2,
+      documentUrl: DOC_LINK,
+    });
+    expect(id?.startsWith(KB_DOC_PANEL_ID_PREFIX)).toBe(true);
+    expect(parseKbDocPanelId(id!)).toEqual({
+      key: "hr/Handbook.docx",
+      src: DOC_LINK,
+      page: 2,
+    });
+  });
+
+  it("omits page when the citation has none", () => {
+    const id = kbDocPanelId({ key: "hr/Policy.pdf", documentUrl: DOC_LINK });
+    expect(parseKbDocPanelId(id!)).toEqual({
+      key: "hr/Policy.pdf",
+      src: DOC_LINK,
+    });
+  });
+
+  it("returns null for citations that cannot be panel-rendered", () => {
+    expect(kbDocPanelId({ key: "hr/Handbook.docx" })).toBeNull();
+    expect(
+      kbDocPanelId({
+        key: "hr/Handbook.docx",
+        documentUrl: "https://other.example/files/Handbook.docx",
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects non-panel ids and tampered payloads on parse", () => {
+    expect(parseKbDocPanelId("a1b2c3-artifact-id")).toBeNull();
+    expect(parseKbDocPanelId(`${KB_DOC_PANEL_ID_PREFIX}not-json`)).toBeNull();
+    // A src that is not the signed doc-link shape must not survive parsing —
+    // the parsed target is handed straight to the viewer/iframe.
+    const tampered = `${KB_DOC_PANEL_ID_PREFIX}${encodeURIComponent(
+      JSON.stringify({ key: "a.docx", src: "https://evil.example/steal" }),
+    )}`;
+    expect(parseKbDocPanelId(tampered)).toBeNull();
+  });
+});
+
+describe("knowledgeDocumentFileName", () => {
+  it("returns the key's last path segment", () => {
+    expect(knowledgeDocumentFileName("hr/docs/Handbook.docx")).toBe(
+      "Handbook.docx",
+    );
+    expect(knowledgeDocumentFileName("Handbook.docx")).toBe("Handbook.docx");
   });
 });
