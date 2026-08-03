@@ -1640,7 +1640,12 @@ locals {
   # the in-app knowledge document viewer (Zrimo) renders Office files with
   # client-side WASM.
   computer_host_script_src = "'self' 'wasm-unsafe-eval'"
-  computer_host_worker_src = "'self'"
+  # blob: workers are how Zrimo (knowledge document viewer) spawns its
+  # render workers. With script-src carrying no blob:/eval, only
+  # first-party page code can mint a blob worker, and blob workers
+  # inherit this document's CSP — the U10 blob-execution escape hatch
+  # (generated-app script on the host origin) stays closed.
+  computer_host_worker_src = "'self' blob:"
   # frame-src carries the sandbox shell plus the cited-knowledge-document
   # frames: browser-native formats (pdf/txt/md) render in an iframe on the
   # signed /kb/doc link — a *.thinkwork.ai brain host that 302s to the

@@ -371,24 +371,27 @@ describe("U10 — host CSP wired for computer_site", () => {
 
   it("host CSP does not keep a legacy blob execution escape hatch", () => {
     const source = read(THINKWORK_MAIN);
-    // 'wasm-unsafe-eval' is deliberate (knowledge document viewer compiles
-    // WASM client-side); it permits WebAssembly compilation only. The
-    // escape hatch this guards against is blob:/eval JS execution on the
-    // host origin — script-src and worker-src must never carry blob: or
-    // 'unsafe-eval'.
+    // The escape hatch this guards against is script execution of
+    // non-first-party code on the host origin. Two knowledge-document-
+    // viewer allowances are deliberate and stay narrower than that:
+    // 'wasm-unsafe-eval' permits WebAssembly compilation only (not JS
+    // eval), and worker-src blob: only matters if page script can mint a
+    // blob worker — script-src carries no blob:/eval, so only first-party
+    // code can, and blob workers inherit this document's CSP.
     expect(source).toMatch(
       /computer_host_script_src\s*=\s*"'self' 'wasm-unsafe-eval'"/,
     );
-    expect(source).toMatch(/computer_host_worker_src\s*=\s*"'self'"/);
+    expect(source).toMatch(/computer_host_worker_src\s*=\s*"'self' blob:"/);
     const scriptSrc = source.match(
       /computer_host_script_src\s*=\s*"([^"]*)"/,
     )?.[1];
     const workerSrc = source.match(
       /computer_host_worker_src\s*=\s*"([^"]*)"/,
     )?.[1];
+    expect(scriptSrc).toBeDefined();
+    expect(scriptSrc!).not.toContain("blob:");
     for (const directive of [scriptSrc, workerSrc]) {
       expect(directive).toBeDefined();
-      expect(directive!).not.toContain("blob:");
       expect(directive!).not.toContain("'unsafe-eval'");
       expect(directive!).not.toContain("*");
     }
