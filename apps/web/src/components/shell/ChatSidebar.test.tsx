@@ -33,6 +33,7 @@ const {
   searchThreadItemsMock,
   pinnedThreadItemsMock,
   spacesMock,
+  pendingApprovalsMock,
   pinnedQueryPauseValuesMock,
   recentReexecuteMock,
   searchReexecuteMock,
@@ -84,6 +85,7 @@ const {
     unreadThreadCount: number;
     lastActivityAt: string;
   }>,
+  pendingApprovalsMock: [] as Array<{ id: string; type: string }>,
   pinnedQueryPauseValuesMock: [] as boolean[],
   recentReexecuteMock: vi.fn(),
   searchReexecuteMock: vi.fn(),
@@ -93,6 +95,7 @@ const {
   subscriptionResultMock: { data: undefined as unknown },
   queryDocs: {
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
+    ComputerApprovalsQuery: Symbol("ComputerApprovalsQuery"),
     ComputerThreadQuery: Symbol("ComputerThreadQuery"),
     DeleteThreadMutation: Symbol("DeleteThreadMutation"),
     MarkThreadsReadMutation: Symbol("MarkThreadsReadMutation"),
@@ -212,6 +215,15 @@ vi.mock("urql", () => ({
         {
           fetching: false,
           data: { workItems: [] },
+        },
+        vi.fn(),
+      ];
+    }
+    if (query === queryDocs.ComputerApprovalsQuery) {
+      return [
+        {
+          fetching: false,
+          data: { inboxItems: pendingApprovalsMock },
         },
         vi.fn(),
       ];
@@ -581,6 +593,7 @@ afterEach(() => {
   searchThreadItemsMock.length = 0;
   pinnedThreadItemsMock.length = 0;
   spacesMock.length = 0;
+  pendingApprovalsMock.length = 0;
   pinnedQueryPauseValuesMock.length = 0;
   window.localStorage.clear();
   if (ORIGINAL_LOCAL_STORAGE) {
@@ -677,6 +690,31 @@ describe("ChatSidebar", () => {
         new Set(["deleted"]),
       ),
     ).toBe("below");
+  });
+
+  it("shows the Approvals nav entry only while approvals are pending", () => {
+    // The queue had no nav entry at all, so months of pending email
+    // approvals went unseen. It has to appear when work is waiting — and
+    // stay out of the way when none is.
+    tenantMock.mockReturnValue({ tenantId: "tenant-1" });
+    locationMock.mockReturnValue({ pathname: "/threads", search: {} });
+
+    const { unmount } = render(<ChatSidebar />);
+    expect(screen.queryByRole("link", { name: /approvals/i })).toBeNull();
+    unmount();
+
+    pendingApprovalsMock.push(
+      { id: "approval-1", type: "computer_approval" },
+      { id: "approval-2", type: "computer_approval" },
+      // Non-approval inbox rows must not inflate the badge.
+      { id: "other-1", type: "workspace_review" },
+    );
+    render(<ChatSidebar />);
+
+    const link = screen.getByRole("link", { name: /approvals/i });
+    expect(link).toBeTruthy();
+    expect(link.getAttribute("href")).toBe("/approvals");
+    expect(link.textContent).toContain("2");
   });
 
   it("renders Codex-style action nav with a single Spaces section", () => {
