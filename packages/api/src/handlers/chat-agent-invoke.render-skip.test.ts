@@ -161,6 +161,7 @@ vi.mock("../lib/workspace-render-skip.js", () => ({
   readThreadLastRender: mocks.readThreadLastRender,
   writeThreadLastRender: mocks.writeThreadLastRender,
   computeRoutingSignature: mocks.computeRoutingSignature,
+  probeSourcePrefixesUnchanged: vi.fn(async () => true),
   evaluateRenderSkip: mocks.evaluateRenderSkip,
 }));
 

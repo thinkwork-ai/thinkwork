@@ -119,6 +119,7 @@ import {
 import {
   computeRoutingSignature,
   evaluateRenderSkip,
+  probeSourcePrefixesUnchanged,
   readThreadLastRender,
   writeThreadLastRender,
   THREAD_LAST_RENDER_VERSION,
@@ -863,6 +864,28 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
 
     const spaceId = spaceContextResolved?.spaceId ?? null;
     const spaceSlug = spaceContextResolved?.spaceSlug ?? null;
+    // Render-skip probe hoist (U2 follow-up): the S3 mtime probe and the DB
+    // routing signature depend only on ids + the marker, so they start here
+    // and overlap resolveAgentRuntimeConfig + turn creation instead of
+    // sitting on the critical path at the render site (measured ~0.8–1.1 s
+    // there). The fingerprint comparison still happens at the render site —
+    // it needs runtimeConfig. Neither promise rejects (both fail closed).
+    const routingSignaturePromise = spaceId
+      ? computeRoutingSignature({
+          tenantId,
+          agentId,
+          spaceId,
+          userId: identity.currentUserId || null,
+        })
+      : null;
+    const sourceProbePromise =
+      spaceId && lastRenderMarker
+        ? probeSourcePrefixesUnchanged({
+            bucket: workspaceBucket() || "",
+            sourcePrefixes: lastRenderMarker.sourcePrefixes,
+            since: new Date(lastRenderMarker.generatedAt),
+          })
+        : null;
     // Member spaces need only identity — start now, await at the builder.
     // The helper try/catches internally (never rejects unhandled).
     const memberSpacesPromise = memberSpacesForDispatch(
@@ -1466,20 +1489,19 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         // routing signature, (b) the config fingerprint computed against the
         // carried manifest, and (c) the S3 mtime probe over the render's own
         // source prefixes agree nothing changed. Any mismatch — or any probe
-        // failure — renders exactly as before (fail-closed to render).
-        const routingSignaturePromise = computeRoutingSignature({
-          tenantId,
-          agentId,
-          spaceId,
-          userId: currentUserId || null,
-        });
+        // failure — renders exactly as before (fail-closed to render). The
+        // signature + probe promises started right after stage 1 (hoisted off
+        // the critical path); the probe result is injected into
+        // evaluateRenderSkip so it is not re-run here.
         let carriedRender: RenderWorkspaceTupleForInvokeResult | null = null;
-        if (lastRenderMarker) {
+        if (lastRenderMarker && routingSignaturePromise) {
           const candidate = renderResultFromLastRenderMarker(lastRenderMarker);
           if (candidate) {
+            const probeResult = (await sourceProbePromise) ?? false;
             const decision = await evaluateRenderSkip({
               marker: lastRenderMarker,
               bucket: workspaceBucket() || undefined,
+              deps: { probe: async () => probeResult },
               currentRoutingSignature: await routingSignaturePromise,
               currentConfigFingerprint: computeConfigFingerprint(
                 {
@@ -1543,7 +1565,13 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
                   }
                 : undefined,
               hydrateManifest: renderedWorkspace.hydrateManifest,
-              routingSignature: await routingSignaturePromise,
+              routingSignature: await (routingSignaturePromise ??
+                computeRoutingSignature({
+                  tenantId,
+                  agentId,
+                  spaceId,
+                  userId: currentUserId || null,
+                })),
               configFingerprint: computeConfigFingerprint(
                 {
                   tenantId,
