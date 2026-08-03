@@ -658,6 +658,11 @@ build_handler "mcp-approval" \
 build_handler "mcp-approval-sweeper" \
   "$REPO_ROOT/packages/api/src/handlers/mcp-approval-sweeper.ts"
 
+# Daily TTL sweeper — cancels computer_approval inbox items past expires_at.
+# Triggered by EventBridge (aws_scheduler_schedule.inbox_approval_sweeper).
+build_handler "inbox-approval-sweeper" \
+  "$REPO_ROOT/packages/api/src/handlers/inbox-approval-sweeper.ts"
+
 build_handler "github-workspace" \
   "$REPO_ROOT/packages/lambda/github-workspace.ts"
 

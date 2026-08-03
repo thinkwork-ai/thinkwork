@@ -13,6 +13,14 @@ import { sendComputerApprovalPush } from "../push-notifications.js";
 
 type Db = Pick<Database, "select" | "insert" | "update">;
 
+/**
+ * How long an unanswered first-send review stays actionable. Past this the
+ * inbox-approval-sweeper cancels it: an outbound draft nobody decided on in
+ * a week is stale, and a queue full of month-old items reads as "nothing is
+ * waiting on me" — which is how four months of sends went unnoticed.
+ */
+export const EMAIL_APPROVAL_TTL_DAYS = 7;
+
 type EmailSendFunction = (
   provider: EmailChannelProvider,
   input: {
@@ -160,6 +168,9 @@ export async function requestFirstSendApproval(
       title: `Review email to ${input.to.join(", ")}`,
       description:
         "First outbound email in this conversation requires human review.",
+      expires_at: new Date(
+        Date.now() + EMAIL_APPROVAL_TTL_DAYS * 24 * 60 * 60 * 1000,
+      ),
       entity_type: "email_conversation",
       entity_id: conversation.id,
       config: {

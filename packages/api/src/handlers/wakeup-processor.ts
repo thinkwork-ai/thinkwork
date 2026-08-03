@@ -775,13 +775,23 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       runtime_config: agents.runtime_config,
       budget_paused: agents.budget_paused,
       guardrail_id: agentTemplates.guardrail_id,
-      blocked_tools: agentTemplates.blocked_tools,
-      sandbox: agentTemplates.sandbox,
-      browser: agentTemplates.browser,
-      web_search: agentTemplates.web_search,
-      web_extract: agentTemplates.web_extract,
-      send_email: agentTemplates.send_email,
-      context_engine: agentTemplates.context_engine,
+      // Platform-tool opt-ins live on the AGENT, not the template — the Tool
+      // Library reclassification moved them (see capabilities/backfill.ts) and
+      // resolve-agent-runtime-config (the chat-agent-invoke path) reads them
+      // from `agents`. This builder kept reading the template columns, so any
+      // agent without a template_id — the default for agents created since —
+      // resolved every capability to NULL on wakeup turns. send_email then
+      // never reached the payload, the extension registered zero tools, and
+      // the model got "Tool send_email not found" while the exact same agent
+      // could email fine from a thread turn. Same divergence silently
+      // disabled sandbox/browser/web_search/web_extract/context_engine.
+      blocked_tools: agents.blocked_tools,
+      sandbox: agents.sandbox,
+      browser: agents.browser,
+      web_search: agents.web_search,
+      web_extract: agents.web_extract,
+      send_email: agents.send_email,
+      context_engine: agents.context_engine,
       json_render_ui: agents.json_render_ui,
     })
     .from(agents)
