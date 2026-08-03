@@ -371,11 +371,44 @@ describe("U10 — host CSP wired for computer_site", () => {
 
   it("host CSP does not keep a legacy blob execution escape hatch", () => {
     const source = read(THINKWORK_MAIN);
-    expect(source).toMatch(/computer_host_script_src\s*=\s*"'self'"/);
-    expect(source).toMatch(/computer_host_worker_src\s*=\s*"'self'"/);
+    // 'wasm-unsafe-eval' is deliberate (knowledge document viewer compiles
+    // WASM client-side); it permits WebAssembly compilation only. The
+    // escape hatch this guards against is blob:/eval JS execution on the
+    // host origin — script-src and worker-src must never carry blob: or
+    // 'unsafe-eval'.
     expect(source).toMatch(
-      /computer_host_frame_src\s*=\s*local\.computer_sandbox_enabled\s*\?\s*"https:\/\/\$\{var\.computer_sandbox_domain\}"\s*:\s*"'none'"/,
+      /computer_host_script_src\s*=\s*"'self' 'wasm-unsafe-eval'"/,
     );
+    expect(source).toMatch(/computer_host_worker_src\s*=\s*"'self'"/);
+    const scriptSrc = source.match(
+      /computer_host_script_src\s*=\s*"([^"]*)"/,
+    )?.[1];
+    const workerSrc = source.match(
+      /computer_host_worker_src\s*=\s*"([^"]*)"/,
+    )?.[1];
+    for (const directive of [scriptSrc, workerSrc]) {
+      expect(directive).toBeDefined();
+      expect(directive!).not.toContain("blob:");
+      expect(directive!).not.toContain("'unsafe-eval'");
+      expect(directive!).not.toContain("*");
+    }
+  });
+
+  it("host CSP frame-src is limited to the sandbox shell and knowledge-document origins", () => {
+    const source = read(THINKWORK_MAIN);
+    // Cited knowledge documents render in frames: the signed /kb/doc link
+    // lives on a *.thinkwork.ai brain host and 302s to an S3 presign, and
+    // CSP re-checks redirect hops — so exactly these origins, never blob:
+    // or a bare wildcard.
+    const frameSrc = source.match(
+      /computer_host_frame_src\s*=\s*join\(" ", compact\(\[[\s\S]*?\]\)\)/,
+    )?.[0];
+    expect(frameSrc).toBeDefined();
+    expect(frameSrc!).toMatch(/computer_sandbox_domain/);
+    expect(frameSrc!).toMatch(/https:\/\/\*\.thinkwork\.ai/);
+    expect(frameSrc!).toMatch(/s3\.\$\{var\.region\}\.amazonaws\.com/);
+    expect(frameSrc!).not.toContain("blob:");
+    expect(frameSrc!).not.toMatch(/"\*"|\s\*\s/);
   });
 });
 
