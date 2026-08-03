@@ -162,6 +162,7 @@ import {
   type ArtifactCardData,
 } from "@/components/artifacts/ArtifactCard";
 import { ThreadArtifactPanel } from "@/components/artifacts/ThreadArtifactPanel";
+import { detectAndConvert } from "@thinkwork/thread-json-render";
 import {
   KnowledgeDocumentOpenerContext,
   type KnowledgeDocumentOpener,
@@ -2948,6 +2949,39 @@ function TranscriptMessage({
       });
     }
   }
+  // Legacy chunk-based runs persist their parts WITHOUT text parts — the
+  // prose lives only in message.content. When such a message also carries a
+  // safety-net table conversion, rendering "parts instead of body" swallows
+  // the entire answer and shows only the table (McPherson CX-0098 sign-off
+  // failure). The safety net converts a table FROM that prose, so the same
+  // deterministic detector re-derives the table's line span here and the
+  // prose renders around the rich part; when nothing detects (so the body
+  // holds no table a part could duplicate), the whole body renders above
+  // the parts.
+  const hasTextPart = typedParts.some(
+    (part) =>
+      part.type === "text" &&
+      ((part as { text?: string }).text ?? "").trim().length > 0,
+  );
+  let bodyAroundParts: { before: string; after: string } | null = null;
+  const partsCarryProse = isUser || hasTextPart || !body;
+  if (
+    !partsCarryProse &&
+    typedParts.some(
+      (part) =>
+        part.type === "data-json-render" &&
+        isSafetyNetPartId((part as { id?: string }).id),
+    )
+  ) {
+    const conversion = detectAndConvert(body);
+    if (conversion.matched && conversion.sourceSpan) {
+      const lines = body.split("\n");
+      bodyAroundParts = {
+        before: lines.slice(0, conversion.sourceSpan.startLine).join("\n").trim(),
+        after: lines.slice(conversion.sourceSpan.endLine).join("\n").trim(),
+      };
+    }
+  }
   const renderedTypedParts =
     typedParts.length > 0
       ? renderTypedParts(typedParts, {
@@ -2963,6 +2997,8 @@ function TranscriptMessage({
       : [];
   const transcriptContentClassName =
     "grid w-full grid-cols-[minmax(0,1fr)] gap-0.5 overflow-visible py-1";
+  const transcriptProseClassName =
+    "prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3";
   const userBubbleClassName =
     "rounded-2xl bg-muted/70 !px-3 !py-2 text-[15px] leading-5 text-foreground";
   const timestamp = formatMessageTimestamp(message.createdAt);
@@ -3040,16 +3076,37 @@ function TranscriptMessage({
                 </div>
               ) : null}
               {renderedTypedParts.length > 0 ? (
-                <div className="mt-2 grid min-w-0 gap-2">
-                  {renderedTypedParts}
-                </div>
+                <>
+                  {!partsCarryProse ? (
+                    // Parts with no text part are augmentations, never the
+                    // message itself — the prose in `body` must still render
+                    // or the answer is silently lost.
+                    <Response
+                      citations={knowledgeCitations}
+                      className={transcriptProseClassName}
+                    >
+                      {bodyAroundParts ? bodyAroundParts.before : body}
+                    </Response>
+                  ) : null}
+                  <div className="mt-2 grid min-w-0 gap-2">
+                    {renderedTypedParts}
+                  </div>
+                  {!partsCarryProse && bodyAroundParts?.after ? (
+                    <Response
+                      citations={knowledgeCitations}
+                      className={transcriptProseClassName}
+                    >
+                      {bodyAroundParts.after}
+                    </Response>
+                  ) : null}
+                </>
               ) : body ? (
                 // citations: this path renders whole-message markdown (no
                 // typed parts) and is what most historical assistant turns
                 // take — without it the answer's markers stay literal text.
                 <Response
                   citations={knowledgeCitations}
-                  className="prose-invert text-sm leading-5 text-foreground prose-p:my-1.5 prose-p:leading-5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0 prose-li:leading-5 prose-headings:mt-3 prose-headings:mb-1.5 prose-headings:font-semibold prose-strong:font-semibold prose-hr:my-3"
+                  className={transcriptProseClassName}
                 >
                   {body}
                 </Response>

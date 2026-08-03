@@ -536,6 +536,53 @@ describe("TaskThreadView", () => {
     expect(screen.queryByLabelText("Open artifact Table")).toBeNull();
   });
 
+  it("keeps the prose of a legacy-run message whose only part is a safety-net table", () => {
+    // McPherson CX-0098 sign-off failure: a chunk-run message persists NO
+    // text parts — its prose lives only in `content` — plus one safety-net
+    // table part. Rendering parts INSTEAD of the body swallowed the whole
+    // answer and showed just the table. The prose must render around the
+    // rich table, split at the table's own lines so nothing duplicates.
+    const safetyNetPart = {
+      ...createPrimitiveJsonRenderFixture(),
+      id: "json-render:safety-net:json-render-fnv1a:79bf37db",
+    };
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-legacy-prose",
+          title: "Legacy chunk run",
+          lifecycleStatus: "COMPLETED",
+          messages: [
+            {
+              id: "message-1",
+              role: "ASSISTANT",
+              content: [
+                "Start with the Navigator, then type UDC in the blank.",
+                "",
+                "| Column | What to enter |",
+                "|---|---|",
+                "| Codes | Your Item Number |",
+                "",
+                "Click the checkmark to save.",
+              ].join("\n"),
+              parts: [safetyNetPart],
+            },
+          ],
+        }}
+      />,
+    );
+
+    // Prose before and after the table both survive…
+    expect(
+      screen.getByText(/Start with the Navigator, then type UDC/),
+    ).toBeTruthy();
+    expect(screen.getByText(/Click the checkmark to save/)).toBeTruthy();
+    // …the safety-net part renders inline…
+    expect(screen.getByText("Pipeline health")).toBeTruthy();
+    // …and the markdown table lines were spliced out, not rendered twice.
+    expect(screen.queryByText("Your Item Number")).toBeNull();
+  });
+
   it("renders a card for a SAVED safety-net-born canvas (deliberate save)", () => {
     // The emit → "save this as a canvas artifact" flow: the emission was a
     // safety-net conversion, but the user deliberately saved it (status is
