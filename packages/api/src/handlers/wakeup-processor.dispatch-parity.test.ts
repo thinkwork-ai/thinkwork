@@ -578,6 +578,45 @@ describe("plate contract floor rides both dispatch paths (THINK-183 U6)", () => 
   });
 });
 
+describe("platform-tool capability source parity", () => {
+  /**
+   * The payload-field contract above cannot catch a capability that is
+   * resolved from the wrong TABLE: the field ships, it just ships as
+   * undefined. wakeup-processor read the platform-tool opt-ins from the
+   * left-joined `agent_templates` while resolve-agent-runtime-config (the
+   * chat path) reads them from `agents`. Every agent without a template_id
+   * — the default — therefore lost send_email, sandbox, browser,
+   * web_search, web_extract and context_engine on wakeup turns only.
+   */
+  const CAPABILITY_COLUMNS = [
+    "blocked_tools",
+    "sandbox",
+    "browser",
+    "web_search",
+    "web_extract",
+    "send_email",
+    "context_engine",
+  ];
+
+  it("wakeup-processor selects platform-tool columns from agents, not agent_templates", () => {
+    const wakeupSource = handlerSource("wakeup-processor.ts");
+    for (const column of CAPABILITY_COLUMNS) {
+      expect(wakeupSource).toContain(`${column}: agents.${column},`);
+      expect(wakeupSource).not.toContain(`${column}: agentTemplates.${column},`);
+    }
+  });
+
+  it("matches the chat path's resolver, which owns the same columns", () => {
+    const resolverSource = readFileSync(
+      new URL("../lib/resolve-agent-runtime-config.ts", import.meta.url),
+      "utf8",
+    );
+    for (const column of CAPABILITY_COLUMNS) {
+      expect(resolverSource).toContain(`${column}: agents.${column},`);
+    }
+  });
+});
+
 describe("agent profile manifest authority (subagent-folders U11)", () => {
   it("every dispatch is manifest-authoritative with no profile bodies", () => {
     const fields = buildAgentDispatchControlFields(baseArgs());

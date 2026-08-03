@@ -808,6 +808,10 @@ resource "aws_lambda_function" "handler" {
     # Daily sweeper: auto-rejects MCP servers pending > 30 days. Triggered
     # by EventBridge schedule (mcp-approval-sweeper-daily).
     "mcp-approval-sweeper",
+    # Daily sweeper: cancels computer_approval inbox items past expires_at
+    # (or older than the TTL, for rows predating it). Keeps the approvals
+    # queue a list of live decisions instead of a months-deep graveyard.
+    "inbox-approval-sweeper",
     # Finance pilot U2 — thread-attachment upload (presign + finalize).
     # presign issues a 5-min PUT URL the end-user client uses to push
     # Excel/CSV bytes directly to S3; finalize sniffs magic bytes, scans
@@ -1893,6 +1897,24 @@ resource "aws_scheduler_schedule" "mcp_approval_sweeper" {
 
   target {
     arn      = aws_lambda_function.handler["mcp-approval-sweeper"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+resource "aws_scheduler_schedule" "inbox_approval_sweeper" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-inbox-approval-sweeper"
+  group_name          = "default"
+  schedule_expression = "cron(30 4 * * ? *)" # daily at 04:30 UTC (offset from mcp-approval-sweeper)
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["inbox-approval-sweeper"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }
