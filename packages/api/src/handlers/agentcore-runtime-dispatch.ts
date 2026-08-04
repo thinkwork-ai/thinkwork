@@ -67,9 +67,7 @@ async function resolvePiRuntimeArn(): Promise<string> {
       "@aws-sdk/client-ssm"
     );
     const ssm = new SSMClient({ region: AWS_REGION });
-    const response = await ssm.send(
-      new GetParameterCommand({ Name: ssmName }),
-    );
+    const response = await ssm.send(new GetParameterCommand({ Name: ssmName }));
     const value = response.Parameter?.Value;
     if (!value || value === "None") {
       throw new Error(`SSM parameter ${ssmName} has no runtime ID.`);
@@ -180,13 +178,13 @@ function extractIdentity(envelope: LwaInvocationEnvelope): EnvelopeIdentity {
 
 function isRetryableConflict(err: unknown): boolean {
   const name = (err as { name?: string } | null)?.name ?? "";
-  return (
-    name === "RetryableConflictException" || name === "ConflictException"
-  );
+  return name === "RetryableConflictException" || name === "ConflictException";
 }
 
 function isRuntimeClientError(err: unknown): boolean {
-  return ((err as { name?: string } | null)?.name ?? "") === "RuntimeClientError";
+  return (
+    ((err as { name?: string } | null)?.name ?? "") === "RuntimeClientError"
+  );
 }
 
 export async function handler(event: LwaInvocationEnvelope): Promise<void> {
@@ -234,7 +232,11 @@ export async function handler(event: LwaInvocationEnvelope): Promise<void> {
     });
 
     let lastConflict: unknown = null;
-    for (let attempt = 0; attempt <= CONFLICT_RETRY_DELAYS_MS.length; attempt += 1) {
+    for (
+      let attempt = 0;
+      attempt <= CONFLICT_RETRY_DELAYS_MS.length;
+      attempt += 1
+    ) {
       try {
         const response = await client.send(
           new InvokeAgentRuntimeCommand({
@@ -259,7 +261,10 @@ export async function handler(event: LwaInvocationEnvelope): Promise<void> {
         });
         return;
       } catch (err) {
-        if (isRetryableConflict(err) && attempt < CONFLICT_RETRY_DELAYS_MS.length) {
+        if (
+          isRetryableConflict(err) &&
+          attempt < CONFLICT_RETRY_DELAYS_MS.length
+        ) {
           lastConflict = err;
           const delay = CONFLICT_RETRY_DELAYS_MS[attempt];
           console.warn(

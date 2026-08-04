@@ -23,10 +23,18 @@ describe("deriveAgentCoreSessionId (KTD1)", () => {
 
   it("differs per thread, user, agent, and tenant", () => {
     const base = deriveAgentCoreSessionId(identity);
-    expect(deriveAgentCoreSessionId({ ...identity, threadId: "thread-2" })).not.toBe(base);
-    expect(deriveAgentCoreSessionId({ ...identity, userId: "user-2" })).not.toBe(base);
-    expect(deriveAgentCoreSessionId({ ...identity, agentId: "agent-2" })).not.toBe(base);
-    expect(deriveAgentCoreSessionId({ ...identity, tenantId: "tenant-2" })).not.toBe(base);
+    expect(
+      deriveAgentCoreSessionId({ ...identity, threadId: "thread-2" }),
+    ).not.toBe(base);
+    expect(
+      deriveAgentCoreSessionId({ ...identity, userId: "user-2" }),
+    ).not.toBe(base);
+    expect(
+      deriveAgentCoreSessionId({ ...identity, agentId: "agent-2" }),
+    ).not.toBe(base);
+    expect(
+      deriveAgentCoreSessionId({ ...identity, tenantId: "tenant-2" }),
+    ).not.toBe(base);
   });
 
   it("matches the KTD1 preimage exactly", async () => {
