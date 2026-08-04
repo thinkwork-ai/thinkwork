@@ -179,6 +179,46 @@ describe("first-send email approval", () => {
     ]);
   });
 
+  it("skips review when the recipient set was approved anywhere in the tenant", async () => {
+    // Recipient-set approvals are tenant-scoped (2026-08-04): a NEW thread
+    // emailing an already-approved recipient set must send without raising
+    // another review — "approve an address once", not per-thread.
+    const db = fakeEmailDb({
+      conversationRows: [
+        {
+          id: "conversation-approved",
+          tenant_id: "tenant-1",
+          thread_id: "some-older-thread",
+          participant_hash: "ignored-by-fake",
+          status: "approved",
+        },
+      ],
+    });
+
+    await expect(
+      requestFirstSendApproval({
+        db,
+        tenantId: "tenant-1",
+        providerInstallId: "provider-1",
+        provider: "ses" as const,
+        agentId: "agent-1",
+        spaceId: "space-1",
+        threadId: "brand-new-thread",
+        from: "sales@acme.thinkwork.ai",
+        to: ["buyer@example.com"],
+        subject: "Pipeline follow-up",
+        body: "Draft",
+      }),
+    ).resolves.toMatchObject({
+      status: "send",
+      conversationId: "conversation-approved",
+    });
+
+    // No new review artifacts: no inbox item, no draft body, no refresh.
+    expect(db.rowsFor(inboxItems)).toHaveLength(0);
+    expect(db.rowsFor(emailBodyObjects)).toHaveLength(0);
+  });
+
   it("sends the edited draft on approval and records the decision", async () => {
     const send = vi.fn(async () => ({
       provider: "ses" as const,
@@ -385,12 +425,13 @@ function fakeEmailDb(
     providerRows?: Array<Record<string, any>>;
     readinessRows?: Array<Record<string, any>>;
     inboxRows?: Array<Record<string, any>>;
+    conversationRows?: Array<Record<string, any>>;
   } = {},
 ) {
   const rows = new Map<unknown, Array<Record<string, any>>>([
     [emailProviderInstalls, [...(seed.providerRows ?? [])]],
     [emailReadinessChecks, [...(seed.readinessRows ?? [])]],
-    [emailConversations, []],
+    [emailConversations, [...(seed.conversationRows ?? [])]],
     [emailBodyObjects, []],
     [emailLedgerEvents, []],
     [inboxItems, [...(seed.inboxRows ?? [])]],
