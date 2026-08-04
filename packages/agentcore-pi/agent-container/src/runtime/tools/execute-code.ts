@@ -17,6 +17,27 @@ const DEFAULT_TIMEOUT_MS =
 const MAX_OUTPUT_FILES = 5;
 const EXPORT_PRESIGN_SECONDS = 300;
 
+/**
+ * Libraries the AWS-managed Code Interpreter image may lack, keyed by the
+ * code signals that predict their use. AgentCore CreateCodeInterpreter has
+ * NO custom-image parameter (verified against SDK 3.1103.0 — the
+ * Dockerfile.sandbox-base substrate is unattachable), so the only way to
+ * guarantee a library is a runtime install. The guard below installs
+ * inline, inside the same tool call, only when the code references the
+ * library — one ~5-10s cost per sandbox session instead of a full
+ * ImportError → model-retry round trip.
+ */
+const ON_DEMAND_LIBRARIES: Array<{ module: string; pattern: RegExp }> = [
+  { module: "openpyxl", pattern: /openpyxl|\.xlsx/i },
+];
+
+function libraryInstallPreamble(code: string): string[] {
+  return ON_DEMAND_LIBRARIES.filter((lib) => lib.pattern.test(code)).map(
+    (lib) =>
+      `python3 -c "import ${lib.module}" 2>/dev/null || pip install --quiet ${lib.module} || true`,
+  );
+}
+
 const EXPORT_MIME_BY_EXTENSION: Record<string, string> = {
   ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ".csv": "text/csv",
@@ -200,9 +221,9 @@ export function buildExecuteCodeTool(
     description:
       "Run Python code in the tenant's AgentCore Code Interpreter sandbox. " +
       "Use this for data analysis, calculations, and short scripts. " +
-      "To produce a downloadable file (e.g. an .xlsx workbook via openpyxl — " +
-      "run `import subprocess; subprocess.run(['pip','install','openpyxl'])` " +
-      "first if the import fails), write it to disk and list its path in " +
+      "openpyxl is auto-installed when your code references it — just " +
+      "`import openpyxl` and write .xlsx workbooks directly. To produce a " +
+      "downloadable file, write it to disk and list its path in " +
       "`output_files`; each becomes a thread attachment whose id can be " +
       "passed to send_email `attachments`.",
     parameters: Type.Object({
@@ -241,7 +262,12 @@ export function buildExecuteCodeTool(
 
       const env = await getSession();
       const started = Date.now();
-      const result = await env.exec(pythonCommandFor(code), {
+      const preamble = libraryInstallPreamble(code);
+      const command =
+        preamble.length > 0
+          ? [...preamble, pythonCommandFor(code)].join("\n")
+          : pythonCommandFor(code);
+      const result = await env.exec(command, {
         cwd: env.cwd,
         timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       });
