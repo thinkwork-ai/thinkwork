@@ -4904,6 +4904,7 @@ export function actionRowsForTurn(
           title: toolActionTitle(name),
           detail: toolInvocationDetail(record),
           kind: toolKind(name),
+          durationMs: toolInvocationDurationMs(record),
         });
       }
       const key = `agent_profile:${profileKey.toLowerCase()}`;
@@ -5551,6 +5552,7 @@ function agentProfileActionRow(
     detail: lines.join("\n") || undefined,
     kind: "thinking",
     children,
+    ...(duration != null && duration >= 0 ? { durationMs: duration } : {}),
   };
 }
 
