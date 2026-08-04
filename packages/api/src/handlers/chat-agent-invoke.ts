@@ -1867,7 +1867,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       // to send it — so the container skipped the composer fetch entirely,
       // `/tmp/workspace` stayed empty, AGENTS.md/USER.md never loaded, and
       // the agent answered from stale default workspace content + a hallucinated identity.
-      // Matches agentcore-invoke.ts:237 and eval-runner.ts:276.
+      // Matches eval-runner.ts:276.
       workspace_tenant_id: tenantId,
       assistant_id: agentId,
       thread_id: threadId,

@@ -463,7 +463,7 @@ locals {
       # Allow API handler Lambdas to invoke each other directly. sendMessage
       # dispatches to chat-agent-invoke for instant chat response; the memory
       # resolvers reach job-schedule-manager for
-      # admin-driven operations. The agentcore-invoke statement below covers
+      # admin-driven operations. The Pi-invoke statement below covers
       # the Pi runtime Lambda only — this one covers internal api-to-api
       # calls. ARNs are constructed deterministically from the handler naming
       # pattern so we don't create a dependency cycle with the handler

@@ -268,16 +268,6 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     ).toHaveLength(2);
   });
 
-  it("agentcore-invoke forwards pi_extensions through its whitelist payload rebuild", () => {
-    const source = readFileSync(
-      new URL("../../agentcore-invoke.ts", import.meta.url),
-      "utf8",
-    );
-    expect(source).toContain(
-      "if (body.pi_extensions) payload.pi_extensions = body.pi_extensions",
-    );
-  });
-
   it("builds the activity callback on every path but the finalize callback only when opted in", () => {
     const wakeupStyle = buildAgentDispatchControlFields(
       baseArgs({ includeFinalizeCallback: false }),
