@@ -458,6 +458,10 @@ locals {
         Action = ["lambda:InvokeFunction"]
         Resource = [
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke",
+          # THINK-583 U3: invokers address the `live` alias (provisioned
+          # concurrency only serves alias-qualified invokes); the alias ARN
+          # is a distinct IAM resource from the unqualified function ARN.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-chat-agent-invoke:live",
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-job-schedule-manager",
           # eval-runner: graphql-http's startEvalRun mutation Event-invokes
           # this asynchronously after inserting the eval_runs row.
@@ -492,7 +496,9 @@ locals {
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-files-efs",
           # workspace-renderer: chat-agent-invoke invokes this synchronously
           # before AgentCore so Pi can opt into the rendered
-          # per-(agent, Space, user) workspace prefix.
+          # per-(agent, Space, user) workspace prefix. THINK-583 U3: the
+          # `:live` alias ARN is covered by the dedicated workspace-renderer
+          # statement below (`...workspace-renderer:*`).
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-renderer",
           # skill-trust-runner: graphql-http's publishSkillDraft mutation
           # invokes this with RequestResponse so SkillSpector completion is a

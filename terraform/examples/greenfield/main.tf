@@ -485,6 +485,24 @@ variable "platform_operator_emails" {
   default     = ""
 }
 
+# THINK-583 U3 — provisioned concurrency for chat-agent-invoke /
+# workspace-renderer (KTD5: never the Pi Lambda). Default 0 = disabled;
+# the `live` alias always exists so alias-qualified invokers work either
+# way. Dev sets 1/1 via scripts/deploy/terraform-vars.sh; customer stages
+# opt in through their runner-secrets tfvars on their release cadence.
+
+variable "chat_agent_invoke_provisioned_concurrency" {
+  description = "Provisioned concurrency on chat-agent-invoke's `live` alias. 0 = disabled (alias still exists)."
+  type        = number
+  default     = 0
+}
+
+variable "workspace_renderer_provisioned_concurrency" {
+  description = "Provisioned concurrency on workspace-renderer's `live` alias. 0 = disabled (alias still exists)."
+  type        = number
+  default     = 0
+}
+
 variable "www_domain" {
   description = "Public website apex domain (e.g. thinkwork.ai). Leave empty to skip the custom domain and DNS wiring."
   type        = string
@@ -923,6 +941,8 @@ module "thinkwork" {
   enable_workspace_orchestration              = var.enable_workspace_orchestration
   api_auth_secret                             = var.api_auth_secret
   platform_operator_emails                    = var.platform_operator_emails
+  chat_agent_invoke_provisioned_concurrency   = var.chat_agent_invoke_provisioned_concurrency
+  workspace_renderer_provisioned_concurrency  = var.workspace_renderer_provisioned_concurrency
 
   # Public website custom domain (optional — wired only when www_domain is set)
   www_domain          = var.www_domain

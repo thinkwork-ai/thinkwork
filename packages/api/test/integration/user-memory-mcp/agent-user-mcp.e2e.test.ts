@@ -50,7 +50,7 @@ describe("agent outbound user MCP E2E", () => {
     const lambda = new LambdaClient({ region: env.awsRegion });
     const result = await lambda.send(
       new InvokeCommand({
-        FunctionName: `thinkwork-${env.stage}-api-chat-agent-invoke`,
+        FunctionName: `thinkwork-${env.stage}-api-chat-agent-invoke:live`,
         InvocationType: "RequestResponse",
         Payload: new TextEncoder().encode(
           JSON.stringify({

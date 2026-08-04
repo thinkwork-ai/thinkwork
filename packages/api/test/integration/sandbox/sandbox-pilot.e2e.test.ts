@@ -133,7 +133,7 @@ async function sendChatAndWait(
   };
   const invoke = await lambda.send(
     new InvokeCommand({
-      FunctionName: `thinkwork-${env.stage}-api-chat-agent-invoke`,
+      FunctionName: `thinkwork-${env.stage}-api-chat-agent-invoke:live`,
       InvocationType: "RequestResponse",
       Payload: new TextEncoder().encode(JSON.stringify(payload)),
     }),

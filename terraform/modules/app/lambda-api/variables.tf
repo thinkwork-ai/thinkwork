@@ -949,3 +949,23 @@ variable "lambda_max_memory_mb" {
   default     = 10240
   description = "Account-level Lambda memory ceiling. Legacy AWS accounts cap function memory at 3008 MB (raised only via support case); handlers that request more are clamped to this value so deploys on capped accounts don't fail mid-apply."
 }
+
+# THINK-583 U3 — provisioned concurrency for the two chat-critical zip
+# Lambdas (chat-agent-invoke, workspace-renderer) ONLY (KTD5: never the Pi
+# Lambda). 0 (the default) disables the provisioned-concurrency config but
+# STILL creates the published version + `live` alias, so alias-qualified
+# invokers keep working on every stage; customer stages opt in on their own
+# release cadence. Dev is enabled via scripts/deploy/terraform-vars.sh
+# (deploy.yml is dev-only — same pattern as enable_capability_broker).
+
+variable "chat_agent_invoke_provisioned_concurrency" {
+  type        = number
+  default     = 0
+  description = "Provisioned concurrency on chat-agent-invoke's `live` alias. 0 = disabled (alias still exists)."
+}
+
+variable "workspace_renderer_provisioned_concurrency" {
+  type        = number
+  default     = 0
+  description = "Provisioned concurrency on workspace-renderer's `live` alias. 0 = disabled (alias still exists)."
+}

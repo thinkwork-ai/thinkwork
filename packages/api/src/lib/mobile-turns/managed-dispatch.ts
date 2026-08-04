@@ -94,13 +94,15 @@ export function defaultProcessStaleMobileHandoffsDeps(): ProcessStaleMobileHando
   // under Lambda's 4KB limit; derive the ARN from the deterministic naming
   // pattern Terraform uses (mirrors deriveChatAgentInvokeFnArn in
   // graphql/utils.ts, inlined to keep this lib off the graphql import graph).
+  // Alias-qualified (THINK-583 U3): provisioned concurrency only serves
+  // invokes addressed to the `live` alias.
   const stage = process.env.STAGE;
   const accountId = process.env.AWS_ACCOUNT_ID;
   const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
   const chatAgentInvokeFunctionName =
     process.env.CHAT_AGENT_INVOKE_FN_ARN ||
     (stage && accountId && region
-      ? `arn:aws:lambda:${region}:${accountId}:function:thinkwork-${stage}-api-chat-agent-invoke`
+      ? `arn:aws:lambda:${region}:${accountId}:function:thinkwork-${stage}-api-chat-agent-invoke:live`
       : "");
 
   return {

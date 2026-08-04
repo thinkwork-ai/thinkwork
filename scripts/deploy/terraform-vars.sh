@@ -143,6 +143,15 @@ TF_VAR_ARGS=(
   # populates CAPABILITY_PRIVATE_* so agentcore-admin provisions
   # capability-private interpreters. One-line revert disables it.
   -var "enable_capability_broker=true"
+  # THINK-583 U3 — warm chat path: provisioned concurrency of 1 on the
+  # `live` alias of chat-agent-invoke and workspace-renderer (KTD5: never
+  # the Pi Lambda). Module defaults stay 0, so this dev-only workflow is
+  # the enablement point (deploy.yml is dev-only; customer stages opt in
+  # via their runner-secrets tfvars on their own release cadence — same
+  # pattern as enable_capability_broker above). Env-overridable so a
+  # repo variable can raise/zero it without a code change.
+  -var "chat_agent_invoke_provisioned_concurrency=${CHAT_AGENT_INVOKE_PROVISIONED_CONCURRENCY:-1}"
+  -var "workspace_renderer_provisioned_concurrency=${WORKSPACE_RENDERER_PROVISIONED_CONCURRENCY:-1}"
   # THINK-316 — explicit dev-only managed multiplayer Harness pilot.
   # The default remains off. Production/customer release workflows do
   # not pass these repository variables.
