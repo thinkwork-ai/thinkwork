@@ -13,6 +13,16 @@ import {
 import { IconTargetArrow } from "@tabler/icons-react";
 import { useEffect, useState, type FormEvent } from "react";
 
+/**
+ * The /goal composer affordance is hidden pending a keep-or-remove decision
+ * (Eric, 2026-08-04): unclear usage, likely faded. All goal-mode plumbing
+ * (dialog, submission intents, GoalRunCard rendering) stays intact so
+ * flipping this back on is a one-line change. Deeper removal/research is
+ * tracked in Linear (see THINK issue "Goal mode: research usage + decide
+ * removal").
+ */
+export const GOAL_MODE_COMPOSER_TOGGLE_HIDDEN = true;
+
 export interface GoalModeToggleProps {
   enabled: boolean;
   objective?: string;

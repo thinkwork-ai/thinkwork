@@ -77,6 +77,7 @@ import {
 } from "@/components/workbench/SkillTokenInput";
 import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
 import {
+  GOAL_MODE_COMPOSER_TOGGLE_HIDDEN,
   GoalModeDialog,
   GoalModeToggle,
 } from "@/components/workbench/GoalModeControls";
@@ -2369,6 +2370,7 @@ function ThreadTurnActivity({
                 kind={row.kind}
                 hideIcon={row.hideIcon}
                 childrenRows={row.children}
+                durationMs={row.durationMs}
               />
             ))}
             {failureDetail ? (
@@ -3999,12 +4001,16 @@ function FollowUpComposer({
               >
                 <Bot className="size-5" />
               </button>
-              <GoalModeToggle
-                enabled={goalModeSubmission.requested && effectiveAgentEnabled}
-                objective={goalModeSubmission.content}
-                disabled={disabled || isSending || !effectiveAgentEnabled}
-                onClick={() => setGoalDialogOpen(true)}
-              />
+              {GOAL_MODE_COMPOSER_TOGGLE_HIDDEN ? null : (
+                <GoalModeToggle
+                  enabled={
+                    goalModeSubmission.requested && effectiveAgentEnabled
+                  }
+                  objective={goalModeSubmission.content}
+                  disabled={disabled || isSending || !effectiveAgentEnabled}
+                  onClick={() => setGoalDialogOpen(true)}
+                />
+              )}
               <ComposerModelPicker
                 models={approvedModels}
                 value={selectedModelId}
@@ -4413,6 +4419,7 @@ function ActionRow({
   kind,
   hideIcon = false,
   childrenRows = [],
+  durationMs,
 }: {
   title: string;
   detail?: string;
@@ -4420,6 +4427,7 @@ function ActionRow({
   kind: "thinking" | "tool" | "source" | "code";
   hideIcon?: boolean;
   childrenRows?: ActionRowData[];
+  durationMs?: number;
 }) {
   const Icon =
     kind === "source"
@@ -4434,6 +4442,11 @@ function ActionRow({
       <summary className="flex cursor-pointer list-none items-center gap-3 text-sm transition-colors hover:text-foreground">
         {hideIcon ? null : <Icon className="size-4" />}
         {title}
+        {durationMs !== undefined ? (
+          <span className="text-xs tabular-nums text-muted-foreground/70">
+            {formatTimingMs(durationMs)}
+          </span>
+        ) : null}
         <ChevronRight className="size-4 transition-transform group-open/action:rotate-90" />
       </summary>
       {detail ? (
@@ -4457,6 +4470,7 @@ function ActionRow({
               kind={child.kind}
               hideIcon={child.hideIcon}
               childrenRows={child.children}
+              durationMs={child.durationMs}
             />
           ))}
         </div>
@@ -4811,6 +4825,26 @@ interface ActionRowData {
   kind: "thinking" | "tool" | "source" | "code";
   hideIcon?: boolean;
   children?: ActionRowData[];
+  /** Wall-clock cost of this step, shown as a muted chip next to the title. */
+  durationMs?: number;
+}
+
+/** started_at/finished_at (or an explicit duration field) → elapsed ms.
+ * Records come from usage.tool_invocations; live/partial records miss one
+ * end of the pair and yield undefined (no chip) rather than a guess. */
+function toolInvocationDurationMs(
+  record: Record<string, unknown>,
+): number | undefined {
+  const explicit = Number(record.duration_ms ?? record.durationMs);
+  if (Number.isFinite(explicit) && explicit >= 0) return explicit;
+  const started = parseEventTimestamp(
+    stringValue(record.started_at ?? record.startedAt) ?? null,
+  );
+  const finished = parseEventTimestamp(
+    stringValue(record.finished_at ?? record.finishedAt) ?? null,
+  );
+  if (!started || !finished || finished < started) return undefined;
+  return finished - started;
 }
 
 // Exported for convergence testing (plan 2026-06-03-001 R1): live step events
@@ -4889,6 +4923,7 @@ export function actionRowsForTurn(
     const key = name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
+    const invocationDurationMs = toolInvocationDurationMs(record);
     const emitRow = emitDocumentActionRow(name, record);
     if (emitRow) {
       rows.push(emitRow);
@@ -4897,6 +4932,7 @@ export function actionRowsForTurn(
           title: "tool invocation completed",
           detail: toolInvocationCompletionDetail(record),
           kind: toolKind(name),
+          durationMs: invocationDurationMs,
         });
       }
       continue;
@@ -4906,12 +4942,14 @@ export function actionRowsForTurn(
       title: toolActionTitle(name),
       detail,
       kind: toolKind(name),
+      durationMs: invocationDurationMs,
     });
     if (detail && isTurnFinished(turn.status)) {
       rows.push({
         title: "tool invocation completed",
         detail: toolInvocationCompletionDetail(record),
         kind: toolKind(name),
+        durationMs: invocationDurationMs,
       });
     }
   }
@@ -5051,10 +5089,12 @@ function actionRowForWorkspaceDiagnostics(usage: Record<string, unknown>) {
   }
   const detail = formatWorkspaceDiagnostics(workspaceDiagnostics, timings);
   if (!detail) return null;
+  const syncMs = Number(workspaceDiagnostics.workspace_sync_ms);
   return {
     title: "Workspace sync",
     detail,
     kind: "source" as const,
+    ...(Number.isFinite(syncMs) && syncMs >= 0 ? { durationMs: syncMs } : {}),
   };
 }
 
@@ -5085,10 +5125,15 @@ function actionRowForAgentCorePhases(usage: Record<string, unknown>) {
     }`;
   });
 
+  const totalMs = phases.reduce((sum, phase) => {
+    const duration = Number(phase.duration_ms);
+    return Number.isFinite(duration) && duration >= 0 ? sum + duration : sum;
+  }, 0);
   return {
     title: "AgentCore phases",
     detail: lines.join("\n"),
     kind: "thinking" as const,
+    ...(totalMs > 0 ? { durationMs: totalMs } : {}),
   };
 }
 
@@ -5338,11 +5383,11 @@ function isAgentProfileToolEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   return Boolean(
     stringValue(payload.profile_slug) ||
-      stringValue(payload.profileSlug) ||
-      stringValue(payload.profile_name) ||
-      stringValue(payload.profileName) ||
-      stringValue(payload.profile_run_id) ||
-      stringValue(payload.profileRunId),
+    stringValue(payload.profileSlug) ||
+    stringValue(payload.profile_name) ||
+    stringValue(payload.profileName) ||
+    stringValue(payload.profile_run_id) ||
+    stringValue(payload.profileRunId),
   );
 }
 

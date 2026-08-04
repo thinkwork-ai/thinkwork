@@ -16,6 +16,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
+  TooltipIconButton,
 } from "@thinkwork/ui";
 import { Save } from "lucide-react";
 import { useTenant } from "@/context/TenantContext";
@@ -76,10 +77,15 @@ export function SaveCanvasDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button type="button" size="sm" data-testid="save-canvas-open">
+        <TooltipIconButton
+          type="button"
+          size="icon"
+          className="text-muted-foreground hover:text-foreground"
+          label="Save canvas"
+          data-testid="save-canvas-open"
+        >
           <Save className="size-4" />
-          Save
-        </Button>
+        </TooltipIconButton>
       </DialogTrigger>
       <DialogContent data-testid="save-canvas-dialog">
         <DialogHeader>
