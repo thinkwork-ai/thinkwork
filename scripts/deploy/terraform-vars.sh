@@ -150,6 +150,13 @@ TF_VAR_ARGS=(
   # via their runner-secrets tfvars on their own release cadence — same
   # pattern as enable_capability_broker above). Env-overridable so a
   # repo variable can raise/zero it without a code change.
+  # THINK-585 U6 — dev-only stage kill-switch for AgentCore Runtime chat
+  # dispatch (KTD3). Same enablement pattern as the PC vars above: module
+  # default stays false, dev opts in here, customer stages opt in via
+  # runner-secrets on their own cadence. The per-agent
+  # agents.agentcore_runtime_dispatch flag gates on top, so flipping this
+  # alone routes no traffic.
+  -var "agentcore_runtime_dispatch_enabled=${AGENTCORE_RUNTIME_DISPATCH_ENABLED:-true}"
   -var "chat_agent_invoke_provisioned_concurrency=${CHAT_AGENT_INVOKE_PROVISIONED_CONCURRENCY:-1}"
   -var "workspace_renderer_provisioned_concurrency=${WORKSPACE_RENDERER_PROVISIONED_CONCURRENCY:-1}"
   # THINK-316 — explicit dev-only managed multiplayer Harness pilot.

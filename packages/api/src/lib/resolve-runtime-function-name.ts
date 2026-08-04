@@ -73,15 +73,16 @@ export function resolveChatDispatchTarget(
     (env.AGENTCORE_RUNTIME_DISPATCH_ENABLED ??
       getConfig("AGENTCORE_RUNTIME_DISPATCH_ENABLED")) === "true";
   if (stageFlagOn && input.agentFlagEnabled) {
-    const functionName =
-      env.AGENTCORE_RUNTIME_DISPATCH_FUNCTION_NAME ??
-      getConfig("AGENTCORE_RUNTIME_DISPATCH_FUNCTION_NAME");
-    if (!functionName) {
-      throw new Error(
-        "AGENTCORE_RUNTIME_DISPATCH_ENABLED is on and the agent is flagged for runtime dispatch, but AGENTCORE_RUNTIME_DISPATCH_FUNCTION_NAME is not configured (no silent Lambda fallback).",
-      );
-    }
-    return { kind: "agentcore_runtime", functionName };
+    // Derivable thinkwork-<stage>-api-* names never ride env (R1/R10
+    // identity-only rule) — same as resolveRuntimeFunctionName below.
+    // deriveFunctionName throws when STAGE is unset: loud, no silent
+    // Lambda fallback.
+    return {
+      kind: "agentcore_runtime",
+      functionName:
+        env.AGENTCORE_RUNTIME_DISPATCH_FUNCTION_NAME ??
+        deriveFunctionName("agentcore-runtime-dispatch"),
+    };
   }
   return {
     kind: "pi_lambda",
