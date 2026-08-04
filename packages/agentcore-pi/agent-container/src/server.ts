@@ -41,7 +41,7 @@
 
 import http from "node:http";
 import { createHash } from "node:crypto";
-import { mkdir, readlink, stat } from "node:fs/promises";
+import { mkdir, readFile, readlink, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
@@ -76,7 +76,11 @@ import {
   ConverseCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 import { LambdaClient } from "@aws-sdk/client-lambda";
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  HeadObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import {
   BUILTIN_TOOL_NAMES,
   buildEmitJsonRenderUiTool,
@@ -108,6 +112,7 @@ import {
   type ToolInvocationRecord,
   type WorkspaceBaseline,
   resolveToolNameClaims,
+  sessionKey,
   type ToolNameClaim,
 } from "@thinkwork/pi-runtime-core";
 import {
@@ -131,12 +136,23 @@ import {
 } from "./handler-context.js";
 import {
   HandleStore,
+  McpHandleAuthScheme,
   buildMcpTools,
   type ConnectMcpServerFn,
   type McpRuntimeRecordLinkHints,
   type McpServerConfig,
 } from "./mcp.js";
-import { createConnectMcpServer } from "./mcp-connect.js";
+import {
+  createConnectMcpServer,
+  createMcpConnectionRetention,
+  type McpConnectionRetention,
+} from "./mcp-connect.js";
+import {
+  createWarmSessionCacheIfRuntime,
+  warmSessionKey,
+  type WarmSessionCache,
+  type WarmSessionEntry,
+} from "./warm-session-cache.js";
 import {
   McpToolRegistry,
   validateDirectTools,
@@ -785,6 +801,13 @@ interface RuntimeDiagnostics {
   agentcore_phases: RuntimePhaseDiagnostic[];
   agentcore_timings_ms: Record<string, number>;
   workspace_diagnostics?: Record<string, unknown>;
+  /**
+   * THINK-586 U7 (R17) — whether this turn reused the in-container warm
+   * session (`warm`) or ran the full cold bootstrap (`cold`). Only set on
+   * the AgentCore runtime path (where the warm cache exists); Lambda-path
+   * turns omit the field entirely.
+   */
+  session_reuse?: "warm" | "cold";
 }
 
 function mergeRuntimeDiagnostics(
@@ -804,6 +827,9 @@ function mergeRuntimeDiagnostics(
       ...existingDiagnostics,
       agentcore_phases: diagnostics.agentcore_phases,
       agentcore_timings_ms: diagnostics.agentcore_timings_ms,
+      ...(diagnostics.session_reuse
+        ? { session_reuse: diagnostics.session_reuse }
+        : {}),
       ...(diagnostics.workspace_diagnostics
         ? {
             workspace_diagnostics: {
@@ -1210,6 +1236,19 @@ export interface HandlerDependencies {
    * after cleanup.
    */
   onHandlerComplete?: (bundle: InvocationResourceBundle) => void;
+  /**
+   * THINK-586 U7 — warm-session cache override. `undefined` (production)
+   * resolves the process-wide factory singleton, which is null unless the
+   * runtime-only env signal is present (Lambda path structurally cannot
+   * reach the cache). Tests inject a cache (or explicit null).
+   */
+  warmSessionCache?: WarmSessionCache<WarmTurnProducts> | null;
+  /**
+   * THINK-586 U7 test seam — MCP connection retention factory for
+   * warm-cacheable turns. Production omits this and uses the real
+   * `createMcpConnectionRetention` from mcp-connect.
+   */
+  mcpRetentionFactory?: () => McpConnectionRetention;
 }
 
 // THINK-324 C4 — memoize the default SDK clients at module scope so warm
@@ -1241,6 +1280,160 @@ const defaultDependencies: HandlerDependencies = {
     (region: string) => new BedrockRuntimeClient({ region }),
   ),
 };
+
+// ---------------------------------------------------------------------------
+// THINK-586 U7 — warm-session fast path (KTD6).
+// ---------------------------------------------------------------------------
+
+/**
+ * The expensive per-thread bootstrap products a warm AgentCore microVM
+ * reuses. Everything here is either immutable across turns or explicitly
+ * re-pointed at per-turn state on reuse (retained MCP transports via
+ * `mcpRetention.rebind`, the `bedrockRequestIds` collector by emptying it
+ * under the per-thread lock). HandleStore and McpToolRegistry stay
+ * per-turn: handles are re-minted and the registry is replayed from
+ * `mcpRegistryEntries` on every warm turn.
+ */
+export interface WarmTurnProducts {
+  tools: AgentTool<any>[];
+  builtinToolNames: string[];
+  extensionFactories: ExtensionFactory[];
+  extensionToolNames: string[];
+  workspaceSkills: WorkspaceSkill[];
+  capabilitiesManifest: CapabilitiesManifestFile | null;
+  mcpJsonConfig: McpJsonConfig;
+  mcpProxyRegistered: boolean;
+  mcpLoadRecord: InvocationResourceBundle["mcpLoadRecord"];
+  capabilityLoadRecord: InvocationResourceBundle["capabilityLoadRecord"];
+  mcpRegistryEntries: ReturnType<McpToolRegistry["entries"]>;
+  /** Shared collector the cached request-identity extension pushes into;
+   * emptied at warm-turn start (safe: the per-thread lock is held). */
+  bedrockRequestIds: string[];
+  mcpRetention: McpConnectionRetention | null;
+  /** The rendered workspace prefix the caching turn bootstrapped — checked
+   * against the on-disk hydrate stamp before a warm reuse. */
+  workspacePrefix: string;
+  /** Last observed durable session body+version (S3 ETag). Serves the
+   * warm turn's session read without S3 and carries the freshness marker. */
+  session: { body: string; version: string } | null;
+}
+
+/**
+ * Process-wide lazy singleton. Factory-constructed (never a module-level
+ * bare Map — tenant-isolation audit) and gated on the runtime-only env
+ * signal: the Pi Lambda env never defines AGENTCORE_RUNTIME_SESSION_CACHE,
+ * so the Lambda path resolves null here and takes today's cold path.
+ */
+let warmSessionCacheSingleton:
+  | WarmSessionCache<WarmTurnProducts>
+  | null
+  | undefined;
+
+function getWarmSessionCache(): WarmSessionCache<WarmTurnProducts> | null {
+  if (warmSessionCacheSingleton === undefined) {
+    warmSessionCacheSingleton =
+      createWarmSessionCacheIfRuntime<WarmTurnProducts>();
+  }
+  return warmSessionCacheSingleton;
+}
+
+/**
+ * Credential/authorization-version signal (R20): a deterministic hash of
+ * every credential- or capability-bearing payload field that shapes the
+ * assembled toolset. Any change (rotated MCP bearer, different trusted
+ * skills, manifest flip, mode toggles) misses the reuse gate → cold path
+ * with fresh MCP clients.
+ */
+function warmAuthorizationVersion(payload: Record<string, unknown>): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        mcp_configs: payload.mcp_configs ?? null,
+        trusted_skill_ids: payload.trusted_skill_ids ?? null,
+        skills: payload.skills ?? null,
+        capabilities_manifest_fingerprint:
+          payload.capabilities_manifest_fingerprint ?? null,
+        eval_mode: payload.eval_mode === true,
+        goal_mode: hasPiGoalMode(payload),
+        browser_automation_enabled: payload.browser_automation_enabled === true,
+        thread_json_render_ui_enabled:
+          payload.thread_json_render_ui_enabled === true,
+        send_email_config: payload.send_email_config ?? null,
+        model_routing_policy: payload.model_routing_policy ?? null,
+        approved_model_ids: payload.approved_model_ids ?? null,
+      }),
+    )
+    .digest("hex");
+}
+
+/**
+ * Durable-store freshness probe: the live S3 session head (object ETag)
+ * for `pi-sessions/<tenantSlug>/<threadId>.jsonl`, "none" when absent.
+ * Cheap (HeadObject, no body); any probe error returns a value that can
+ * never match a cached marker so doubt takes the cold path (R10 — S3
+ * stays the correctness source).
+ */
+async function probeDurableSessionHead(options: {
+  s3: S3Client;
+  bucket: string;
+  tenantSlug: string;
+  threadId: string;
+}): Promise<string> {
+  try {
+    const response = await options.s3.send(
+      new HeadObjectCommand({
+        Bucket: options.bucket,
+        Key: `pi-sessions/${options.tenantSlug}/${sessionKey(options.threadId)}`,
+      }),
+    );
+    return (response as { ETag?: string })?.ETag ?? "unknown";
+  } catch (err) {
+    const name = (err as { name?: string })?.name;
+    const status = (err as { $metadata?: { httpStatusCode?: number } })
+      ?.$metadata?.httpStatusCode;
+    if (name === "NotFound" || name === "NoSuchKey" || status === 404) {
+      return "none";
+    }
+    return `probe_error:${Date.now()}`;
+  }
+}
+
+/**
+ * Cheap local workspace freshness probe for warm hits: the bootstrap's
+ * sibling `.hydrate-cache.json` stamp must still name THIS tenant/agent
+ * (and the cached rendered prefix). A warm container that ran another
+ * tenant's turn in between rewrote the stamp — skipping re-bootstrap then
+ * would leak the other tenant's workspace, so any mismatch/missing stamp
+ * fails the probe and takes the cold path.
+ */
+async function warmWorkspaceStampMatches(options: {
+  workspaceDir: string;
+  tenantSlug: string;
+  agentSlug: string;
+  workspacePrefix: string;
+}): Promise<boolean> {
+  let cachePath: string;
+  try {
+    cachePath = `${await realpath(options.workspaceDir)}.hydrate-cache.json`;
+  } catch {
+    cachePath = `${options.workspaceDir}.hydrate-cache.json`;
+  }
+  try {
+    const parsed = JSON.parse(await readFile(cachePath, "utf8")) as {
+      tenantSlug?: unknown;
+      agentSlug?: unknown;
+      prefix?: unknown;
+    } | null;
+    return (
+      parsed?.tenantSlug === options.tenantSlug &&
+      parsed?.agentSlug === options.agentSlug &&
+      (options.workspacePrefix === "" ||
+        parsed?.prefix === options.workspacePrefix)
+    );
+  } catch {
+    return false;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Tool assembly — pure given the snapshots + payload + factories.
@@ -2741,6 +2934,29 @@ export async function handleInvocation(
   args: HandleInvocationArgs,
 ): Promise<HandleInvocationResult> {
   const deps: HandlerDependencies = { ...defaultDependencies, ...args.deps };
+  // THINK-586 U7 — warm-session fast path (KTD6). `undefined` means "not
+  // injected": resolve the process singleton (null off the AgentCore
+  // runtime). An explicit null injection disables the cache.
+  const warmCache =
+    deps.warmSessionCache !== undefined
+      ? deps.warmSessionCache
+      : getWarmSessionCache();
+  const lockThreadId = asString(args.payload.thread_id);
+  if (!warmCache || !lockThreadId) {
+    return runInvocationTurn(args, deps, warmCache ?? null);
+  }
+  // Per-thread in-process lock around the fast path: concurrent turns for
+  // the same thread on one container must not interleave cache state.
+  return warmCache.withThreadLock(lockThreadId, () =>
+    runInvocationTurn(args, deps, warmCache),
+  );
+}
+
+async function runInvocationTurn(
+  args: HandleInvocationArgs,
+  deps: HandlerDependencies,
+  warmCache: WarmSessionCache<WarmTurnProducts> | null,
+): Promise<HandleInvocationResult> {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const runLoop = deps.runAgentLoop ?? runAgentLoop;
   const bootstrap = deps.bootstrapWorkspaceImpl ?? bootstrapWorkspace;
@@ -2865,13 +3081,189 @@ export async function handleInvocation(
     };
   }
 
+  // Allocate the per-invocation cleanup queue here (the same array the
+  // handler's `finally` block drains). The MCP connect factory and tool
+  // builders share this reference, so transport teardown closures land in
+  // the array we actually drain — not a private array owned by the
+  // factory. This was a real defect in an earlier draft that the multi-
+  // reviewer pass caught (correctness + reliability + maintainability +
+  // adversarial + agent-native + kieran-typescript all flagged it).
+  // (Hoisted above the workspace bootstrap for THINK-586 U7: the warm
+  // fast-path decision needs the HandleStore + scrubbing fetch to re-mint
+  // handles for retained MCP transports BEFORE deciding to skip
+  // re-bootstrap.)
+  const cleanup: Array<() => Promise<void>> = [];
+
+  // U16 — Allocate the per-invocation HandleStore here (was previously
+  // created inside the resource builder). Both the scrubbing fetch
+  // (createScrubbingFetch below) and the MCP tool builder
+  // (resource builder → buildMcpTools) need to share this same instance
+  // so the egress fetch resolves the handle the build minted. The
+  // handler's `finally` block already calls `bundle.handleStore.clear()`
+  // which now operates on the same store.
+  const handleStore = new HandleStore();
+
+  // U16 — Egress fetch interceptor. Swaps `Authorization: Handle <uuid>`
+  // for `Bearer <bearer>` at HTTP-call time and scrubs response bodies
+  // for bearer-shaped strings + the literal active bearer. Production
+  // path; tests inject `connectMcpServerFactory` to bypass entirely.
+  const scrubbingFetch = createScrubbingFetch({ handleStore });
+
+  // ── THINK-586 U7: warm-session fast-path decision (KTD6) ────────────────
+  // Eligibility excludes payload shapes whose tool surface is inherently
+  // per-turn (explicit memory turns, sandbox-backed tools, pinned skills,
+  // skill-creator commands): those always run the cold path and are never
+  // cached.
+  const warmConfigFingerprint = asString(args.payload.config_fingerprint);
+  const warmEligible = Boolean(
+    warmCache &&
+      workspaceBucket &&
+      warmConfigFingerprint &&
+      identity.tenantSlug &&
+      identity.agentSlug &&
+      identity.userId &&
+      !asString(args.payload.sandbox_interpreter_id) &&
+      !explicitMemoryTurn(args.payload.message) &&
+      parsePinnedSkillRefs(args.payload.pinned_skills).length === 0 &&
+      !parseSkillCreatorCommandPayload(args.payload.skill_creator_command),
+  );
+  let warmKey = "";
+  let warmAuthVersion = "";
+  let warmEntry: WarmSessionEntry<WarmTurnProducts> | null = null;
+  if (warmCache && warmEligible) {
+    warmKey = warmSessionKey({
+      tenantSlug: identity.tenantSlug,
+      agentSlug: identity.agentSlug,
+      userId: identity.userId,
+      threadId: identity.threadId,
+      configFingerprint: warmConfigFingerprint,
+    });
+    warmAuthVersion = warmAuthorizationVersion(args.payload);
+    const candidate = warmCache.peek(warmKey);
+    if (candidate) {
+      // Reuse gates: durable-store freshness (cached marker vs live S3
+      // session head) + credential/authorization version (R20) + local
+      // workspace stamp. Any mismatch evicts and takes the cold path.
+      const liveHead = await probeDurableSessionHead({
+        s3: deps.s3ClientFactory(env.awsRegion),
+        bucket: workspaceBucket,
+        tenantSlug: identity.tenantSlug,
+        threadId: identity.threadId,
+      });
+      warmEntry = warmCache.take(warmKey, {
+        durableStoreMarker: liveHead,
+        authorizationVersion: warmAuthVersion,
+      });
+      if (!warmEntry) {
+        // The gate mismatch evicted the entry: close its retained
+        // transports so a replaced credential set gets fresh clients.
+        void candidate.value.mcpRetention?.close().catch(() => undefined);
+      } else if (
+        !(await warmWorkspaceStampMatches({
+          workspaceDir: env.workspaceDir,
+          tenantSlug: identity.tenantSlug,
+          agentSlug: identity.agentSlug,
+          workspacePrefix: candidate.value.workspacePrefix,
+        }))
+      ) {
+        logStructured({
+          level: "info",
+          event: "warm_session_workspace_stamp_mismatch",
+          tenantId: identity.tenantId,
+          agentSlug: identity.agentSlug,
+          threadId: identity.threadId,
+        });
+        void warmEntry.value.mcpRetention?.close().catch(() => undefined);
+        warmCache.evict(warmKey);
+        warmEntry = null;
+      }
+    }
+    if (warmEntry?.value.mcpRetention) {
+      // Re-mint the current payload's bearers into THIS turn's fresh
+      // HandleStore and repoint the retained transports at this turn's
+      // scrubbing fetch, then liveness-ping every server. Any failure
+      // (dead transport, missing bearer) evicts → cold path.
+      const bearerByServer: Record<string, string> = {};
+      for (const config of parseMcpConfigs(args.payload.mcp_configs)) {
+        if (typeof config.bearer === "string" && config.bearer.trim()) {
+          bearerByServer[config.serverName] = config.bearer;
+        }
+      }
+      try {
+        await warmEntry.value.mcpRetention.rebind({
+          fetch: scrubbingFetch,
+          authorizationForServer: (serverName) => {
+            const bearer = bearerByServer[serverName];
+            return bearer
+              ? `${McpHandleAuthScheme} ${handleStore.mint(bearer)}`
+              : null;
+          },
+        });
+      } catch (err) {
+        logStructured({
+          level: "warn",
+          event: "warm_session_mcp_rebind_failed",
+          tenantId: identity.tenantId,
+          threadId: identity.threadId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        void warmEntry.value.mcpRetention.close().catch(() => undefined);
+        warmCache.evict(warmKey);
+        warmEntry = null;
+      }
+    }
+  }
+  // Retention for a cold-but-cacheable turn's newly built MCP clients:
+  // diverts transport teardown away from the per-turn cleanup queue so the
+  // clients survive into the cache. Null on non-cacheable turns → today's
+  // per-turn teardown, byte-identical.
+  const mcpRetention: McpConnectionRetention | null = warmEntry
+    ? warmEntry.value.mcpRetention
+    : warmCache && warmEligible
+      ? (deps.mcpRetentionFactory ?? createMcpConnectionRetention)()
+      : null;
+  if (warmCache) {
+    runtimeDiagnostics.session_reuse = warmEntry ? "warm" : "cold";
+  }
+
+  const connectMcpServer =
+    deps.connectMcpServerFactory ??
+    createConnectMcpServer({
+      cleanup,
+      fetch: scrubbingFetch,
+      ...(mcpRetention && !warmEntry ? { retention: mcpRetention } : {}),
+    });
+
   // Workspace S3 sync — required for tenant isolation when the environment or
   // managed-runtime payload carries a workspace bucket. Warm containers persist
   // the workspace directory across invocations, so a turn that skips the
   // per-tenant sync would discover the prior tenant's SKILL.md files and leak
   // them into the system prompt. Fail closed when the bucket is known.
   let workspaceBaseline: WorkspaceBaseline | undefined;
-  if (workspaceBucket) {
+  let coldWorkspacePrefix = "";
+  if (workspaceBucket && warmEntry) {
+    // Warm hit (THINK-586 U7): every reuse gate passed — the workspace on
+    // this container is the one this tenant/agent last synced. Skip the
+    // full re-bootstrap; the S3 durable session store remains the
+    // correctness source.
+    recordRuntimePhase({
+      phase: "runtime.workspace_bootstrap",
+      status: "skipped",
+      detail: "session_reuse=warm",
+    });
+    logAgentCorePhase({
+      phase: "runtime.workspace_bootstrap",
+      status: "skipped",
+      tenantId: identity.tenantId,
+      agentId: identity.agentId,
+      agentSlug: identity.agentSlug,
+      threadId: identity.threadId,
+      threadTurnId,
+      traceId: identity.traceId,
+      runtimeType: "pi",
+      detail: "session_reuse=warm",
+    });
+  } else if (workspaceBucket) {
     if (!identity.tenantSlug || !identity.agentSlug) {
       logStructured({
         level: "error",
@@ -2907,6 +3299,7 @@ export async function handleInvocation(
         },
       );
       const workspaceBootstrapDurationMs = Date.now() - workspaceBootstrapStart;
+      coldWorkspacePrefix = bootstrapResult.prefix;
       runtimeDiagnostics.workspace_diagnostics = {
         workspace_sync_ms: workspaceBootstrapDurationMs,
         hydration_copy_ms: workspaceBootstrapDurationMs,
@@ -3012,9 +3405,14 @@ export async function handleInvocation(
   }
 
   const trustedSkillIds = trustedWorkspaceSkillIds(args.payload);
-  const discoveredSkills = (await discoverSkills(env.workspaceDir)).filter(
-    (skill) => trustedSkillIds.has(skill.slug),
-  );
+  // Warm hit: reuse the cached (already trust-filtered) skill set — the
+  // authorization-version gate covers trusted-skill changes. Cold: walk the
+  // local workspace tree as before.
+  const discoveredSkills = warmEntry
+    ? warmEntry.value.workspaceSkills
+    : (await discoverSkills(env.workspaceDir)).filter((skill) =>
+        trustedSkillIds.has(skill.slug),
+      );
 
   // Ephemeral force-pinned skills (plan 2026-06-04-004 U4). The composer
   // slash-command can pin a tenant-catalog skill the agent has NOT installed;
@@ -3077,7 +3475,12 @@ export async function handleInvocation(
   // directTools validation.
   let mcpJsonConfig: McpJsonConfig;
   try {
-    mcpJsonConfig = await readMcpJson(env.workspaceDir);
+    // Warm hit: the workspace was not re-synced, so mcp.json cannot have
+    // changed — reuse the parse from the caching turn (it only feeds the
+    // skipped tool assembly anyway).
+    mcpJsonConfig = warmEntry
+      ? warmEntry.value.mcpJsonConfig
+      : await readMcpJson(env.workspaceDir);
   } catch (err) {
     if (err instanceof McpJsonError) {
       logStructured({
@@ -3098,6 +3501,13 @@ export async function handleInvocation(
     throw err;
   }
   const mcpRegistry = new McpToolRegistry();
+  if (warmEntry) {
+    // McpToolRegistry stays per-turn (stated invariant): replay the cached
+    // tools/list metadata into this turn's fresh registry — no network.
+    for (const entry of warmEntry.value.mcpRegistryEntries) {
+      mcpRegistry.register(entry.server, entry);
+    }
+  }
 
   // THINK-173 U6 — MANIFEST MODE: the dispatch pinned a capabilities
   // manifest fingerprint (only sent for capability_folder_dispatch
@@ -3109,7 +3519,11 @@ export async function handleInvocation(
   const capabilitiesManifestFingerprint = asString(
     args.payload.capabilities_manifest_fingerprint,
   );
-  if (capabilitiesManifestFingerprint) {
+  if (warmEntry) {
+    // Warm hit: fingerprint changes miss the authorization-version gate,
+    // so the cached verified manifest is current for this turn.
+    capabilitiesManifest = warmEntry.value.capabilitiesManifest;
+  } else if (capabilitiesManifestFingerprint) {
     try {
       capabilitiesManifest = await readCapabilitiesManifest(
         env.workspaceDir,
@@ -3163,33 +3577,10 @@ export async function handleInvocation(
     }
   }
 
-  // Allocate the per-invocation cleanup queue here (the same array the
-  // handler's `finally` block drains). The MCP connect factory and tool
-  // builders share this reference, so transport teardown closures land in
-  // the array we actually drain — not a private array owned by the
-  // factory. This was a real defect in an earlier draft that the multi-
-  // reviewer pass caught (correctness + reliability + maintainability +
-  // adversarial + agent-native + kieran-typescript all flagged it).
-  const cleanup: Array<() => Promise<void>> = [];
-
-  // U16 — Allocate the per-invocation HandleStore here (was previously
-  // created inside the resource builder). Both the scrubbing fetch
-  // (createScrubbingFetch below) and the MCP tool builder
-  // (resource builder → buildMcpTools) need to share this same instance
-  // so the egress fetch resolves the handle the build minted. The
-  // handler's `finally` block already calls `bundle.handleStore.clear()`
-  // which now operates on the same store.
-  const handleStore = new HandleStore();
-
-  // U16 — Egress fetch interceptor. Swaps `Authorization: Handle <uuid>`
-  // for `Bearer <bearer>` at HTTP-call time and scrubs response bodies
-  // for bearer-shaped strings + the literal active bearer. Production
-  // path; tests inject `connectMcpServerFactory` to bypass entirely.
-  const scrubbingFetch = createScrubbingFetch({ handleStore });
-
-  const connectMcpServer =
-    deps.connectMcpServerFactory ??
-    createConnectMcpServer({ cleanup, fetch: scrubbingFetch });
+  // (THINK-586 U7: the per-invocation cleanup queue, HandleStore, scrubbing
+  // fetch, and connectMcpServer factory are allocated earlier — above the
+  // workspace bootstrap — so the warm fast-path decision can re-mint
+  // handles for retained MCP transports. Same per-turn lifecycle.)
 
   // fetch_workspace_source host seam (plan 2026-06-12-002 U5) — only when a
   // workspace bucket + turn baseline exist (the tool mounts into the local
@@ -3226,7 +3617,13 @@ export async function handleInvocation(
   // THINK-245 U4 — one collector shared by the request-identity extension
   // (parent agent loop) and the Bedrock child-model caller, so every model
   // call's response requestId reaches the finalize payload.
-  const bedrockRequestIds: string[] = [];
+  // THINK-586 U7 — warm turns reuse the cached collector array (the cached
+  // request-identity extension closure pushes into that exact instance),
+  // emptied at turn start. Safe: the per-thread lock is held for the turn.
+  const bedrockRequestIds: string[] = warmEntry
+    ? warmEntry.value.bedrockRequestIds
+    : [];
+  bedrockRequestIds.length = 0;
   const collectBedrockRequestId = (requestId: string) => {
     if (!bedrockRequestIds.includes(requestId)) {
       bedrockRequestIds.push(requestId);
@@ -3261,35 +3658,29 @@ export async function handleInvocation(
   // lands while tool assembly is still in flight — the later await of this
   // same promise still observes (and rethrows) the rejection.
   stagedAttachmentsPromise.catch(() => {});
-  try {
-    bundle = await buildInvocationResources({
-      payload: args.payload,
-      identity,
-      env,
-      agentCoreClient,
-      workspaceSkills,
-      connectMcpServer,
-      sessionStoreFactory,
+  let coldWarmProducts: WarmTurnProducts | null = null;
+  if (warmEntry) {
+    // Warm hit (THINK-586 U7): reuse the cached bootstrap products instead
+    // of reconnecting MCP servers and reassembling tools. The per-turn
+    // bundle gets fresh array copies (later per-turn pushes — file_read,
+    // profile tool, dynamic extensions — must never accrete into the
+    // cache), this turn's HandleStore, and this turn's cleanup queue.
+    bundle = {
+      tools: [...warmEntry.value.tools],
+      builtinToolNames: [...warmEntry.value.builtinToolNames],
+      extensionFactories: [...warmEntry.value.extensionFactories],
+      extensionToolNames: [...warmEntry.value.extensionToolNames],
       cleanup,
-      bedrockRequestIds,
+      workspaceSkills: warmEntry.value.workspaceSkills,
       handleStore,
-      mcpJsonConfig,
-      capabilitiesManifest,
-      mcpRegistry,
-      fetchWorkspaceSourceHost,
-      childModelCaller:
-        deps.childModelCaller ??
-        createBedrockChildModelCaller(
-          deps.bedrockRuntimeClientFactory(env.awsRegion),
-          {
-            requestMetadata: childRequestMetadata,
-            onRequestId: collectBedrockRequestId,
-          },
-        ),
-    });
+      mcpProxyRegistered: warmEntry.value.mcpProxyRegistered,
+      mcpLoadRecord: warmEntry.value.mcpLoadRecord,
+      capabilityLoadRecord: warmEntry.value.capabilityLoadRecord,
+      bedrockRequestIds,
+    };
     logAgentCorePhase({
       phase: "runtime.tool_assembly",
-      status: "completed",
+      status: "skipped",
       tenantId: identity.tenantId,
       agentId: identity.agentId,
       agentSlug: identity.agentSlug,
@@ -3297,90 +3688,179 @@ export async function handleInvocation(
       threadTurnId,
       traceId: identity.traceId,
       runtimeType: "pi",
-      durationMs: Date.now() - toolAssemblyStart,
       count: bundle.tools.length,
-      detail: `extensionTools=${bundle.extensionToolNames.length}`,
+      detail: "session_reuse=warm",
     });
     recordRuntimePhase({
       phase: "runtime.tool_assembly",
-      status: "completed",
-      duration_ms: Date.now() - toolAssemblyStart,
+      status: "skipped",
       count: bundle.tools.length,
-      detail: `extensionTools=${bundle.extensionToolNames.length}`,
+      detail: "session_reuse=warm",
     });
-  } catch (err) {
-    // U16 — the resource builder may have minted handles into `handleStore`
-    // before failing (e.g., MCP transport opened then listTools timed
-    // out). The runLoop's finally block is unreachable on this path, so
-    // clear the store + drain any partial cleanup closures HERE to
-    // honor the U7 invariant: `try { … } finally { handleStore.clear() }`
-    // on every handleInvocation exit path.
-    handleStore.clear();
-    for (const fn of cleanup.reverse()) {
+  } else
+    try {
+      bundle = await buildInvocationResources({
+        payload: args.payload,
+        identity,
+        env,
+        agentCoreClient,
+        workspaceSkills,
+        connectMcpServer,
+        sessionStoreFactory,
+        cleanup,
+        bedrockRequestIds,
+        handleStore,
+        mcpJsonConfig,
+        capabilitiesManifest,
+        mcpRegistry,
+        fetchWorkspaceSourceHost,
+        childModelCaller:
+          deps.childModelCaller ??
+          createBedrockChildModelCaller(
+            deps.bedrockRuntimeClientFactory(env.awsRegion),
+            {
+              requestMetadata: childRequestMetadata,
+              onRequestId: collectBedrockRequestId,
+            },
+          ),
+      });
+      logAgentCorePhase({
+        phase: "runtime.tool_assembly",
+        status: "completed",
+        tenantId: identity.tenantId,
+        agentId: identity.agentId,
+        agentSlug: identity.agentSlug,
+        threadId: identity.threadId,
+        threadTurnId,
+        traceId: identity.traceId,
+        runtimeType: "pi",
+        durationMs: Date.now() - toolAssemblyStart,
+        count: bundle.tools.length,
+        detail: `extensionTools=${bundle.extensionToolNames.length}`,
+      });
+      recordRuntimePhase({
+        phase: "runtime.tool_assembly",
+        status: "completed",
+        duration_ms: Date.now() - toolAssemblyStart,
+        count: bundle.tools.length,
+        detail: `extensionTools=${bundle.extensionToolNames.length}`,
+      });
+      if (warmCache && warmEligible) {
+        // THINK-586 U7 — snapshot the reusable products NOW, before per-turn
+        // additions mutate the bundle arrays. Stored into the cache only
+        // after the turn succeeds. An assembly-time cleanup closure (other
+        // than the retained MCP teardowns, which were diverted) means the
+        // toolset holds per-turn resources → not cacheable.
+        coldWarmProducts =
+          cleanup.length === 0
+            ? {
+                tools: [...bundle.tools],
+                builtinToolNames: [...bundle.builtinToolNames],
+                extensionFactories: [...bundle.extensionFactories],
+                extensionToolNames: [...bundle.extensionToolNames],
+                workspaceSkills: bundle.workspaceSkills,
+                capabilitiesManifest,
+                mcpJsonConfig,
+                mcpProxyRegistered: bundle.mcpProxyRegistered,
+                mcpLoadRecord: bundle.mcpLoadRecord,
+                capabilityLoadRecord: bundle.capabilityLoadRecord,
+                mcpRegistryEntries: mcpRegistry.entries(),
+                bedrockRequestIds,
+                mcpRetention,
+                workspacePrefix: coldWorkspacePrefix,
+                session: null,
+              }
+            : null;
+      }
+    } catch (err) {
+      // U16 — the resource builder may have minted handles into `handleStore`
+      // before failing (e.g., MCP transport opened then listTools timed
+      // out). The runLoop's finally block is unreachable on this path, so
+      // clear the store + drain any partial cleanup closures HERE to
+      // honor the U7 invariant: `try { … } finally { handleStore.clear() }`
+      // on every handleInvocation exit path.
+      handleStore.clear();
+      for (const fn of cleanup.reverse()) {
+        try {
+          await fn();
+        } catch (cleanupErr) {
+          logStructured({
+            level: "warn",
+            event: "cleanup_failed",
+            tenantId: identity.tenantId,
+            error:
+              cleanupErr instanceof Error
+                ? cleanupErr.message
+                : String(cleanupErr),
+          });
+        }
+      }
+      if (mcpRetention) {
+        // THINK-586 U7 — the retained MCP teardowns were diverted away from
+        // the cleanup queue; nothing will cache them on this failed path.
+        await mcpRetention.close();
+      }
+      logStructured({
+        level: "error",
+        event: "tool_assembly_failed",
+        tenantId: identity.tenantId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      logAgentCorePhase({
+        phase: "runtime.tool_assembly",
+        status: "failed",
+        tenantId: identity.tenantId,
+        agentId: identity.agentId,
+        agentSlug: identity.agentSlug,
+        threadId: identity.threadId,
+        threadTurnId,
+        traceId: identity.traceId,
+        runtimeType: "pi",
+        durationMs: Date.now() - toolAssemblyStart,
+        errorType: err instanceof Error ? err.name : "Error",
+      });
+      recordRuntimePhase({
+        phase: "runtime.tool_assembly",
+        status: "failed",
+        duration_ms: Date.now() - toolAssemblyStart,
+        detail: err instanceof Error ? err.message : String(err),
+      });
+      // The concurrent staging may have downloaded attachments into /tmp; the
+      // normal cleanup path (post-loop finally) is unreachable from here.
       try {
-        await fn();
-      } catch (cleanupErr) {
+        const staged = await stagedAttachmentsPromise;
+        await cleanupMessageAttachments(staged.turnDir);
+      } catch (stagingErr) {
         logStructured({
           level: "warn",
-          event: "cleanup_failed",
+          event: "message_attachment_cleanup_failed",
           tenantId: identity.tenantId,
           error:
-            cleanupErr instanceof Error
-              ? cleanupErr.message
-              : String(cleanupErr),
+            stagingErr instanceof Error
+              ? stagingErr.message
+              : String(stagingErr),
         });
       }
+      return {
+        statusCode: 500,
+        body: {
+          error:
+            err instanceof Error ? err.message : "Pi tool assembly failed.",
+          runtime: "pi",
+        },
+      };
     }
-    logStructured({
-      level: "error",
-      event: "tool_assembly_failed",
-      tenantId: identity.tenantId,
-      error: err instanceof Error ? err.message : String(err),
-    });
-    logAgentCorePhase({
-      phase: "runtime.tool_assembly",
-      status: "failed",
-      tenantId: identity.tenantId,
-      agentId: identity.agentId,
-      agentSlug: identity.agentSlug,
-      threadId: identity.threadId,
-      threadTurnId,
-      traceId: identity.traceId,
-      runtimeType: "pi",
-      durationMs: Date.now() - toolAssemblyStart,
-      errorType: err instanceof Error ? err.name : "Error",
-    });
-    recordRuntimePhase({
-      phase: "runtime.tool_assembly",
-      status: "failed",
-      duration_ms: Date.now() - toolAssemblyStart,
-      detail: err instanceof Error ? err.message : String(err),
-    });
-    // The concurrent staging may have downloaded attachments into /tmp; the
-    // normal cleanup path (post-loop finally) is unreachable from here.
-    try {
-      const staged = await stagedAttachmentsPromise;
-      await cleanupMessageAttachments(staged.turnDir);
-    } catch (stagingErr) {
-      logStructured({
-        level: "warn",
-        event: "message_attachment_cleanup_failed",
-        tenantId: identity.tenantId,
-        error:
-          stagingErr instanceof Error ? stagingErr.message : String(stagingErr),
-      });
-    }
-    return {
-      statusCode: 500,
-      body: {
-        error: err instanceof Error ? err.message : "Pi tool assembly failed.",
-        runtime: "pi",
-      },
-    };
-  }
 
   // Run the agent loop inside try/finally so the HandleStore is cleared
   // even if the LLM throws or a tool raises.
+  // THINK-586 U7 — the products this turn will cache (warm: the reused
+  // entry's value; cold: the post-assembly snapshot, null when not
+  // cacheable). Shared with the session-store wrapper below so the durable
+  // body/version markers stay current.
+  const warmProducts: WarmTurnProducts | null = warmEntry
+    ? warmEntry.value
+    : coldWarmProducts;
+  let warmSessionWriteFailed = false;
   let runResult: RunAgentLoopResult | undefined;
   let runError: unknown;
   let runLoopStart = 0;
@@ -3692,7 +4172,7 @@ export async function handleInvocation(
             keyPrefix: `pi-sessions/${identity.tenantSlug}/`,
           })
         : undefined;
-    const sessionStore = rawSessionStore
+    const instrumentedSessionStore = rawSessionStore
       ? instrumentSessionStore(rawSessionStore, {
           tenantId: identity.tenantId,
           agentId: identity.agentId,
@@ -3702,6 +4182,81 @@ export async function handleInvocation(
           traceId: identity.traceId,
         })
       : undefined;
+    // THINK-586 U7 — warm-session store wrapper. A warm hit serves the
+    // cached session body/version without the S3 read; every write passes
+    // through to S3 (correctness source, R10) and refreshes the cached
+    // markers. A failed durable append evicts the cache entry — divergent
+    // history must not survive to the next turn (KTD6).
+    const expectedSessionKey = sessionKey(identity.threadId);
+    const sessionStore: SessionStore | undefined =
+      instrumentedSessionStore && warmProducts && warmCache
+        ? {
+            read: async (key) => {
+              if (
+                warmEntry &&
+                key === expectedSessionKey &&
+                warmProducts.session
+              ) {
+                logAgentCorePhase({
+                  phase: "runtime.session_resume",
+                  status: "skipped",
+                  tenantId: identity.tenantId,
+                  agentId: identity.agentId,
+                  agentSlug: identity.agentSlug,
+                  threadId: identity.threadId,
+                  threadTurnId,
+                  traceId: identity.traceId,
+                  runtimeType: "pi",
+                  detail: "session_reuse=warm",
+                });
+                recordRuntimePhase({
+                  phase: "runtime.session_resume",
+                  status: "skipped",
+                  detail: "session_reuse=warm",
+                });
+                return {
+                  body: warmProducts.session.body,
+                  version: warmProducts.session.version,
+                };
+              }
+              const result = await instrumentedSessionStore.read(key);
+              if (result && key === expectedSessionKey) {
+                warmProducts.session = {
+                  body: result.body,
+                  version: result.version,
+                };
+              }
+              return result;
+            },
+            write: async (key, body, expectedVersion) => {
+              try {
+                const version = await instrumentedSessionStore.write(
+                  key,
+                  body,
+                  expectedVersion,
+                );
+                if (key === expectedSessionKey) {
+                  warmProducts.session = { body, version };
+                }
+                return version;
+              } catch (err) {
+                warmSessionWriteFailed = true;
+                if (warmKey) warmCache.evict(warmKey);
+                // Evicted entries own their retained transports — close
+                // them (idempotent; per-connection failures swallowed).
+                void warmProducts.mcpRetention?.close().catch(() => undefined);
+                logStructured({
+                  level: "warn",
+                  event: "warm_session_evicted_on_write_failure",
+                  tenantId: identity.tenantId,
+                  threadId: identity.threadId,
+                  error: err instanceof Error ? err.message : String(err),
+                });
+                throw err;
+              }
+            },
+          }
+        : instrumentedSessionStore;
     const sessionStoreFallbackReason = sessionStore
       ? "s3"
       : !workspaceBucket
@@ -4101,6 +4656,20 @@ export async function handleInvocation(
       detail: `toolsCalled=${runResult.toolsCalled.length}`,
     });
     runResult = mergeRuntimeDiagnostics(runResult, runtimeDiagnostics);
+    if (warmCache && warmKey && warmProducts && !warmSessionWriteFailed) {
+      // THINK-586 U7 — populate/refresh the cache with this turn's products
+      // and fresh freshness markers (durable head + authorization version).
+      warmCache.set(warmKey, {
+        value: warmProducts,
+        durableStoreMarker: warmProducts.session?.version ?? "none",
+        authorizationVersion: warmAuthVersion,
+        cachedAtMs: Date.now(),
+      });
+    } else if (mcpRetention && !warmEntry) {
+      // Cold turn that ended up not cacheable: close the retained MCP
+      // transports the cleanup drain deliberately skipped.
+      await mcpRetention.close();
+    }
   } catch (err) {
     runError = err;
     logStructured({
@@ -4181,6 +4750,13 @@ export async function handleInvocation(
   });
 
   if (runError !== undefined || !runResult) {
+    // THINK-586 U7 — a failed cold turn caches nothing: close the retained
+    // MCP transports the per-turn cleanup drain deliberately skipped. (A
+    // failed WARM turn keeps its entry — the durable-store head probe
+    // decides freshness on the next turn.)
+    if (mcpRetention && !warmEntry) {
+      await mcpRetention.close();
+    }
     if (isFinalizeCallbackConfigured(args.payload)) {
       const finalizeStart = Date.now();
       const finalized = await postFinalizeCallback({

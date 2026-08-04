@@ -3385,6 +3385,9 @@ def reconcile_agentcore_pi_runtime(vars_json, payload):
             f"AgentCore Pi runtime reconcile: {lambda_name} reported an EMPTY environment; "
             "mirroring it would strand the runtime (atomic-or-abort)."
         )
+    # THINK-586 U7 (KTD6): runtime-only overlay — the warm-session cache
+    # factory gates on this var; it must never enter the Lambda terraform env.
+    environment["AGENTCORE_RUNTIME_SESSION_CACHE"] = "1"
     role_arn = fn.get("Role") or ""
     account_id = (fn.get("FunctionArn") or "").split(":")[4] if fn.get("FunctionArn") else ""
     if not role_arn or not account_id:

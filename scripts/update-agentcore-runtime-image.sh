@@ -96,7 +96,11 @@ runtime_env_json() {
     --region "$REGION" \
     --query 'Environment.Variables' \
     --output json 2>/dev/null \
-    | jq 'if . == null then null else map_values(if type == "string" then gsub("\r"; "\\r") | gsub("\n"; "\\n") | gsub("\t"; "\\t") else . end) end' \
+    | jq 'if . == null then null else map_values(if type == "string" then gsub("\r"; "\\r") | gsub("\n"; "\\n") | gsub("\t"; "\\t") else . end) end
+          # THINK-586 U7 (KTD6): runtime-only overlay — set ONLY here (and in
+          # the runner mirror), NEVER in the Pi Lambda terraform env, so the
+          # Lambda path structurally cannot construct the warm-session cache.
+          | if . == null or (. | length) == 0 then . else . + {"AGENTCORE_RUNTIME_SESSION_CACHE": "1"} end' \
     || echo ""
 }
 
