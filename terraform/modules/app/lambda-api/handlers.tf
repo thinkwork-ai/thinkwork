@@ -836,6 +836,11 @@ resource "aws_lambda_function" "handler" {
     # threads.tenant_id lookup. Needs WORKSPACE_BUCKET env for S3.
     "thread-attachments-presign",
     "thread-attachments-finalize",
+    # Runtime-generated file registration (execute_code output_files).
+    # Bearer API_AUTH_SECRET + x-tenant-id; the Pi runtime uploads the
+    # sandbox file to the same staging prefix and registers it here with
+    # the same magic-byte + OOXML validation as finalize.
+    "thread-attachments-register",
     # U9-remainder of finance pilot — tenant-pinned download endpoint.
     # GET /api/threads/{tid}/attachments/{aid}/download returns a 302
     # to a 5-minute presigned S3 GET URL with ResponseContentDisposition:
@@ -929,7 +934,7 @@ resource "aws_lambda_function" "handler" {
   # headroom for transient slowness.
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "agentcore-runtime-dispatch" ? 900 : each.key == "agentcore-dispatch-dlq-redrive" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "requester-memory-dreaming" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  timeout = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "agentcore-runtime-dispatch" ? 900 : each.key == "agentcore-dispatch-dlq-redrive" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "requester-memory-dreaming" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
   # THINK-583 U2: chat-agent-invoke and workspace-renderer get a full vCPU
   # (1769 MB). At 256 MB (~1/7 vCPU) the parallelized setup awaits starved on
   # CPU — per-leg timing showed three independent {1 DB read + 1 S3/Secrets
@@ -1741,6 +1746,10 @@ locals {
       "OPTIONS /api/threads/{threadId}/attachments/presign"  = "thread-attachments-presign"
       "POST /api/threads/{threadId}/attachments/finalize"    = "thread-attachments-finalize"
       "OPTIONS /api/threads/{threadId}/attachments/finalize" = "thread-attachments-finalize"
+
+      # Runtime-generated attachments (execute_code output_files). Shared
+      # API_AUTH_SECRET; no browser callers, so no OPTIONS route.
+      "POST /api/threads/{threadId}/attachments/register" = "thread-attachments-register"
 
       # U9-remainder of finance pilot — tenant-pinned download endpoint.
       "GET /api/threads/{threadId}/attachments/{attachmentId}/download"     = "thread-attachment-download"

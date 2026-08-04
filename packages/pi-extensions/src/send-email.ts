@@ -131,7 +131,10 @@ export function createSendEmailExtension(
         description:
           "Send a plain text email from the active Space email address. " +
           "Use this when the user asks you to email, forward, or share results by email. " +
-          'Use recipient "me" for the signed-in user when they ask you to email them.',
+          'Use recipient "me" for the signed-in user when they ask you to email them. ' +
+          "To send files (spreadsheets, CSVs, documents), pass their attachment ids in " +
+          "`attachments` — e.g. ids returned by execute_code output_files. Never paste " +
+          "file contents into the body when the user asks for a file.",
         parameters: Type.Object({
           to: Type.Union([
             Type.String({
@@ -164,6 +167,25 @@ export function createSendEmailExtension(
           ),
           quoted_body: Type.Optional(
             Type.String({ description: "Original body for quoted replies." }),
+          ),
+          attachments: Type.Optional(
+            Type.Array(
+              Type.Object({
+                attachment_id: Type.String({
+                  description:
+                    "Thread attachment id (e.g. from execute_code output_files).",
+                }),
+                name: Type.Optional(
+                  Type.String({
+                    description: "Optional filename override for the email.",
+                  }),
+                ),
+              }),
+              {
+                description:
+                  "Files to attach (max 5, 7 MB total). Reference existing thread attachments by id.",
+              },
+            ),
           ),
         }),
         executionMode: "sequential",
@@ -231,6 +253,25 @@ export function createSendEmailExtension(
           }
           const threadId = asString(typedParams.thread_id) || defaultThreadId;
           if (threadId) requestPayload.threadId = threadId;
+          const attachmentRefs = Array.isArray(typedParams.attachments)
+            ? typedParams.attachments
+                .map((ref) => {
+                  const record = objectValue(ref);
+                  return {
+                    attachmentId: asString(record.attachment_id),
+                    ...(asString(record.name)
+                      ? { name: asString(record.name) }
+                      : {}),
+                  };
+                })
+                .filter((ref) => ref.attachmentId)
+            : [];
+          if (attachmentRefs.length > 5) {
+            throw new Error("send_email supports a maximum of 5 attachments.");
+          }
+          if (attachmentRefs.length > 0) {
+            requestPayload.attachments = attachmentRefs;
+          }
           if (inReplyTo) requestPayload.inReplyTo = inReplyTo;
           if (quotedFrom) requestPayload.quotedFrom = quotedFrom;
           if (quotedBody) requestPayload.quotedBody = quotedBody;

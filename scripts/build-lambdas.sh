@@ -418,6 +418,10 @@ build_handler "thread-attachments-presign" \
 build_handler "thread-attachments-finalize" \
   "$REPO_ROOT/packages/api/src/handlers/thread-attachments-finalize.ts"
 
+# Runtime-generated file registration (execute_code output_files).
+build_handler "thread-attachments-register" \
+  "$REPO_ROOT/packages/api/src/handlers/thread-attachments-register.ts"
+
 # U9-remainder of finance pilot — tenant-pinned download endpoint.
 # GET /api/threads/{tid}/attachments/{aid}/download returns a 302 to a
 # 5-minute presigned S3 GET URL with Content-Disposition: attachment.

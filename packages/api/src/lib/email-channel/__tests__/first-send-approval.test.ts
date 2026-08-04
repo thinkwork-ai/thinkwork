@@ -1,11 +1,28 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { sendComputerApprovalPushMock } = vi.hoisted(() => ({
-  sendComputerApprovalPushMock: vi.fn(async () => undefined),
-}));
+const { sendComputerApprovalPushMock, loadEmailAttachmentBytesMock } =
+  vi.hoisted(() => ({
+    sendComputerApprovalPushMock: vi.fn(async () => undefined),
+    loadEmailAttachmentBytesMock: vi.fn(async () => [
+      {
+        name: "orders.xlsx",
+        contentType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        bytes: Buffer.from("PK-fake-xlsx"),
+      },
+    ]),
+  }));
 
 vi.mock("../../push-notifications.js", () => ({
   sendComputerApprovalPush: sendComputerApprovalPushMock,
+}));
+vi.mock("../email-attachments.js", () => ({
+  loadEmailAttachmentBytes: loadEmailAttachmentBytesMock,
+}));
+vi.mock("@thinkwork/runtime-config", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getConfig: (key: string) =>
+    key === "WORKSPACE_BUCKET" ? "workspace-bucket" : "",
 }));
 import {
   emailBodyObjects,
@@ -392,6 +409,113 @@ describe("first-send email approval", () => {
         reason_code: "reviewer_rejected",
       },
     ]);
+  });
+
+  it("persists attachment refs on the draft so approval sees them", async () => {
+    const db = fakeEmailDb();
+    await requestFirstSendApproval({
+      db,
+      tenantId: "tenant-1",
+      providerInstallId: "provider-1",
+      provider: "ses",
+      agentId: "agent-1",
+      requestingUserId: "user-1",
+      spaceId: "space-1",
+      threadId: "thread-1",
+      from: "sales@acme.thinkwork.ai",
+      to: ["buyer@example.com"],
+      subject: "Warrior orders",
+      body: "Attached.",
+      attachments: [
+        {
+          attachmentId: "att-1",
+          name: "orders.xlsx",
+          contentType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          s3Key: "tenants/tenant-1/attachments/thread-1/att-1/orders.xlsx",
+          sizeBytes: 1234,
+        },
+      ],
+    });
+    const config = db.rowsFor(inboxItems)[0].config as Record<string, any>;
+    expect(config.emailDraft.attachmentNames).toEqual(["orders.xlsx"]);
+    expect(config.emailChannel.attachments).toMatchObject([
+      { attachmentId: "att-1", name: "orders.xlsx" },
+    ]);
+    expect(db.rowsFor(inboxItems)[0].description).toContain("orders.xlsx");
+  });
+
+  it("rebuilds full MIME with attachments on approved send", async () => {
+    const send = vi.fn(
+      async (_provider: string, _input: Record<string, unknown>) => ({
+        provider: "ses" as const,
+        providerMessageId: "ses-raw-1",
+        status: "sent" as const,
+        metadata: {},
+      }),
+    );
+    const db = fakeEmailDb({
+      inboxRows: [
+        {
+          id: "inbox-1",
+          tenant_id: "tenant-1",
+          type: "computer_approval",
+          config: {
+            actionType: "email_send",
+            emailDraft: {
+              to: "buyer@example.com",
+              subject: "Warrior orders",
+              body: "Attached.",
+            },
+            emailChannel: {
+              conversationId: "conversation-1",
+              providerInstallId: "provider-1",
+              provider: "ses",
+              from: "sales@acme.thinkwork.ai",
+              to: ["buyer@example.com"],
+              spaceId: "space-1",
+              threadId: "thread-1",
+              attachments: [
+                {
+                  attachmentId: "att-1",
+                  name: "orders.xlsx",
+                  contentType:
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                  s3Key:
+                    "tenants/tenant-1/attachments/thread-1/att-1/orders.xlsx",
+                  sizeBytes: 1234,
+                },
+              ],
+            },
+          },
+        },
+      ],
+    });
+
+    await expect(
+      bridgeEmailApprovalDecision({
+        db,
+        inboxItem: db.rowsFor(inboxItems)[0],
+        decision: "approved",
+        actorId: "reviewer-1",
+        decisionPayload: {},
+        send,
+      }),
+    ).resolves.toEqual({ sent: true, providerMessageId: "ses-raw-1" });
+
+    expect(loadEmailAttachmentBytesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucket: "workspace-bucket",
+        attachments: [expect.objectContaining({ attachmentId: "att-1" })],
+      }),
+    );
+    const sendInput = send.mock.calls[0]![1];
+    expect(sendInput.text).toBeUndefined();
+    const raw = String(sendInput.rawMessage);
+    expect(raw).toContain("multipart/mixed");
+    expect(raw).toContain('filename="orders.xlsx"');
+    expect(raw).toContain(Buffer.from("PK-fake-xlsx").toString("base64"));
+    expect(raw).toContain("Attached.");
   });
 
   it("identifies email send approval inbox items", () => {
