@@ -437,44 +437,17 @@ jobs:
               --overwrite \
               --region ${{ env.AWS_REGION }}
           else
-            echo "Updating Pi runtime $RUNTIME_ID to $NEW_IMAGE"
-            # Plan §005 U2: force the role to the new agentcore-pi-role on
-            # every update so an existing dev runtime created in U1 against
-            # the shared `agentcore-role` reconciles to the canonical Pi
-            # role. When the canonical role exists, avoid a pre-update
-            # get-agent-runtime read; AgentCore's control plane can return
-            # Forbidden for reads while still allowing the update call.
-            NETWORK_MODE="PUBLIC"
-            SERVER_PROTOCOL="HTTP"
-            if [ -z "$ROLE_ARN" ]; then
-              CURRENT=$(aws bedrock-agentcore-control get-agent-runtime \
-                --region ${{ env.AWS_REGION }} \
-                --agent-runtime-id "$RUNTIME_ID" \
-                --output json)
-              ROLE_ARN=$(echo "$CURRENT" | jq -r '.roleArn')
-              echo "Reusing existing role: $ROLE_ARN (canonical Pi role will be adopted on the next deploy after terraform-apply creates it)"
-              NETWORK_MODE=$(echo "$CURRENT" | jq -r '.networkConfiguration.networkMode // "PUBLIC"')
-              SERVER_PROTOCOL=$(echo "$CURRENT" | jq -r '.protocolConfiguration.serverProtocol // "HTTP"')
-            fi
-            UPDATE_OUTPUT=$(aws bedrock-agentcore-control update-agent-runtime \
-              --region ${{ env.AWS_REGION }} \
-              --agent-runtime-id "$RUNTIME_ID" \
-              --role-arn "$ROLE_ARN" \
-              --network-configuration "networkMode=$NETWORK_MODE" \
-              --protocol-configuration "serverProtocol=$SERVER_PROTOCOL" \
-              --agent-runtime-artifact "containerConfiguration={containerUri=$NEW_IMAGE}" \
-              --query '{version:agentRuntimeVersion,status:status,image:agentRuntimeArtifact.containerConfiguration.containerUri}' \
-              --output json 2>&1) || {
-                if grep -Eq 'ForbiddenException|(^|[^[:alnum:]_])Forbidden([^[:alnum:]_]|$)' <<<"$UPDATE_OUTPUT"; then
-                  echo "WARN: update-agent-runtime $RUNTIME_ID returned Forbidden; Lambda/Terraform deploy will continue and Deploy Summary will run the tolerant AgentCore drift probe."
-                else
-                  echo "$UPDATE_OUTPUT" >&2
-                  exit 1
-                fi
-              }
-            if [ -n "${UPDATE_OUTPUT:-}" ]; then
-              echo "$UPDATE_OUTPUT"
-            fi
+            # THINK-584/THINK-585: the inline update-agent-runtime that used
+            # to live here is REMOVED. UpdateAgentRuntime replaces the whole
+            # runtime config — calling it without --environment-variables
+            # wiped the mirrored env on every container build (v842 empty-env
+            # stranding, 2026-08-04), and its tag-form image also undid the
+            # digest pin. The update-agentcore-runtimes job (which runs the
+            # hardened scripts/update-agentcore-runtime-image.sh: env mirror
+            # atomic-or-abort + digest pin + post-update assertion) is the
+            # single update authority (KTD4). Existing-runtime image updates
+            # happen there, after terraform-apply.
+            echo "Existing Pi runtime $RUNTIME_ID found; image update deferred to the update-agentcore-runtimes job (single authority)."
           fi
 
           echo "Pi AgentCore runtime visible:"
