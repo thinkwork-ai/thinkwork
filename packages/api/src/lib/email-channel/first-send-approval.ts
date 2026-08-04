@@ -57,6 +57,29 @@ export async function requestFirstSendApproval(
   inboxItemId?: string;
 }> {
   const participantHash = conversationParticipantHash(input.to);
+  // Recipient-set approvals are TENANT-scoped, not thread-scoped (Eric,
+  // 2026-08-04): once a human has approved sending to this exact recipient
+  // set anywhere in the tenant, later threads must not re-raise the review
+  // — "approve an address once", not "approve every email". The per-thread
+  // conversation row below still tracks each thread's traffic; only the
+  // review gate consults the tenant-wide history.
+  const [tenantApproved] = await input.db
+    .select()
+    .from(emailConversations)
+    .where(
+      and(
+        eq(emailConversations.tenant_id, input.tenantId),
+        eq(emailConversations.participant_hash, participantHash),
+        eq(emailConversations.status, "approved"),
+      ),
+    )
+    .limit(1);
+  if (tenantApproved?.status === "approved") {
+    return {
+      status: "send",
+      conversationId: tenantApproved.id,
+    };
+  }
   const [existingConversation] = await input.db
     .select()
     .from(emailConversations)
