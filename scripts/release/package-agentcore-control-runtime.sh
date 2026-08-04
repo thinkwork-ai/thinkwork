@@ -20,6 +20,7 @@ mkdir -p "$runtime_dir"
 pnpm exec esbuild \
   "$repo_root/packages/agentcore-control-runtime/preflight.mjs" \
   "$repo_root/terraform/modules/app/agentcore-identity/scripts/reconcile_twenty_provider.mjs" \
+  "$repo_root/terraform/modules/app/agentcore-pi/scripts/reconcile_pi_runtime.mjs" \
   --bundle \
   --platform=node \
   --format=esm \
@@ -56,7 +57,7 @@ while IFS= read -r file; do
 done < <(find "$runtime_dir" -type f | LC_ALL=C sort)
 
 entrypoints="$(find "$runtime_dir" -maxdepth 1 -type f -name '*.js' -exec basename {} \; | LC_ALL=C sort)"
-if [[ "$entrypoints" != $'preflight.js\nreconcile_twenty_provider.js' ]]; then
+if [[ "$entrypoints" != $'preflight.js\nreconcile_pi_runtime.js\nreconcile_twenty_provider.js' ]]; then
   echo "Bundled AgentCore control runtime has an unexpected entrypoint set:" >&2
   printf '%s\n' "$entrypoints" >&2
   exit 1

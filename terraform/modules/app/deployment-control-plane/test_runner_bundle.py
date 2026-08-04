@@ -142,6 +142,152 @@ def test_customer_update_accepts_customer_ecr_agentcore_pi_source_image() -> Non
     )
 
 
+SECRET_PEM = "-----BEGIN PUBLIC KEY-----\nMIIFakePemBody\n-----END PUBLIC KEY-----"
+SECRET_API = "fake-api-auth-secret-000"
+PI_RECONCILE_PAYLOAD = {
+    "action": "update",
+    "awsAccountId": "637423202447",
+    "awsRegion": "us-east-1",
+    "agentcorePiSourceImageUri": (
+        "637423202447.dkr.ecr.us-east-1.amazonaws.com/thinkwork-tei-e2e-agentcore:pinned"
+    ),
+}
+PI_DIGEST = "sha256:" + "a" * 64
+
+
+def _pi_reconcile_fixture(runner, tmp_path, monkeypatch, ssm_runtime_id):
+    entry_dir = tmp_path / "control-runtime"
+    entry_dir.mkdir()
+    (entry_dir / "reconcile_pi_runtime.js").write_text("// stub", encoding="utf-8")
+    monkeypatch.setenv("THINKWORK_AGENTCORE_CONTROL_RUNTIME_DIR", str(entry_dir))
+
+    calls = {"output": [], "run": [], "node": []}
+
+    def fake_output(args, **kwargs):
+        calls["output"].append(args)
+        if args[1] == "lambda":
+            return json.dumps(
+                {
+                    "Role": "arn:aws:iam::637423202447:role/thinkwork-tei-e2e-agentcore-pi-role",
+                    "FunctionArn": (
+                        "arn:aws:lambda:us-east-1:637423202447:function:thinkwork-tei-e2e-agentcore-pi"
+                    ),
+                    "Environment": {
+                        "Variables": {
+                            "CAPABILITY_SIGNING_PUBLIC_KEY": SECRET_PEM,
+                            "API_AUTH_SECRET": SECRET_API,
+                        }
+                    },
+                }
+            )
+        if args[1] == "ecr":
+            return PI_DIGEST
+        if args[1] == "ssm":
+            if ssm_runtime_id is None:
+                raise subprocess.CalledProcessError(255, args)
+            return ssm_runtime_id
+        raise AssertionError(f"unexpected output() args: {args}")
+
+    def fake_run(args, **kwargs):
+        calls["run"].append(args)
+        return SimpleNamespace(returncode=0)
+
+    def fake_subprocess_run(args, **kwargs):
+        calls["node"].append({"args": args, "input": kwargs.get("input", "")})
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "runtimeId": "rt-pi-123",
+                    "created": ssm_runtime_id is None,
+                    "version": "7",
+                    "status": "READY",
+                    "envCount": 2,
+                }
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(runner, "output", fake_output)
+    monkeypatch.setattr(runner, "run", fake_run)
+    monkeypatch.setattr(runner.subprocess, "run", fake_subprocess_run)
+    return calls
+
+
+def test_pi_runtime_reconcile_creates_when_absent_and_writes_ssm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    runner = load_runner()
+    calls = _pi_reconcile_fixture(runner, tmp_path, monkeypatch, ssm_runtime_id=None)
+
+    result = runner.reconcile_agentcore_pi_runtime({"stage": "tei-e2e"}, PI_RECONCILE_PAYLOAD)
+
+    assert result["runtimeId"] == "rt-pi-123"
+    request = json.loads(calls["node"][0]["input"])
+    assert request["runtimeId"] == ""
+    assert request["runtimeName"] == "thinkwork_tei-e2e_pi"
+    assert request["imageUri"].endswith(f"@{PI_DIGEST}")
+    assert request["environment"]["API_AUTH_SECRET"] == SECRET_API
+    assert "\\n" in request["environment"]["CAPABILITY_SIGNING_PUBLIC_KEY"]
+    assert "\n" not in request["environment"]["CAPABILITY_SIGNING_PUBLIC_KEY"]
+    ssm_put = [args for args in calls["run"] if args[2] == "put-parameter"]
+    assert len(ssm_put) == 1 and "rt-pi-123" in ssm_put[0]
+    # R19: secret values never reach argv or logs.
+    for args in calls["node"]:
+        assert SECRET_API not in " ".join(args["args"])
+    captured = capsys.readouterr()
+    assert SECRET_API not in captured.out + captured.err
+    assert "MIIFakePemBody" not in captured.out + captured.err
+
+
+def test_pi_runtime_reconcile_updates_when_present(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    calls = _pi_reconcile_fixture(runner, tmp_path, monkeypatch, ssm_runtime_id="rt-pi-123")
+
+    result = runner.reconcile_agentcore_pi_runtime({"stage": "tei-e2e"}, PI_RECONCILE_PAYLOAD)
+
+    assert result["runtimeId"] == "rt-pi-123"
+    request = json.loads(calls["node"][0]["input"])
+    assert request["runtimeId"] == "rt-pi-123"
+    assert [args for args in calls["run"] if args[2] == "put-parameter"]
+
+
+def test_pi_runtime_reconcile_aborts_on_empty_lambda_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runner = load_runner()
+    calls = _pi_reconcile_fixture(runner, tmp_path, monkeypatch, ssm_runtime_id="rt-pi-123")
+
+    def empty_env_output(args, **kwargs):
+        if args[1] == "lambda":
+            return json.dumps(
+                {
+                    "Role": "arn:aws:iam::637423202447:role/r",
+                    "FunctionArn": "arn:aws:lambda:us-east-1:637423202447:function:f",
+                    "Environment": {"Variables": {}},
+                }
+            )
+        raise AssertionError("must abort before any non-lambda call")
+
+    monkeypatch.setattr(runner, "output", empty_env_output)
+
+    with pytest.raises(RuntimeError, match="EMPTY environment"):
+        runner.reconcile_agentcore_pi_runtime({"stage": "tei-e2e"}, PI_RECONCILE_PAYLOAD)
+    assert not calls["node"]
+
+
+def test_pi_runtime_reconcile_skips_on_legacy_bundle(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    runner = load_runner()
+    monkeypatch.delenv("THINKWORK_AGENTCORE_CONTROL_RUNTIME_DIR", raising=False)
+
+    assert runner.reconcile_agentcore_pi_runtime({"stage": "tei-e2e"}, PI_RECONCILE_PAYLOAD) is None
+    assert "SKIPPED" in capsys.readouterr().out
+
+
 def test_native_auth_custom_attributes_skip_before_user_pool_exists(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -723,6 +869,7 @@ def test_packaged_agentcore_control_runtime_is_exact_and_runnable(
     assert evidence["bundledRuntimeVerified"] is True
     assert evidence["bundledEntrypoints"] == [
         "preflight.js",
+        "reconcile_pi_runtime.js",
         "reconcile_twenty_provider.js",
     ]
     assert json.loads(
@@ -896,6 +1043,7 @@ def test_packaged_agentcore_control_runtime_rebuild_removes_stale_files(
     assert {path for path in paths if "/" not in path} == {
         "package.json",
         "preflight.js",
+        "reconcile_pi_runtime.js",
         "reconcile_twenty_provider.js",
     }
 

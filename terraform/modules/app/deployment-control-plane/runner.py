@@ -513,6 +513,11 @@ def prepare_agentcore_control_runtime():
     preflight = json.loads(output(["node", str(runtime_dir / "preflight.js")]))
     if preflight != expected_sdk:
         raise RuntimeError("AgentCore control runtime preflight differs from its manifest")
+    # reconcile_pi_runtime.js (THINK-584 U5) is preflighted only when present:
+    # a newer seeded runner.py may run against a pre-U5 release bundle (the
+    # runner-py-bootstrap-skew trap), and the Pi runtime reconcile step skips
+    # loudly in that case rather than failing bundle validation here.
+    optional_entrypoints = ("reconcile_pi_runtime.js",)
     entrypoint_preflights = [
         json.loads(
             output(
@@ -523,7 +528,8 @@ def prepare_agentcore_control_runtime():
                 ]
             )
         )
-        for entrypoint in ("reconcile_twenty_provider.js",)
+        for entrypoint in ("reconcile_twenty_provider.js", *optional_entrypoints)
+        if entrypoint not in optional_entrypoints or (runtime_dir / entrypoint).is_file()
     ]
     if any(not item.get("sdkImportReady") for item in entrypoint_preflights):
         raise RuntimeError("An AgentCore control runtime entrypoint cannot import its SDK")
@@ -534,7 +540,9 @@ def prepare_agentcore_control_runtime():
         "sdkVersion": preflight["version"],
         "nodeVersion": node_version,
         "bundledEntrypoints": sorted(
-            item["path"] for item in runtime_files if item.get("path") in required_entrypoints
+            item["path"]
+            for item in runtime_files
+            if item.get("path") in required_entrypoints or item.get("path") in optional_entrypoints
         ),
         "bundledRuntimeVerified": True,
         "entrypointPreflights": entrypoint_preflights,
@@ -3324,6 +3332,166 @@ def resolve_agentcore_pi_source_image_uri(payload):
         )
 
     return release_runtime_image("agentcore-pi-amd64")
+
+
+def escape_env_control_chars(value):
+    # AgentCore rejects env values with raw control characters (the PEM's
+    # newlines); mirror them as literal escapes exactly like the dev-pipeline
+    # env mirror does (scripts/update-agentcore-runtime-image.sh). Consumers
+    # un-escape (the Pi container's publicKeyPemFromEnv normalizes \n).
+    return value.replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
+
+
+def reconcile_agentcore_pi_runtime(vars_json, payload):
+    """Create/update the Pi Bedrock AgentCore Runtime after a successful apply
+    (THINK-584 U5). Pins the runtime to the immutable digest of the customer's
+    mirrored Pi image, mirrors the Pi Lambda env atomically (abort on empty),
+    and records the runtime id in SSM. Secret env values never appear in logs
+    or argv — the request travels to the node entrypoint on stdin."""
+    stage = vars_json["stage"]
+    region = os.environ.get("AWS_REGION") or safe_get(payload, "awsRegion", default="us-east-1")
+    runtime_bundle_dir = os.environ.get("THINKWORK_AGENTCORE_CONTROL_RUNTIME_DIR", "")
+    entrypoint = (
+        Path(runtime_bundle_dir) / "reconcile_pi_runtime.js" if runtime_bundle_dir else None
+    )
+    if entrypoint is None or not entrypoint.is_file():
+        print(
+            "[runner] AgentCore Pi runtime reconcile SKIPPED: release bundle predates "
+            "reconcile_pi_runtime.js (THINK-584 U5). Re-seed the runner bundle to enable "
+            "the customer runtime-update path."
+        )
+        return None
+
+    lambda_name = f"thinkwork-{stage}-agentcore-pi"
+    fn = json.loads(
+        output(
+            [
+                "aws",
+                "lambda",
+                "get-function-configuration",
+                "--function-name",
+                lambda_name,
+                "--region",
+                region,
+            ]
+        )
+    )
+    environment = {
+        key: escape_env_control_chars(value) if isinstance(value, str) else value
+        for key, value in ((fn.get("Environment") or {}).get("Variables") or {}).items()
+    }
+    if not environment:
+        raise RuntimeError(
+            f"AgentCore Pi runtime reconcile: {lambda_name} reported an EMPTY environment; "
+            "mirroring it would strand the runtime (atomic-or-abort)."
+        )
+    role_arn = fn.get("Role") or ""
+    account_id = (fn.get("FunctionArn") or "").split(":")[4] if fn.get("FunctionArn") else ""
+    if not role_arn or not account_id:
+        raise RuntimeError("AgentCore Pi runtime reconcile: Lambda did not report Role/ARN")
+
+    source_image_uri = resolve_agentcore_pi_source_image_uri(payload)
+    image_tag = (
+        f"pi-{hashlib.sha256(source_image_uri.encode('utf-8')).hexdigest()[:16]}"
+        if source_image_uri
+        else "pi-latest"
+    )
+    repository = f"thinkwork-{stage}-agentcore"
+    digest = output(
+        [
+            "aws",
+            "ecr",
+            "describe-images",
+            "--repository-name",
+            repository,
+            "--region",
+            region,
+            "--image-ids",
+            f"imageTag={image_tag}",
+            "--query",
+            "imageDetails[0].imageDigest",
+            "--output",
+            "text",
+        ]
+    )
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+        raise RuntimeError(
+            f"AgentCore Pi runtime reconcile: could not resolve an immutable digest for "
+            f"{repository}:{image_tag} (got '{digest}')"
+        )
+    image_uri = f"{account_id}.dkr.ecr.{region}.amazonaws.com/{repository}@{digest}"
+
+    ssm_name = f"/thinkwork/{stage}/agentcore/runtime-id-pi"
+    runtime_id = ""
+    try:
+        runtime_id = output(
+            [
+                "aws",
+                "ssm",
+                "get-parameter",
+                "--name",
+                ssm_name,
+                "--region",
+                region,
+                "--query",
+                "Parameter.Value",
+                "--output",
+                "text",
+            ],
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        runtime_id = ""
+    if runtime_id == "None":
+        runtime_id = ""
+
+    request = {
+        "region": region,
+        "runtimeName": f"thinkwork_{stage}_pi",
+        "runtimeId": runtime_id,
+        "roleArn": role_arn,
+        "imageUri": image_uri,
+        "environment": environment,
+        "waitSeconds": 900,
+    }
+    print(
+        f"[runner] Reconciling AgentCore Pi runtime to {image_uri} "
+        f"({len(environment)} env vars mirrored; values not logged)"
+    )
+    reconciled = subprocess.run(
+        ["node", str(entrypoint)],
+        input=json.dumps(request),
+        capture_output=True,
+        text=True,
+    )
+    if reconciled.returncode != 0:
+        raise RuntimeError(
+            "AgentCore Pi runtime reconcile failed: "
+            f"{(reconciled.stderr or '').strip() or f'exit {reconciled.returncode}'}"
+        )
+    result = json.loads(reconciled.stdout)
+    run(
+        [
+            "aws",
+            "ssm",
+            "put-parameter",
+            "--name",
+            ssm_name,
+            "--value",
+            str(result["runtimeId"]),
+            "--type",
+            "String",
+            "--overwrite",
+            "--region",
+            region,
+        ],
+        stdout=subprocess.DEVNULL,
+    )
+    print(
+        f"[runner] AgentCore Pi runtime ready: {result['runtimeId']} "
+        f"v{result.get('version')} ({'created' if result.get('created') else 'updated'})"
+    )
+    return result
 
 
 def release_git_sha():
@@ -7001,6 +7169,13 @@ def main():
                     selected_controller_release,
                 )
             sync_static(outputs_path, static_files, vars_json)
+            if control_runtime_operation:
+                pi_runtime_evidence = reconcile_agentcore_pi_runtime(vars_json, payload)
+                if pi_runtime_evidence is not None:
+                    CONTROLLER_EVIDENCE["agentcorePiRuntime"] = write_json_evidence_artifact(
+                        "agentcore-pi-runtime.json",
+                        pi_runtime_evidence,
+                    )
             try:
                 self_update_runner_script()
             except Exception as self_update_error:
