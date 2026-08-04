@@ -13,7 +13,6 @@ import {
   Database,
   Download,
   FileText,
-  Flag,
   ListChecks,
   RotateCcw,
   Search,
@@ -330,12 +329,6 @@ interface TaskThreadViewProps {
    */
   threadMode?: ServerThreadMode | null;
   infoPanelState?: TaskThreadInfoPanelState;
-  /**
-   * Flag-for-evaluation affordance (Trust Core U7). Rendered per
-   * completed turn when provided — the host gates it on the operator
-   * role (TenantContext.isOperator); the server enforces regardless.
-   */
-  onFlagTurn?: (turn: TaskThreadTurn) => void;
   onJsonRenderActionSuccess?: JsonRenderActionSuccessHandler;
   /**
    * THINK-136 U6 (R7/AE5): retry a user message's failed agent dispatch. The
@@ -603,7 +596,6 @@ export function TaskThreadView({
   onSendFollowUp,
   threadMode,
   infoPanelState,
-  onFlagTurn,
   onJsonRenderActionSuccess,
   onRetryDispatch,
   savedCanvases,
@@ -888,7 +880,6 @@ export function TaskThreadView({
                             mentionTargets={mentionTargets}
                             skillCatalog={skillCatalog}
                             viewerIsOperator={isOperator}
-                            onFlagTurn={onFlagTurn}
                             onJsonRenderActionSuccess={
                               onJsonRenderActionSuccess
                             }
@@ -2034,7 +2025,6 @@ function TranscriptSegment({
   mentionTargets,
   skillCatalog,
   viewerIsOperator,
-  onFlagTurn,
   onJsonRenderActionSuccess,
   onRetryDispatch,
 }: {
@@ -2067,7 +2057,6 @@ function TranscriptSegment({
   mentionTargets?: MentionTarget[];
   skillCatalog?: SkillOption[];
   viewerIsOperator?: boolean;
-  onFlagTurn?: (turn: TaskThreadTurn) => void;
   onJsonRenderActionSuccess?: JsonRenderActionSuccessHandler;
   onRetryDispatch?: (messageId: string) => Promise<void> | void;
 }) {
@@ -2113,7 +2102,6 @@ function TranscriptSegment({
           message={message}
           threadId={threadId}
           latestProjection={latestProjection}
-          onFlagTurn={onFlagTurn}
           onSendFollowUp={onSendFollowUp}
         />
       ) : null}
@@ -2183,17 +2171,6 @@ function normalizeStatus(status: unknown) {
     .toLowerCase()
     .trim();
 }
-
-// Terminal statuses an operator can flag into an eval dataset (U7). The
-// server rejects in-flight turns regardless; `skipped` never renders a
-// turn surface at all.
-const FLAGGABLE_TURN_STATUSES = new Set([
-  "completed",
-  "succeeded",
-  "failed",
-  "cancelled",
-  "timed_out",
-]);
 
 /**
  * Per-user-message dispatch indicator (THINK-136 U6, R6/R7). State is derived
@@ -2278,14 +2255,12 @@ function ThreadTurnActivity({
   message,
   threadId,
   latestProjection,
-  onFlagTurn,
   onSendFollowUp,
 }: {
   turn?: TaskThreadTurn;
   message?: TaskThreadMessage;
   threadId?: string;
   latestProjection?: LatestProjectionRef | null;
-  onFlagTurn?: (turn: TaskThreadTurn) => void;
   onSendFollowUp?: (
     content: string,
     files?: File[],
@@ -2346,11 +2321,6 @@ function ThreadTurnActivity({
         : turn.error || "No error detail was provided."
       : null;
 
-  // Per-turn flag-for-evaluation affordance (U7): completed turns only,
-  // and only when the host wired the (operator-gated) callback.
-  const canFlag =
-    Boolean(onFlagTurn) && !running && FLAGGABLE_TURN_STATUSES.has(status);
-
   // Default closed so activity rows do not shift the page mid-read or after
   // loading; failed turns keep an explicit header and reveal details on manual
   // expansion. Manual toggle persists across re-renders.
@@ -2410,20 +2380,6 @@ function ThreadTurnActivity({
             ) : null}
           </ThinkingRow>
         </div>
-        {canFlag ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Flag turn for evaluation"
-            title="Flag for evaluation"
-            data-testid={`flag-turn-${turn.id}`}
-            className="shrink-0 text-muted-foreground/50 hover:text-foreground"
-            onClick={() => onFlagTurn?.(turn)}
-          >
-            <Flag className="size-3.5" />
-          </Button>
-        ) : null}
       </div>
       {knowledgeSources.length > 0 && !running ? (
         <KnowledgeSourcesCard sources={knowledgeSources} />
@@ -2977,7 +2933,10 @@ function TranscriptMessage({
     if (conversion.matched && conversion.sourceSpan) {
       const lines = body.split("\n");
       bodyAroundParts = {
-        before: lines.slice(0, conversion.sourceSpan.startLine).join("\n").trim(),
+        before: lines
+          .slice(0, conversion.sourceSpan.startLine)
+          .join("\n")
+          .trim(),
         after: lines.slice(conversion.sourceSpan.endLine).join("\n").trim(),
       };
     }
@@ -5379,11 +5338,11 @@ function isAgentProfileToolEvent(event: TaskThreadEvent) {
   const payload = parseRecord(event.payload);
   return Boolean(
     stringValue(payload.profile_slug) ||
-    stringValue(payload.profileSlug) ||
-    stringValue(payload.profile_name) ||
-    stringValue(payload.profileName) ||
-    stringValue(payload.profile_run_id) ||
-    stringValue(payload.profileRunId),
+      stringValue(payload.profileSlug) ||
+      stringValue(payload.profile_name) ||
+      stringValue(payload.profileName) ||
+      stringValue(payload.profile_run_id) ||
+      stringValue(payload.profileRunId),
   );
 }
 
