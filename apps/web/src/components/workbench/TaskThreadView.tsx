@@ -5125,15 +5125,13 @@ function actionRowForAgentCorePhases(usage: Record<string, unknown>) {
     }`;
   });
 
-  const totalMs = phases.reduce((sum, phase) => {
-    const duration = Number(phase.duration_ms);
-    return Number.isFinite(duration) && duration >= 0 ? sum + duration : sum;
-  }, 0);
+  // No summed chip: phases overlap (agent_loop contains tool/model time),
+  // so a total reads as a bogus wall-clock next to "Worked for Ns" (Eric,
+  // 2026-08-04). Per-phase durations live in the expanded detail lines.
   return {
     title: "AgentCore phases",
     detail: lines.join("\n"),
     kind: "thinking" as const,
-    ...(totalMs > 0 ? { durationMs: totalMs } : {}),
   };
 }
 
