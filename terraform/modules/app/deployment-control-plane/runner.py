@@ -3448,9 +3448,13 @@ def reconcile_agentcore_pi_runtime(vars_json, payload):
     if runtime_id == "None":
         runtime_id = ""
 
+    # AgentCore runtime names must match [a-zA-Z][a-zA-Z0-9_]{0,47} — no
+    # hyphens. Customer stages like "tei-e2e" broke the create with a
+    # ValidationException (first live canary of this step, 2026-08-04).
+    runtime_stage = re.sub(r"[^a-zA-Z0-9_]", "_", stage)
     request = {
         "region": region,
-        "runtimeName": f"thinkwork_{stage}_pi",
+        "runtimeName": f"thinkwork_{runtime_stage}_pi",
         "runtimeId": runtime_id,
         "roleArn": role_arn,
         "imageUri": image_uri,

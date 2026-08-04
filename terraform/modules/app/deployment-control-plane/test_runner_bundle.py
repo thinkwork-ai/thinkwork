@@ -225,7 +225,9 @@ def test_pi_runtime_reconcile_creates_when_absent_and_writes_ssm(
     assert result["runtimeId"] == "rt-pi-123"
     request = json.loads(calls["node"][0]["input"])
     assert request["runtimeId"] == ""
-    assert request["runtimeName"] == "thinkwork_tei-e2e_pi"
+    # AgentCore names forbid hyphens ([a-zA-Z][a-zA-Z0-9_]{0,47}) — the
+    # tei-e2e canary proved the unsanitized name 400s (2026-08-04).
+    assert request["runtimeName"] == "thinkwork_tei_e2e_pi"
     assert request["imageUri"].endswith(f"@{PI_DIGEST}")
     assert request["environment"]["API_AUTH_SECRET"] == SECRET_API
     assert "\\n" in request["environment"]["CAPABILITY_SIGNING_PUBLIC_KEY"]
