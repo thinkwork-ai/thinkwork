@@ -596,9 +596,8 @@ describe("McpConnectionRetention rebind ping tolerance (THINK-586 U7)", () => {
   }
 
   it("treats JSON-RPC -32601 (ping unimplemented) as liveness proof", async () => {
-    const { createMcpConnectionRetention } = await import(
-      "../src/mcp-connect.js"
-    );
+    const { createMcpConnectionRetention } =
+      await import("../src/mcp-connect.js");
     const retention = createMcpConnectionRetention();
     retention.register(
       retainedConnection(() =>
@@ -618,9 +617,8 @@ describe("McpConnectionRetention rebind ping tolerance (THINK-586 U7)", () => {
   });
 
   it("still fails rebind on transport-level ping errors", async () => {
-    const { createMcpConnectionRetention } = await import(
-      "../src/mcp-connect.js"
-    );
+    const { createMcpConnectionRetention } =
+      await import("../src/mcp-connect.js");
     const retention = createMcpConnectionRetention();
     retention.register(
       retainedConnection(() => Promise.reject(new Error("fetch failed"))),
