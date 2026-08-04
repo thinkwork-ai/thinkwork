@@ -219,9 +219,8 @@ async function handleApiGatewayDeliver(event: APIGatewayProxyEventV2) {
 
     // Send via SES
     try {
-      const { SESClient, SendRawEmailCommand } = await import(
-        "@aws-sdk/client-ses"
-      );
+      const { SESClient, SendRawEmailCommand } =
+        await import("@aws-sdk/client-ses");
       const ses = new SESClient({});
 
       const recipients = req.to
@@ -498,9 +497,8 @@ async function handleWorkflowDelivery(
   });
 
   try {
-    const { SESClient, SendRawEmailCommand } = await import(
-      "@aws-sdk/client-ses"
-    );
+    const { SESClient, SendRawEmailCommand } =
+      await import("@aws-sdk/client-ses");
     const ses = new SESClient({});
     const boundary = `----=_Part_${Date.now()}`;
     const rawEmail = [

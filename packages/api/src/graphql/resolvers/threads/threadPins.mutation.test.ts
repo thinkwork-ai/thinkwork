@@ -112,11 +112,13 @@ beforeEach(() => {
 
 describe("thread pin mutations", () => {
   it("pins a visible thread to the caller participant row", async () => {
-    mockLoadPinnedThread.mockResolvedValueOnce(null).mockResolvedValueOnce({
-      thread: { id: "thread-1" },
-      pinnedAt: "2026-05-28T12:00:00.000Z",
-      pinOrder: 3,
-    });
+    mockLoadPinnedThread
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        thread: { id: "thread-1" },
+        pinnedAt: "2026-05-28T12:00:00.000Z",
+        pinOrder: 3,
+      });
 
     const result = await pinThread(
       {},
@@ -140,9 +142,11 @@ describe("thread pin mutations", () => {
   });
 
   it("unpins only the caller's participant row", async () => {
-    await unpinThread({}, { tenantId: "tenant-1", threadId: "thread-1" }, {
-      auth: { authType: "cognito" },
-    } as any);
+    await unpinThread(
+      {},
+      { tenantId: "tenant-1", threadId: "thread-1" },
+      { auth: { authType: "cognito" } } as any,
+    );
 
     expect(updatedValues[0]).toMatchObject({
       pinned_at: null,

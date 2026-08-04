@@ -408,9 +408,7 @@ export function buildDefaultAgentTurnWakeup(
   };
 }
 
-class DrizzleDefaultAgentRoutingRepository
-  implements DefaultAgentRoutingRepository
-{
+class DrizzleDefaultAgentRoutingRepository implements DefaultAgentRoutingRepository {
   private readonly db = getDb();
 
   async loadDefaultAgent(input: { tenantId: string; threadId: string }) {

@@ -186,9 +186,7 @@ function drizzleRetryDeps(): RetryAgentDispatchDeps {
         })
         .from(messages)
         .innerJoin(threads, eq(threads.id, messages.thread_id))
-        .where(
-          and(eq(messages.id, messageId), eq(messages.tenant_id, tenantId)),
-        )
+        .where(and(eq(messages.id, messageId), eq(messages.tenant_id, tenantId)))
         .limit(1);
       if (!row) return null;
       return {
@@ -220,9 +218,7 @@ function drizzleRetryDeps(): RetryAgentDispatchDeps {
       const [row] = await db
         .update(messages)
         .set({ metadata })
-        .where(
-          and(eq(messages.id, messageId), eq(messages.tenant_id, tenantId)),
-        )
+        .where(and(eq(messages.id, messageId), eq(messages.tenant_id, tenantId)))
         .returning();
       const [thread] = await db
         .select({ spaceId: threads.space_id })

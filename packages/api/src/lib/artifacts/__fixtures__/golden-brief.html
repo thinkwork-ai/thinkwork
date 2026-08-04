@@ -1,567 +1,134 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="tw-plate" content="brief" />
-    <title>Golden brief</title>
-    <style>
-      :root {
-        --bg: #faf9f7;
-        --ink: #1e2126;
-        --muted: #5c6470;
-        --line: #e3ded6;
-        --card: #ffffff;
-        --accent: #0f6b5c;
-        --accent-soft: #e7f2ef;
-        --accent-text: #0b5a4d;
-        --warn: #9a5b00;
-        --warn-soft: #fdf3e3;
-        --warn-text: #7c4a00;
-        --info: #2b5aa0;
-        --info-soft: #e9f0fa;
-        --info-text: #234b86;
-        --bad: #a03030;
-        --bad-soft: #fbeaea;
-        --bad-text: #8a2626;
-        --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #16181c;
-          --ink: #e6e3dd;
-          --muted: #9aa2ad;
-          --line: #2c3037;
-          --card: #1d2025;
-          --accent: #4cc2ab;
-          --accent-soft: #12332d;
-          --accent-text: #7fd8c6;
-          --warn: #e0a44a;
-          --warn-soft: #33270f;
-          --warn-text: #eebd72;
-          --info: #7aa7e0;
-          --info-soft: #16243a;
-          --info-text: #9dbfec;
-          --bad: #e08585;
-          --bad-soft: #3a1c1c;
-          --bad-text: #eda3a3;
-        }
-      }
-      :root[data-theme="dark"] {
-        --bg: #16181c;
-        --ink: #e6e3dd;
-        --muted: #9aa2ad;
-        --line: #2c3037;
-        --card: #1d2025;
-        --accent: #4cc2ab;
-        --accent-soft: #12332d;
-        --accent-text: #7fd8c6;
-        --warn: #e0a44a;
-        --warn-soft: #33270f;
-        --warn-text: #eebd72;
-        --info: #7aa7e0;
-        --info-soft: #16243a;
-        --info-text: #9dbfec;
-        --bad: #e08585;
-        --bad-soft: #3a1c1c;
-        --bad-text: #eda3a3;
-      }
-      :root[data-theme="light"] {
-        --bg: #faf9f7;
-        --ink: #1e2126;
-        --muted: #5c6470;
-        --line: #e3ded6;
-        --card: #ffffff;
-        --accent: #0f6b5c;
-        --accent-soft: #e7f2ef;
-        --accent-text: #0b5a4d;
-        --warn: #9a5b00;
-        --warn-soft: #fdf3e3;
-        --warn-text: #7c4a00;
-        --info: #2b5aa0;
-        --info-soft: #e9f0fa;
-        --info-text: #234b86;
-        --bad: #a03030;
-        --bad-soft: #fbeaea;
-        --bad-text: #8a2626;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--ink);
-        font:
-          15px/1.6 -apple-system,
-          BlinkMacSystemFont,
-          "Segoe UI",
-          Roboto,
-          Helvetica,
-          Arial,
-          sans-serif;
-      }
-      main {
-        max-width: 920px;
-        margin: 0 auto;
-        padding: 32px 24px 64px;
-      }
-      p,
-      li,
-      dd {
-        max-width: 72ch;
-      }
-      h1 {
-        font-size: 1.7em;
-        line-height: 1.25;
-        margin: 0.2em 0 0.3em;
-      }
-      h2 {
-        font-size: 1.25em;
-        margin: 2.2em 0 0.6em;
-        padding-top: 0.6em;
-        border-top: 1px solid var(--line);
-      }
-      h3 {
-        font-size: 1.05em;
-        margin: 1.4em 0 0.4em;
-      }
-      a {
-        color: var(--info);
-      }
-      code {
-        font-family: var(--mono);
-        font-size: 0.88em;
-        background: var(--accent-soft);
-        padding: 1px 5px;
-        border-radius: 4px;
-      }
-      pre {
-        font-family: var(--mono);
-        background: var(--accent-soft);
-        padding: 12px 14px;
-        border-radius: 8px;
-        overflow-x: auto;
-      }
-      pre code {
-        background: none;
-        padding: 0;
-        border-radius: 0;
-      }
-      .eyebrow {
-        font-size: 0.72em;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--muted);
-        margin-bottom: 2px;
-      }
-      .meta {
-        color: var(--muted);
-        font-size: 0.9em;
-        margin: 0.2em 0 1.2em;
-      }
-      .stats {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin: 18px 0 6px;
-      }
-      .stat {
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 10px 16px;
-        min-width: 110px;
-      }
-      .stat .n {
-        font-size: 1.35em;
-        font-weight: 700;
-      }
-      .stat .l {
-        font-size: 0.78em;
-        color: var(--muted);
-      }
-      .timeline {
-        display: flex;
-        flex-wrap: wrap;
-        margin: 18px 0 6px;
-      }
-      .timeline .t-item {
-        flex: 1 1 0;
-        min-width: 120px;
-        max-width: 220px;
-        text-align: center;
-        padding: 0 6px;
-        position: relative;
-      }
-      .timeline .t-label {
-        font-size: 0.92em;
-        font-weight: 600;
-        overflow-wrap: break-word;
-      }
-      .timeline .t-track {
-        position: relative;
-        height: 22px;
-        margin: 6px 0;
-      }
-      .timeline .t-track::before {
-        content: "";
-        position: absolute;
-        left: -6px;
-        right: -6px;
-        top: 50%;
-        height: 2px;
-        background: var(--line);
-      }
-      .timeline .t-item:first-child .t-track::before {
-        left: 50%;
-      }
-      .timeline .t-item:last-child .t-track::before {
-        right: 50%;
-      }
-      .timeline .t-dot {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        width: 12px;
-        height: 12px;
-        border-radius: 999px;
-        background: var(--card);
-        border: 2px solid var(--accent);
-      }
-      .timeline .t-item.current .t-dot {
-        background: var(--accent);
-        box-shadow: 0 0 0 3px var(--accent-soft);
-      }
-      .timeline .t-item.current .t-label {
-        font-weight: 800;
-      }
-      .timeline .t-caption {
-        font-size: 0.8em;
-        color: var(--muted);
-      }
-      .timeline .t-date {
-        font-size: 0.75em;
-        color: var(--muted);
-      }
-      .cards {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        gap: 12px;
-        margin: 14px 0;
-      }
-      .card {
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 14px 16px;
-      }
-      .card .q {
-        font-size: 0.72em;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }
-      .card .a {
-        font-weight: 700;
-        margin: 0.25em 0 0.35em;
-      }
-      .card p {
-        font-size: 0.92em;
-        margin: 0;
-        color: var(--muted);
-      }
-      .pill {
-        display: inline-block;
-        border-radius: 999px;
-        padding: 2px 10px;
-        font-size: 0.75em;
-        font-weight: 600;
-      }
-      .pill.acc {
-        background: var(--accent-soft);
-        color: var(--accent-text);
-      }
-      .pill.warn {
-        background: var(--warn-soft);
-        color: var(--warn-text);
-      }
-      .pill.info {
-        background: var(--info-soft);
-        color: var(--info-text);
-      }
-      .pill.bad {
-        background: var(--bad-soft);
-        color: var(--bad-text);
-      }
-      article.item {
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 18px 20px;
-        margin: 16px 0;
-      }
-      article.item h3 {
-        margin: 0.1em 0 0.5em;
-      }
-      article.item .chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-bottom: 10px;
-      }
-      dl.fields {
-        margin: 0;
-      }
-      dl.fields dt {
-        font-size: 0.72em;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--muted);
-        margin-top: 0.8em;
-      }
-      dl.fields dd {
-        margin: 0.15em 0 0;
-      }
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        margin: 0.8em 0;
-        font-size: 0.92em;
-      }
-      th,
-      td {
-        border: 1px solid var(--line);
-        padding: 7px 10px;
-        text-align: left;
-        vertical-align: top;
-      }
-      th {
-        background: var(--accent-soft);
-        color: var(--accent-text);
-        font-size: 0.85em;
-      }
-      figure {
-        margin: 18px 0;
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 14px;
-      }
-      figcaption {
-        font-size: 0.85em;
-        color: var(--muted);
-        margin-top: 8px;
-      }
-      footer.composition-signal {
-        margin-top: 48px;
-        padding-top: 14px;
-        border-top: 1px solid var(--line);
-        color: var(--muted);
-        font-size: 0.82em;
-      }
-      svg text {
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      }
-      @page {
-        margin: 18mm 16mm;
-      }
-      @media print {
-        body {
-          background: #fff;
-          color: #111;
-        }
-        main {
-          max-width: none;
-          padding: 0;
-        }
-        article.item,
-        .card,
-        .stat,
-        figure,
-        table,
-        blockquote,
-        pre {
-          break-inside: avoid;
-        }
-        .timeline .t-item {
-          break-inside: avoid;
-        }
-        h1,
-        h2,
-        h3,
-        h4 {
-          break-after: avoid;
-        }
-        h1,
-        h2,
-        h3,
-        h4,
-        p,
-        li,
-        th,
-        td,
-        figcaption {
-          color: #111;
-        }
-        a {
-          color: #111;
-          text-decoration: underline;
-        }
-        th {
-          background: #f3f4f6;
-          color: #111;
-        }
-        .card,
-        .stat,
-        figure {
-          background: #fff;
-          border-color: #d1d5db;
-        }
-        img,
-        svg {
-          max-width: 100%;
-        }
-        footer.composition-signal {
-          color: #6b7280;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <main>
-      <div class="eyebrow">DECISION BRIEF</div>
-      <h1 id="doc-title">Golden brief</h1>
-      <p class="meta">
-        <strong>date</strong> Q3 2026 &nbsp;·&nbsp; Golden parity fixture
-      </p>
-      <p class="meta">Abstract for brief.</p>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="tw-plate" content="brief">
+<title>Golden brief</title>
+<style>
+:root{
+  --bg:#faf9f7; --ink:#1e2126; --muted:#5c6470; --line:#e3ded6; --card:#ffffff;
+  --accent:#0f6b5c; --accent-soft:#e7f2ef; --accent-text:#0b5a4d;
+  --warn:#9a5b00; --warn-soft:#fdf3e3; --warn-text:#7c4a00;
+  --info:#2b5aa0; --info-soft:#e9f0fa; --info-text:#234b86;
+  --bad:#a03030; --bad-soft:#fbeaea; --bad-text:#8a2626;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181c; --ink:#e6e3dd; --muted:#9aa2ad; --line:#2c3037; --card:#1d2025;
+    --accent:#4cc2ab; --accent-soft:#12332d; --accent-text:#7fd8c6;
+    --warn:#e0a44a; --warn-soft:#33270f; --warn-text:#eebd72;
+    --info:#7aa7e0; --info-soft:#16243a; --info-text:#9dbfec;
+    --bad:#e08585; --bad-soft:#3a1c1c; --bad-text:#eda3a3;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181c; --ink:#e6e3dd; --muted:#9aa2ad; --line:#2c3037; --card:#1d2025;
+  --accent:#4cc2ab; --accent-soft:#12332d; --accent-text:#7fd8c6;
+  --warn:#e0a44a; --warn-soft:#33270f; --warn-text:#eebd72;
+  --info:#7aa7e0; --info-soft:#16243a; --info-text:#9dbfec;
+  --bad:#e08585; --bad-soft:#3a1c1c; --bad-text:#eda3a3;
+}
+:root[data-theme="light"]{
+  --bg:#faf9f7; --ink:#1e2126; --muted:#5c6470; --line:#e3ded6; --card:#ffffff;
+  --accent:#0f6b5c; --accent-soft:#e7f2ef; --accent-text:#0b5a4d;
+  --warn:#9a5b00; --warn-soft:#fdf3e3; --warn-text:#7c4a00;
+  --info:#2b5aa0; --info-soft:#e9f0fa; --info-text:#234b86;
+  --bad:#a03030; --bad-soft:#fbeaea; --bad-text:#8a2626;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+main{max-width:920px;margin:0 auto;padding:32px 24px 64px}
+p,li,dd{max-width:72ch}
+h1{font-size:1.7em;line-height:1.25;margin:.2em 0 .3em}
+h2{font-size:1.25em;margin:2.2em 0 .6em;padding-top:.6em;border-top:1px solid var(--line)}
+h3{font-size:1.05em;margin:1.4em 0 .4em}
+a{color:var(--info)}
+code{font-family:var(--mono);font-size:.88em;background:var(--accent-soft);padding:1px 5px;border-radius:4px}
+pre{font-family:var(--mono);background:var(--accent-soft);padding:12px 14px;border-radius:8px;overflow-x:auto}
+pre code{background:none;padding:0;border-radius:0}
+.eyebrow{font-size:.72em;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.meta{color:var(--muted);font-size:.9em;margin:.2em 0 1.2em}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 6px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 16px;min-width:110px}
+.stat .n{font-size:1.35em;font-weight:700}
+.stat .l{font-size:.78em;color:var(--muted)}
+.timeline{display:flex;flex-wrap:wrap;margin:18px 0 6px}
+.timeline .t-item{flex:1 1 0;min-width:120px;max-width:220px;text-align:center;padding:0 6px;position:relative}
+.timeline .t-label{font-size:.92em;font-weight:600;overflow-wrap:break-word}
+.timeline .t-track{position:relative;height:22px;margin:6px 0}
+.timeline .t-track::before{content:"";position:absolute;left:-6px;right:-6px;top:50%;height:2px;background:var(--line)}
+.timeline .t-item:first-child .t-track::before{left:50%}
+.timeline .t-item:last-child .t-track::before{right:50%}
+.timeline .t-dot{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:999px;background:var(--card);border:2px solid var(--accent)}
+.timeline .t-item.current .t-dot{background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.timeline .t-item.current .t-label{font-weight:800}
+.timeline .t-caption{font-size:.8em;color:var(--muted)}
+.timeline .t-date{font-size:.75em;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin:14px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card .q{font-size:.72em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.card .a{font-weight:700;margin:.25em 0 .35em}
+.card p{font-size:.92em;margin:0;color:var(--muted)}
+.pill{display:inline-block;border-radius:999px;padding:2px 10px;font-size:.75em;font-weight:600}
+.pill.acc{background:var(--accent-soft);color:var(--accent-text)}
+.pill.warn{background:var(--warn-soft);color:var(--warn-text)}
+.pill.info{background:var(--info-soft);color:var(--info-text)}
+.pill.bad{background:var(--bad-soft);color:var(--bad-text)}
+article.item{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
+article.item h3{margin:.1em 0 .5em}
+article.item .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+dl.fields{margin:0}
+dl.fields dt{font-size:.72em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:.8em}
+dl.fields dd{margin:.15em 0 0}
+table{border-collapse:collapse;width:100%;margin:.8em 0;font-size:.92em}
+th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{background:var(--accent-soft);color:var(--accent-text);font-size:.85em}
+figure{margin:18px 0;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+figcaption{font-size:.85em;color:var(--muted);margin-top:8px}
+footer.composition-signal{margin-top:48px;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:.82em}
+svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+@page{margin:18mm 16mm}
+@media print{
+  body{background:#fff;color:#111}
+  main{max-width:none;padding:0}
+  article.item,.card,.stat,figure,table,blockquote,pre{break-inside:avoid}
+  .timeline .t-item{break-inside:avoid}
+  h1,h2,h3,h4{break-after:avoid}
+  h1,h2,h3,h4,p,li,th,td,figcaption{color:#111}
+  a{color:#111;text-decoration:underline}
+  th{background:#f3f4f6;color:#111}
+  .card,.stat,figure{background:#fff;border-color:#d1d5db}
+  img,svg{max-width:100%}
+  footer.composition-signal{color:#6b7280}
+}
+</style>
+</head>
+<body>
+<main>
 
-      <h2 id="section-one">Section one</h2>
-      <p>
-        Prose with <strong>bold</strong>, <em>em</em>, <code>code</code>, and a
-        <a href="#section-one">link</a>.
-      </p>
-      <ul>
-        <li>item one</li>
-        <li>item two</li>
-      </ul>
-      <table class="data">
-        <thead>
-          <tr>
-            <th>A</th>
-            <th>B</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>1</td>
-            <td>2</td>
-          </tr>
-        </tbody>
-      </table>
-      <div class="stats">
-        <div class="stat">
-          <div class="n">42</div>
-          <div class="l">things</div>
-        </div>
-        <div class="stat">
-          <div class="n">+18%</div>
-          <div class="l">delta</div>
-        </div>
-      </div>
-      <div class="cards">
-        <div class="card">
-          <div class="q">Ship it?</div>
-          <div class="a"><span class="pill acc">Yes</span></div>
-          <p>All gates green</p>
-        </div>
-      </div>
-      <div class="tw-directive-slot">
-        <figure>
-          <svg
-            viewBox="0 0 720 250"
-            role="img"
-            aria-label="Column chart: Quarterly momentum"
-          >
-            <text
-              x="12"
-              y="18"
-              font-size="12"
-              font-weight="600"
-              fill="var(--ink)"
-            >
-              Quarterly momentum
-            </text>
-            <g stroke="var(--line)" stroke-width="1">
-              <line x1="48" y1="179" x2="708" y2="179" />
-              <line x1="48" y1="138" x2="708" y2="138" />
-              <line x1="48" y1="97" x2="708" y2="97" />
-              <line x1="48" y1="56" x2="708" y2="56" />
-            </g>
-            <g font-size="10" fill="var(--muted)" text-anchor="end">
-              <text x="42" y="223">0</text>
-              <text x="42" y="182">5</text>
-              <text x="42" y="141">10</text>
-              <text x="42" y="100">15</text>
-              <text x="42" y="59">20</text>
-            </g>
-            <line
-              x1="48"
-              y1="220"
-              x2="708"
-              y2="220"
-              stroke="var(--muted)"
-              stroke-width="1"
-            />
-            <g fill="var(--accent)">
-              <path d="M201,220 v-110.8 q0,-4 4,-4 h16 q4,0 4,4 v110.8 z" />
-              <path d="M531,220 v-143.6 q0,-4 4,-4 h16 q4,0 4,4 v143.6 z" />
-            </g>
-            <text
-              x="543"
-              y="64.4"
-              font-size="11"
-              font-weight="600"
-              fill="var(--ink)"
-              text-anchor="middle"
-            >
-              18
-            </text>
-            <g font-size="10.5" fill="var(--muted)" text-anchor="middle">
-              <text x="213" y="238">M1</text>
-              <text x="543" y="238">M2</text>
-            </g>
-          </svg>
-          <figcaption>Pace accelerated.</figcaption>
-        </figure>
-        <details>
-          <summary>Chart data</summary>
-          <table>
-            <tr>
-              <th>Label</th>
-              <th>Quarterly momentum</th>
-            </tr>
-            <tr>
-              <td>M1</td>
-              <td>14</td>
-            </tr>
-            <tr>
-              <td>M2</td>
-              <td>18</td>
-            </tr>
-          </table>
-        </details>
-      </div>
-      <blockquote>
-        <p>Closing quote.</p>
-      </blockquote>
+<div class="eyebrow">DECISION BRIEF</div>
+<h1 id="doc-title">Golden brief</h1>
+<p class="meta"><strong>date</strong> Q3 2026 &nbsp;·&nbsp; Golden parity fixture</p>
+<p class="meta">Abstract for brief.</p>
 
-      <footer class="composition-signal">
-        Composed by the ThinkWork document compositor · brief · Q3 2026
-      </footer>
-    </main>
-  </body>
+<h2 id="section-one">Section one</h2>
+<p>Prose with <strong>bold</strong>, <em>em</em>, <code>code</code>, and a <a href="#section-one">link</a>.</p>
+<ul>
+<li>item one</li>
+<li>item two</li>
+</ul>
+<table class="data"><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>
+<div class="stats"><div class="stat"><div class="n">42</div><div class="l">things</div></div><div class="stat"><div class="n">+18%</div><div class="l">delta</div></div></div>
+<div class="cards"><div class="card"><div class="q">Ship it?</div><div class="a"><span class="pill acc">Yes</span></div><p>All gates green</p></div></div>
+<div class="tw-directive-slot"><figure><svg viewBox="0 0 720 250" role="img" aria-label="Column chart: Quarterly momentum"><text x="12" y="18" font-size="12" font-weight="600" fill="var(--ink)">Quarterly momentum</text><g stroke="var(--line)" stroke-width="1"><line x1="48" y1="179" x2="708" y2="179"/><line x1="48" y1="138" x2="708" y2="138"/><line x1="48" y1="97" x2="708" y2="97"/><line x1="48" y1="56" x2="708" y2="56"/></g><g font-size="10" fill="var(--muted)" text-anchor="end"><text x="42" y="223">0</text><text x="42" y="182">5</text><text x="42" y="141">10</text><text x="42" y="100">15</text><text x="42" y="59">20</text></g><line x1="48" y1="220" x2="708" y2="220" stroke="var(--muted)" stroke-width="1"/><g fill="var(--accent)"><path d="M201,220 v-110.8 q0,-4 4,-4 h16 q4,0 4,4 v110.8 z"/><path d="M531,220 v-143.6 q0,-4 4,-4 h16 q4,0 4,4 v143.6 z"/></g><text x="543" y="64.4" font-size="11" font-weight="600" fill="var(--ink)" text-anchor="middle">18</text><g font-size="10.5" fill="var(--muted)" text-anchor="middle"><text x="213" y="238">M1</text><text x="543" y="238">M2</text></g></svg><figcaption>Pace accelerated.</figcaption></figure><details><summary>Chart data</summary><table><tr><th>Label</th><th>Quarterly momentum</th></tr><tr><td>M1</td><td>14</td></tr><tr><td>M2</td><td>18</td></tr></table></details></div>
+<blockquote>
+<p>Closing quote.</p>
+</blockquote>
+
+<footer class="composition-signal">Composed by the ThinkWork document compositor · brief · Q3 2026</footer>
+</main>
+</body>
 </html>

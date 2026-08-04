@@ -24,12 +24,9 @@ export async function setThreadNotificationPreference(
 ) {
   const preference = args.preference.toLowerCase();
   if (!ALLOWED_PREFERENCES.has(preference)) {
-    throw new GraphQLError(
-      `Unknown notification preference: ${args.preference}`,
-      {
-        extensions: { code: "BAD_USER_INPUT" },
-      },
-    );
+    throw new GraphQLError(`Unknown notification preference: ${args.preference}`, {
+      extensions: { code: "BAD_USER_INPUT" },
+    });
   }
 
   const caller = await requireThreadPinCaller(ctx, args.tenantId);

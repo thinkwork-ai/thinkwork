@@ -24,9 +24,8 @@ export async function resolveCallerFromAuth(
   if (auth.authType !== "cognito") {
     return { userId: null, tenantId: null };
   }
-  const { admitCognitoTenant, AuthAdmissionError } = await import(
-    "../../../lib/auth-admission.js"
-  );
+  const { admitCognitoTenant, AuthAdmissionError } =
+    await import("../../../lib/auth-admission.js");
   try {
     const admitted = await admitCognitoTenant(auth, requestedTenantId);
     return { userId: admitted.userId, tenantId: admitted.tenantId };

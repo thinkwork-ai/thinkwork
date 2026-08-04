@@ -74,9 +74,7 @@ export async function loadTenantMentionTargets(
   return repository.loadTenantTargets(input);
 }
 
-class DrizzleThreadMentionTargetsRepository
-  implements ThreadMentionTargetsRepository
-{
+class DrizzleThreadMentionTargetsRepository implements ThreadMentionTargetsRepository {
   private readonly db = getDb();
 
   async loadThread(input: { tenantId: string; threadId: string }) {

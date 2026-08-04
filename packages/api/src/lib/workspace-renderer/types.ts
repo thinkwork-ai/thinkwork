@@ -132,12 +132,7 @@ export interface WorkspaceCanvasIndexEntry {
 export type WorkspaceRenderCacheStatus = "hit" | "miss";
 
 export type WorkspaceHydrateOwner =
-  | "agent"
-  | "space"
-  | "user"
-  | "thread_notes"
-  | "thread_goal"
-  | "system";
+  "agent" | "space" | "user" | "thread_notes" | "thread_goal" | "system";
 
 export interface WorkspaceHydrateSource {
   owner: Exclude<WorkspaceHydrateOwner, "system">;

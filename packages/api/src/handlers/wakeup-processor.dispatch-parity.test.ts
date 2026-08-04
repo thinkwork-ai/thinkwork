@@ -602,9 +602,7 @@ describe("platform-tool capability source parity", () => {
     const wakeupSource = handlerSource("wakeup-processor.ts");
     for (const column of CAPABILITY_COLUMNS) {
       expect(wakeupSource).toContain(`${column}: agents.${column},`);
-      expect(wakeupSource).not.toContain(
-        `${column}: agentTemplates.${column},`,
-      );
+      expect(wakeupSource).not.toContain(`${column}: agentTemplates.${column},`);
     }
   });
 

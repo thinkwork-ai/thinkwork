@@ -223,9 +223,8 @@ export async function attachServerToPlatformDefaultAgents(input: {
   }
   if (agentIds.length === 0) return;
   try {
-    const { materializeMcpAssignmentFoldersForAgents } = await import(
-      "../mcp/assignment-state.js"
-    );
+    const { materializeMcpAssignmentFoldersForAgents } =
+      await import("../mcp/assignment-state.js");
     await materializeMcpAssignmentFoldersForAgents({
       agentIds,
       tenantId: input.tenantId,
@@ -282,5 +281,5 @@ export async function removeConnectionFoldersForAgents(input: {
     }
   }
   if (input.tenantId) {
-  }
+    }
 }

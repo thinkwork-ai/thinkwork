@@ -39,8 +39,7 @@ export interface StartInterpreterRunInput {
 }
 
 export type StartInterpreterRunResult =
-  | { ok: true; runId: string; created: boolean }
-  | { ok: false; reason: string };
+  { ok: true; runId: string; created: boolean } | { ok: false; reason: string };
 
 export async function startInterpreterRun(
   input: StartInterpreterRunInput,

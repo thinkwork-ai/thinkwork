@@ -90,8 +90,7 @@ function parsePermissions(raw: unknown): ParsedPermissions {
 }
 
 export type PermissionsValidationResult =
-  | { ok: true }
-  | { ok: false; error: string };
+  { ok: true } | { ok: false; error: string };
 
 /**
  * Enforces `agent.ops ⊆ template.ops ⊆ manifest.ops` at resolver

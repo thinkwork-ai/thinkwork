@@ -266,9 +266,8 @@ function platformAgentFolderWriter(): AdmissionFolderWriter {
       }
       // Dynamic import keeps the S3 client out of partially-mocked suites
       // (the capabilityAssignment convention).
-      const { putCapabilityFolder } = await import(
-        "../../../lib/capabilities/folder-write.js"
-      );
+      const { putCapabilityFolder } =
+        await import("../../../lib/capabilities/folder-write.js");
       return putCapabilityFolder({
         targetPrefix,
         klass: input.klass,

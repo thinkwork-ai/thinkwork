@@ -454,12 +454,12 @@ export async function discoverCognitoTenantAdmissions(
       const policy = policyByTenant.get(membership.tenantId);
       return Boolean(
         policy &&
-          policy.status === "active" &&
-          tenantPolicyAllowsConnection(
-            auth.route!,
-            policy,
-            referencesByTenant.get(membership.tenantId) ?? [],
-          ),
+        policy.status === "active" &&
+        tenantPolicyAllowsConnection(
+          auth.route!,
+          policy,
+          referencesByTenant.get(membership.tenantId) ?? [],
+        ),
       );
     })
     .map(({ tenantId, role }) => ({ tenantId, role }));

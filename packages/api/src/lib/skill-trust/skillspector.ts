@@ -121,9 +121,8 @@ async function runSkillSpectorWithRunner(
   input: { slug: string; files: SkillTrustInputFile[] },
 ): Promise<SkillSpectorRunResult> {
   try {
-    const { InvokeCommand, LambdaClient } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { InvokeCommand, LambdaClient } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({ region: resolveAwsRegion() });
     const response = await lambda.send(
       new InvokeCommand({

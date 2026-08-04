@@ -87,9 +87,8 @@ export const runScheduledJob = async (
     scheduleName: row.eb_schedule_name ?? undefined,
   };
 
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   const res = await lambda.send(
     new InvokeCommand({

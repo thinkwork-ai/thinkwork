@@ -87,7 +87,7 @@ describe("Microsoft Teams tenant install store", () => {
         botAppId: "bot-app-1",
         installedByUserId: "user-1",
       },
-      db as any,
+      db as any
     );
 
     expect(insertValues).toHaveBeenCalledWith(
@@ -98,7 +98,7 @@ describe("Microsoft Teams tenant install store", () => {
         installed_by_user_id: "user-1",
         status: "pending",
         consent_status: "pending",
-      }),
+      })
     );
     expect(row).toMatchObject({ id: "install-1", status: "pending" });
   });
@@ -117,7 +117,7 @@ describe("Microsoft Teams tenant install store", () => {
         entraTenantId: "entra-1",
         botAppId: "bot-app-2",
       },
-      db as any,
+      db as any
     );
 
     expect(row).toMatchObject({ id: "install-1", tenant_id: "tenant-1" });
@@ -135,8 +135,8 @@ describe("Microsoft Teams tenant install store", () => {
           entraTenantId: "entra-1",
           botAppId: "bot-app-1",
         },
-        db as any,
-      ),
+        db as any
+      )
     ).rejects.toBeInstanceOf(MsteamsTenantConflictError);
 
     expect(insertValues).not.toHaveBeenCalled();
@@ -155,8 +155,8 @@ describe("Microsoft Teams tenant install store", () => {
           entraTenantId: "entra-1",
           botAppId: "bot-app-1",
         },
-        db as any,
-      ),
+        db as any
+      )
     ).rejects.toBeInstanceOf(MsteamsTenantConflictError);
   });
 
@@ -169,7 +169,7 @@ describe("Microsoft Teams tenant install store", () => {
 
     const row = await activateTenantInstall(
       { entraTenantId: "entra-1", consentStatus: "granted" },
-      db as any,
+      db as any
     );
 
     expect(updateSet).toHaveBeenCalledWith(
@@ -177,7 +177,7 @@ describe("Microsoft Teams tenant install store", () => {
         status: "active",
         consent_status: "granted",
         uninstalled_at: null,
-      }),
+      })
     );
     expect((updateSet.mock.calls[0]?.[0] as any).installed_at).toBeDefined();
     expect(row).toMatchObject({ id: "install-1", status: "active" });
@@ -203,12 +203,12 @@ describe("Microsoft Teams tenant install store", () => {
 
     const row = await activateTenantInstall(
       { entraTenantId: "entra-1", consentStatus: "granted" },
-      db as any,
+      db as any
     );
 
     expect(row).toMatchObject({ status: "active", uninstalled_at: null });
     expect(renderWhere(updateWhere.mock.calls[0]?.[0]).sql).toContain(
-      "IN ('pending', 'uninstalled')",
+      "IN ('pending', 'uninstalled')"
     );
   });
 
@@ -220,8 +220,8 @@ describe("Microsoft Teams tenant install store", () => {
     await expect(
       activateTenantInstall(
         { entraTenantId: "entra-revoked", consentStatus: "granted" },
-        db as any,
-      ),
+        db as any
+      )
     ).resolves.toBeNull();
 
     const where = renderWhere(updateWhere.mock.calls[0]?.[0]);
@@ -235,12 +235,12 @@ describe("Microsoft Teams tenant install store", () => {
     await expect(
       activateTenantInstall(
         { entraTenantId: "entra-active", consentStatus: "granted" },
-        db as any,
-      ),
+        db as any
+      )
     ).resolves.toBeNull();
 
     expect(renderWhere(updateWhere.mock.calls[0]?.[0]).sql).not.toContain(
-      "'active'",
+      "'active'"
     );
   });
 
@@ -251,11 +251,11 @@ describe("Microsoft Teams tenant install store", () => {
 
     const row = await markConsent(
       { entraTenantId: "entra-1", consentStatus: "admin_required" },
-      db as any,
+      db as any
     );
 
     expect(updateSet).toHaveBeenCalledWith(
-      expect.objectContaining({ consent_status: "admin_required" }),
+      expect.objectContaining({ consent_status: "admin_required" })
     );
     expect((updateSet.mock.calls[0]?.[0] as any).status).toBeUndefined();
     expect(row).toMatchObject({ consent_status: "admin_required" });
@@ -263,7 +263,7 @@ describe("Microsoft Teams tenant install store", () => {
     // ACTIVE installs are excluded in SQL: a forged consent-error callback
     // can never downgrade the consent surface of a working binding.
     expect(renderWhere(updateWhere.mock.calls[0]?.[0]).sql).toContain(
-      "<> 'active'",
+      "<> 'active'"
     );
   });
 
@@ -275,12 +275,12 @@ describe("Microsoft Teams tenant install store", () => {
     await expect(
       markConsent(
         { entraTenantId: "entra-active", consentStatus: "admin_required" },
-        db as any,
-      ),
+        db as any
+      )
     ).resolves.toBeNull();
 
     expect(renderWhere(updateWhere.mock.calls[0]?.[0]).sql).toContain(
-      "<> 'active'",
+      "<> 'active'"
     );
   });
 
@@ -298,7 +298,7 @@ describe("Microsoft Teams tenant install store", () => {
         status: "pending",
         consent_status: "pending",
         uninstalled_at: null,
-      }),
+      })
     );
     expect(row).toMatchObject({ id: "install-1", status: "pending" });
 
@@ -312,7 +312,7 @@ describe("Microsoft Teams tenant install store", () => {
     const { db } = fakeDb({ updateReturning: [] });
 
     await expect(
-      reopenRevokedInstall({ tenantId: "tenant-1" }, db as any),
+      reopenRevokedInstall({ tenantId: "tenant-1" }, db as any)
     ).resolves.toBeNull();
   });
 
@@ -323,11 +323,11 @@ describe("Microsoft Teams tenant install store", () => {
 
     const row = await revokeTenantInstall(
       { entraTenantId: "entra-1" },
-      db as any,
+      db as any
     );
 
     expect(updateSet).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "revoked" }),
+      expect.objectContaining({ status: "revoked" })
     );
     expect((updateSet.mock.calls[0]?.[0] as any).uninstalled_at).toBeDefined();
     expect(row).toMatchObject({ status: "revoked" });
@@ -337,7 +337,7 @@ describe("Microsoft Teams tenant install store", () => {
     const { db } = fakeDb({ updateReturning: [] });
 
     await expect(
-      revokeTenantInstall({ entraTenantId: "entra-missing" }, db as any),
+      revokeTenantInstall({ entraTenantId: "entra-missing" }, db as any)
     ).resolves.toBeNull();
   });
 
@@ -346,12 +346,12 @@ describe("Microsoft Teams tenant install store", () => {
       selectRows: [{ id: "install-1", status: "active" }],
     });
     await expect(
-      findActiveTenantInstall({ entraTenantId: "entra-1" }, active.db as any),
+      findActiveTenantInstall({ entraTenantId: "entra-1" }, active.db as any)
     ).resolves.toMatchObject({ id: "install-1", status: "active" });
 
     const missing = fakeDb({ selectRows: [] });
     await expect(
-      findActiveTenantInstall({ entraTenantId: "entra-1" }, missing.db as any),
+      findActiveTenantInstall({ entraTenantId: "entra-1" }, missing.db as any)
     ).resolves.toBeNull();
   });
 
@@ -363,7 +363,7 @@ describe("Microsoft Teams tenant install store", () => {
     });
 
     await expect(
-      getTenantInstallStatus({ tenantId: "tenant-1" }, db as any),
+      getTenantInstallStatus({ tenantId: "tenant-1" }, db as any)
     ).resolves.toEqual([
       { id: "install-1", tenant_id: "tenant-1", status: "active" },
     ]);

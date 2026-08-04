@@ -73,8 +73,8 @@ export const threadTurns_ = async (
   // request_id is `${turnId}:tool:${toolCallId}:model`.
   const requestIds = [
     ...new Set(
-      rows.flatMap(
-        (r) => [r.id, r.wakeup_request_id].filter(Boolean) as string[],
+      rows.flatMap((r) =>
+        [r.id, r.wakeup_request_id].filter(Boolean) as string[],
       ),
     ),
   ];
@@ -110,7 +110,10 @@ export const threadTurns_ = async (
         .where(
           and(
             eq(costEvents.tenant_id, args.tenantId),
-            inArray(sql`${costEvents.metadata}->>'parent_request_id'`, turnIds),
+            inArray(
+              sql`${costEvents.metadata}->>'parent_request_id'`,
+              turnIds,
+            ),
           ),
         )
         .groupBy(sql`${costEvents.metadata}->>'parent_request_id'`);
@@ -125,7 +128,9 @@ export const threadTurns_ = async (
 
   return rows.map((r) => {
     const directRequestIds = [
-      ...new Set([r.id, r.wakeup_request_id].filter(Boolean) as string[]),
+      ...new Set(
+        [r.id, r.wakeup_request_id].filter(Boolean) as string[],
+      ),
     ];
     const directCost = directRequestIds.reduce(
       (sum, requestId) => sum + (directCostByRequestId.get(requestId) ?? 0),

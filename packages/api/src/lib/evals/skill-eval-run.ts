@@ -100,9 +100,8 @@ async function invokeEvalRunnerAsync(runId: string): Promise<void> {
   if (!fnName) {
     throw new Error("EVAL_RUNNER_FN not configured");
   }
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({});
   await lambda.send(
     new InvokeCommand({

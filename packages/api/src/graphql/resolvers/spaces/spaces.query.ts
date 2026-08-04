@@ -152,10 +152,7 @@ function visibleSpaceListPredicate() {
   )`;
 }
 
-function assignedWorkItemSpacePredicate(
-  tenantId: string,
-  callerUserId: string,
-) {
+function assignedWorkItemSpacePredicate(tenantId: string, callerUserId: string) {
   return sql`EXISTS (
     SELECT 1
       FROM ${workItems} assigned_wi

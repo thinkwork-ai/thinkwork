@@ -38,9 +38,7 @@ function userSlug(user: { email: string | null; name: string | null }): string {
     .slice(0, 80);
 }
 
-export class DrizzleWorkspaceTupleRepository
-  implements WorkspaceTupleRepository
-{
+export class DrizzleWorkspaceTupleRepository implements WorkspaceTupleRepository {
   private readonly db = getDb();
 
   async resolve(

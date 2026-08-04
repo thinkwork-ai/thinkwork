@@ -91,7 +91,7 @@ async function loadHandler() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.useRealTimers();
+  process.env.DISPATCH_CONFLICT_RETRY_DELAYS_MS = "1,1,1,1";
   process.env.AGENTCORE_PI_RUNTIME_SSM_NAME =
     "/thinkwork/test/agentcore/runtime-id-pi";
   process.env.AWS_ACCOUNT_ID = "111111111111";
@@ -127,32 +127,22 @@ describe("agentcore-runtime-dispatch", () => {
   });
 
   it("retries a 409 conflict and succeeds", async () => {
-    vi.useFakeTimers();
     invokeSend
       .mockRejectedValueOnce(new RetryableConflictException("busy"))
       .mockResolvedValueOnce({
         response: { transformToByteArray: async () => new Uint8Array() },
       });
     const { handler } = await loadHandler();
-    const done = handler(envelope());
-    for (let i = 0; i < 8; i += 1) {
-      await vi.advanceTimersByTimeAsync(8_000);
-    }
-    await done;
+    await handler(envelope());
 
     expect(invokeSend).toHaveBeenCalledTimes(2);
     expect(turnUpdateWhere).not.toHaveBeenCalled();
   });
 
   it("fails the turn cleanly after 409 exhaustion", async () => {
-    vi.useFakeTimers();
     invokeSend.mockRejectedValue(new RetryableConflictException("busy"));
     const { handler } = await loadHandler();
-    const done = handler(envelope());
-    for (let i = 0; i < 12; i += 1) {
-      await vi.advanceTimersByTimeAsync(8_000);
-    }
-    await done;
+    await handler(envelope());
 
     expect(invokeSend).toHaveBeenCalledTimes(5);
     expect(turnUpdateWhere).toHaveBeenCalledTimes(1);

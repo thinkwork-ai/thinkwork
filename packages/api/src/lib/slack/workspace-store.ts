@@ -30,7 +30,7 @@ function getClient(): SecretsManagerClient {
 
 export function slackBotTokenSecretPath(
   tenantId: string,
-  slackTeamId: string,
+  slackTeamId: string
 ): string {
   return `thinkwork/tenants/${tenantId}/slack/workspaces/${slackTeamId}/bot-token`;
 }
@@ -65,18 +65,18 @@ export async function getSlackBotToken(secretPath: string): Promise<string> {
   }
 
   const res = await getClient().send(
-    new GetSecretValueCommand({ SecretId: secretPath }),
+    new GetSecretValueCommand({ SecretId: secretPath })
   );
   if (!res.SecretString) {
     throw new Error(
-      `Secrets Manager returned empty SecretString for ${secretPath} - reinstall or repair the Slack workspace.`,
+      `Secrets Manager returned empty SecretString for ${secretPath} - reinstall or repair the Slack workspace.`
     );
   }
 
   const token = parseBotTokenSecret(res.SecretString);
   if (!token) {
     throw new Error(
-      `Slack bot token secret at ${secretPath} is missing bot_token.`,
+      `Slack bot token secret at ${secretPath} is missing bot_token.`
     );
   }
 
@@ -86,7 +86,7 @@ export async function getSlackBotToken(secretPath: string): Promise<string> {
 
 export async function putSlackBotToken(
   secretPath: string,
-  botToken: string,
+  botToken: string
 ): Promise<string> {
   if (!secretPath) throw new Error("Slack bot token secret path is required.");
   if (!botToken.trim()) throw new Error("Slack bot token is required.");
@@ -98,7 +98,7 @@ export async function putSlackBotToken(
       new CreateSecretCommand({
         Name: secretPath,
         SecretString: secretString,
-      }),
+      })
     );
     botTokenCache.set(secretPath, botToken);
     return created.ARN || secretPath;
@@ -108,7 +108,7 @@ export async function putSlackBotToken(
       new UpdateSecretCommand({
         SecretId: secretPath,
         SecretString: secretString,
-      }),
+      })
     );
     botTokenCache.set(secretPath, botToken);
     return secretPath;
@@ -122,7 +122,7 @@ export async function deleteSlackBotToken(secretPath: string): Promise<void> {
     new DeleteSecretCommand({
       SecretId: secretPath,
       RecoveryWindowInDays: 7,
-    }),
+    })
   );
 }
 

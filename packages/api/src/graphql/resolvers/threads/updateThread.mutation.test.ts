@@ -339,6 +339,7 @@ describe("updateThread participant-scoped read state", () => {
       threadId: "thread-1",
     });
   });
+
 });
 
 describe("updateThread Thread Mode override (plan 2026-07-03-003 U3)", () => {

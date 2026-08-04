@@ -72,7 +72,7 @@ describe("Microsoft Teams user link store", () => {
         userId: "user-1",
         displayName: "Eric",
       },
-      db as any,
+      db as any
     );
 
     expect(insertValues).toHaveBeenCalledWith(
@@ -84,7 +84,7 @@ describe("Microsoft Teams user link store", () => {
         display_name: "Eric",
         status: "active",
         unlinked_at: null,
-      }),
+      })
     );
     expect(row).toMatchObject({ id: "link-1", status: "active" });
   });
@@ -105,7 +105,7 @@ describe("Microsoft Teams user link store", () => {
         aadObjectId: "aad-1",
         userId: "user-1",
       },
-      db as any,
+      db as any
     );
 
     expect(insertValues).toHaveBeenCalled();
@@ -128,7 +128,7 @@ describe("Microsoft Teams user link store", () => {
         aadObjectId: "aad-1",
         userId: "user-1",
       },
-      db as any,
+      db as any
     );
 
     expect(row).toMatchObject({ user_id: "user-1", status: "active" });
@@ -150,8 +150,8 @@ describe("Microsoft Teams user link store", () => {
           aadObjectId: "aad-1",
           userId: "user-1",
         },
-        db as any,
-      ),
+        db as any
+      )
     ).rejects.toBeInstanceOf(MsteamsLinkConflictError);
     expect(insertValues).not.toHaveBeenCalled();
   });
@@ -173,8 +173,8 @@ describe("Microsoft Teams user link store", () => {
           aadObjectId: "aad-1",
           userId: "user-1",
         },
-        db as any,
-      ),
+        db as any
+      )
     ).rejects.toBeInstanceOf(MsteamsLinkConflictError);
     expect(insertValues).toHaveBeenCalled();
   });
@@ -190,8 +190,8 @@ describe("Microsoft Teams user link store", () => {
           aadObjectId: "aad-1",
           userId: "user-1",
         },
-        db as any,
-      ),
+        db as any
+      )
     ).rejects.toThrow(/not installed/);
   });
 
@@ -208,8 +208,8 @@ describe("Microsoft Teams user link store", () => {
           aadObjectId: "aad-1",
           userId: "user-1",
         },
-        db as any,
-      ),
+        db as any
+      )
     ).rejects.toThrow(/different ThinkWork tenant/);
     expect(insertValues).not.toHaveBeenCalled();
   });
@@ -227,8 +227,8 @@ describe("Microsoft Teams user link store", () => {
           aadObjectId: "aad-1",
           userId: "user-1",
         },
-        db as any,
-      ),
+        db as any
+      )
     ).rejects.toThrow(/not active/);
   });
 
@@ -239,16 +239,16 @@ describe("Microsoft Teams user link store", () => {
     await expect(
       findActiveUserLink(
         { entraTenantId: "entra-1", aadObjectId: "aad-1" },
-        active.db as any,
-      ),
+        active.db as any
+      )
     ).resolves.toMatchObject({ id: "link-1", status: "active" });
 
     const missing = fakeDb({ selectResults: [[]] });
     await expect(
       findActiveUserLink(
         { entraTenantId: "entra-1", aadObjectId: "aad-1" },
-        missing.db as any,
-      ),
+        missing.db as any
+      )
     ).resolves.toBeNull();
   });
 
@@ -259,11 +259,11 @@ describe("Microsoft Teams user link store", () => {
 
     const row = await unlinkUser(
       { entraTenantId: "entra-1", aadObjectId: "aad-1" },
-      db as any,
+      db as any
     );
 
     expect(updateSet).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "unlinked" }),
+      expect.objectContaining({ status: "unlinked" })
     );
     expect((updateSet.mock.calls[0]?.[0] as any).unlinked_at).toBeDefined();
     expect(row).toMatchObject({ id: "link-1", status: "unlinked" });
@@ -275,8 +275,8 @@ describe("Microsoft Teams user link store", () => {
     await expect(
       unlinkUser(
         { entraTenantId: "entra-1", aadObjectId: "aad-missing" },
-        db as any,
-      ),
+        db as any
+      )
     ).resolves.toBeNull();
   });
 });

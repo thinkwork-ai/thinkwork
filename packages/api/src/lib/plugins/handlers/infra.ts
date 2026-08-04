@@ -354,9 +354,9 @@ function desiredConfigForPlanJob(args: {
 function hasResolvedRelease(app: InfraManagedApplicationSnapshot): boolean {
   return Boolean(
     app.selectedReleaseVersion &&
-      app.selectedReleaseVersion !== "unresolved" &&
-      app.selectedManifestDigest &&
-      app.selectedManifestDigest !== "unresolved",
+    app.selectedReleaseVersion !== "unresolved" &&
+    app.selectedManifestDigest &&
+    app.selectedManifestDigest !== "unresolved",
   );
 }
 

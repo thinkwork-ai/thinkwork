@@ -24,11 +24,7 @@ const {
     mockResolveCallerUserId: vi.fn(),
     mockResolveWorkItemTenant: vi.fn(),
     tables: {
-      spaceMembers: table("space_members", [
-        "tenant_id",
-        "space_id",
-        "user_id",
-      ]),
+      spaceMembers: table("space_members", ["tenant_id", "space_id", "user_id"]),
       spaces: table("spaces", ["id", "tenant_id", "status", "access_mode"]),
       workItemComments: table("work_item_comments", [
         "tenant_id",

@@ -255,8 +255,8 @@ export async function pluginCatalog(
       launchUrl: await pluginLaunchUrlForInstall(tenantId, installPayload),
       updateAvailable: Boolean(
         install &&
-          latestVersion &&
-          compareSemverDesc(latestVersion, install.pinned_version) < 0,
+        latestVersion &&
+        compareSemverDesc(latestVersion, install.pinned_version) < 0,
       ),
     });
   }

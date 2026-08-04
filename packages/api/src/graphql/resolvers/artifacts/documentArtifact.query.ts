@@ -9,7 +9,15 @@
  */
 
 import type { GraphQLContext } from "../../context.js";
-import { and, artifacts, db, desc, eq, inArray, sql } from "../../utils.js";
+import {
+  and,
+  artifacts,
+  db,
+  desc,
+  eq,
+  inArray,
+  sql,
+} from "../../utils.js";
 import { requireTenantMember } from "../core/authz.js";
 import { assertCanvasAccess } from "../../../lib/artifacts/canvas-access.js";
 import { DOCUMENT_METADATA_KIND } from "../../../lib/artifacts/document-emission.js";

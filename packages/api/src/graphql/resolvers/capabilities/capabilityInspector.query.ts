@@ -694,7 +694,7 @@ export async function capabilityInspector(
         !blocked &&
         Boolean(
           effectivePolicy?.mcpAllowedServers &&
-            !effectivePolicy.mcpAllowedServers.includes(server.name),
+          !effectivePolicy.mcpAllowedServers.includes(server.name),
         );
       push({
         capabilityClass: "mcp_server",

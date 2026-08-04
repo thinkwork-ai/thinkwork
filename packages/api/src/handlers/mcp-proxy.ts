@@ -202,9 +202,8 @@ export async function handler(
         );
         return error("Failed to resolve MCP servers", 502);
       }
-      const { renderWorkspaceTuple } = await import(
-        "../lib/workspace-renderer/compose-tuple.js"
-      );
+      const { renderWorkspaceTuple } =
+        await import("../lib/workspace-renderer/compose-tuple.js");
       const rendered = await renderWorkspaceTuple(
         {
           tenantId,

@@ -154,9 +154,7 @@ export function buildAgentMentionWakeups(
     }));
 }
 
-class DrizzleAgentMentionDispatchRepository
-  implements AgentMentionDispatchRepository
-{
+class DrizzleAgentMentionDispatchRepository implements AgentMentionDispatchRepository {
   private readonly db = getDb();
 
   async findExistingWakeup(input: {

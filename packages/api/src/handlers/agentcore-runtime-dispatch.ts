@@ -82,8 +82,14 @@ async function resolvePiRuntimeArn(): Promise<string> {
   return `arn:aws:bedrock-agentcore:${AWS_REGION}:${accountId}:runtime/${cachedRuntimeId}`;
 }
 
-/** 409 backoff schedule — bounded (KTD2: never an unbounded retry). */
-const CONFLICT_RETRY_DELAYS_MS = [2_000, 4_000, 8_000, 16_000];
+/** 409 backoff schedule — bounded (KTD2: never an unbounded retry).
+ * Env-overridable (comma list, ms) so tests use real timers with tiny
+ * delays instead of fake-timer scheduling, which proved CI-flaky. */
+const CONFLICT_RETRY_DELAYS_MS = (
+  process.env.DISPATCH_CONFLICT_RETRY_DELAYS_MS ?? "2000,4000,8000,16000"
+)
+  .split(",")
+  .map((value) => Number(value));
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

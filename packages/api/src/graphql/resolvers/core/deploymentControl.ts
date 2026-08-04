@@ -1,8 +1,5 @@
 import { getConfig } from "@thinkwork/runtime-config";
-import {
-  GetSecretValueCommand,
-  SecretsManagerClient,
-} from "@aws-sdk/client-secrets-manager";
+import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager";
 import { GraphQLError } from "graphql";
 import type { GraphQLContext } from "../../context.js";
 
@@ -16,7 +13,8 @@ export function deploymentControlConfig() {
       `thinkwork/${stage}/github/deploy-token`,
     repository:
       process.env.DEPLOY_CONTROL_REPOSITORY || "thinkwork-ai/thinkwork",
-    workflowFile: process.env.DEPLOY_CONTROL_WORKFLOW_FILE || "deploy.yml",
+    workflowFile:
+      process.env.DEPLOY_CONTROL_WORKFLOW_FILE || "deploy.yml",
     ref: process.env.DEPLOY_CONTROL_REF || "main",
   };
 }

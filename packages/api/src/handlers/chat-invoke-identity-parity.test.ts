@@ -139,9 +139,7 @@ describe("dispatch identity parity (direct invoke vs wakeup fallback) — R12", 
       sender: { type: "user", id: BOB },
     });
 
-    expect(directIdentity.currentUserId).toBe(
-      deriveWakeupInvokerUserId(wakeup),
-    );
+    expect(directIdentity.currentUserId).toBe(deriveWakeupInvokerUserId(wakeup));
   });
 
   it("(c) a resume/wakeup turn resolves identically to the first turn (not just first-turn)", async () => {

@@ -175,8 +175,7 @@ export async function loadPinnedThreads(
       last_read_at: sql<Date | null>`COALESCE(${threadParticipants.last_read_at}, ${threads.last_read_at})`,
       pinned_at: threadParticipants.pinned_at,
       pin_order: threadParticipants.pin_order,
-      viewer_notification_preference:
-        threadParticipants.notification_preference,
+      viewer_notification_preference: threadParticipants.notification_preference,
     })
     .from(threadParticipants)
     .innerJoin(

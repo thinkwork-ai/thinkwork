@@ -382,15 +382,15 @@ describe("handleJsonRenderAction", () => {
     expect(mocks.setWorkItemStatus).not.toHaveBeenCalled();
     expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
     const forwarded = mocks.sendMessage.mock.calls[0][1].input;
-    expect(
-      JSON.parse(forwarded.metadata).jsonRenderAction.mutation,
-    ).toMatchObject({
-      target: "work_item_status",
-      workItemId: WORK_ITEM_ID,
-      statusCategory: "DONE",
-      statusId: STATUS_DONE_ID,
-      alreadyApplied: true,
-    });
+    expect(JSON.parse(forwarded.metadata).jsonRenderAction.mutation).toMatchObject(
+      {
+        target: "work_item_status",
+        workItemId: WORK_ITEM_ID,
+        statusCategory: "DONE",
+        statusId: STATUS_DONE_ID,
+        alreadyApplied: true,
+      },
+    );
   });
 
   it("rejects stale action submissions with an old spec hash", async () => {

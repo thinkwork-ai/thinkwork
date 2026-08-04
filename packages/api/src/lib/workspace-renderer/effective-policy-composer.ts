@@ -5,10 +5,7 @@ export interface WorkspacePolicyInput {
 }
 
 export type WorkspaceModelRoutingSourceOwner =
-  | "agent"
-  | "space"
-  | "workspace"
-  | "user";
+  "agent" | "space" | "workspace" | "user";
 
 export interface WorkspaceModelRoutingRouteInput {
   tool: string;

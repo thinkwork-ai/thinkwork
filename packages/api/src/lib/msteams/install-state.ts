@@ -56,7 +56,7 @@ export function createMsteamsInstallState({
 export function verifyMsteamsInstallState(
   state: string,
   signingKey: string,
-  nowMs: () => number = Date.now,
+  nowMs: () => number = Date.now
 ): MsteamsInstallStatePayload {
   return verifySignedPayload(state, signingKey, {
     validate: isMsteamsInstallStatePayload,
@@ -118,7 +118,7 @@ export interface VerifyMsteamsAccountLinkTokenOptions {
 export function verifyMsteamsAccountLinkToken(
   token: string,
   signingKey: string,
-  options: VerifyMsteamsAccountLinkTokenOptions = {},
+  options: VerifyMsteamsAccountLinkTokenOptions = {}
 ): MsteamsAccountLinkTokenPayload {
   const parsed = verifySignedPayload(token, signingKey, {
     validate: isMsteamsAccountLinkTokenPayload,
@@ -131,7 +131,7 @@ export function verifyMsteamsAccountLinkToken(
     parsed.entraTenantId !== options.expectedEntraTenantId
   ) {
     throw new Error(
-      "Teams account-link token is bound to a different Entra tenant",
+      "Teams account-link token is bound to a different Entra tenant"
     );
   }
   if (
@@ -139,7 +139,7 @@ export function verifyMsteamsAccountLinkToken(
     parsed.aadObjectId !== options.expectedAadObjectId
   ) {
     throw new Error(
-      "Teams account-link token is bound to a different Teams user",
+      "Teams account-link token is bound to a different Teams user"
     );
   }
   return parsed;
@@ -193,7 +193,7 @@ export async function verifyMsteamsAdminConsent(input: {
     return { granted: false, reason: "invalid_tenant_id" };
   }
   const url = `https://login.microsoftonline.com/${encodeURIComponent(
-    input.entraTenantId,
+    input.entraTenantId
   )}/oauth2/v2.0/token`;
   let response: Response;
   try {
@@ -247,7 +247,7 @@ function msteamsAppCredentialsSecretId(): string {
 }
 
 function isMsteamsInstallStatePayload(
-  value: unknown,
+  value: unknown
 ): value is MsteamsInstallStatePayload {
   if (!value || typeof value !== "object") return false;
   const payload = value as Partial<MsteamsInstallStatePayload>;
@@ -264,7 +264,7 @@ function isMsteamsInstallStatePayload(
 }
 
 function isMsteamsAccountLinkTokenPayload(
-  value: unknown,
+  value: unknown
 ): value is MsteamsAccountLinkTokenPayload {
   if (!value || typeof value !== "object") return false;
   const payload = value as Partial<MsteamsAccountLinkTokenPayload>;

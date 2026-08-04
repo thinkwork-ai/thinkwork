@@ -4,10 +4,10 @@ Creates a PostgreSQL database for Thinkwork. Supports two engines selectable by 
 
 ## Engines
 
-| Engine                      | `database_engine` value | Best for                                         | Deletion protection | Typical deploy time |
-| --------------------------- | ----------------------- | ------------------------------------------------ | ------------------- | ------------------- |
-| **Aurora Serverless v2**    | `aurora-serverless`     | Production. Auto-scales 0.5–2 ACU by default.    | ON by default       | ~6 min              |
-| **Standard RDS PostgreSQL** | `rds-postgres`          | Dev/test. Single `db.t4g.micro` instance, 20 GB. | OFF by default      | ~5 min              |
+| Engine | `database_engine` value | Best for | Deletion protection | Typical deploy time |
+|--------|------------------------|----------|--------------------|--------------------|
+| **Aurora Serverless v2** | `aurora-serverless` | Production. Auto-scales 0.5–2 ACU by default. | ON by default | ~6 min |
+| **Standard RDS PostgreSQL** | `rds-postgres` | Dev/test. Single `db.t4g.micro` instance, 20 GB. | OFF by default | ~5 min |
 
 Both engines share the same output interface — downstream modules don't need to know which is running.
 
@@ -64,29 +64,29 @@ module "database" {
 
 ## Variables
 
-| Name                    | Type         | Default               | Description                              |
-| ----------------------- | ------------ | --------------------- | ---------------------------------------- |
-| `stage`                 | string       | —                     | Deployment stage (required)              |
-| `database_engine`       | string       | `"aurora-serverless"` | `aurora-serverless` or `rds-postgres`    |
-| `create_database`       | bool         | `true`                | Set `false` for BYO                      |
-| `vpc_id`                | string       | `""`                  | VPC ID (required when creating)          |
-| `subnet_ids`            | list(string) | `[]`                  | Subnet IDs (required when creating)      |
-| `db_password`           | string       | `""`                  | Master password (required when creating) |
-| `database_name`         | string       | `"thinkwork"`         | Database name                            |
-| `engine_version`        | string       | `"15.10"`             | PostgreSQL version                       |
-| `min_capacity`          | number       | `0.5`                 | Aurora min ACU (aurora-serverless only)  |
-| `max_capacity`          | number       | `2`                   | Aurora max ACU (aurora-serverless only)  |
-| `rds_instance_class`    | string       | `"db.t4g.micro"`      | RDS instance class (rds-postgres only)   |
-| `rds_allocated_storage` | number       | `20`                  | Storage in GB (rds-postgres only)        |
-| `deletion_protection`   | bool         | `null`                | Auto: `true` for Aurora, `false` for RDS |
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `stage` | string | — | Deployment stage (required) |
+| `database_engine` | string | `"aurora-serverless"` | `aurora-serverless` or `rds-postgres` |
+| `create_database` | bool | `true` | Set `false` for BYO |
+| `vpc_id` | string | `""` | VPC ID (required when creating) |
+| `subnet_ids` | list(string) | `[]` | Subnet IDs (required when creating) |
+| `db_password` | string | `""` | Master password (required when creating) |
+| `database_name` | string | `"thinkwork"` | Database name |
+| `engine_version` | string | `"15.10"` | PostgreSQL version |
+| `min_capacity` | number | `0.5` | Aurora min ACU (aurora-serverless only) |
+| `max_capacity` | number | `2` | Aurora max ACU (aurora-serverless only) |
+| `rds_instance_class` | string | `"db.t4g.micro"` | RDS instance class (rds-postgres only) |
+| `rds_allocated_storage` | number | `20` | Storage in GB (rds-postgres only) |
+| `deletion_protection` | bool | `null` | Auto: `true` for Aurora, `false` for RDS |
 
 ## Outputs
 
-| Name                    | Description                         |
-| ----------------------- | ----------------------------------- |
-| `cluster_endpoint`      | Database hostname                   |
-| `db_cluster_arn`        | Database ARN                        |
+| Name | Description |
+|------|-------------|
+| `cluster_endpoint` | Database hostname |
+| `db_cluster_arn` | Database ARN |
 | `graphql_db_secret_arn` | Secrets Manager ARN for credentials |
-| `db_security_group_id`  | Security group ID                   |
-| `database_url`          | Full connection string (sensitive)  |
-| `database_engine`       | Which engine is running             |
+| `db_security_group_id` | Security group ID |
+| `database_url` | Full connection string (sensitive) |
+| `database_engine` | Which engine is running |

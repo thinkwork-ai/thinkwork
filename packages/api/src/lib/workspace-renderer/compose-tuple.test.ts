@@ -616,7 +616,9 @@ describe("renderWorkspaceTuple", () => {
     const markerIndex = composed.indexOf(WORKSPACE_ROUTING_MARKER);
     expect(markerIndex).toBeGreaterThan(0);
     expect(composed.slice(0, markerIndex)).toContain("Root routing.");
-    expect(composed).toContain("- Board Pack — `Space/` (active, hydrated)");
+    expect(composed).toContain(
+      "- Board Pack — `Space/` (active, hydrated)",
+    );
     expect(composed).toContain("- Eric — `User/` (acting user, hydrated)");
     // The baseline fixture carries a stale legacy generated section
     // ("<!-- RENDERED:ACTIVE_SPACE -->\n\nold"); composition truncates it.
@@ -1609,7 +1611,9 @@ modelRouting:
     const composed =
       store.puts.find((put) => put.key.endsWith("/AGENTS.md"))?.content ?? "";
     expect(composed).toContain(WORKSPACE_ROUTING_MARKER);
-    expect(composed).toContain("- Default — `Space/` (active, hydrated)");
+    expect(composed).toContain(
+      "- Default — `Space/` (active, hydrated)",
+    );
     expect(composed).not.toContain("### User");
     expect(composed).not.toContain("### Active Space Participants");
     expect(composed).not.toContain("### Agent Profiles");

@@ -1328,9 +1328,8 @@ async function resolveCaller(
 
   const sub = stringClaim(claims.sub);
   if (!sub) return null;
-  const { resolveCallerFromAuth } = await import(
-    "../graphql/resolvers/core/resolve-auth-user.js"
-  );
+  const { resolveCallerFromAuth } =
+    await import("../graphql/resolvers/core/resolve-auth-user.js");
   const resolved = await resolveCallerFromAuth({
     authType: "cognito",
     principalId: sub,
@@ -1730,9 +1729,8 @@ function isServiceBearer(bearer: string): boolean {
 
 async function tryFirstPartyAuth(event: APIGatewayProxyEventV2) {
   const { authenticate } = await import("../lib/cognito-auth.js");
-  const { resolveCallerFromAuth } = await import(
-    "../graphql/resolvers/core/resolve-auth-user.js"
-  );
+  const { resolveCallerFromAuth } =
+    await import("../graphql/resolvers/core/resolve-auth-user.js");
   const auth = await authenticate(event.headers);
   if (!auth) return null;
   if (auth.authType !== "cognito") return auth;

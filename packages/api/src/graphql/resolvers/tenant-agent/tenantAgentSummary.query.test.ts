@@ -41,9 +41,11 @@ beforeEach(() => {
 
 describe("tenantAgentSummary", () => {
   it("allows any tenant member and returns display fields only", async () => {
-    const result = await tenantAgentSummary(null, { tenantId: "tenant-1" }, {
-      auth: { authType: "cognito" },
-    } as any);
+    const result = await tenantAgentSummary(
+      null,
+      { tenantId: "tenant-1" },
+      { auth: { authType: "cognito" } } as any,
+    );
 
     expect(mocks.requireTenantMember).toHaveBeenCalledWith(
       expect.anything(),
@@ -69,9 +71,11 @@ describe("tenantAgentSummary", () => {
     mocks.requireTenantMember.mockRejectedValue(new Error("Forbidden"));
 
     await expect(
-      tenantAgentSummary(null, { tenantId: "tenant-1" }, {
-        auth: { authType: "cognito" },
-      } as any),
+      tenantAgentSummary(
+        null,
+        { tenantId: "tenant-1" },
+        { auth: { authType: "cognito" } } as any,
+      ),
     ).rejects.toThrow("Forbidden");
     expect(mocks.loadTenantAgentForGraphql).not.toHaveBeenCalled();
   });

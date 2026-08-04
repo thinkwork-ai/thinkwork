@@ -48,11 +48,11 @@ export async function loadAppCredentialsSecret<T>({
   if (cached) return cached as T;
 
   const res = await getClient().send(
-    new GetSecretValueCommand({ SecretId: secretId }),
+    new GetSecretValueCommand({ SecretId: secretId })
   );
   if (!res.SecretString) {
     throw new Error(
-      `Secrets Manager returned empty SecretString for ${secretId} - populate it with ${label} app credentials.`,
+      `Secrets Manager returned empty SecretString for ${secretId} - populate it with ${label} app credentials.`
     );
   }
 
@@ -62,7 +62,7 @@ export async function loadAppCredentialsSecret<T>({
   } catch {
     const shape = requiredFields.map((field) => `"${field}":"..."`).join(",");
     throw new Error(
-      `Secrets Manager value for ${secretId} is not valid JSON. Expected {${shape}}.`,
+      `Secrets Manager value for ${secretId} is not valid JSON. Expected {${shape}}.`
     );
   }
 
@@ -74,8 +74,8 @@ export async function loadAppCredentialsSecret<T>({
   if (requiredFields.some((field) => !fields[field])) {
     throw new Error(
       `${label} app credentials incomplete at ${secretId}. Secret must contain non-empty ${formatFieldList(
-        requiredFields,
-      )}.`,
+        requiredFields
+      )}.`
     );
   }
 

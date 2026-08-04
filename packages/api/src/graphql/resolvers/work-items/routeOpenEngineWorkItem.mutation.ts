@@ -16,11 +16,7 @@ export async function routeOpenEngineWorkItem(
 ) {
   const input = args.input ?? {};
   const tenantId = await resolveWorkItemTenant(ctx, input.tenantId);
-  await requireAdminOrServiceCaller(
-    ctx,
-    tenantId,
-    "open_engine_work_items:route",
-  );
+  await requireAdminOrServiceCaller(ctx, tenantId, "open_engine_work_items:route");
   const actorUserId =
     ctx.auth?.authType === "cognito"
       ? await resolveCallerUserId(ctx).catch(() => null)

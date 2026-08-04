@@ -1,20 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { mockRequireThreadPinCaller, mockLoadPinnedThreads } = vi.hoisted(
-  () => ({
-    mockRequireThreadPinCaller: vi.fn(async () => ({
-      tenantId: "tenant-1",
-      userId: "user-1",
-    })),
-    mockLoadPinnedThreads: vi.fn(async () => [
-      {
-        thread: { id: "thread-1", title: "Pinned" },
-        pinnedAt: "2026-05-28T12:00:00.000Z",
-        pinOrder: 1,
-      },
-    ]),
-  }),
-);
+const { mockRequireThreadPinCaller, mockLoadPinnedThreads } = vi.hoisted(() => ({
+  mockRequireThreadPinCaller: vi.fn(async () => ({
+    tenantId: "tenant-1",
+    userId: "user-1",
+  })),
+  mockLoadPinnedThreads: vi.fn(async () => [
+    {
+      thread: { id: "thread-1", title: "Pinned" },
+      pinnedAt: "2026-05-28T12:00:00.000Z",
+      pinOrder: 1,
+    },
+  ]),
+}));
 
 vi.mock("./threadPins.shared.js", () => ({
   requireThreadPinCaller: mockRequireThreadPinCaller,

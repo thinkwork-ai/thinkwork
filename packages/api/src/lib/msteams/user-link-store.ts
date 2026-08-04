@@ -32,7 +32,7 @@ export class MsteamsLinkConflictError extends Error {
 
   constructor(aadObjectId: string) {
     super(
-      "This Microsoft Teams identity is already linked to a different ThinkWork user",
+      "This Microsoft Teams identity is already linked to a different ThinkWork user"
     );
     this.name = "MsteamsLinkConflictError";
     this.aadObjectId = aadObjectId;
@@ -49,7 +49,7 @@ export interface MsteamsUserLinkInput {
 
 export async function upsertUserLink(
   input: MsteamsUserLinkInput,
-  dbClient: DbClient = db,
+  dbClient: DbClient = db
 ) {
   const [install] = await dbClient
     .select({
@@ -62,12 +62,12 @@ export async function upsertUserLink(
 
   if (!install) {
     throw new Error(
-      "Microsoft Teams app is not installed for this ThinkWork tenant",
+      "Microsoft Teams app is not installed for this ThinkWork tenant"
     );
   }
   if (install.tenant_id !== input.tenantId) {
     throw new Error(
-      "Microsoft Teams app is installed for a different ThinkWork tenant",
+      "Microsoft Teams app is installed for a different ThinkWork tenant"
     );
   }
   if (install.status !== "active") {
@@ -83,8 +83,8 @@ export async function upsertUserLink(
     .where(
       and(
         eq(msteamsUserLinks.entra_tenant_id, input.entraTenantId),
-        eq(msteamsUserLinks.aad_object_id, input.aadObjectId),
-      ),
+        eq(msteamsUserLinks.aad_object_id, input.aadObjectId)
+      )
     )
     .limit(1);
 
@@ -129,7 +129,7 @@ export async function upsertUserLink(
         eq(msteamsUserLinks.entra_tenant_id, input.entraTenantId),
         eq(msteamsUserLinks.aad_object_id, input.aadObjectId),
         eq(msteamsUserLinks.tenant_id, input.tenantId),
-        sql`(${msteamsUserLinks.status} <> 'active' OR ${msteamsUserLinks.user_id} = ${input.userId})`,
+        sql`(${msteamsUserLinks.status} <> 'active' OR ${msteamsUserLinks.user_id} = ${input.userId})`
       ),
     })
     .returning();
@@ -142,7 +142,7 @@ export async function upsertUserLink(
 
 export async function findActiveUserLink(
   input: { entraTenantId: string; aadObjectId: string },
-  dbClient: DbClient = db,
+  dbClient: DbClient = db
 ) {
   const [row] = await dbClient
     .select()
@@ -151,8 +151,8 @@ export async function findActiveUserLink(
       and(
         eq(msteamsUserLinks.entra_tenant_id, input.entraTenantId),
         eq(msteamsUserLinks.aad_object_id, input.aadObjectId),
-        eq(msteamsUserLinks.status, "active"),
-      ),
+        eq(msteamsUserLinks.status, "active")
+      )
     )
     .limit(1);
   return row ?? null;
@@ -160,7 +160,7 @@ export async function findActiveUserLink(
 
 export async function unlinkUser(
   input: { entraTenantId: string; aadObjectId: string },
-  dbClient: DbClient = db,
+  dbClient: DbClient = db
 ) {
   const [row] = await dbClient
     .update(msteamsUserLinks)
@@ -172,8 +172,8 @@ export async function unlinkUser(
     .where(
       and(
         eq(msteamsUserLinks.entra_tenant_id, input.entraTenantId),
-        eq(msteamsUserLinks.aad_object_id, input.aadObjectId),
-      ),
+        eq(msteamsUserLinks.aad_object_id, input.aadObjectId)
+      )
     )
     .returning();
   return row ?? null;

@@ -52,11 +52,7 @@ describe("push-token identity admission", () => {
     });
 
     await expect(
-      registerPushToken(
-        null,
-        { input: { token: "ExponentPushToken[secret]" } },
-        ctx,
-      ),
+      registerPushToken(null, { input: { token: "ExponentPushToken[secret]" } }, ctx),
     ).resolves.toBe(true);
 
     expect(resolveCallerFromAuth).toHaveBeenCalledWith(ctx.auth);
@@ -71,11 +67,7 @@ describe("push-token identity admission", () => {
     resolveCallerFromAuth.mockResolvedValue({ userId: null, tenantId: null });
 
     await expect(
-      registerPushToken(
-        null,
-        { input: { token: "ExponentPushToken[secret]" } },
-        ctx,
-      ),
+      registerPushToken(null, { input: { token: "ExponentPushToken[secret]" } }, ctx),
     ).rejects.toThrow("Unauthorized");
     await expect(unregisterPushToken(null, {}, ctx)).rejects.toThrow(
       "Unauthorized",

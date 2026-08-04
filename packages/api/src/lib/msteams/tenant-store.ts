@@ -39,7 +39,7 @@ export class MsteamsTenantConflictError extends Error {
 
   constructor(entraTenantId: string) {
     super(
-      "Microsoft Teams (Entra) tenant is already bound to a different ThinkWork tenant",
+      "Microsoft Teams (Entra) tenant is already bound to a different ThinkWork tenant"
     );
     this.name = "MsteamsTenantConflictError";
     this.entraTenantId = entraTenantId;
@@ -61,7 +61,7 @@ export interface UpsertTenantInstallInput {
  */
 export async function upsertTenantInstall(
   input: UpsertTenantInstallInput,
-  dbClient: DbClient = db,
+  dbClient: DbClient = db
 ) {
   const [existing] = await dbClient
     .select({ tenant_id: msteamsTenantInstalls.tenant_id })
@@ -117,7 +117,7 @@ export async function activateTenantInstall(
     entraTenantId: string;
     consentStatus: MsteamsConsentStatus;
   },
-  dbClient: DbClient = db,
+  dbClient: DbClient = db
 ) {
   const [row] = await dbClient
     .update(msteamsTenantInstalls)
@@ -131,8 +131,8 @@ export async function activateTenantInstall(
     .where(
       and(
         eq(msteamsTenantInstalls.entra_tenant_id, input.entraTenantId),
-        sql`${msteamsTenantInstalls.status} IN ('pending', 'uninstalled')`,
-      ),
+        sql`${msteamsTenantInstalls.status} IN ('pending', 'uninstalled')`
+      )
     )
     .returning();
   return row ?? null;
@@ -148,7 +148,7 @@ export async function markConsent(
     entraTenantId: string;
     consentStatus: MsteamsConsentStatus;
   },
-  dbClient: DbClient = db,
+  dbClient: DbClient = db
 ) {
   const [row] = await dbClient
     .update(msteamsTenantInstalls)
@@ -159,8 +159,8 @@ export async function markConsent(
     .where(
       and(
         eq(msteamsTenantInstalls.entra_tenant_id, input.entraTenantId),
-        sql`${msteamsTenantInstalls.status} <> 'active'`,
-      ),
+        sql`${msteamsTenantInstalls.status} <> 'active'`
+      )
     )
     .returning();
   return row ?? null;
@@ -173,7 +173,7 @@ export async function markConsent(
  */
 export async function reopenRevokedInstall(
   input: { tenantId: string },
-  dbClient: DbClient = db,
+  dbClient: DbClient = db
 ) {
   const [row] = await dbClient
     .update(msteamsTenantInstalls)
@@ -186,8 +186,8 @@ export async function reopenRevokedInstall(
     .where(
       and(
         eq(msteamsTenantInstalls.tenant_id, input.tenantId),
-        eq(msteamsTenantInstalls.status, "revoked"),
-      ),
+        eq(msteamsTenantInstalls.status, "revoked")
+      )
     )
     .returning();
   return row ?? null;
@@ -195,7 +195,7 @@ export async function reopenRevokedInstall(
 
 export async function revokeTenantInstall(
   input: { entraTenantId: string },
-  dbClient: DbClient = db,
+  dbClient: DbClient = db
 ) {
   const [row] = await dbClient
     .update(msteamsTenantInstalls)
@@ -211,7 +211,7 @@ export async function revokeTenantInstall(
 
 export async function findActiveTenantInstall(
   input: { entraTenantId: string },
-  dbClient: DbClient = db,
+  dbClient: DbClient = db
 ) {
   const [row] = await dbClient
     .select()
@@ -219,8 +219,8 @@ export async function findActiveTenantInstall(
     .where(
       and(
         eq(msteamsTenantInstalls.entra_tenant_id, input.entraTenantId),
-        eq(msteamsTenantInstalls.status, "active"),
-      ),
+        eq(msteamsTenantInstalls.status, "active")
+      )
     )
     .limit(1);
   return row ?? null;
@@ -232,7 +232,7 @@ export async function findActiveTenantInstall(
  */
 export async function getTenantInstallStatus(
   input: { tenantId: string },
-  dbClient: DbClient = db,
+  dbClient: DbClient = db
 ) {
   return dbClient
     .select()

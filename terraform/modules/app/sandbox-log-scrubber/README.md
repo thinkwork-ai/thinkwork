@@ -14,8 +14,8 @@ strings registered by the preamble — and can therefore catch any token the
 agent's own preamble has handled.
 
 This backstop redacts by **pattern**: it has no access to session values,
-only to the bytes that reach CloudWatch. It exists to mitigate _stdio-bypass
-classes_ named in R13's residual list:
+only to the bytes that reach CloudWatch. It exists to mitigate *stdio-bypass
+classes* named in R13's residual list:
 
 - `subprocess.run(['env'])`, `subprocess.run(['cat', '/proc/self/environ'])`
 - `os.write(fd, ...)` at the file-descriptor level
@@ -25,7 +25,7 @@ classes_ named in R13's residual list:
 - Adversarial split-writes that fragment a token across more bytes than the
   rolling-buffer window
 
-When those bytes carry a token whose _shape_ is recognizable, this backstop
+When those bytes carry a token whose *shape* is recognizable, this backstop
 catches it. When they don't (bespoke token formats, high-entropy opaque
 strings with no prefix), only the v2 in-process credential proxy can help.
 

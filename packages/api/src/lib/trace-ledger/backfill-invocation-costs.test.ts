@@ -2,9 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@thinkwork/database-pg", () => ({ getDb: () => ({}) }));
 
-const { buildDailyAdjustmentEvent, computeDailyAdjustmentUsd } = await import(
-  "./backfill-invocation-costs.js"
-);
+const { buildDailyAdjustmentEvent, computeDailyAdjustmentUsd } =
+  await import("./backfill-invocation-costs.js");
 
 describe("computeDailyAdjustmentUsd", () => {
   it("returns the residual when provider exceeds recorded", () => {

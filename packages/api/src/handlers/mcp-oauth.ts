@@ -625,9 +625,8 @@ async function defaultExternalClientLoader(
   clientId: string,
 ): Promise<ExternalCapabilityClientRecord | null> {
   const { getDb } = await import("@thinkwork/database-pg");
-  const { capabilityExternalClients, tenantServicePrincipals } = await import(
-    "@thinkwork/database-pg/schema"
-  );
+  const { capabilityExternalClients, tenantServicePrincipals } =
+    await import("@thinkwork/database-pg/schema");
   const { eq } = await import("drizzle-orm");
   const db = getDb();
   const [client] = (await db

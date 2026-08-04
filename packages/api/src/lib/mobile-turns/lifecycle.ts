@@ -245,7 +245,11 @@ function truncateCheckpointText(value: string, limit: number): string {
   return `${value.slice(0, limit)}\n[truncated ${value.length - limit} chars]`;
 }
 
-function compactCheckpointValue(value: unknown, key = "", depth = 0): unknown {
+function compactCheckpointValue(
+  value: unknown,
+  key = "",
+  depth = 0,
+): unknown {
   if (typeof value === "string") {
     return truncateCheckpointText(
       value,

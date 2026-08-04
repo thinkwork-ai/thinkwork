@@ -163,9 +163,8 @@ export async function approveMcpServer(
   // a separate Composer assignment step. Best-effort: the folder write
   // never fails the approval, and the next reconcile converges.
   try {
-    const { attachServerToPlatformDefaultAgents } = await import(
-      "../lib/capabilities/reconcile-connection-folders.js"
-    );
+    const { attachServerToPlatformDefaultAgents } =
+      await import("../lib/capabilities/reconcile-connection-folders.js");
     await attachServerToPlatformDefaultAgents({
       tenantId,
       registryServerId: serverId,

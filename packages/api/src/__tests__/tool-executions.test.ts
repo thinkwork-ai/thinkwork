@@ -182,7 +182,7 @@ describe("POST /api/runtime/tool-executions", () => {
   it("terminal without matching start is skipped (dropped-start tolerance)", async () => {
     mockInsertResult.mockReturnValue(
       new Error(
-        "insert failed: tool_execution_terminal_without_matching_start",
+        'insert failed: tool_execution_terminal_without_matching_start',
       ),
     );
     const res = await handler(ev(body({ events: [terminalEvent()] })));
@@ -219,9 +219,9 @@ describe("POST /api/runtime/tool-executions", () => {
     expect(
       (await handler(ev(body({ principal_type: "robot" })))).statusCode,
     ).toBe(400);
-    expect(
-      (await handler(ev(body({ turn_id: "not-a-uuid" })))).statusCode,
-    ).toBe(400);
+    expect((await handler(ev(body({ turn_id: "not-a-uuid" })))).statusCode).toBe(
+      400,
+    );
   });
 
   it("401 without the bearer secret", async () => {

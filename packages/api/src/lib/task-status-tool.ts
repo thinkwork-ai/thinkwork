@@ -418,7 +418,7 @@ function hasNativeWorkItemPointer(value: unknown): boolean {
   const nativeWorkItem = objectValue(metadata.nativeWorkItem);
   return Boolean(
     typeof metadata.nativeWorkItemId === "string" ||
-      typeof nativeWorkItem.id === "string",
+    typeof nativeWorkItem.id === "string",
   );
 }
 

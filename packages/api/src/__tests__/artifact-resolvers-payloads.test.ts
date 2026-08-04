@@ -89,9 +89,8 @@ describe("artifact payload resolvers", () => {
   });
 
   it("stores created artifact content in S3 and returns hydrated content", async () => {
-    const { createArtifact } = await import(
-      "../graphql/resolvers/artifacts/createArtifact.mutation.js"
-    );
+    const { createArtifact } =
+      await import("../graphql/resolvers/artifacts/createArtifact.mutation.js");
     s3Mock.on(PutObjectCommand).resolves({});
     s3Mock.on(GetObjectCommand).resolves({
       Body: { transformToString: async () => "# Report" } as any,
@@ -135,9 +134,8 @@ describe("artifact payload resolvers", () => {
   });
 
   it("rejects client-managed payload S3 keys", async () => {
-    const { createArtifact } = await import(
-      "../graphql/resolvers/artifacts/createArtifact.mutation.js"
-    );
+    const { createArtifact } =
+      await import("../graphql/resolvers/artifacts/createArtifact.mutation.js");
 
     await expect(
       createArtifact(
@@ -156,9 +154,8 @@ describe("artifact payload resolvers", () => {
   });
 
   it("updates content through an immutable revision key", async () => {
-    const { updateArtifact } = await import(
-      "../graphql/resolvers/artifacts/updateArtifact.mutation.js"
-    );
+    const { updateArtifact } =
+      await import("../graphql/resolvers/artifacts/updateArtifact.mutation.js");
     selectRows.push({
       id: "artifact-2",
       tenant_id: "tenant-1",
@@ -194,9 +191,8 @@ describe("artifact payload resolvers", () => {
   });
 
   it("favoriting an artifact stores favorited_at as a Date", async () => {
-    const { updateArtifact } = await import(
-      "../graphql/resolvers/artifacts/updateArtifact.mutation.js"
-    );
+    const { updateArtifact } =
+      await import("../graphql/resolvers/artifacts/updateArtifact.mutation.js");
     selectRows.push({
       id: "artifact-3",
       tenant_id: "tenant-1",
@@ -225,9 +221,8 @@ describe("artifact payload resolvers", () => {
   });
 
   it("explicit null on favoritedAt clears the field", async () => {
-    const { updateArtifact } = await import(
-      "../graphql/resolvers/artifacts/updateArtifact.mutation.js"
-    );
+    const { updateArtifact } =
+      await import("../graphql/resolvers/artifacts/updateArtifact.mutation.js");
     selectRows.push({
       id: "artifact-4",
       tenant_id: "tenant-1",
@@ -251,9 +246,8 @@ describe("artifact payload resolvers", () => {
   });
 
   it("omitting favoritedAt leaves the existing value untouched", async () => {
-    const { updateArtifact } = await import(
-      "../graphql/resolvers/artifacts/updateArtifact.mutation.js"
-    );
+    const { updateArtifact } =
+      await import("../graphql/resolvers/artifacts/updateArtifact.mutation.js");
     selectRows.push({
       id: "artifact-5",
       tenant_id: "tenant-1",

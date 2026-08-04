@@ -30,11 +30,7 @@ import {
   KMSClient,
   SignCommand,
 } from "@aws-sdk/client-kms";
-import {
-  createPublicKey,
-  verify as cryptoVerify,
-  type KeyObject,
-} from "node:crypto";
+import { createPublicKey, verify as cryptoVerify, type KeyObject } from "node:crypto";
 
 export const TURN_ASSERTION_HEADER = "x-thinkwork-turn-assertion";
 const TOKEN_PREFIX = "twta1";

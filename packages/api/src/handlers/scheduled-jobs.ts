@@ -114,9 +114,8 @@ async function getJobScheduleManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } = await import(
-      "@aws-sdk/client-ssm"
-    );
+    const { SSMClient, GetParameterCommand } =
+      await import("@aws-sdk/client-ssm");
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -144,9 +143,8 @@ async function invokeJobScheduleManager(
       console.error("[scheduled-jobs]", msg);
       return { ok: false, error: msg };
     }
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const res = await lambda.send(
       new InvokeCommand({
@@ -775,9 +773,8 @@ async function fireScheduledJob(
       .returning();
 
     try {
-      const { LambdaClient, InvokeCommand } = await import(
-        "@aws-sdk/client-lambda"
-      );
+      const { LambdaClient, InvokeCommand } =
+        await import("@aws-sdk/client-lambda");
       const lambda = new LambdaClient({});
       const stage = process.env.STAGE || "dev";
       const fnName =

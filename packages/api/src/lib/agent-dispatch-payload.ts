@@ -274,10 +274,10 @@ export function buildAgentDispatchControlFields(
     // workspace for the routing tree the tool navigates.
     fetch_workspace_source_enabled: Boolean(
       args.thinkworkApiUrl &&
-        args.apiAuthSecret &&
-        args.threadId &&
-        args.threadTurnId &&
-        args.renderedWorkspacePrefix,
+      args.apiAuthSecret &&
+      args.threadId &&
+      args.threadTurnId &&
+      args.renderedWorkspacePrefix,
     ),
     // Finalize-callback opt-in (plan 2026-05-22-006 U3) — chat-path only,
     // see `includeFinalizeCallback`.

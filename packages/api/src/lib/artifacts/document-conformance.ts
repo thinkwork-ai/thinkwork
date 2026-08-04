@@ -204,9 +204,8 @@ export interface ConformanceReportReadStore {
 export function drizzleConformanceReportReadStore(): ConformanceReportReadStore {
   return {
     listByTenantAndPlate: async (tenantId, plateSlug, limit) => {
-      const { documentConformanceReports: table } = await import(
-        "@thinkwork/database-pg/schema"
-      );
+      const { documentConformanceReports: table } =
+        await import("@thinkwork/database-pg/schema");
       const { and, desc, eq } = await import("drizzle-orm");
       const rows = await getDb()
         .select({

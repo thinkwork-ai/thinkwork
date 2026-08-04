@@ -160,9 +160,8 @@ export async function invokeConformanceJudge(input: {
   /** THINK-245 U6: when set, the call records a per-tenant cost event. */
   costContext?: { tenantId: string; requestId: string };
 }): Promise<ConformanceJudgeVerdict> {
-  const { BedrockRuntimeClient, ConverseCommand } = await import(
-    "@aws-sdk/client-bedrock-runtime"
-  );
+  const { BedrockRuntimeClient, ConverseCommand } =
+    await import("@aws-sdk/client-bedrock-runtime");
   const client = new BedrockRuntimeClient({ region: REGION });
   const startedAt = Date.now();
   const resp = await client.send(

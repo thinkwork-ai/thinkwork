@@ -244,7 +244,9 @@ describe("Open Engine Work Item queue service", () => {
       NOW,
     ) as unknown as CapturedSql;
 
-    expect(predicate.text).toContain("work_items.owner_agent_id = agent-owner");
+    expect(predicate.text).toContain(
+      "work_items.owner_agent_id = agent-owner",
+    );
   });
 
   it("lists eligible Work Items with deterministic queue ordering", async () => {

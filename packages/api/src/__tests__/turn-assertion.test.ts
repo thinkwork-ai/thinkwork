@@ -71,10 +71,7 @@ describe("mintTurnAssertion / verifyTurnAssertion", () => {
     forged.turn_id = "77777777-7777-7777-7777-777777777777";
     const tampered = `${prefix}.${Buffer.from(JSON.stringify(forged)).toString("base64url")}.${sig}`;
     const verdict = await verifyTurnAssertion(tampered, { kms });
-    expect(verdict).toMatchObject({
-      status: "invalid",
-      reason: "bad signature",
-    });
+    expect(verdict).toMatchObject({ status: "invalid", reason: "bad signature" });
   });
 
   it("rejects an expired assertion", async () => {

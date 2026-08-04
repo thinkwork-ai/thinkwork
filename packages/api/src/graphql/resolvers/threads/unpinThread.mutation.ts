@@ -1,5 +1,10 @@
 import type { GraphQLContext } from "../../context.js";
-import { db, eq, and, threadParticipants } from "../../utils.js";
+import {
+  db,
+  eq,
+  and,
+  threadParticipants,
+} from "../../utils.js";
 import {
   loadVisibleThreadForPin,
   requireThreadPinCaller,
