@@ -444,148 +444,82 @@ export async function resolveAgentRuntimeConfig(
   const thinkworkApiSecret =
     opts.thinkworkApiSecret ?? getApiAuthSecret() ?? "";
 
-  const [agent] = await db
-    .select({
-      id: agents.id,
-      name: agents.name,
-      slug: agents.slug,
-      system_prompt: agents.system_prompt,
-      human_pair_id: agents.human_pair_id,
-      capability_folder_dispatch: agents.capability_folder_dispatch,
-      template_id: agents.template_id,
-      runtime: agents.runtime,
-      runtime_config: agents.runtime_config,
-      model: agents.model,
-      guardrail_id: agents.guardrail_id,
-      budget_monthly_cents: agents.budget_monthly_cents,
-      budget_paused: agents.budget_paused,
-      blocked_tools: agents.blocked_tools,
-      sandbox: agents.sandbox,
-      browser: agents.browser,
-      web_search: agents.web_search,
-      web_extract: agents.web_extract,
-      send_email: agents.send_email,
-      context_engine: agents.context_engine,
-      json_render_ui: agents.json_render_ui,
-    })
-    .from(agents)
-    .where(
-      and(eq(agents.id, opts.agentId), eq(agents.tenant_id, opts.tenantId)),
-    );
+  // Stage 1 (U2 setup-diet, mirrors chat-agent-invoke's "data-independent
+  // setup reads start together"): every read here depends only on `opts`,
+  // is a pure read (DB/Secrets lookups, no writes), and so may safely start
+  // before the agent-existence check settles — an AgentNotFoundError abort
+  // cannot leave stray side effects behind.
+  const [agentRows, tenantRows, activeSpaceSlug, invokerEmailRows] =
+    await Promise.all([
+      db
+        .select({
+          id: agents.id,
+          name: agents.name,
+          slug: agents.slug,
+          system_prompt: agents.system_prompt,
+          human_pair_id: agents.human_pair_id,
+          capability_folder_dispatch: agents.capability_folder_dispatch,
+          template_id: agents.template_id,
+          runtime: agents.runtime,
+          runtime_config: agents.runtime_config,
+          model: agents.model,
+          guardrail_id: agents.guardrail_id,
+          budget_monthly_cents: agents.budget_monthly_cents,
+          budget_paused: agents.budget_paused,
+          blocked_tools: agents.blocked_tools,
+          sandbox: agents.sandbox,
+          browser: agents.browser,
+          web_search: agents.web_search,
+          web_extract: agents.web_extract,
+          send_email: agents.send_email,
+          context_engine: agents.context_engine,
+          json_render_ui: agents.json_render_ui,
+        })
+        .from(agents)
+        .where(
+          and(eq(agents.id, opts.agentId), eq(agents.tenant_id, opts.tenantId)),
+        ),
+      db
+        .select({ slug: tenants.slug })
+        .from(tenants)
+        .where(eq(tenants.id, opts.tenantId)),
+      opts.spaceId
+        ? resolveSpaceWorkspaceFolderName({
+            tenantId: opts.tenantId,
+            spaceId: opts.spaceId,
+            logPrefix,
+          })
+        : Promise.resolve(null),
+      // Resolve email: explicit override → users lookup → optional
+      // human-pair fallback (the fallback needs the agent row, so it runs
+      // in stage 2).
+      //
+      // All three users lookups are tenant-scoped because this function is
+      // reachable via the service-auth REST endpoint where `currentUserId` is
+      // a query-string parameter. Without the tenant predicate any holder of
+      // API_AUTH_SECRET could enumerate arbitrary users' emails by flipping
+      // the tenantId they claim to own while passing another tenant's userId.
+      // The human_pair_id lookups are already derived from the tenant-scoped
+      // agent row, but we scope them the same way as defense-in-depth.
+      !opts.currentUserEmail && opts.currentUserId
+        ? db
+            .select({ email: users.email })
+            .from(users)
+            .where(
+              and(
+                eq(users.id, opts.currentUserId),
+                eq(users.tenant_id, opts.tenantId),
+              ),
+            )
+        : Promise.resolve([] as Array<{ email: string | null }>),
+    ]);
+  const [agent] = agentRows;
   if (!agent) throw new AgentNotFoundError(opts.agentId);
 
-  const [tenant] = await db
-    .select({ slug: tenants.slug })
-    .from(tenants)
-    .where(eq(tenants.id, opts.tenantId));
-  const tenantSlug = tenant?.slug ?? "";
+  const tenantSlug = tenantRows[0]?.slug ?? "";
   const agentSlug = agent.slug ?? "";
-  const activeSpaceSlug = opts.spaceId
-    ? await resolveSpaceWorkspaceFolderName({
-        tenantId: opts.tenantId,
-        spaceId: opts.spaceId,
-        logPrefix,
-      })
-    : null;
-
-  // Resolve email: explicit override → users lookup → optional human-pair fallback.
-  //
-  // All three users lookups are tenant-scoped because this function is
-  // reachable via the service-auth REST endpoint where `currentUserId` is
-  // a query-string parameter. Without the tenant predicate any holder of
-  // API_AUTH_SECRET could enumerate arbitrary users' emails by flipping
-  // the tenantId they claim to own while passing another tenant's userId.
-  // The human_pair_id lookups are already derived from the tenant-scoped
-  // agent row, but we scope them the same way as defense-in-depth.
-  let currentUserEmail = opts.currentUserEmail ?? "";
-  if (!currentUserEmail && opts.currentUserId) {
-    const [u] = await db
-      .select({ email: users.email })
-      .from(users)
-      .where(
-        and(
-          eq(users.id, opts.currentUserId),
-          eq(users.tenant_id, opts.tenantId),
-        ),
-      );
-    currentUserEmail = u?.email ?? "";
-  }
-  if (
-    !currentUserEmail &&
-    opts.allowHumanPairEmailFallback &&
-    agent.human_pair_id
-  ) {
-    const [u] = await db
-      .select({ email: users.email })
-      .from(users)
-      .where(
-        and(
-          eq(users.id, agent.human_pair_id),
-          eq(users.tenant_id, opts.tenantId),
-        ),
-      );
-    currentUserEmail = u?.email ?? "";
-  }
-
-  let humanName: string | undefined;
-  if (agent.human_pair_id) {
-    const [human] = await db
-      .select({ name: users.name })
-      .from(users)
-      .where(
-        and(
-          eq(users.id, agent.human_pair_id),
-          eq(users.tenant_id, opts.tenantId),
-        ),
-      );
-    humanName = human?.name ?? undefined;
-  }
-
-  // Guardrail: agent-assigned → tenant default → none.
-  let guardrailId: string | null = null;
-  let guardrailConfig: GuardrailPayload | undefined;
-  if (agent.guardrail_id) {
-    const [gr] = await db
-      .select({
-        bedrock_guardrail_id: guardrails.bedrock_guardrail_id,
-        bedrock_version: guardrails.bedrock_version,
-      })
-      .from(guardrails)
-      .where(
-        and(
-          eq(guardrails.id, agent.guardrail_id),
-          eq(guardrails.tenant_id, opts.tenantId),
-        ),
-      );
-    if (gr?.bedrock_guardrail_id && gr?.bedrock_version) {
-      guardrailId = agent.guardrail_id;
-      guardrailConfig = {
-        guardrailIdentifier: gr.bedrock_guardrail_id,
-        guardrailVersion: gr.bedrock_version,
-      };
-    }
-  } else {
-    const [defaultGr] = await db
-      .select({
-        id: guardrails.id,
-        bedrock_guardrail_id: guardrails.bedrock_guardrail_id,
-        bedrock_version: guardrails.bedrock_version,
-      })
-      .from(guardrails)
-      .where(
-        and(
-          eq(guardrails.tenant_id, opts.tenantId),
-          eq(guardrails.is_default, true),
-        ),
-      );
-    if (defaultGr?.bedrock_guardrail_id && defaultGr?.bedrock_version) {
-      guardrailId = defaultGr.id;
-      guardrailConfig = {
-        guardrailIdentifier: defaultGr.bedrock_guardrail_id,
-        guardrailVersion: defaultGr.bedrock_version,
-      };
-    }
-  }
+  let currentUserEmail =
+    (opts.currentUserEmail ?? "") || (invokerEmailRows[0]?.email ?? "");
 
   const blockedTools: string[] = (agent.blocked_tools as string[] | null) ?? [];
   const templateBrowserResult = validateTemplateBrowser(agent.browser);
@@ -638,19 +572,91 @@ export async function resolveAgentRuntimeConfig(
     );
   }
 
+  // Stage 2 (U2 setup-diet): pure reads that need the agent row but not each
+  // other. Guardrail, human-pair lookups, capability rows, tenant built-in
+  // tools, web-extract config, and the workspace S3 skill walk all start
+  // together. Side-effect-capable steps (per-skill OAuth env resolution,
+  // buildMcpConfigs token refresh) stay sequential AFTER this group so an
+  // abort here cannot leave stray writes behind.
+  const [
+    guardrailSelection,
+    humanName,
+    humanPairFallbackEmail,
+    capabilityRows,
+    builtinToolsResult,
+    workspaceSkills,
+    webExtractConfig,
+  ] = await Promise.all([
+    resolveGuardrailSelection({
+      db,
+      tenantId: opts.tenantId,
+      agentGuardrailId: agent.guardrail_id,
+    }),
+    agent.human_pair_id
+      ? db
+          .select({ name: users.name })
+          .from(users)
+          .where(
+            and(
+              eq(users.id, agent.human_pair_id),
+              eq(users.tenant_id, opts.tenantId),
+            ),
+          )
+          .then((rows) => rows[0]?.name ?? undefined)
+      : Promise.resolve(undefined),
+    !currentUserEmail && opts.allowHumanPairEmailFallback && agent.human_pair_id
+      ? db
+          .select({ email: users.email })
+          .from(users)
+          .where(
+            and(
+              eq(users.id, agent.human_pair_id),
+              eq(users.tenant_id, opts.tenantId),
+            ),
+          )
+          .then((rows) => rows[0]?.email ?? "")
+      : Promise.resolve(""),
+    db
+      .select({
+        capability: agentCapabilities.capability,
+        enabled: agentCapabilities.enabled,
+        config: agentCapabilities.config,
+      })
+      .from(agentCapabilities)
+      .where(
+        and(
+          eq(agentCapabilities.agent_id, opts.agentId),
+          eq(agentCapabilities.tenant_id, opts.tenantId),
+        ),
+      ),
+    // Fail-soft wrapper: the consumption site below preserves the original
+    // try/catch degradation (warn + continue without built-in tools).
+    loadTenantBuiltinTools(opts.tenantId).then(
+      (tools) => ({ ok: true as const, tools }),
+      (err: unknown) => ({ ok: false as const, err }),
+    ),
+    loadWorkspaceSkillConfigs({
+      tenantSlug,
+      agentSlug,
+      spaceSlug: activeSpaceSlug,
+      logPrefix,
+    }),
+    templateWebExtractEnabled &&
+    !blockedTools.includes("web-extract") &&
+    !blockedTools.includes("web_extract")
+      ? loadTenantWebExtractConfig(opts.tenantId)
+      : Promise.resolve(null),
+  ]);
+  const { guardrailId, guardrailConfig } = guardrailSelection;
+  if (!currentUserEmail) currentUserEmail = humanPairFallbackEmail;
+
   // --- Skills --------------------------------------------------------------
   // Workspace skill folders first, then default skills the container always
   // needs, then tenant-configured built-in tools (web-search etc.), then the
   // template's blocked-tools filter.
 
-  let skillsConfig: SkillConfig[] = await loadWorkspaceSkillConfigs({
-    tenantSlug,
-    agentSlug,
-    spaceSlug: activeSpaceSlug,
-    logPrefix,
-  });
-  skillsConfig = await applyAgentSkillMetadata({
-    skillsConfig,
+  let skillsConfig: SkillConfig[] = await applyAgentSkillMetadata({
+    skillsConfig: workspaceSkills,
     agentId: opts.agentId,
     tenantId: opts.tenantId,
     logPrefix,
@@ -675,10 +681,15 @@ export async function resolveAgentRuntimeConfig(
   }
 
   // Tenant built-in tools (web-search etc.) — only injected when a row exists
-  // with enabled=true AND a usable API key in Secrets Manager.
-  try {
-    const builtinTools = await loadTenantBuiltinTools(opts.tenantId);
-    for (const bt of builtinTools) {
+  // with enabled=true AND a usable API key in Secrets Manager. The load
+  // itself started in stage 2; failure degrades exactly like before.
+  if (!builtinToolsResult.ok) {
+    console.warn(
+      `${logPrefix} Failed to load tenant built-in tools:`,
+      builtinToolsResult.err,
+    );
+  } else {
+    for (const bt of builtinToolsResult.tools) {
       if (bt.toolSlug === "web-search" && !templateWebSearchEnabled) {
         continue;
       }
@@ -703,8 +714,6 @@ export async function resolveAgentRuntimeConfig(
         `${logPrefix} Injected built-in tool '${bt.toolSlug}' (provider=${bt.provider})`,
       );
     }
-  } catch (err) {
-    console.warn(`${logPrefix} Failed to load tenant built-in tools:`, err);
   }
 
   // Apply template blocked-tools filter last.
@@ -763,30 +772,12 @@ export async function resolveAgentRuntimeConfig(
   });
 
   const webSearchConfig = resolveWebSearchConfigFromSkills(skillsConfig);
-  const webExtractConfig =
-    templateWebExtractEnabled &&
-    !blockedTools.includes("web-extract") &&
-    !blockedTools.includes("web_extract")
-      ? await loadTenantWebExtractConfig(opts.tenantId)
-      : null;
 
   const runtimeType = normalizeAgentRuntimeType(agent.runtime);
 
   // --- Per-agent Browser Automation override ------------------------------
+  // (capabilityRows loaded in stage 2.)
 
-  const capabilityRows = await db
-    .select({
-      capability: agentCapabilities.capability,
-      enabled: agentCapabilities.enabled,
-      config: agentCapabilities.config,
-    })
-    .from(agentCapabilities)
-    .where(
-      and(
-        eq(agentCapabilities.agent_id, opts.agentId),
-        eq(agentCapabilities.tenant_id, opts.tenantId),
-      ),
-    );
   const browserCapability = capabilityRows.find(
     (row) => row.capability === BROWSER_AUTOMATION_CAPABILITY,
   );
@@ -1340,13 +1331,19 @@ export async function loadWorkspaceSkillConfigs(input: {
       ? [`tenants/${input.tenantSlug}/spaces/${input.spaceSlug}/`]
       : []),
   ];
+  // The prefixes are independent S3 walks; load them concurrently but merge
+  // in declaration order so the Space tree still overrides the agent tree.
+  const perPrefix = await Promise.all(
+    prefixes.map((prefix) =>
+      loadWorkspaceSkillConfigsForPrefix({
+        bucket,
+        prefix,
+        logPrefix: input.logPrefix,
+      }),
+    ),
+  );
   const bySkillId = new Map<string, SkillConfig>();
-  for (const prefix of prefixes) {
-    const skills = await loadWorkspaceSkillConfigsForPrefix({
-      bucket,
-      prefix,
-      logPrefix: input.logPrefix,
-    });
+  for (const skills of perPrefix) {
     for (const skill of skills) bySkillId.set(skill.skillId, skill);
   }
   return [...bySkillId.values()];
@@ -1377,7 +1374,7 @@ async function loadWorkspaceSkillConfigsForPrefix(input: {
       : undefined;
   } while (continuationToken);
 
-  const skills = await discoverWorkspaceSkillsFromPaths(paths, async (path) => {
+  const readSkillMarker = async (path: string): Promise<string | null> => {
     try {
       const response = await s3.send(
         new GetObjectCommand({
@@ -1393,7 +1390,20 @@ async function loadWorkspaceSkillConfigsForPrefix(input: {
       );
       return null;
     }
-  });
+  };
+  // The tree walker awaits its reader sequentially; prefetch every SKILL.md
+  // GetObject up front so the per-skill reads run concurrently (N+1 diet).
+  // `readSkillMarker` never rejects (fail-soft to null), so eagerly started
+  // promises cannot become unhandled rejections.
+  const prefetched = new Map(
+    paths
+      .filter((path) => /^(?:.+\/)?skills\/[^/]+\/SKILL\.md$/.test(path))
+      .map((path) => [path, readSkillMarker(path)] as const),
+  );
+  const skills = await discoverWorkspaceSkillsFromPaths(
+    paths,
+    (path) => prefetched.get(path) ?? readSkillMarker(path),
+  );
 
   return skills
     .filter((skill) => !isBuiltinToolSlug(skill.slug))
@@ -1401,6 +1411,64 @@ async function loadWorkspaceSkillConfigsForPrefix(input: {
       skillId: skill.slug,
       s3Key: `${input.prefix}${skill.skillPath.replace(/\/SKILL\.md$/, "")}`,
     }));
+}
+
+/** Guardrail: agent-assigned → tenant default → none. */
+async function resolveGuardrailSelection(input: {
+  db: ReturnType<typeof getDb>;
+  tenantId: string;
+  agentGuardrailId: string | null;
+}): Promise<{
+  guardrailId: string | null;
+  guardrailConfig: GuardrailPayload | undefined;
+}> {
+  if (input.agentGuardrailId) {
+    const [gr] = await input.db
+      .select({
+        bedrock_guardrail_id: guardrails.bedrock_guardrail_id,
+        bedrock_version: guardrails.bedrock_version,
+      })
+      .from(guardrails)
+      .where(
+        and(
+          eq(guardrails.id, input.agentGuardrailId),
+          eq(guardrails.tenant_id, input.tenantId),
+        ),
+      );
+    if (gr?.bedrock_guardrail_id && gr?.bedrock_version) {
+      return {
+        guardrailId: input.agentGuardrailId,
+        guardrailConfig: {
+          guardrailIdentifier: gr.bedrock_guardrail_id,
+          guardrailVersion: gr.bedrock_version,
+        },
+      };
+    }
+    return { guardrailId: null, guardrailConfig: undefined };
+  }
+  const [defaultGr] = await input.db
+    .select({
+      id: guardrails.id,
+      bedrock_guardrail_id: guardrails.bedrock_guardrail_id,
+      bedrock_version: guardrails.bedrock_version,
+    })
+    .from(guardrails)
+    .where(
+      and(
+        eq(guardrails.tenant_id, input.tenantId),
+        eq(guardrails.is_default, true),
+      ),
+    );
+  if (defaultGr?.bedrock_guardrail_id && defaultGr?.bedrock_version) {
+    return {
+      guardrailId: defaultGr.id,
+      guardrailConfig: {
+        guardrailIdentifier: defaultGr.bedrock_guardrail_id,
+        guardrailVersion: defaultGr.bedrock_version,
+      },
+    };
+  }
+  return { guardrailId: null, guardrailConfig: undefined };
 }
 
 async function resolveSpaceWorkspaceFolderName(input: {
@@ -1441,27 +1509,31 @@ export async function applyAgentSkillMetadata(input: {
   if (input.skillsConfig.length === 0) return input.skillsConfig;
 
   const db = getDb();
-  const skillRows = await db
-    .select({
-      skill_id: agentSkills.skill_id,
-      config: agentSkills.config,
-    })
-    .from(agentSkills)
-    .where(eq(agentSkills.agent_id, input.agentId));
-
   // KTD-8 (plan U9): per-assignment config now lives in the workspace
   // state file (`skills/<slug>/.assignment.json`); the agent_skills row
   // is the fallback for assignments that predate the file. Reads are
   // parallel and fail soft — a missing/unreadable file means DB config.
-  const workspacePrefix = await resolveAgentWorkspacePrefix(
-    input.agentId,
-  ).catch(() => null);
-  const fileStates = workspacePrefix
-    ? await readSkillAssignmentStates(
-        workspacePrefix,
-        input.skillsConfig.map((skill) => skill.skillId),
-      )
-    : new Map<string, { config?: Record<string, unknown> }>();
+  // The agent_skills fallback query and the workspace-file chain are
+  // data-independent, so they start together (U2 setup-diet).
+  const [skillRows, fileStates] = await Promise.all([
+    db
+      .select({
+        skill_id: agentSkills.skill_id,
+        config: agentSkills.config,
+      })
+      .from(agentSkills)
+      .where(eq(agentSkills.agent_id, input.agentId)),
+    resolveAgentWorkspacePrefix(input.agentId)
+      .catch(() => null)
+      .then((workspacePrefix) =>
+        workspacePrefix
+          ? readSkillAssignmentStates(
+              workspacePrefix,
+              input.skillsConfig.map((skill) => skill.skillId),
+            )
+          : new Map<string, { config?: Record<string, unknown> }>(),
+      ),
+  ]);
 
   if (skillRows.length === 0 && fileStates.size === 0) {
     return input.skillsConfig;
@@ -1478,33 +1550,48 @@ export async function applyAgentSkillMetadata(input: {
     ...fileStates.keys(),
   ]);
 
-  for (const slug of slugsToApply) {
-    const row = {
-      skill_id: slug,
-      config:
-        fileStates.get(slug)?.config ?? dbConfigBySkillId.get(slug) ?? null,
-    };
-    const skill = bySkillId.get(row.skill_id);
+  // Per-skill env resolution is independent across slugs (each touches its
+  // own skill entry), so the awaits run concurrently (N+1 diet). Failures
+  // are captured and reported in deterministic slug order below so log and
+  // diagnostic output match the previous sequential loop.
+  const resolutions = await Promise.all(
+    [...slugsToApply].map(async (slug) => {
+      const config =
+        ((fileStates.get(slug)?.config ??
+          dbConfigBySkillId.get(slug)) as Record<string, unknown>) || {};
+      if (!bySkillId.has(slug)) return { slug, config, skipped: true as const };
+      const outcome = await buildSkillEnvOverrides(config, input.tenantId).then(
+        (envOverrides) => ({ ok: true as const, envOverrides }),
+        (err: unknown) => ({ ok: false as const, err }),
+      );
+      return { slug, config, skipped: false as const, outcome };
+    }),
+  );
+  for (const resolution of resolutions) {
+    if (resolution.skipped) continue;
+    const { slug, config, outcome } = resolution;
+    const skill = bySkillId.get(slug);
     if (!skill) continue;
-    const config = (row.config as Record<string, unknown>) || {};
-    const envOverrides = await buildSkillEnvOverrides(
-      config,
-      input.tenantId,
-    ).catch((err) => {
+    let envOverrides: Record<string, string> | null;
+    if (outcome.ok) {
+      envOverrides = outcome.envOverrides;
+    } else {
       console.warn(
-        `${input.logPrefix} envOverrides failed for skill ${row.skill_id}:`,
-        err,
+        `${input.logPrefix} envOverrides failed for skill ${slug}:`,
+        outcome.err,
       );
       input.diagnostics?.add({
         capabilityClass: "skill",
-        capabilityId: row.skill_id,
+        capabilityId: slug,
         reason: "oauth_missing",
         detail: `skill env resolution failed; skill ships without its OAuth env: ${
-          err instanceof Error ? err.message : String(err)
+          outcome.err instanceof Error
+            ? outcome.err.message
+            : String(outcome.err)
         }`,
       });
-      return null;
-    });
+      envOverrides = null;
+    }
     if (config.secretRef) skill.secretRef = config.secretRef as string;
     if (config.mcpServer) skill.mcpServer = config.mcpServer as string;
     if (envOverrides && Object.keys(envOverrides).length > 0) {
