@@ -11,14 +11,7 @@
 import { GraphQLError } from "graphql";
 import { getConfig } from "@thinkwork/runtime-config";
 import type { GraphQLContext } from "../../context.js";
-import {
-  db,
-  eq,
-  and,
-  isNull,
-  artifacts,
-  artifactShares,
-} from "../../utils.js";
+import { db, eq, and, isNull, artifacts, artifactShares } from "../../utils.js";
 import { requireTenantMember } from "../core/authz.js";
 import { resolveCallerFromAuth } from "../core/resolve-auth-user.js";
 import { assertCanvasAccess } from "../../../lib/artifacts/canvas-access.js";

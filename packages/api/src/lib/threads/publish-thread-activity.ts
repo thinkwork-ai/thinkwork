@@ -100,6 +100,9 @@ export async function publishThreadActivity({
         }),
     );
   } catch (err) {
-    console.error(`[publishThreadActivity] failed for thread ${threadId}:`, err);
+    console.error(
+      `[publishThreadActivity] failed for thread ${threadId}:`,
+      err,
+    );
   }
 }

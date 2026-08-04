@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  type ThinkWorkReleaseManifest,
-} from "@thinkwork/release-manifest";
+import { type ThinkWorkReleaseManifest } from "@thinkwork/release-manifest";
 import { resolveManifestImagesForManagedApp } from "./release-manifest-images.js";
 
 afterEach(() => {

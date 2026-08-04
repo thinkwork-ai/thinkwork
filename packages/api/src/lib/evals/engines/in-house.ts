@@ -168,8 +168,9 @@ async function invokeBedrockLlmJudge(
   rubric: string,
 ): Promise<EvalJudgeResult> {
   try {
-    const { BedrockRuntimeClient, ConverseCommand } =
-      await import("@aws-sdk/client-bedrock-runtime");
+    const { BedrockRuntimeClient, ConverseCommand } = await import(
+      "@aws-sdk/client-bedrock-runtime"
+    );
     const client = new BedrockRuntimeClient({ region: REGION });
     // Untrusted content (operator-authored rubric, recorded thread
     // text, agent output) travels ONLY inside delimited tags in the

@@ -34,7 +34,7 @@ export function createSignedPayload<T>(payload: T, signingKey: string): string {
 export function verifySignedPayload<T>(
   state: string,
   signingKey: string,
-  options: VerifySignedPayloadOptions<T>
+  options: VerifySignedPayloadOptions<T>,
 ): T {
   const { validate, errorPrefix, expiresAt, nowMs = Date.now } = options;
 

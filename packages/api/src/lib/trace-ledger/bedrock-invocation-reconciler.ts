@@ -877,8 +877,8 @@ function metadataMatchesRuntime(
   const metadataValues = new Set(Object.values(record.requestMetadata));
   return Boolean(
     (runtime.traceId && metadataValues.has(runtime.traceId)) ||
-    (runtime.threadTurnId && metadataValues.has(runtime.threadTurnId)) ||
-    (runtime.requestId && metadataValues.has(runtime.requestId)),
+      (runtime.threadTurnId && metadataValues.has(runtime.threadTurnId)) ||
+      (runtime.requestId && metadataValues.has(runtime.requestId)),
   );
 }
 

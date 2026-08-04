@@ -21,13 +21,13 @@ export interface SlackThreadMappingResult {
 
 export interface SlackThreadMappingStore {
   withTransaction<T>(
-    fn: (store: SlackThreadMappingStore) => Promise<T>
+    fn: (store: SlackThreadMappingStore) => Promise<T>,
   ): Promise<T>;
   findThread(
-    input: SlackThreadKey
+    input: SlackThreadKey,
   ): Promise<{ threadId: string; spaceId: string } | null>;
   createThread(
-    input: SlackThreadCreateInput
+    input: SlackThreadCreateInput,
   ): Promise<{ threadId: string; spaceId: string }>;
   createMapping(input: SlackThreadCreateMappingInput): Promise<void>;
   createMessage(input: SlackThreadCreateMessageInput): Promise<{
@@ -72,7 +72,7 @@ export async function resolveOrCreateSlackThread(
     actorId: string;
     envelope: SlackThreadTurnInput;
   },
-  store: SlackThreadMappingStore = createDrizzleSlackThreadMappingStore()
+  store: SlackThreadMappingStore = createDrizzleSlackThreadMappingStore(),
 ): Promise<SlackThreadMappingResult> {
   return store.withTransaction(async (tx) => {
     const key = slackThreadKey(input.tenantId, input.envelope);
@@ -103,7 +103,7 @@ export function slackSourceEventId(eventId: string): string {
 
 function slackThreadKey(
   tenantId: string,
-  envelope: SlackThreadTurnInput
+  envelope: SlackThreadTurnInput,
 ): SlackThreadKey {
   return {
     tenantId,
@@ -125,7 +125,7 @@ async function createMappedThread(
     envelope: SlackThreadTurnInput;
   },
   key: SlackThreadKey,
-  store: SlackThreadMappingStore
+  store: SlackThreadMappingStore,
 ) {
   const thread = await store.createThread({
     tenantId: input.tenantId,
@@ -149,12 +149,12 @@ function slackThreadTitle(envelope: SlackThreadTurnInput): string {
 }
 
 function createDrizzleSlackThreadMappingStore(
-  dbClient: any = db
+  dbClient: any = db,
 ): SlackThreadMappingStore {
   return {
     withTransaction(fn) {
       return dbClient.transaction((tx: any) =>
-        fn(createDrizzleSlackThreadMappingStore(tx))
+        fn(createDrizzleSlackThreadMappingStore(tx)),
       );
     },
     async findThread(input) {
@@ -174,8 +174,8 @@ function createDrizzleSlackThreadMappingStore(
             eq(slackThreads.tenant_id, input.tenantId),
             eq(slackThreads.slack_team_id, input.slackTeamId),
             eq(slackThreads.channel_id, input.channelId),
-            rootCondition
-          )
+            rootCondition,
+          ),
         )
         .limit(1);
       return row ?? null;
@@ -234,9 +234,9 @@ function createDrizzleSlackThreadMappingStore(
             input.title || identifier,
             existingThreads.map(
               (row: { workspaceFolderName: string | null; id: string }) =>
-                row.workspaceFolderName ?? row.id
+                row.workspaceFolderName ?? row.id,
             ),
-            "thread"
+            "thread",
           ),
           status: "in_progress",
           channel: "slack",
@@ -307,8 +307,8 @@ function createDrizzleSlackThreadMappingStore(
         .where(
           and(
             eq(messages.tenant_id, input.tenantId),
-            eq(messages.source_event_id, input.sourceEventId)
-          )
+            eq(messages.source_event_id, input.sourceEventId),
+          ),
         )
         .limit(1);
       if (!existing) throw new Error("Slack source event dedupe lookup failed");

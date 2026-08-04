@@ -67,9 +67,9 @@ describe("runRetryAgentDispatch (R7/AE5)", () => {
     expect(redispatched).toEqual([
       { route: "default", attempt: 2, message: expect.any(Object) },
     ]);
-    expect(
-      (result.metadata?.dispatch as Record<string, unknown>).status,
-    ).toBe("pending");
+    expect((result.metadata?.dispatch as Record<string, unknown>).status).toBe(
+      "pending",
+    );
   });
 
   it("re-drives the recorded route (mention) with the incremented attempt", async () => {
@@ -112,7 +112,11 @@ describe("runRetryAgentDispatch (R7/AE5)", () => {
     });
     await expect(
       runRetryAgentDispatch(
-        { messageId: "message-1", tenantId: "tenant-other", callerUserId: SENDER },
+        {
+          messageId: "message-1",
+          tenantId: "tenant-other",
+          callerUserId: SENDER,
+        },
         d,
       ),
     ).rejects.toMatchObject({
@@ -162,7 +166,9 @@ describe("KTD4: retry mints a fresh idempotency key that differs from the base",
       sender: { type: "user", id: SENDER },
       attempt: 2,
     });
-    expect(base.idempotencyKey).toBe("agent-default:tenant-1:message-1:agent-1");
+    expect(base.idempotencyKey).toBe(
+      "agent-default:tenant-1:message-1:agent-1",
+    );
     expect(retry.idempotencyKey).toBe(
       "agent-default:tenant-1:message-1:agent-1:attempt-2",
     );
@@ -197,7 +203,9 @@ describe("KTD4: retry mints a fresh idempotency key that differs from the base",
       sender: { type: "user", id: SENDER },
       attempt: 3,
     });
-    expect(base.idempotencyKey).toBe("agent-mention:tenant-1:message-1:agent-9");
+    expect(base.idempotencyKey).toBe(
+      "agent-mention:tenant-1:message-1:agent-9",
+    );
     expect(retry.idempotencyKey).toBe(
       "agent-mention:tenant-1:message-1:agent-9:attempt-3",
     );
@@ -232,9 +240,9 @@ describe("retryAgentDispatch failure-evidence guard", () => {
       d,
     );
     expect(redispatched).toHaveLength(1);
-    expect(
-      (result.metadata?.dispatch as Record<string, unknown>).status,
-    ).toBe("pending");
+    expect((result.metadata?.dispatch as Record<string, unknown>).status).toBe(
+      "pending",
+    );
   });
 
   it("does not consult the turn lookup when the sync failure stamp is present", async () => {

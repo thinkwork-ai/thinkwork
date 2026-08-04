@@ -1174,8 +1174,8 @@ function isAuthorizedSecretOverride(
 ): boolean {
   return Boolean(
     override?.actorType === "operator" &&
-    override.operatorId.trim() &&
-    override.reason.trim(),
+      override.operatorId.trim() &&
+      override.reason.trim(),
   );
 }
 

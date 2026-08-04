@@ -51,7 +51,9 @@ export class SpaceAccessDeniedError extends WorkspaceRenderError {
   }
 }
 
-export class DrizzleSpaceMembershipRepository implements SpaceMembershipRepository {
+export class DrizzleSpaceMembershipRepository
+  implements SpaceMembershipRepository
+{
   private readonly db = getDb();
 
   async isSpaceMember(input: {

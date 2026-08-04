@@ -59,8 +59,9 @@ beforeEach(() => {
 
 describe("push notification payloads", () => {
   it("builds computer approval pushes with code tier, sound, and action category", async () => {
-    const { buildComputerApprovalPushMessage } =
-      await import("./push-notifications.js");
+    const { buildComputerApprovalPushMessage } = await import(
+      "./push-notifications.js"
+    );
 
     expect(
       buildComputerApprovalPushMessage({

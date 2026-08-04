@@ -70,7 +70,7 @@ describe("msteams install-start handler", () => {
     const d = deps();
     const response = await handleMsteamsInstallStart(
       event({ tenantId: "tenant-1" }),
-      d
+      d,
     );
 
     expect(response.statusCode).toBe(200);
@@ -80,19 +80,19 @@ describe("msteams install-start handler", () => {
     const payload = verifyMsteamsInstallState(
       body.state,
       CREDENTIALS.clientSecret,
-      () => 2_000
+      () => 2_000,
     );
     expect(payload.tenantId).toBe("tenant-1");
     expect(payload.adminUserId).toBe("user-1");
 
     const url = new URL(body.adminConsentUrl);
     expect(url.origin + url.pathname).toBe(
-      "https://login.microsoftonline.com/organizations/adminconsent"
+      "https://login.microsoftonline.com/organizations/adminconsent",
     );
     expect(url.searchParams.get("client_id")).toBe("app-1");
     expect(url.searchParams.get("state")).toBe(body.state);
     expect(url.searchParams.get("redirect_uri")).toBe(
-      "https://api.example.com/msteams/install/complete"
+      "https://api.example.com/msteams/install/complete",
     );
 
     // The only persistence side effect: a revoked install is deliberately
@@ -104,7 +104,7 @@ describe("msteams install-start handler", () => {
     const d = deps({ authenticate: vi.fn().mockResolvedValue(null) });
     const response = await handleMsteamsInstallStart(
       event({ tenantId: "tenant-1" }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(401);
     expect(d.reopenRevoked).not.toHaveBeenCalled();
@@ -118,7 +118,7 @@ describe("msteams install-start handler", () => {
     });
     const response = await handleMsteamsInstallStart(
       event({ tenantId: "tenant-1" }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(401);
     expect(d.reopenRevoked).not.toHaveBeenCalled();
@@ -128,7 +128,7 @@ describe("msteams install-start handler", () => {
     const d = deps({ isTenantAdmin: vi.fn().mockResolvedValue(false) });
     const response = await handleMsteamsInstallStart(
       event({ tenantId: "tenant-1" }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(403);
     expect(d.reopenRevoked).not.toHaveBeenCalled();
@@ -138,7 +138,7 @@ describe("msteams install-start handler", () => {
     const d = deps({ resolveUserIdByEmail: vi.fn().mockResolvedValue(null) });
     const response = await handleMsteamsInstallStart(
       event({ tenantId: "tenant-1" }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(403);
     expect(d.reopenRevoked).not.toHaveBeenCalled();
@@ -159,7 +159,7 @@ describe("msteams install-start handler", () => {
   it("guards the method", async () => {
     const response = await handleMsteamsInstallStart(
       event({ tenantId: "tenant-1" }, "GET"),
-      deps()
+      deps(),
     );
     expect(response.statusCode).toBe(405);
   });
@@ -171,7 +171,7 @@ describe("msteams install-start handler", () => {
 
     const response = await handleMsteamsInstallStart(
       event({ tenantId: "tenant-1" }),
-      deps()
+      deps(),
     );
 
     expect(response.body).not.toContain(CREDENTIALS.clientSecret);

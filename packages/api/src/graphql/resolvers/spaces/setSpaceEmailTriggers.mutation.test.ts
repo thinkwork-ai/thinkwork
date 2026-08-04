@@ -152,8 +152,9 @@ describe("setSpaceEmailTriggers", () => {
   });
 
   it("requires admin access to the Space tenant before enabling email triggers", async () => {
-    const { setSpaceEmailTriggers } =
-      await import("./setSpaceEmailTriggers.mutation.js");
+    const { setSpaceEmailTriggers } = await import(
+      "./setSpaceEmailTriggers.mutation.js"
+    );
 
     const result = await setSpaceEmailTriggers(
       null,
@@ -180,8 +181,9 @@ describe("setSpaceEmailTriggers", () => {
   });
 
   it("maps the compatibility false toggle to a disabled visible trigger", async () => {
-    const { setSpaceEmailTriggers } =
-      await import("./setSpaceEmailTriggers.mutation.js");
+    const { setSpaceEmailTriggers } = await import(
+      "./setSpaceEmailTriggers.mutation.js"
+    );
 
     const result = await setSpaceEmailTriggers(
       null,
@@ -201,8 +203,9 @@ describe("setSpaceEmailTriggers", () => {
 
   it("edits the Space email prefix after copying source files to the new slug prefix", async () => {
     selectRows.push([]);
-    const { updateSpaceEmailTrigger } =
-      await import("./setSpaceEmailTriggers.mutation.js");
+    const { updateSpaceEmailTrigger } = await import(
+      "./setSpaceEmailTriggers.mutation.js"
+    );
 
     const result = await updateSpaceEmailTrigger(
       null,
@@ -255,8 +258,9 @@ describe("setSpaceEmailTriggers", () => {
   it("cleans up copied destination keys when the slug update fails", async () => {
     selectRows.push([]);
     updateRows.push([]);
-    const { updateSpaceEmailTrigger } =
-      await import("./setSpaceEmailTriggers.mutation.js");
+    const { updateSpaceEmailTrigger } = await import(
+      "./setSpaceEmailTriggers.mutation.js"
+    );
 
     await expect(
       updateSpaceEmailTrigger(
@@ -281,8 +285,9 @@ describe("setSpaceEmailTriggers", () => {
   });
 
   it("deletes lifecycle state without changing slug or touching S3", async () => {
-    const { updateSpaceEmailTrigger } =
-      await import("./setSpaceEmailTriggers.mutation.js");
+    const { updateSpaceEmailTrigger } = await import(
+      "./setSpaceEmailTriggers.mutation.js"
+    );
 
     const result = await updateSpaceEmailTrigger(
       null,
@@ -309,8 +314,9 @@ describe("setSpaceEmailTriggers", () => {
   });
 
   it("rejects deleting and editing the prefix in the same request", async () => {
-    const { updateSpaceEmailTrigger } =
-      await import("./setSpaceEmailTriggers.mutation.js");
+    const { updateSpaceEmailTrigger } = await import(
+      "./setSpaceEmailTriggers.mutation.js"
+    );
 
     await expect(
       updateSpaceEmailTrigger(
@@ -329,8 +335,9 @@ describe("setSpaceEmailTriggers", () => {
   });
 
   it("rejects blank and invalid email trigger updates", async () => {
-    const { updateSpaceEmailTrigger } =
-      await import("./setSpaceEmailTriggers.mutation.js");
+    const { updateSpaceEmailTrigger } = await import(
+      "./setSpaceEmailTriggers.mutation.js"
+    );
 
     await expect(
       updateSpaceEmailTrigger(
@@ -362,8 +369,9 @@ describe("setSpaceEmailTriggers", () => {
 
   it("rejects duplicate tenant-local email prefixes before copying files", async () => {
     selectRows.push([{ id: "space-2" }]);
-    const { updateSpaceEmailTrigger } =
-      await import("./setSpaceEmailTriggers.mutation.js");
+    const { updateSpaceEmailTrigger } = await import(
+      "./setSpaceEmailTriggers.mutation.js"
+    );
 
     await expect(
       updateSpaceEmailTrigger(
@@ -386,8 +394,9 @@ describe("setSpaceEmailTriggers", () => {
     selectRows.length = 0;
     selectRows.push([]);
 
-    const { setSpaceEmailTriggers } =
-      await import("./setSpaceEmailTriggers.mutation.js");
+    const { setSpaceEmailTriggers } = await import(
+      "./setSpaceEmailTriggers.mutation.js"
+    );
 
     await expect(
       setSpaceEmailTriggers(

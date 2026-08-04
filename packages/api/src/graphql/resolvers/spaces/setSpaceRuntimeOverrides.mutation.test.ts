@@ -107,8 +107,9 @@ describe("setSpaceRuntimeOverrides", () => {
   });
 
   it("persists typed Space runtime overrides after tenant authorization", async () => {
-    const { setSpaceRuntimeOverrides } =
-      await import("./setSpaceRuntimeOverrides.mutation.js");
+    const { setSpaceRuntimeOverrides } = await import(
+      "./setSpaceRuntimeOverrides.mutation.js"
+    );
 
     const result = await setSpaceRuntimeOverrides(
       null,

@@ -55,8 +55,8 @@ describe("msteams install state", () => {
       verifyMsteamsInstallState(
         state,
         SIGNING_KEY,
-        () => 1_000 + MSTEAMS_INSTALL_STATE_TTL_MS + 1
-      )
+        () => 1_000 + MSTEAMS_INSTALL_STATE_TTL_MS + 1,
+      ),
     ).toThrow(/expired/);
   });
 
@@ -75,10 +75,10 @@ describe("msteams install state", () => {
         nonce: "n",
         expiresAt: Date.now() + 60_000,
       }),
-      "utf8"
+      "utf8",
     ).toString("base64url");
     expect(() =>
-      verifyMsteamsInstallState(`${forged}.${signature}`, SIGNING_KEY)
+      verifyMsteamsInstallState(`${forged}.${signature}`, SIGNING_KEY),
     ).toThrow(/signature is invalid/);
   });
 
@@ -90,32 +90,32 @@ describe("msteams install state", () => {
       nowMs: () => 1_000,
     });
     expect(() =>
-      verifyMsteamsInstallState(state, SIGNING_KEY, () => 2_000)
+      verifyMsteamsInstallState(state, SIGNING_KEY, () => 2_000),
     ).toThrow(/signature is invalid/);
   });
 
   it("rejects malformed states", () => {
     expect(() => verifyMsteamsInstallState("", SIGNING_KEY)).toThrow(
-      /malformed/
+      /malformed/,
     );
     expect(() => verifyMsteamsInstallState("abc", SIGNING_KEY)).toThrow(
-      /malformed/
+      /malformed/,
     );
     expect(() => verifyMsteamsInstallState("a.b.c", SIGNING_KEY)).toThrow(
-      /malformed/
+      /malformed/,
     );
   });
 
   it("rejects an incomplete payload even when the signature is valid", () => {
     const encoded = Buffer.from(
       JSON.stringify({ tenantId: "tenant-1" }),
-      "utf8"
+      "utf8",
     ).toString("base64url");
     const signature = createHmac("sha256", SIGNING_KEY)
       .update(encoded)
       .digest("base64url");
     expect(() =>
-      verifyMsteamsInstallState(`${encoded}.${signature}`, SIGNING_KEY)
+      verifyMsteamsInstallState(`${encoded}.${signature}`, SIGNING_KEY),
     ).toThrow(/incomplete/);
   });
 });
@@ -154,7 +154,7 @@ describe("msteams account-link token", () => {
         expectedEntraTenantId: "entra-other",
         expectedAadObjectId: "aad-1",
         nowMs: () => 2_000,
-      })
+      }),
     ).toThrow(/different Entra tenant/);
   });
 
@@ -165,7 +165,7 @@ describe("msteams account-link token", () => {
         expectedEntraTenantId: "entra-1",
         expectedAadObjectId: "aad-other",
         nowMs: () => 2_000,
-      })
+      }),
     ).toThrow(/different Teams user/);
   });
 
@@ -174,7 +174,7 @@ describe("msteams account-link token", () => {
     expect(() =>
       verifyMsteamsAccountLinkToken(token, SIGNING_KEY, {
         nowMs: () => 1_000 + MSTEAMS_LINK_TOKEN_TTL_MS + 1,
-      })
+      }),
     ).toThrow(/expired/);
   });
 
@@ -189,22 +189,22 @@ describe("msteams account-link token", () => {
         nonce: "n",
         expiresAt: Date.now() + 60_000,
       }),
-      "utf8"
+      "utf8",
     ).toString("base64url");
     expect(() =>
-      verifyMsteamsAccountLinkToken(`${forged}.${signature}`, SIGNING_KEY)
+      verifyMsteamsAccountLinkToken(`${forged}.${signature}`, SIGNING_KEY),
     ).toThrow(/signature is invalid/);
   });
 
   it("rejects malformed tokens", () => {
     expect(() => verifyMsteamsAccountLinkToken("", SIGNING_KEY)).toThrow(
-      /malformed/
+      /malformed/,
     );
     expect(() => verifyMsteamsAccountLinkToken("abc", SIGNING_KEY)).toThrow(
-      /malformed/
+      /malformed/,
     );
     expect(() => verifyMsteamsAccountLinkToken("a.b.c", SIGNING_KEY)).toThrow(
-      /malformed/
+      /malformed/,
     );
   });
 });
@@ -220,7 +220,7 @@ describe("verifyMsteamsAdminConsent", () => {
     const fetchFn = vi
       .fn()
       .mockResolvedValue(
-        new Response(JSON.stringify({ access_token: "tok" }), { status: 200 })
+        new Response(JSON.stringify({ access_token: "tok" }), { status: 200 }),
       );
 
     const result = await verifyMsteamsAdminConsent({ ...input, fetchFn });
@@ -229,7 +229,7 @@ describe("verifyMsteamsAdminConsent", () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
     const [url, init] = fetchFn.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(
-      "https://login.microsoftonline.com/entra-tenant-1/oauth2/v2.0/token"
+      "https://login.microsoftonline.com/entra-tenant-1/oauth2/v2.0/token",
     );
     expect(String(init.body)).toContain("grant_type=client_credentials");
   });
@@ -240,7 +240,7 @@ describe("verifyMsteamsAdminConsent", () => {
       fetchFn: vi.fn().mockResolvedValue(
         new Response(JSON.stringify({ token_type: "Bearer" }), {
           status: 200,
-        })
+        }),
       ),
     });
     expect(missingToken).toEqual({
@@ -264,11 +264,11 @@ describe("verifyMsteamsAdminConsent", () => {
     const fetchFn = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: "invalid_client" }), {
         status: 400,
-      })
+      }),
     );
 
     await expect(
-      verifyMsteamsAdminConsent({ ...input, fetchFn })
+      verifyMsteamsAdminConsent({ ...input, fetchFn }),
     ).resolves.toEqual({ granted: false, reason: "invalid_client" });
   });
 
@@ -276,7 +276,7 @@ describe("verifyMsteamsAdminConsent", () => {
     const fetchFn = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
 
     await expect(
-      verifyMsteamsAdminConsent({ ...input, fetchFn })
+      verifyMsteamsAdminConsent({ ...input, fetchFn }),
     ).resolves.toEqual({
       granted: false,
       reason: "token_endpoint_unreachable",
@@ -291,7 +291,7 @@ describe("verifyMsteamsAdminConsent", () => {
         ...input,
         entraTenantId: "evil/../tenant",
         fetchFn,
-      })
+      }),
     ).resolves.toEqual({ granted: false, reason: "invalid_tenant_id" });
     expect(fetchFn).not.toHaveBeenCalled();
   });
@@ -303,7 +303,7 @@ describe("verifyMsteamsAdminConsent", () => {
         fetchFn: vi.fn().mockResolvedValue(
           new Response(JSON.stringify({ access_token: "tok" }), {
             status: 200,
-          })
+          }),
         ),
       }),
       verifyMsteamsAdminConsent({
@@ -314,8 +314,8 @@ describe("verifyMsteamsAdminConsent", () => {
               error: "invalid_client",
               error_description: input.clientSecret,
             }),
-            { status: 401 }
-          )
+            { status: 401 },
+          ),
         ),
       }),
       verifyMsteamsAdminConsent({
@@ -368,7 +368,7 @@ describe("getMsteamsAppCredentials", () => {
   it("fails when the secret is empty or not JSON", async () => {
     sendMock.mockResolvedValue({ SecretString: "" });
     await expect(getMsteamsAppCredentials()).rejects.toThrow(
-      /empty SecretString/
+      /empty SecretString/,
     );
 
     resetMsteamsAppCredentialsCacheForTests();

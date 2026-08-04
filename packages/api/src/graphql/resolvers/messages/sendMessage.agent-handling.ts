@@ -18,7 +18,8 @@ export interface SendMessageAgentHandlingInput {
   hasAgentMentions: boolean;
 }
 
-export interface DefaultAgentDispatchInput extends SendMessageAgentHandlingInput {
+export interface DefaultAgentDispatchInput
+  extends SendMessageAgentHandlingInput {
   hasComputerThread: boolean;
   // A #profile mention (targetType agent_profile). Profile mentions engage
   // the agent through THIS default route (as requestedProfileSlug) — they are

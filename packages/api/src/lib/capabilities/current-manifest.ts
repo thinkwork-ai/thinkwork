@@ -98,8 +98,9 @@ export async function resolveCurrentCapabilitiesManifest(input: {
       spaceId: string;
       userId: string | null;
     }) => {
-      const { renderWorkspaceTuple } =
-        await import("../workspace-renderer/compose-tuple.js");
+      const { renderWorkspaceTuple } = await import(
+        "../workspace-renderer/compose-tuple.js"
+      );
       return renderWorkspaceTuple(tupleInput, { persist: false });
     });
 

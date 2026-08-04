@@ -99,8 +99,9 @@ vi.mock("../../../lib/spaces/customer-onboarding-workflow.js", async () => {
   };
 });
 
-const { startTwentyCustomerOnboarding } =
-  await import("./startCustomerOnboardingFromCrmRecord.mutation.js");
+const { startTwentyCustomerOnboarding } = await import(
+  "./startCustomerOnboardingFromCrmRecord.mutation.js"
+);
 
 const ctx = { auth: { authType: "cognito" } } as any;
 

@@ -68,8 +68,9 @@ const defaultDeps = (): MemoryStageSweeperDeps => {
   const sfn = new SFNClient({});
   return {
     invokeWorker: async (payload) => {
-      const { LambdaClient, InvokeCommand } =
-        await import("@aws-sdk/client-lambda");
+      const { LambdaClient, InvokeCommand } = await import(
+        "@aws-sdk/client-lambda"
+      );
       const stage = process.env.STAGE;
       const fnName =
         process.env.MEMORY_STAGE_WORKER_FUNCTION_NAME ??

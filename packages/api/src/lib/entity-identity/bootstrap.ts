@@ -41,10 +41,7 @@ import type {
   MatchRequest,
 } from "./matcher.js";
 import { matchCanonicalEntity, defaultIdentityRules } from "./matcher.js";
-import {
-  computeIdentitySignature,
-  type IdentityRule,
-} from "./normalizers.js";
+import { computeIdentitySignature, type IdentityRule } from "./normalizers.js";
 import {
   attachIdentityEvidence,
   appendResolutionEvent,
@@ -625,8 +622,9 @@ export async function runIdentityMatchJob(
     if (!deps.fetchSourceRecords) {
       // Lazy import keeps the pure orchestration testable without the
       // network-facing fetcher module's transitive imports.
-      const { createDefaultSourceRecordFetcher } =
-        await import("./source-fetchers.js");
+      const { createDefaultSourceRecordFetcher } = await import(
+        "./source-fetchers.js"
+      );
       deps = {
         ...deps,
         fetchSourceRecords: createDefaultSourceRecordFetcher(),

@@ -289,10 +289,12 @@ describe("workspace agent-folder index (subagent-folders U11)", () => {
 
 describe("serializeAgentProfileFolderForm (subagent-folders U12)", () => {
   it("emits strict folder form: description absorbs routingGuidance, no legacy fields", async () => {
-    const { serializeAgentProfileFolderForm } =
-      await import("./agent-profile-workspace-files.js");
-    const { parseAgentFolderInstructions } =
-      await import("./agent-folder-format.js");
+    const { serializeAgentProfileFolderForm } = await import(
+      "./agent-profile-workspace-files.js"
+    );
+    const { parseAgentFolderInstructions } = await import(
+      "./agent-folder-format.js"
+    );
     const content = serializeAgentProfileFolderForm({
       slug: "helper",
       name: "Helper",
@@ -339,8 +341,9 @@ describe("serializeAgentProfileFolderForm (subagent-folders U12)", () => {
   });
 
   it("falls back to the display name when description and routingGuidance are absent", async () => {
-    const { serializeAgentProfileFolderForm } =
-      await import("./agent-profile-workspace-files.js");
+    const { serializeAgentProfileFolderForm } = await import(
+      "./agent-profile-workspace-files.js"
+    );
     const content = serializeAgentProfileFolderForm({
       slug: "helper",
       name: "Helper",

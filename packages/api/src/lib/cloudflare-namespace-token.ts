@@ -107,8 +107,9 @@ function isParameterNotFound(error: unknown): boolean {
 }
 
 async function defaultSsmSend(paramName: string): Promise<string | null> {
-  const { SSMClient, GetParameterCommand } =
-    await import("@aws-sdk/client-ssm");
+  const { SSMClient, GetParameterCommand } = await import(
+    "@aws-sdk/client-ssm"
+  );
   const ssm = new SSMClient({});
   const res = await ssm.send(
     new GetParameterCommand({ Name: paramName, WithDecryption: true }),

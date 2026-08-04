@@ -84,8 +84,9 @@ describe("tenant membership subscription invalidation", () => {
       },
     ]);
     returningQueue.push([{ id: "membership-1" }]);
-    const { removeTenantMember } =
-      await import("./removeTenantMember.mutation.js");
+    const { removeTenantMember } = await import(
+      "./removeTenantMember.mutation.js"
+    );
 
     await expect(
       removeTenantMember(null, { id: "membership-1" }, {} as never),
@@ -119,8 +120,9 @@ describe("tenant membership subscription invalidation", () => {
         status: "disabled",
       },
     ]);
-    const { updateTenantMember } =
-      await import("./updateTenantMember.mutation.js");
+    const { updateTenantMember } = await import(
+      "./updateTenantMember.mutation.js"
+    );
 
     await updateTenantMember(
       null,

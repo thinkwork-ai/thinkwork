@@ -26,7 +26,10 @@ export async function pinThread(
     thread,
   });
 
-  const existing = await loadPinnedThread({ ...caller, threadId: args.threadId });
+  const existing = await loadPinnedThread({
+    ...caller,
+    threadId: args.threadId,
+  });
   const pinnedAt = new Date();
   await db
     .update(threadParticipants)

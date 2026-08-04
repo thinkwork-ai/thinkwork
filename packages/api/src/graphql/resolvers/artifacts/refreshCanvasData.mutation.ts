@@ -112,8 +112,9 @@ export const refreshCanvasData = async (
     ...(callerUserId ? { actingUserId: callerUserId } : {}),
   };
 
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   const res = await lambda.send(
     new InvokeCommand({

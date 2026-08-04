@@ -1486,7 +1486,8 @@ function resolveAgentChildGrants(input: {
         ? root.definition.operations
         : null);
     const permissions = sidecar.permissions as
-      { operations?: unknown } | undefined;
+      | { operations?: unknown }
+      | undefined;
     const requested = Array.isArray(permissions?.operations)
       ? (permissions.operations as string[])
       : null;

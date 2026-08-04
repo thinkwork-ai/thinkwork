@@ -234,8 +234,9 @@ describe("routine-approval-bridge — type discriminator", () => {
   });
 
   it("isRoutineApprovalInboxItem narrows the type predicate", async () => {
-    const { isRoutineApprovalInboxItem } =
-      await import("../graphql/resolvers/inbox/routine-approval-bridge.js");
+    const { isRoutineApprovalInboxItem } = await import(
+      "../graphql/resolvers/inbox/routine-approval-bridge.js"
+    );
     expect(isRoutineApprovalInboxItem({ type: "routine_approval" })).toBe(true);
     expect(isRoutineApprovalInboxItem({ type: "workspace_review" })).toBe(
       false,

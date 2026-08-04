@@ -105,7 +105,11 @@ function extractSignaturePrefix(
 // ---------------------------------------------------------------------------
 
 type SignatureStatus =
-  "verified" | "invalid" | "missing" | "skipped_dev" | "not_required";
+  | "verified"
+  | "invalid"
+  | "missing"
+  | "skipped_dev"
+  | "not_required";
 
 type ResolutionStatus =
   | "ok"

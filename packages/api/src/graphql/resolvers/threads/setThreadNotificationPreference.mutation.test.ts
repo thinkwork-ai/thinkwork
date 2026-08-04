@@ -119,7 +119,11 @@ describe("setThreadNotificationPreference", () => {
     await expect(
       setThreadNotificationPreference(
         null,
-        { tenantId: "tenant-1", threadId: "thread-1", preference: "SUBSCRIBED" },
+        {
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+          preference: "SUBSCRIBED",
+        },
         ctx,
       ),
     ).rejects.toBeInstanceOf(GraphQLError);

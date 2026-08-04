@@ -245,8 +245,9 @@ describe("Query.messages — tenant scoping (plan-012 U7)", () => {
       created_at: new Date("2026-05-09T00:00:00Z"),
     });
 
-    const { messages_ } =
-      await import("../graphql/resolvers/messages/messages.query.js");
+    const { messages_ } = await import(
+      "../graphql/resolvers/messages/messages.query.js"
+    );
 
     const result = await messages_(null, { threadId: THREAD_A }, {
       auth: { tenantId: TENANT_A, principalId: "u-1" },
@@ -271,8 +272,9 @@ describe("Query.messages — tenant scoping (plan-012 U7)", () => {
       created_at: new Date("2026-05-09T00:00:00Z"),
     });
 
-    const { messages_ } =
-      await import("../graphql/resolvers/messages/messages.query.js");
+    const { messages_ } = await import(
+      "../graphql/resolvers/messages/messages.query.js"
+    );
 
     const result = await messages_(null, { threadId: THREAD_A }, {
       auth: { tenantId: TENANT_B, principalId: "u-foreign" },
@@ -296,8 +298,9 @@ describe("Query.messages — tenant scoping (plan-012 U7)", () => {
       created_at: new Date("2026-05-09T00:00:00Z"),
     });
 
-    const { messages_ } =
-      await import("../graphql/resolvers/messages/messages.query.js");
+    const { messages_ } = await import(
+      "../graphql/resolvers/messages/messages.query.js"
+    );
 
     const result = await messages_(null, { threadId: THREAD_A }, {
       auth: {},
@@ -330,8 +333,9 @@ describe("Thread.messages field resolver — tenant scoping (plan-012 U7)", () =
       },
     );
 
-    const { threadTypeResolvers } =
-      await import("../graphql/resolvers/threads/types.js");
+    const { threadTypeResolvers } = await import(
+      "../graphql/resolvers/threads/types.js"
+    );
 
     const result = await threadTypeResolvers.messages(
       { id: THREAD_A, tenantId: TENANT_A },
@@ -355,8 +359,9 @@ describe("Thread.messages field resolver — tenant scoping (plan-012 U7)", () =
       created_at: new Date("2026-05-09T00:00:00Z"),
     });
 
-    const { threadTypeResolvers } =
-      await import("../graphql/resolvers/threads/types.js");
+    const { threadTypeResolvers } = await import(
+      "../graphql/resolvers/threads/types.js"
+    );
 
     const result = await threadTypeResolvers.messages(
       { id: THREAD_A }, // no tenantId on parent

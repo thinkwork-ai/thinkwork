@@ -71,9 +71,9 @@ describe("msteams install-complete handler", () => {
     const state = signedState();
     const response = await handleMsteamsInstallComplete(
       event(
-        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`
+        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`,
       ),
-      d
+      d,
     );
 
     expect(response.statusCode).toBe(200);
@@ -107,9 +107,9 @@ describe("msteams install-complete handler", () => {
     const state = signedState();
     const response = await handleMsteamsInstallComplete(
       event(
-        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`
+        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`,
       ),
-      d
+      d,
     );
 
     expect(response.statusCode).toBe(403);
@@ -125,14 +125,14 @@ describe("msteams install-complete handler", () => {
     const state = signedState();
     const response = await handleMsteamsInstallComplete(
       event(
-        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`
+        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`,
       ),
-      d
+      d,
     );
 
     expect(response.statusCode).toBe(409);
     expect(JSON.parse(response.body ?? "{}").error).toMatch(
-      /not pending activation/
+      /not pending activation/,
     );
   });
 
@@ -145,9 +145,9 @@ describe("msteams install-complete handler", () => {
     const state = signedState();
     const response = await handleMsteamsInstallComplete(
       event(
-        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`
+        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`,
       ),
-      d
+      d,
     );
 
     expect(response.statusCode).toBe(200);
@@ -170,10 +170,10 @@ describe("msteams install-complete handler", () => {
     const response = await handleMsteamsInstallComplete(
       event(
         `admin_consent=True&tenant=entra-evil&state=${encodeURIComponent(
-          state
-        )}`
+          state,
+        )}`,
       ),
-      d
+      d,
     );
 
     expect(response.statusCode).toBe(409);
@@ -190,9 +190,9 @@ describe("msteams install-complete handler", () => {
     const state = signedState();
     const response = await handleMsteamsInstallComplete(
       event(
-        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`
+        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`,
       ),
-      d
+      d,
     );
 
     expect(response.statusCode).toBe(409);
@@ -207,10 +207,10 @@ describe("msteams install-complete handler", () => {
     const response = await handleMsteamsInstallComplete(
       event(
         `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(
-          tampered
-        )}`
+          tampered,
+        )}`,
       ),
-      d
+      d,
     );
     expect(response.statusCode).toBe(401);
     expect(d.upsertInstall).not.toHaveBeenCalled();
@@ -223,9 +223,9 @@ describe("msteams install-complete handler", () => {
     const state = signedState();
     const response = await handleMsteamsInstallComplete(
       event(
-        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`
+        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`,
       ),
-      d
+      d,
     );
     expect(response.statusCode).toBe(401);
     expect(d.upsertInstall).not.toHaveBeenCalled();
@@ -235,13 +235,13 @@ describe("msteams install-complete handler", () => {
     const d = deps();
     const malformed = await handleMsteamsInstallComplete(
       event("admin_consent=True&tenant=entra-1&state=not-a-state"),
-      d
+      d,
     );
     expect(malformed.statusCode).toBe(401);
 
     const missing = await handleMsteamsInstallComplete(
       event("admin_consent=True&tenant=entra-1"),
-      d
+      d,
     );
     expect(missing.statusCode).toBe(400);
     expect(d.upsertInstall).not.toHaveBeenCalled();
@@ -253,10 +253,10 @@ describe("msteams install-complete handler", () => {
     const response = await handleMsteamsInstallComplete(
       event(
         `error=access_denied&error_description=declined&tenant=entra-1&state=${encodeURIComponent(
-          state
-        )}`
+          state,
+        )}`,
       ),
-      d
+      d,
     );
 
     expect(response.statusCode).toBe(200);
@@ -286,9 +286,9 @@ describe("msteams install-complete handler", () => {
     const state = signedState();
     const response = await handleMsteamsInstallComplete(
       event(
-        `error=access_denied&tenant=entra-1&state=${encodeURIComponent(state)}`
+        `error=access_denied&tenant=entra-1&state=${encodeURIComponent(state)}`,
       ),
-      d
+      d,
     );
 
     // Still 200 and diagnosable, but the working binding is untouched.
@@ -305,7 +305,7 @@ describe("msteams install-complete handler", () => {
     const state = signedState();
     const response = await handleMsteamsInstallComplete(
       event(`error=access_denied&state=${encodeURIComponent(state)}`),
-      d
+      d,
     );
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body ?? "{}").consent).toBe("admin_required");
@@ -323,9 +323,9 @@ describe("msteams install-complete handler", () => {
     const state = signedState();
     const response = await handleMsteamsInstallComplete(
       event(
-        `error=access_denied&tenant=entra-1&state=${encodeURIComponent(state)}`
+        `error=access_denied&tenant=entra-1&state=${encodeURIComponent(state)}`,
       ),
-      d
+      d,
     );
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body ?? "{}").consent).toBe("admin_required");
@@ -337,7 +337,7 @@ describe("msteams install-complete handler", () => {
     const state = signedState();
     const response = await handleMsteamsInstallComplete(
       event(`tenant=entra-1&state=${encodeURIComponent(state)}`),
-      d
+      d,
     );
     expect(response.statusCode).toBe(400);
     expect(d.upsertInstall).not.toHaveBeenCalled();
@@ -346,7 +346,7 @@ describe("msteams install-complete handler", () => {
   it("guards the method", async () => {
     const response = await handleMsteamsInstallComplete(
       event("", "POST"),
-      deps()
+      deps(),
     );
     expect(response.statusCode).toBe(405);
   });
@@ -359,9 +359,9 @@ describe("msteams install-complete handler", () => {
     const state = signedState();
     const response = await handleMsteamsInstallComplete(
       event(
-        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`
+        `admin_consent=True&tenant=entra-1&state=${encodeURIComponent(state)}`,
       ),
-      deps()
+      deps(),
     );
 
     expect(response.body).not.toContain(CREDENTIALS.clientSecret);

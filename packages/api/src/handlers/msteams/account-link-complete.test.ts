@@ -55,7 +55,7 @@ function linkToken(
     entraTenantId: string;
     aadObjectId: string;
     signingKey: string;
-  }> = {}
+  }> = {},
 ): string {
   return createMsteamsAccountLinkToken({
     tenantId: "tenant-1",
@@ -104,7 +104,7 @@ describe("msteams account-link-complete handler", () => {
     const d = deps();
     const response = await handleMsteamsAccountLinkComplete(
       event({ token: linkToken() }),
-      d
+      d,
     );
 
     expect(response.statusCode).toBe(200);
@@ -124,7 +124,7 @@ describe("msteams account-link-complete handler", () => {
     const d = deps({ authenticate: vi.fn().mockResolvedValue(null) });
     const response = await handleMsteamsAccountLinkComplete(
       event({ token: linkToken() }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(401);
     expect(d.upsertLink).not.toHaveBeenCalled();
@@ -138,7 +138,7 @@ describe("msteams account-link-complete handler", () => {
     });
     const response = await handleMsteamsAccountLinkComplete(
       event({ token: linkToken() }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(401);
   });
@@ -147,7 +147,7 @@ describe("msteams account-link-complete handler", () => {
     const d = deps({ nowMs: () => 1_000 + MSTEAMS_LINK_TOKEN_TTL_MS + 1 });
     const response = await handleMsteamsAccountLinkComplete(
       event({ token: linkToken() }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(401);
     expect(d.upsertLink).not.toHaveBeenCalled();
@@ -157,13 +157,13 @@ describe("msteams account-link-complete handler", () => {
     const d = deps();
     const tampered = await handleMsteamsAccountLinkComplete(
       event({ token: `${linkToken().slice(0, -3)}xyz` }),
-      d
+      d,
     );
     expect(tampered.statusCode).toBe(401);
 
     const wrongKey = await handleMsteamsAccountLinkComplete(
       event({ token: linkToken({ signingKey: "other-key" }) }),
-      d
+      d,
     );
     expect(wrongKey.statusCode).toBe(401);
     expect(d.upsertLink).not.toHaveBeenCalled();
@@ -173,7 +173,7 @@ describe("msteams account-link-complete handler", () => {
     const d = deps();
     const malformed = await handleMsteamsAccountLinkComplete(
       event({ token: "not-a-token" }),
-      d
+      d,
     );
     expect(malformed.statusCode).toBe(401);
 
@@ -191,7 +191,7 @@ describe("msteams account-link-complete handler", () => {
     });
     const response = await handleMsteamsAccountLinkComplete(
       event({ token: linkToken() }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(403);
     expect(d.upsertLink).not.toHaveBeenCalled();
@@ -206,7 +206,7 @@ describe("msteams account-link-complete handler", () => {
     });
     const response = await handleMsteamsAccountLinkComplete(
       event({ token: linkToken() }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(200);
     expect(d.isTenantMember).toHaveBeenCalledWith("tenant-1", "user-1");
@@ -216,7 +216,7 @@ describe("msteams account-link-complete handler", () => {
     const d = deps({ findInstall: vi.fn().mockResolvedValue(null) });
     const response = await handleMsteamsAccountLinkComplete(
       event({ token: linkToken() }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(409);
     expect(d.upsertLink).not.toHaveBeenCalled();
@@ -233,7 +233,7 @@ describe("msteams account-link-complete handler", () => {
     });
     const response = await handleMsteamsAccountLinkComplete(
       event({ token: linkToken() }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(409);
     expect(d.upsertLink).not.toHaveBeenCalled();
@@ -247,11 +247,11 @@ describe("msteams account-link-complete handler", () => {
     });
     const response = await handleMsteamsAccountLinkComplete(
       event({ token: linkToken() }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(409);
     expect(JSON.parse(response.body ?? "{}").error).toMatch(
-      /already linked to a different ThinkWork user/
+      /already linked to a different ThinkWork user/,
     );
   });
 
@@ -259,7 +259,7 @@ describe("msteams account-link-complete handler", () => {
     const d = deps();
     const response = await handleMsteamsAccountLinkComplete(
       event({ token: linkToken({ aadObjectId: "bot-app-1" }) }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(403);
     expect(d.upsertLink).not.toHaveBeenCalled();
@@ -273,7 +273,7 @@ describe("msteams account-link-complete handler", () => {
         entraTenantId: "entra-1",
         aadObjectId: "aad-1",
       }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(200);
     expect(JSON.parse(response.body ?? "{}")).toEqual({ linked: false });
@@ -298,7 +298,7 @@ describe("msteams account-link-complete handler", () => {
         entraTenantId: "entra-1",
         aadObjectId: "aad-1",
       }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(403);
     expect(d.unlink).not.toHaveBeenCalled();
@@ -312,7 +312,7 @@ describe("msteams account-link-complete handler", () => {
         entraTenantId: "entra-1",
         aadObjectId: "aad-1",
       }),
-      d
+      d,
     );
     expect(response.statusCode).toBe(404);
     expect(d.unlink).not.toHaveBeenCalled();
@@ -321,7 +321,7 @@ describe("msteams account-link-complete handler", () => {
   it("guards the method", async () => {
     const response = await handleMsteamsAccountLinkComplete(
       event({ token: linkToken() }, "GET"),
-      deps()
+      deps(),
     );
     expect(response.statusCode).toBe(405);
   });
@@ -334,7 +334,7 @@ describe("msteams account-link-complete handler", () => {
     const token = linkToken();
     const response = await handleMsteamsAccountLinkComplete(
       event({ token }),
-      deps()
+      deps(),
     );
 
     expect(response.body).not.toContain(token);

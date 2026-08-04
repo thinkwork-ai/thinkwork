@@ -67,8 +67,9 @@ describe("updateTenantSettings", () => {
   });
 
   it("saves a positive goal token budget after admin authorization", async () => {
-    const { updateTenantSettings } =
-      await import("./updateTenantSettings.mutation.js");
+    const { updateTenantSettings } = await import(
+      "./updateTenantSettings.mutation.js"
+    );
 
     const result = await updateTenantSettings(
       null,
@@ -92,8 +93,9 @@ describe("updateTenantSettings", () => {
   });
 
   it("allows clearing the saved goal token budget to use the built-in fallback", async () => {
-    const { updateTenantSettings } =
-      await import("./updateTenantSettings.mutation.js");
+    const { updateTenantSettings } = await import(
+      "./updateTenantSettings.mutation.js"
+    );
 
     const result = await updateTenantSettings(
       null,
@@ -113,8 +115,9 @@ describe("updateTenantSettings", () => {
   it.each([0, -1, 1.5, 2_000_001, "100000"])(
     "rejects invalid goal token budget value %s",
     async (goalDefaultTokenBudget) => {
-      const { updateTenantSettings } =
-        await import("./updateTenantSettings.mutation.js");
+      const { updateTenantSettings } = await import(
+        "./updateTenantSettings.mutation.js"
+      );
 
       await expect(
         updateTenantSettings(
@@ -134,8 +137,9 @@ describe("updateTenantSettings", () => {
 
   it("does not update settings when admin authorization fails", async () => {
     authError.current = new Error("FORBIDDEN");
-    const { updateTenantSettings } =
-      await import("./updateTenantSettings.mutation.js");
+    const { updateTenantSettings } = await import(
+      "./updateTenantSettings.mutation.js"
+    );
 
     await expect(
       updateTenantSettings(

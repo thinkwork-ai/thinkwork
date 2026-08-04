@@ -7,8 +7,9 @@ vi.mock("../lib/appsync-iam-publisher.js", () => ({
   publishAppSyncMutation: publishSpy,
 }));
 
-const { notifyThreadActivity, notifyThreadTurnStep } =
-  await import("./notify.js");
+const { notifyThreadActivity, notifyThreadTurnStep } = await import(
+  "./notify.js"
+);
 
 function lastBody() {
   const call = publishSpy.mock.calls.at(-1)!;

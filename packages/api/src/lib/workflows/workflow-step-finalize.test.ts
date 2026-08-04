@@ -107,7 +107,10 @@ describe("projectWorkflowStepFinalize — skip / hold", () => {
       },
       { db: fake.db as never },
     );
-    expect(result).toEqual({ status: "skipped", reason: "not_workflow_step_turn" });
+    expect(result).toEqual({
+      status: "skipped",
+      reason: "not_workflow_step_turn",
+    });
     expect(mockSfnSend).not.toHaveBeenCalled();
     expect(fake.updates).toHaveLength(0);
     expect(fake.inserts).toHaveLength(0);
@@ -151,7 +154,10 @@ describe("projectWorkflowStepFinalize — completed", () => {
       { db: fake.db as never },
     );
 
-    expect(result).toMatchObject({ status: "resumed", turnStatus: "completed" });
+    expect(result).toMatchObject({
+      status: "resumed",
+      turnStatus: "completed",
+    });
     expect(mockSfnSend).toHaveBeenCalledTimes(1);
 
     const command = mockSfnSend.mock.calls[0][0] as {

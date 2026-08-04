@@ -474,7 +474,8 @@ async function deleteKeys(
 }
 
 export type ResignSidecarResult =
-  FolderWriteResult | { ok: true; skipped: "no_sidecar" };
+  | FolderWriteResult
+  | { ok: true; skipped: "no_sidecar" };
 
 /**
  * Author-dependent re-sign (subagent-folders U6 — R8). Re-signs a

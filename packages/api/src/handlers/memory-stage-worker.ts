@@ -63,8 +63,9 @@ const _DEFAULT_SFN_CLIENT = new SFNClient({});
  * continuation). The shared api role may invoke every api Lambda,
  * including this one. */
 async function defaultSelfInvoke(event: MemoryStageWorkerEvent): Promise<void> {
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const stage = process.env.STAGE;
   const fnName =
     process.env.MEMORY_STAGE_WORKER_FUNCTION_NAME ??

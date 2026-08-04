@@ -28,7 +28,9 @@ async function bodyToString(body: unknown): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-export class S3WorkspaceRendererObjectStore implements WorkspaceRendererObjectStore {
+export class S3WorkspaceRendererObjectStore
+  implements WorkspaceRendererObjectStore
+{
   constructor(private readonly client: Pick<S3Client, "send">) {}
 
   async listObjects(input: {

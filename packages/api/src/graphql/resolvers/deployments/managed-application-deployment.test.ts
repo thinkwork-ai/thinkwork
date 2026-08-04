@@ -128,8 +128,9 @@ beforeEach(async () => {
   mockRequireTenantAdmin.mockReset().mockResolvedValue("owner");
   mockResolveCallerTenantId.mockReset().mockResolvedValue("tenant-1");
   mockResolveCallerUserId.mockReset().mockResolvedValue("user-1");
-  approveMod =
-    await import("./approveManagedApplicationDeployment.mutation.js");
+  approveMod = await import(
+    "./approveManagedApplicationDeployment.mutation.js"
+  );
   rejectMod = await import("./rejectManagedApplicationDeployment.mutation.js");
   queryMod = await import("./managedApplicationDeployment.query.js");
 });

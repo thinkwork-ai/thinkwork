@@ -92,7 +92,8 @@ describe("agent_profiles retirement gate (U11)", () => {
     const offenders: string[] = [];
     for (const file of productionSources()) {
       const source = readFileSync(file, "utf8");
-      const imports = source.match(/import\s+(?:type\s+)?\{[^}]*\}\s+from[^;]+;/gs) ?? [];
+      const imports =
+        source.match(/import\s+(?:type\s+)?\{[^}]*\}\s+from[^;]+;/gs) ?? [];
       for (const statement of imports) {
         if (IMPORT_RE.test(statement)) {
           offenders.push(relative(PACKAGE_ROOT, file));

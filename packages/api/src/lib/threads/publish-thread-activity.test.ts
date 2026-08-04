@@ -48,7 +48,11 @@ describe("publishThreadActivity", () => {
   it("fans out to every non-author participant with the full payload and shouldNotify=true (subscribed, R9/R11)", async () => {
     selectSpy.mockResolvedValue(subscribed("author", "bob", "carol"));
 
-    await publishThreadActivity({ ...base, authorId: "author", authorType: "user" });
+    await publishThreadActivity({
+      ...base,
+      authorId: "author",
+      authorType: "user",
+    });
 
     expect(notifySpy).toHaveBeenCalledTimes(2);
     const recipients = notifySpy.mock.calls.map((c) => c[0].userId).sort();
@@ -73,10 +77,17 @@ describe("publishThreadActivity", () => {
       { userId: "carol", notificationPreference: "muted" },
     ]);
 
-    await publishThreadActivity({ ...base, authorId: "author", authorType: "user" });
+    await publishThreadActivity({
+      ...base,
+      authorId: "author",
+      authorType: "user",
+    });
 
     // The event still delivers (sidebar liveness) — only shouldNotify is gated.
-    expect(byUser("carol")).toMatchObject({ mentioned: false, shouldNotify: false });
+    expect(byUser("carol")).toMatchObject({
+      mentioned: false,
+      shouldNotify: false,
+    });
   });
 
   it("punches a mention through mute → shouldNotify=true (AE6)", async () => {
@@ -92,7 +103,10 @@ describe("publishThreadActivity", () => {
       mentionedUserIds: ["carol"],
     });
 
-    expect(byUser("carol")).toMatchObject({ mentioned: true, shouldNotify: true });
+    expect(byUser("carol")).toMatchObject({
+      mentioned: true,
+      shouldNotify: true,
+    });
   });
 
   it("mentions-preference participant is notified only when mentioned (AE4)", async () => {
@@ -109,8 +123,14 @@ describe("publishThreadActivity", () => {
       mentionedUserIds: ["dave"],
     });
 
-    expect(byUser("dave")).toMatchObject({ mentioned: true, shouldNotify: true });
-    expect(byUser("erin")).toMatchObject({ mentioned: false, shouldNotify: false });
+    expect(byUser("dave")).toMatchObject({
+      mentioned: true,
+      shouldNotify: true,
+    });
+    expect(byUser("erin")).toMatchObject({
+      mentioned: false,
+      shouldNotify: false,
+    });
   });
 
   it("includes a user first mentioned by this same message in the fan-out (KTD5/R11)", async () => {
@@ -129,13 +149,20 @@ describe("publishThreadActivity", () => {
       mentionedUserIds: ["newbie"],
     });
 
-    expect(byUser("newbie")).toMatchObject({ mentioned: true, shouldNotify: true });
+    expect(byUser("newbie")).toMatchObject({
+      mentioned: true,
+      shouldNotify: true,
+    });
   });
 
   it("never notifies the author (R3)", async () => {
     selectSpy.mockResolvedValue(subscribed("author", "bob"));
 
-    await publishThreadActivity({ ...base, authorId: "author", authorType: "user" });
+    await publishThreadActivity({
+      ...base,
+      authorId: "author",
+      authorType: "user",
+    });
 
     const recipients = notifySpy.mock.calls.map((c) => c[0].userId);
     expect(recipients).toEqual(["bob"]);
@@ -145,16 +172,26 @@ describe("publishThreadActivity", () => {
   it("agent-authored message still notifies all user participants (author-skip is id-based; agents are never participants)", async () => {
     selectSpy.mockResolvedValue(subscribed("bob", "carol"));
 
-    await publishThreadActivity({ ...base, authorId: "agent-7", authorType: "agent" });
+    await publishThreadActivity({
+      ...base,
+      authorId: "agent-7",
+      authorType: "agent",
+    });
 
     expect(notifySpy).toHaveBeenCalledTimes(2);
-    expect(notifySpy.mock.calls.every((c) => c[0].authorType === "agent")).toBe(true);
+    expect(notifySpy.mock.calls.every((c) => c[0].authorType === "agent")).toBe(
+      true,
+    );
   });
 
   it("a thread whose only participant is the author fires nothing", async () => {
     selectSpy.mockResolvedValue(subscribed("author"));
 
-    await publishThreadActivity({ ...base, authorId: "author", authorType: "user" });
+    await publishThreadActivity({
+      ...base,
+      authorId: "author",
+      authorType: "user",
+    });
 
     expect(notifySpy).not.toHaveBeenCalled();
   });
@@ -164,7 +201,11 @@ describe("publishThreadActivity", () => {
     selectSpy.mockRejectedValue(new Error("db down"));
 
     await expect(
-      publishThreadActivity({ ...base, authorId: "author", authorType: "user" }),
+      publishThreadActivity({
+        ...base,
+        authorId: "author",
+        authorType: "user",
+      }),
     ).resolves.toBeUndefined();
 
     expect(errSpy).toHaveBeenCalled();

@@ -1007,8 +1007,9 @@ describe("floor-model layered merge (THINK-188 U1)", () => {
 
 describe("contract preview exemplar (THINK-188 U3)", () => {
   it("every op's sampleInputs computes clean (R10 pin, all six ops)", async () => {
-    const { computeAnalysis, getAnalysisOp, ANALYSIS_OPS } =
-      await import("./document-analyses.js");
+    const { computeAnalysis, getAnalysisOp, ANALYSIS_OPS } = await import(
+      "./document-analyses.js"
+    );
     for (const op of ANALYSIS_OPS) {
       const spec = getAnalysisOp(op)!;
       const result = computeAnalysis({ op, inputs: spec.sampleInputs });

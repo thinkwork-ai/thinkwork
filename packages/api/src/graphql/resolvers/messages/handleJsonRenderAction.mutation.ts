@@ -543,23 +543,27 @@ async function applyWorkItemAction(input: {
   ctx: GraphQLContext;
 }) {
   if (input.action.target === "work_item_create") {
-    return applyWorkItemCreateAction(input as {
+    return applyWorkItemCreateAction(
+      input as {
+        tenantId: string;
+        userId: string;
+        threadId: string;
+        threadSpaceId: string;
+        action: WorkItemCreateAction;
+        provenance: JsonRenderActionProvenance;
+        ctx: GraphQLContext;
+      },
+    );
+  }
+  return applyWorkItemStatusAction(
+    input as {
       tenantId: string;
       userId: string;
       threadId: string;
-      threadSpaceId: string;
-      action: WorkItemCreateAction;
+      action: WorkItemStatusAction;
       provenance: JsonRenderActionProvenance;
-      ctx: GraphQLContext;
-    });
-  }
-  return applyWorkItemStatusAction(input as {
-    tenantId: string;
-    userId: string;
-    threadId: string;
-    action: WorkItemStatusAction;
-    provenance: JsonRenderActionProvenance;
-  });
+    },
+  );
 }
 
 async function applyWorkItemStatusAction(input: {
@@ -604,7 +608,9 @@ function mutationMetadataFromPriorEvent(
   action: WorkItemAction,
   event: PriorWorkItemActionEvent,
 ) {
-  const manualMetadata = objectValue(objectValue(event.metadata).manualMetadata);
+  const manualMetadata = objectValue(
+    objectValue(event.metadata).manualMetadata,
+  );
   const inputMetadata = objectValue(objectValue(event.metadata).inputMetadata);
   const priorAction = objectValue(manualMetadata.jsonRenderAction);
   const priorCreateAction = objectValue(inputMetadata.jsonRenderAction);

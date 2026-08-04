@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@thinkwork/database-pg", () => ({ getDb: () => ({}) }));
 
-const { computeDrift, isTokenUsageType, modelKeyFor } =
-  await import("./cost-drift-check.js");
+const { computeDrift, isTokenUsageType, modelKeyFor } = await import(
+  "./cost-drift-check.js"
+);
 
 describe("modelKeyFor", () => {
   it("maps CE usage types to canonical model keys across region variants", () => {

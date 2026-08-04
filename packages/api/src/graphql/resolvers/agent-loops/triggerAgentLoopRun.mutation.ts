@@ -208,8 +208,9 @@ async function invokeAgentLoopContinueDispatch(input: {
   threadId: string | null;
   spaceId: string | null;
 }): Promise<void> {
-  const { LambdaClient, InvokeCommand } =
-    await import("@aws-sdk/client-lambda");
+  const { LambdaClient, InvokeCommand } = await import(
+    "@aws-sdk/client-lambda"
+  );
   const lambda = new LambdaClient({});
   const stage = process.env.STAGE;
   const fnName =

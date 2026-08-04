@@ -16,10 +16,10 @@ Bucket name: `thinkwork-${var.stage}-compliance-anchors` (master plan line 513 �
 
 ## Object Lock posture
 
-| Stage | Default `mode` | Default retention | Notes |
-|-------|----------------|-------------------|-------|
-| dev / staging | `GOVERNANCE` | 365 days | Allows a privileged role with `s3:BypassGovernanceRetention` to delete or shorten retention. Required for dev iteration; the anchor Lambda role itself does **not** hold the bypass action (explicitly denied). |
-| prod (audit-engagement time) | `COMPLIANCE` | 365 days | Irreversible — even AWS root cannot delete or shorten retention until it expires. |
+| Stage                        | Default `mode` | Default retention | Notes                                                                                                                                                                                                           |
+| ---------------------------- | -------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| dev / staging                | `GOVERNANCE`   | 365 days          | Allows a privileged role with `s3:BypassGovernanceRetention` to delete or shorten retention. Required for dev iteration; the anchor Lambda role itself does **not** hold the bypass action (explicitly denied). |
+| prod (audit-engagement time) | `COMPLIANCE`   | 365 days          | Irreversible — even AWS root cannot delete or shorten retention until it expires.                                                                                                                               |
 
 ### COMPLIANCE-mode cutover playbook (prod)
 
@@ -55,7 +55,7 @@ Either way, `force_destroy = true` masks Object Lock retention behavior. Don't s
 > **U8b cutover note (2026-05-07):** the anchor Lambda now writes real WORM-locked
 > bytes on every 15-minute cadence. A dev bucket that's been live for any non-trivial
 > period accumulates objects under default 365-day retention — the dev stage's
-> `GOVERNANCE` mode is the *only* thing that makes this playbook achievable. The
+> `GOVERNANCE` mode is the _only_ thing that makes this playbook achievable. The
 > `proofs/` prefix relies on the bucket-default lock; both anchor and proof objects
 > require the bypass action below to delete. **Do not run this playbook against a
 > COMPLIANCE-mode bucket** (prod) — the `s3:BypassGovernanceRetention` action is
@@ -118,21 +118,21 @@ This module is compatible with the repo-wide `hashicorp/aws ~> 5.0` pin (locked 
 
 ## Inputs
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `stage` | string | _required_ | Deployment stage (e.g., `dev`, `prod`). Stages `prod` and `production` enforce `mode = "COMPLIANCE"` via Terraform `precondition`. |
-| `account_id` | string | _required_ | AWS account ID. Used as `aws:SourceAccount` condition on the anchor Lambda role's trust policy (confused-deputy defense). |
-| `bucket_name` | string | _required_ | Bucket name. Master-plan canonical: `thinkwork-${stage}-compliance-anchors`. |
-| `kms_key_arn` | string | _required_ | CMK ARN for SSE-KMS. Wired from `module.kms.key_arn` at the composite root. Validated non-empty. |
-| `mode` | string | `"GOVERNANCE"` | Object Lock retention mode. Validated ∈ {`GOVERNANCE`, `COMPLIANCE`}. Production stages reject `GOVERNANCE` via plan-time `precondition`. |
-| `retention_days` | number | `365` | Default retention in days. Validated > 0. |
+| Variable         | Type   | Default        | Description                                                                                                                               |
+| ---------------- | ------ | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `stage`          | string | _required_     | Deployment stage (e.g., `dev`, `prod`). Stages `prod` and `production` enforce `mode = "COMPLIANCE"` via Terraform `precondition`.        |
+| `account_id`     | string | _required_     | AWS account ID. Used as `aws:SourceAccount` condition on the anchor Lambda role's trust policy (confused-deputy defense).                 |
+| `bucket_name`    | string | _required_     | Bucket name. Master-plan canonical: `thinkwork-${stage}-compliance-anchors`.                                                              |
+| `kms_key_arn`    | string | _required_     | CMK ARN for SSE-KMS. Wired from `module.kms.key_arn` at the composite root. Validated non-empty.                                          |
+| `mode`           | string | `"GOVERNANCE"` | Object Lock retention mode. Validated ∈ {`GOVERNANCE`, `COMPLIANCE`}. Production stages reject `GOVERNANCE` via plan-time `precondition`. |
+| `retention_days` | number | `365`          | Default retention in days. Validated > 0.                                                                                                 |
 
 ## Outputs
 
-| Output | Description |
-|--------|-------------|
-| `bucket_name` | Bucket id (= `var.bucket_name`). |
-| `bucket_arn` | Bucket ARN. |
+| Output            | Description                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------- |
+| `bucket_name`     | Bucket id (= `var.bucket_name`).                                                   |
+| `bucket_arn`      | Bucket ARN.                                                                        |
 | `lambda_role_arn` | IAM role ARN the anchor Lambda will assume (inert in U7 — U8a wires the function). |
 
 ## See also

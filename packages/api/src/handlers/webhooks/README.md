@@ -115,11 +115,11 @@ index, and the RequestResponse invoke at `agentcore-invoke`.
 The resolver is the one thing that varies per integration. It takes
 `{ tenantId, rawBody, headers }` and returns a `WebhookResolveResult`:
 
-| Return shape | Meaning | Response |
-|--------------|---------|----------|
-| `{ ok: true, skillId, inputs }` | Start a composition run | 200 `{runId, deduped}` |
-| `{ ok: true, skip: true, reason }` | Authenticated but no action needed | 200 `{skipped, reason}` |
-| `{ ok: false, status, message }` | Payload malformed / cross-tenant | `status` + error envelope |
+| Return shape                       | Meaning                            | Response                  |
+| ---------------------------------- | ---------------------------------- | ------------------------- |
+| `{ ok: true, skillId, inputs }`    | Start a composition run            | 200 `{runId, deduped}`    |
+| `{ ok: true, skip: true, reason }` | Authenticated but no action needed | 200 `{skipped, reason}`   |
+| `{ ok: false, status, message }`   | Payload malformed / cross-tenant   | `status` + error envelope |
 
 Reconciler integrations (like `task-event`) additionally set
 `triggeredByRunId` so the new run links back to the run whose composition

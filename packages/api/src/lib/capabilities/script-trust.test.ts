@@ -55,12 +55,10 @@ const seed = {
 };
 
 const completedScan = (findings: any[] = []) =>
-  vi.fn(
-    async (input: { slug: string; files: Array<{ path: string }> }) => {
-      void input;
-      return { scanner: { status: "completed" as const }, findings };
-    },
-  );
+  vi.fn(async (input: { slug: string; files: Array<{ path: string }> }) => {
+    void input;
+    return { scanner: { status: "completed" as const }, findings };
+  });
 
 describe("runScriptToolTrustGate", () => {
   it("passes a clean folder and pins definition sha + files signature", async () => {

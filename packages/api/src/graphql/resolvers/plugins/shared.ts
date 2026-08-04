@@ -88,8 +88,7 @@ export function pluginRequestMetadata(ctx: GraphQLContext): {
   userAgent: string | null;
 } {
   const headers = ctx.headers ?? {};
-  const forwardedFor =
-    headers["x-forwarded-for"] ?? headers["X-Forwarded-For"];
+  const forwardedFor = headers["x-forwarded-for"] ?? headers["X-Forwarded-For"];
   const ip = forwardedFor?.split(",")[0]?.trim() || null;
   const userAgent = headers["user-agent"] ?? headers["User-Agent"] ?? null;
   return { ip, userAgent };
