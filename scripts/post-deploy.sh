@@ -116,6 +116,31 @@ digest_from_uri() {
   fi
 }
 
+source_sha_from_digest() {
+  # A digest-pinned image URI carries no tag, but the image still has its
+  # build tags in ECR — recover the 40-hex source sha from them so the
+  # ancestry check works for digest-pinned runtimes. Two builds of the same
+  # source produce different digests, so digest EQUALITY against a
+  # source-sha-derived tag is the wrong invariant (2026-08-04 deploy
+  # 30872795807); tag-recovered ancestry is the right one.
+  local image_uri="$1" digest="$2"
+  local repo_path="${image_uri%%@*}"
+  local repo_name="${repo_path##*/}"
+  local tags tag
+  tags=$(aws ecr describe-images \
+    --repository-name "$repo_name" \
+    --region "$REGION" \
+    --image-ids "imageDigest=$digest" \
+    --query 'imageDetails[0].imageTags' \
+    --output json 2>/dev/null) || return 0
+  while IFS= read -r tag; do
+    if [[ "$tag" =~ ([0-9a-f]{40}) ]]; then
+      echo "${BASH_REMATCH[1]}"
+      return 0
+    fi
+  done < <(echo "$tags" | jq -r '.[]? // empty')
+}
+
 image_contains_source_sha() {
   local image_sha="$1"
   local source_sha="$2"
@@ -268,19 +293,28 @@ while read -r rt_id rt_name rt_status; do
     is_clean=0
     reasons+=("endpoint liveVersion=$ep_live != runtime version=$rt_version")
   fi
-  # Digest pinning (THINK-584 U5): when the caller supplies the release
-  # image's immutable digest and the active runtime serves a digest-pinned
-  # image, they must match exactly. A digest match is stronger provenance
-  # than tag ancestry, so a digest-pinned image skips the min-source-sha
-  # ancestry check (it has no tag to attest). A legacy TAG-form runtime
-  # image is not a digest mismatch — it falls through to the ancestry
-  # check below, so the first post-merge deploy (runtime not yet
-  # re-pinned) doesn't false-fail.
-  if [[ -n "$EXPECTED_DIGEST" && -n "$rt_digest" && ( -z "$ACTIVE_RUNTIME_ID" || "$rt_id" == "$ACTIVE_RUNTIME_ID" ) ]] && [[ "$rt_digest" != "$EXPECTED_DIGEST" ]]; then
-    is_clean=0
-    reasons+=("runtime image digest=${rt_digest} != expected digest=$EXPECTED_DIGEST")
+  # Digest pinning (THINK-584 U5): --expected-digest is for callers that
+  # know the EXACT digest the runtime was just pinned to (the control-plane
+  # runner). When it's set and the runtime serves a digest-pinned image,
+  # they must match. A legacy TAG-form runtime image is not a digest
+  # mismatch — it falls through to the ancestry check, so the first
+  # post-merge deploy (runtime not yet re-pinned) doesn't false-fail.
+  digest_matched=0
+  if [[ -n "$EXPECTED_DIGEST" && -n "$rt_digest" && ( -z "$ACTIVE_RUNTIME_ID" || "$rt_id" == "$ACTIVE_RUNTIME_ID" ) ]]; then
+    if [[ "$rt_digest" != "$EXPECTED_DIGEST" ]]; then
+      is_clean=0
+      reasons+=("runtime image digest=${rt_digest} != expected digest=$EXPECTED_DIGEST")
+    else
+      digest_matched=1
+    fi
   fi
-  if [[ -z "$rt_digest" && -n "$MIN_SOURCE_SHA" && ( -z "$ACTIVE_RUNTIME_ID" || "$rt_id" == "$ACTIVE_RUNTIME_ID" ) ]] && ! image_contains_source_sha "$rt_image_sha" "$MIN_SOURCE_SHA"; then
+  # Ancestry check: a digest-pinned image recovers its source sha from the
+  # image's ECR tags. A matched expected digest is stronger provenance and
+  # skips ancestry.
+  if [[ -n "$rt_digest" && -z "$rt_image_sha" && "$digest_matched" -eq 0 ]]; then
+    rt_image_sha=$(source_sha_from_digest "$rt_image" "$rt_digest")
+  fi
+  if [[ "$digest_matched" -eq 0 && -n "$MIN_SOURCE_SHA" && ( -z "$ACTIVE_RUNTIME_ID" || "$rt_id" == "$ACTIVE_RUNTIME_ID" ) ]] && ! image_contains_source_sha "$rt_image_sha" "$MIN_SOURCE_SHA"; then
     is_clean=0
     reasons+=("runtime image sha=${rt_image_sha:-unknown} does not include required source sha=$MIN_SOURCE_SHA")
   fi

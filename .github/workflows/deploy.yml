@@ -2349,31 +2349,16 @@ jobs:
 
       - name: Verify AgentCore runtime image
         run: |
-          set -euo pipefail
-          # THINK-584 U5: resolve the release image's immutable digest from the
-          # source-sha tag and require the active runtime to be serving exactly
-          # it. Falls back to the tag-ancestry check (--min-source-sha) when the
-          # digest can't be resolved (e.g. ECR describe denied) or the runtime
-          # still runs a legacy tag-form image.
-          EXPECTED_DIGEST=$(aws ecr describe-images \
-            --repository-name "thinkwork-${{ env.STAGE }}-agentcore" \
-            --region ${{ env.AWS_REGION }} \
-            --image-ids imageTag="${{ needs.detect-changes.outputs.pi_container_source_sha }}-pi-arm64" \
-            --query 'imageDetails[0].imageDigest' \
-            --output text 2>/dev/null || echo "")
-          DIGEST_ARGS=()
-          if [[ "$EXPECTED_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
-            echo "Expecting runtime digest ${EXPECTED_DIGEST}"
-            DIGEST_ARGS=(--expected-digest "$EXPECTED_DIGEST")
-          else
-            echo "WARN: could not resolve release image digest; relying on tag ancestry only."
-          fi
+          # THINK-584 U5: the runtime is digest-pinned; post-deploy.sh recovers
+          # the source sha from the digest's ECR tags for this ancestry check.
+          # (Digest EQUALITY against a source-sha-derived tag is the wrong
+          # invariant — two builds of the same source have different digests;
+          # deploy 30872795807 false-failed on it.)
           bash scripts/post-deploy.sh \
             --stage ${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }} \
             --runtime pi \
             --min-source-sha ${{ needs.detect-changes.outputs.pi_container_source_sha }} \
-            "${DIGEST_ARGS[@]}" \
             --strict
 
       - name: Fat-folder composed-tree smoke
