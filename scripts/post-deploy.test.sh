@@ -24,6 +24,13 @@ case "$cmd" in
   "ssm get-parameter")
     echo "thinkwork_dev_pi_active"
     ;;
+  "ecr describe-images")
+    if [[ -n "${ECR_DIGEST_TAG:-}" ]]; then
+      printf '["%s-arm64"]\n' "$ECR_DIGEST_TAG"
+    else
+      echo 'null'
+    fi
+    ;;
   "bedrock-agentcore-control list-agent-runtimes")
     if [[ "${LIST_RUNTIMES_FORBIDDEN:-0}" == "1" ]]; then
       echo "aws: [ERROR]: An error occurred (ForbiddenException) when calling the ListAgentRuntimes operation: Forbidden" >&2
@@ -218,6 +225,44 @@ assert_skips_when_active_runtime_get_times_out() {
   grep -q "skipping AgentCore control-plane drift probe" "$TMPDIR/get-timeout.err"
 }
 
+assert_digest_pinned_image_recovers_ancestry_from_ecr_tags() {
+  local source_sha="$1"
+  local fresh_sha="$2"
+  local digest="sha256:5555555555555555555555555555555555555555555555555555555555555555"
+
+  # No --expected-digest (the normal deploy verify): a digest-pinned runtime
+  # image must recover its source sha from the digest's ECR tags and pass
+  # the ancestry check.
+  PATH="$FAKEBIN:$PATH" ACTIVE_IMAGE_SHA="unused" ORPHAN_IMAGE_SHA="$source_sha" \
+    ACTIVE_IMAGE_DIGEST="$digest" ECR_DIGEST_TAG="$fresh_sha" \
+    bash "$ROOT/scripts/post-deploy.sh" --stage dev --region us-east-1 \
+    --min-source-sha "$source_sha" --strict \
+    >"$TMPDIR/digest-ancestry.out" 2>"$TMPDIR/digest-ancestry.err"
+
+  grep -q "post-deploy] ok" "$TMPDIR/digest-ancestry.out"
+}
+
+assert_digest_pinned_image_with_stale_ecr_tag_fails() {
+  local source_sha="$1"
+  local stale_sha="$2"
+  local digest="sha256:6666666666666666666666666666666666666666666666666666666666666666"
+
+  set +e
+  PATH="$FAKEBIN:$PATH" ACTIVE_IMAGE_SHA="unused" ORPHAN_IMAGE_SHA="$source_sha" \
+    ACTIVE_IMAGE_DIGEST="$digest" ECR_DIGEST_TAG="$stale_sha" \
+    bash "$ROOT/scripts/post-deploy.sh" --stage dev --region us-east-1 \
+    --min-source-sha "$source_sha" --strict \
+    >"$TMPDIR/digest-stale.out" 2>"$TMPDIR/digest-stale.err"
+  local status=$?
+  set -e
+
+  if [[ "$status" -eq 0 ]]; then
+    echo "expected stale digest-pinned runtime to fail strict probe" >&2
+    exit 1
+  fi
+  grep -q "does not include required source sha=$source_sha" "$TMPDIR/digest-stale.out"
+}
+
 assert_digest_match_passes() {
   local source_sha="$1"
   local digest="sha256:1111111111111111111111111111111111111111111111111111111111111111"
@@ -281,5 +326,7 @@ assert_skips_when_active_runtime_get_times_out "$source_sha" "$stale_sha" "$fres
 assert_digest_match_passes "$source_sha"
 assert_digest_mismatch_fails "$source_sha"
 assert_tag_image_with_expected_digest_uses_ancestry "$source_sha" "$fresh_sha"
+assert_digest_pinned_image_recovers_ancestry_from_ecr_tags "$source_sha" "$fresh_sha"
+assert_digest_pinned_image_with_stale_ecr_tag_fails "$source_sha" "$stale_sha"
 
 echo "post-deploy tests passed"
