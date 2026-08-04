@@ -1078,9 +1078,9 @@ export function SpacesThreadDetailRoute({
     : false;
   const hasPendingStartRealActivity = Boolean(
     optimisticThreadStart &&
-    (optimisticThreadStart.expectAssistantResponse === false ||
-      threadTurns.length > 0 ||
-      hasDurableAssistantAfterLatestUser(thread)),
+      (optimisticThreadStart.expectAssistantResponse === false ||
+        threadTurns.length > 0 ||
+        hasDurableAssistantAfterLatestUser(thread)),
   );
   const shouldKeepPendingStartSignal = Boolean(
     optimisticThreadStart && !hasPendingStartRealActivity,
@@ -1280,9 +1280,9 @@ export function SpacesThreadDetailRoute({
     isActiveLifecycleStatus(visibleThread?.lifecycleStatus);
   const shouldPollActiveAgentResult = Boolean(
     latestMessageAwaitsAssistant &&
-    (hasActiveAgentTurn ||
-      (effectiveOptimisticMessage &&
-        effectiveOptimisticMessage.expectAssistantResponse !== false)),
+      (hasActiveAgentTurn ||
+        (effectiveOptimisticMessage &&
+          effectiveOptimisticMessage.expectAssistantResponse !== false)),
   );
 
   useEffect(() => {
@@ -1480,11 +1480,11 @@ export function SpacesThreadDetailRoute({
   // rejects non-participants server-side; the UI matches it, review-pinned).
   const canEditThreadMode = Boolean(
     userId &&
-    routeThread?.participants?.some(
-      (participant) =>
-        (participant.participantType ?? "").toUpperCase() === "USER" &&
-        participant.userId === userId,
-    ),
+      routeThread?.participants?.some(
+        (participant) =>
+          (participant.participantType ?? "").toUpperCase() === "USER" &&
+          participant.userId === userId,
+      ),
   );
   const threadInfoPanelState = useMemo<TaskThreadInfoPanelState>(
     () => ({
@@ -1825,15 +1825,6 @@ export function SpacesThreadDetailRoute({
       }}
       threadMode={routeThreadMode}
       infoPanelState={threadInfoPanelState}
-      onFlagTurn={
-        isOperator
-          ? (turn) => {
-              if (!isUuidLike(turn.id)) return;
-              setFlagEvalTurnId(turn.id);
-              setFlagEvalOpen(true);
-            }
-          : undefined
-      }
       onJsonRenderActionSuccess={handleJsonRenderActionSuccess}
       onRetryDispatch={async (messageId) => {
         // THINK-136 U6 (R7/AE5): re-drive a failed dispatch. The server mints a
@@ -3022,9 +3013,9 @@ function isActiveRunbookQueue(status: unknown) {
   const normalized = stringValue(status)?.toLowerCase().replace(/_/g, "-");
   return Boolean(
     normalized &&
-    !["completed", "failed", "error", "cancelled", "rejected"].includes(
-      normalized,
-    ),
+      !["completed", "failed", "error", "cancelled", "rejected"].includes(
+        normalized,
+      ),
   );
 }
 
