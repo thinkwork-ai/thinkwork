@@ -67,6 +67,10 @@ JSON
       version="1"
       name="thinkwork_dev_pi_orphan"
     fi
+    image_ref=":${image_sha}-arm64"
+    if [[ "$runtime_id" == "thinkwork_dev_pi_active" && -n "${ACTIVE_IMAGE_DIGEST:-}" ]]; then
+      image_ref="@${ACTIVE_IMAGE_DIGEST}"
+    fi
     cat <<JSON
 {
   "agentRuntimeId": "$runtime_id",
@@ -75,7 +79,7 @@ JSON
   "agentRuntimeVersion": "$version",
   "agentRuntimeArtifact": {
     "containerConfiguration": {
-      "containerUri": "487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork-dev-agentcore:${image_sha}-arm64"
+      "containerUri": "487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork-dev-agentcore${image_ref}"
     }
   }
 }
@@ -214,6 +218,56 @@ assert_skips_when_active_runtime_get_times_out() {
   grep -q "skipping AgentCore control-plane drift probe" "$TMPDIR/get-timeout.err"
 }
 
+assert_digest_match_passes() {
+  local source_sha="$1"
+  local digest="sha256:1111111111111111111111111111111111111111111111111111111111111111"
+
+  # Digest-pinned image, matching expected digest: passes even though the
+  # image URI carries no tag for the ancestry check (digest supersedes it).
+  PATH="$FAKEBIN:$PATH" ACTIVE_IMAGE_SHA="unused" ORPHAN_IMAGE_SHA="$source_sha" ACTIVE_IMAGE_DIGEST="$digest" \
+    bash "$ROOT/scripts/post-deploy.sh" --stage dev --region us-east-1 \
+    --min-source-sha "$source_sha" --expected-digest "$digest" --strict \
+    >"$TMPDIR/digest-ok.out" 2>"$TMPDIR/digest-ok.err"
+
+  grep -q "post-deploy] ok" "$TMPDIR/digest-ok.out"
+}
+
+assert_digest_mismatch_fails() {
+  local source_sha="$1"
+  local runtime_digest="sha256:1111111111111111111111111111111111111111111111111111111111111111"
+  local expected_digest="sha256:2222222222222222222222222222222222222222222222222222222222222222"
+
+  set +e
+  PATH="$FAKEBIN:$PATH" ACTIVE_IMAGE_SHA="unused" ORPHAN_IMAGE_SHA="$source_sha" ACTIVE_IMAGE_DIGEST="$runtime_digest" \
+    bash "$ROOT/scripts/post-deploy.sh" --stage dev --region us-east-1 \
+    --expected-digest "$expected_digest" --strict \
+    >"$TMPDIR/digest-bad.out" 2>"$TMPDIR/digest-bad.err"
+  local status=$?
+  set -e
+
+  if [[ "$status" -eq 0 ]]; then
+    echo "expected digest mismatch to fail strict probe" >&2
+    cat "$TMPDIR/digest-bad.out" >&2
+    exit 1
+  fi
+  grep -q "!= expected digest=$expected_digest" "$TMPDIR/digest-bad.out"
+}
+
+assert_tag_image_with_expected_digest_uses_ancestry() {
+  local source_sha="$1"
+  local fresh_sha="$2"
+  local digest="sha256:3333333333333333333333333333333333333333333333333333333333333333"
+
+  # Transition case: expected digest resolvable but the runtime still serves
+  # a legacy TAG-form image — must fall back to ancestry, not digest-fail.
+  PATH="$FAKEBIN:$PATH" ACTIVE_IMAGE_SHA="$fresh_sha" ORPHAN_IMAGE_SHA="$source_sha" \
+    bash "$ROOT/scripts/post-deploy.sh" --stage dev --region us-east-1 \
+    --min-source-sha "$source_sha" --expected-digest "$digest" --strict \
+    >"$TMPDIR/digest-tag.out" 2>"$TMPDIR/digest-tag.err"
+
+  grep -q "post-deploy] ok" "$TMPDIR/digest-tag.out"
+}
+
 source_sha="$(git -C "$ROOT" rev-parse HEAD~1)"
 stale_sha="$(git -C "$ROOT" rev-parse HEAD~2)"
 fresh_sha="$(git -C "$ROOT" rev-parse HEAD)"
@@ -224,5 +278,8 @@ assert_rejects_legacy_strands_runtime
 assert_uses_ssm_runtime_without_list_permission "$source_sha" "$stale_sha" "$fresh_sha"
 assert_skips_when_active_runtime_get_is_forbidden "$source_sha" "$stale_sha" "$fresh_sha"
 assert_skips_when_active_runtime_get_times_out "$source_sha" "$stale_sha" "$fresh_sha"
+assert_digest_match_passes "$source_sha"
+assert_digest_mismatch_fails "$source_sha"
+assert_tag_image_with_expected_digest_uses_ancestry "$source_sha" "$fresh_sha"
 
 echo "post-deploy tests passed"

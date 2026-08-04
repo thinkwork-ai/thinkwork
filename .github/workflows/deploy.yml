@@ -1920,11 +1920,28 @@ jobs:
         run: |
           set -euo pipefail
           REPO="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/thinkwork-${{ env.STAGE }}-agentcore"
+          # THINK-584 U5: pin the runtime to the image's IMMUTABLE digest, not
+          # the mutable tag. A tag can be repushed after the update call, at
+          # which point "what is the runtime actually serving" is unanswerable;
+          # the digest makes the deployed artifact provable end-to-end (the
+          # post-deploy verifier asserts the same digest).
+          TAG="${{ github.sha }}-pi-arm64"
+          DIGEST=$(aws ecr describe-images \
+            --repository-name "thinkwork-${{ env.STAGE }}-agentcore" \
+            --region ${{ env.AWS_REGION }} \
+            --image-ids imageTag="$TAG" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Could not resolve an immutable digest for ${TAG} (got '${DIGEST}')."
+            exit 1
+          fi
+          echo "Resolved ${TAG} -> ${DIGEST}"
           bash scripts/update-agentcore-runtime-image.sh \
             --stage ${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }} \
             --runtime pi \
-            --image "${REPO}:${{ github.sha }}-pi-arm64" \
+            --image "${REPO}@${DIGEST}" \
             --account-id ${{ secrets.AWS_ACCOUNT_ID }} \
             --wait-seconds 900
 
@@ -2332,11 +2349,31 @@ jobs:
 
       - name: Verify AgentCore runtime image
         run: |
+          set -euo pipefail
+          # THINK-584 U5: resolve the release image's immutable digest from the
+          # source-sha tag and require the active runtime to be serving exactly
+          # it. Falls back to the tag-ancestry check (--min-source-sha) when the
+          # digest can't be resolved (e.g. ECR describe denied) or the runtime
+          # still runs a legacy tag-form image.
+          EXPECTED_DIGEST=$(aws ecr describe-images \
+            --repository-name "thinkwork-${{ env.STAGE }}-agentcore" \
+            --region ${{ env.AWS_REGION }} \
+            --image-ids imageTag="${{ needs.detect-changes.outputs.pi_container_source_sha }}-pi-arm64" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text 2>/dev/null || echo "")
+          DIGEST_ARGS=()
+          if [[ "$EXPECTED_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Expecting runtime digest ${EXPECTED_DIGEST}"
+            DIGEST_ARGS=(--expected-digest "$EXPECTED_DIGEST")
+          else
+            echo "WARN: could not resolve release image digest; relying on tag ancestry only."
+          fi
           bash scripts/post-deploy.sh \
             --stage ${{ env.STAGE }} \
             --region ${{ env.AWS_REGION }} \
             --runtime pi \
             --min-source-sha ${{ needs.detect-changes.outputs.pi_container_source_sha }} \
+            "${DIGEST_ARGS[@]}" \
             --strict
 
       - name: Fat-folder composed-tree smoke

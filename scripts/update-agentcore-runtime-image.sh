@@ -104,6 +104,46 @@ is_agentcore_forbidden() {
   grep -Eq 'ForbiddenException|(^|[^[:alnum:]_])Forbidden([^[:alnum:]_]|$)' <<<"$1"
 }
 
+# Atomic-or-abort env mirror (THINK-584 U5). An earlier incident stranded the
+# runtime with an EMPTY environment (the mirror read raced the Lambda update
+# and silently proceeded), which bricked every turn until a manual re-mirror.
+# Refuse to create/update a runtime with an empty mirrored env, and verify the
+# runtime actually reports a non-empty env afterwards. Env VALUES are secrets
+# (PEM, API_AUTH_SECRET) and are never printed — counts only (R19).
+require_env_mirror() {
+  local env_json="$1" action="$2" count=0
+  if [[ -n "$env_json" && "$env_json" != "null" ]]; then
+    count=$(jq 'length' <<<"$env_json" 2>/dev/null || echo 0)
+  fi
+  if (( count == 0 )); then
+    echo "ERROR: refusing to ${action}: source Lambda ${lambda_function_name} reported an empty environment; mirroring it would strand the runtime (atomic-or-abort)." >&2
+    exit 2
+  fi
+  echo "Mirroring ${count} environment variables from ${lambda_function_name} (values not logged)."
+}
+
+assert_runtime_env_nonempty() {
+  local detail count
+  detail=$(aws bedrock-agentcore-control get-agent-runtime \
+    --region "$REGION" \
+    --agent-runtime-id "$runtime_id" \
+    --output json 2>&1) || {
+    if is_agentcore_forbidden "$detail"; then
+      echo "WARN: get-agent-runtime ${runtime_id} returned Forbidden; skipping post-update env assertion." >&2
+      return 0
+    fi
+    echo "ERROR: get-agent-runtime ${runtime_id} failed during post-update env assertion:" >&2
+    echo "$detail" >&2
+    exit 2
+  }
+  count=$(jq '.environmentVariables // {} | length' <<<"$detail" 2>/dev/null || echo 0)
+  if (( count == 0 )); then
+    echo "ERROR: runtime ${runtime_id} reports an EMPTY environment after the update — the env mirror did not stick. Aborting so the deploy fails loudly instead of stranding the runtime." >&2
+    exit 2
+  fi
+  echo "Runtime env assertion OK: ${count} variables present (values not logged)."
+}
+
 runtime_id=$(aws ssm get-parameter \
   --name "$ssm_name" \
   --region "$REGION" \
@@ -125,10 +165,8 @@ create_runtime() {
   echo "Creating ${RUNTIME} AgentCore runtime ${runtime_name} with ${IMAGE}"
   local env_json
   env_json="$(runtime_env_json)"
-  local env_args=()
-  if [[ -n "$env_json" && "$env_json" != "null" ]]; then
-    env_args=(--environment-variables "$env_json")
-  fi
+  require_env_mirror "$env_json" "create runtime ${runtime_name}"
+  local env_args=(--environment-variables "$env_json")
   runtime_id=$(aws bedrock-agentcore-control create-agent-runtime \
     --region "$REGION" \
     --agent-runtime-name "$runtime_name" \
@@ -176,10 +214,8 @@ update_runtime() {
   local update_output
   local env_json
   env_json="$(runtime_env_json)"
-  local env_args=()
-  if [[ -n "$env_json" && "$env_json" != "null" ]]; then
-    env_args=(--environment-variables "$env_json")
-  fi
+  require_env_mirror "$env_json" "update runtime ${runtime_id}"
+  local env_args=(--environment-variables "$env_json")
   update_output=$(aws bedrock-agentcore-control update-agent-runtime \
     --region "$REGION" \
     --agent-runtime-id "$runtime_id" \
@@ -203,8 +239,10 @@ update_runtime() {
 
 if [[ -z "$runtime_id" || "$runtime_id" == "None" ]]; then
   create_runtime
+  assert_runtime_env_nonempty
 else
   update_runtime
+  assert_runtime_env_nonempty
 fi
 
 deadline=$((SECONDS + WAIT_SECONDS))
