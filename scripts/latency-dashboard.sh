@@ -17,7 +17,7 @@
 # 59% cold), Pi Lambda cold init 3-6 s, tool_assembly ~1.2 s, agent_loop p50 9.6 s.
 #
 # Usage:
-#   scripts/latency-dashboard.sh --stage dev [--hours 168] [--section all|report|api-phases|runtime-phases|cohort]
+#   scripts/latency-dashboard.sh --stage dev [--hours 168] [--section all|report|api-phases|runtime-phases|cohort|soak]
 #
 # Requires: aws CLI creds for the stage account, python3, jq.
 
@@ -45,6 +45,8 @@ CAI_LG="/aws/lambda/thinkwork-${STAGE}-api-chat-agent-invoke"
 FIN_LG="/aws/lambda/thinkwork-${STAGE}-api-chat-agent-finalize"
 WSR_LG="/aws/lambda/thinkwork-${STAGE}-api-workspace-renderer"
 PI_LG="/thinkwork/${STAGE}/agentcore-pi"
+DSP_LG="/aws/lambda/thinkwork-${STAGE}-api-agentcore-runtime-dispatch"
+RUNTIME_LG_PREFIX="/aws/bedrock-agentcore/runtimes"
 
 run_query() {
   # run_query <log-group> <query> -> prints results JSON to stdout
@@ -217,11 +219,51 @@ else:
 PYEOF
 }
 
+
+section_soak() {
+  # THINK-587 U8: runtime-dispatch soak signals against the R18 thresholds.
+  echo "== Soak signals (THINK-587 U8) — last ${HOURS}h, stage ${STAGE} =="
+
+  echo "-- dispatcher invoke outcomes (api.runtime_dispatch.invoke)"
+  run_query "$DSP_LG" 'filter event = "agentcore_phase" and phase = "api.runtime_dispatch.invoke"
+    | stats count(*) as n, pct(durationMs, 50) as p50_ms, pct(durationMs, 90) as p90_ms, max(durationMs) as max_ms by status' | print_table || true
+
+  echo "-- dispatcher near-timeout (>870s) invocations"
+  run_query "$DSP_LG" 'filter @type = "REPORT" and @duration > 870000
+    | stats count(*) as near_timeout_invocations' | print_table || true
+
+  echo "-- legacy_lambda_dispatch sentinels (must be 0 for flagged agents)"
+  run_query "$CAI_LG" 'filter event = "legacy_lambda_dispatch"
+    | stats count(*) as sentinel_count' | print_table || true
+
+  echo "-- DLQ redrive activity (must be 0 in steady state)"
+  # The log group only exists after the consumer's first invocation — a
+  # missing group IS the zero-redrives signal.
+  run_query "/aws/lambda/thinkwork-${STAGE}-api-agentcore-dispatch-dlq-redrive" 'filter event = "dispatch_dlq_redrive"
+    | stats count(*) as redriven by outcome' 2>/dev/null | print_table || echo "  (no redrive invocations yet)"
+
+  echo "-- session_reuse hit rate (U7 warm fast path; empty until U7 deploys)"
+  local runtime_lg
+  runtime_lg=$(aws logs describe-log-groups --log-group-name-prefix "$RUNTIME_LG_PREFIX"     --query "logGroups[?contains(logGroupName, 'thinkwork_${STAGE}_pi')].logGroupName | [0]" --output text 2>/dev/null)
+  if [[ -n "$runtime_lg" && "$runtime_lg" != "None" ]]; then
+    run_query "$runtime_lg" 'filter ispresent(session_reuse)
+      | stats count(*) as n by session_reuse' | print_table || true
+  else
+    echo "  (no AgentCore runtime log group found)"
+  fi
+
+  echo "-- current DLQ depth"
+  aws sqs get-queue-attributes     --queue-url "https://sqs.us-east-1.amazonaws.com/$(aws sts get-caller-identity --query Account --output text)/thinkwork-${STAGE}-agentcore-dispatch-dlq"     --attribute-names ApproximateNumberOfMessages     --query 'Attributes.ApproximateNumberOfMessages' --output text 2>/dev/null || echo "  (queue not found)"
+
+  echo "-- turn error rate (thread_turns not queryable here; failed dispatcher phases above are the proxy)"
+}
+
 case "$SECTION" in
-  all) section_report; echo; section_api_phases; echo; section_runtime_phases; echo; section_cohort ;;
+  all) section_report; echo; section_api_phases; echo; section_runtime_phases; echo; section_cohort; echo; section_soak ;;
   report) section_report ;;
   api-phases) section_api_phases ;;
   runtime-phases) section_runtime_phases ;;
   cohort) section_cohort ;;
+  soak) section_soak ;;
   *) echo "unknown section: $SECTION" >&2; exit 2 ;;
 esac
