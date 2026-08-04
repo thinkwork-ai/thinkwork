@@ -331,6 +331,44 @@ describe("buildToolAllowlist", () => {
     expect(result.agentProfileRuns).toEqual([profileRun]);
     expect(result.toolInvocations[0]?.agent_profile_run).toEqual(profileRun);
   });
+
+  it("ignores completion events with no start observed this run (history replay, THINK-601)", async () => {
+    const session = makeFakeSession({
+      events: [
+        // Durable-session resume replays a PRIOR turn's completion — no
+        // matching start in this run. Must not pollute this turn's usage.
+        {
+          type: "tool_execution_end",
+          toolCallId: "tool-call-historical",
+          toolName: "send_email",
+          result: { ok: true },
+          isError: false,
+        } as AgentSessionEvent,
+        // A real same-run invocation records normally.
+        {
+          type: "tool_execution_start",
+          toolCallId: "tool-call-live",
+          toolName: "web_search",
+          args: { q: "x" },
+        } as AgentSessionEvent,
+        {
+          type: "tool_execution_end",
+          toolCallId: "tool-call-live",
+          toolName: "web_search",
+          result: { hits: 1 },
+          isError: false,
+        } as AgentSessionEvent,
+      ],
+      messages: [assistantMessage("done")],
+    });
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async (inputs) => ({ session, modelId: inputs.modelId }),
+    });
+
+    expect(result.toolsCalled).toEqual(["web_search"]);
+    expect(result.toolInvocations.map((t) => t.id)).toEqual(["tool-call-live"]);
+  });
 });
 
 describe("buildTurnPrompt", () => {
@@ -1213,7 +1251,13 @@ describe("runAgentLoop", () => {
     expect(session.promptText).toContain("Current user message:\nfollow up");
   });
 
-  it("records a tool_execution_end with no preceding start (orphan end)", async () => {
+  it("ignores a tool_execution_end with no preceding start (history replay)", async () => {
+    // Contract flipped by THINK-601: an end with no start observed THIS run
+    // is durable-session history replaying on resume — recording it
+    // attributed prior turns' tools to the current turn's usage (seen live
+    // on both Lambda and runtime paths, 2026-08-04). The prior
+    // "record orphan ends" behavior was characterization from the U3 SDK
+    // migration, not a product requirement.
     const session = makeFakeSession({
       messages: [assistantMessage("done")],
       events: [
@@ -1229,11 +1273,8 @@ describe("runAgentLoop", () => {
     const result = await runAgentLoop(baseArgs(), {
       openSession: async () => ({ session, modelId: "m" }),
     });
-    expect(result.toolsCalled).toEqual(["grep"]);
-    expect(result.toolInvocations).toHaveLength(1);
-    expect(result.toolInvocations[0].status).toBe("ok");
-    expect(result.toolInvocations[0].started_at).toBeUndefined();
-    expect(result.toolInvocations[0].finished_at).toBeTruthy();
+    expect(result.toolsCalled).toEqual([]);
+    expect(result.toolInvocations).toHaveLength(0);
   });
 
   it("correlates interleaved tool calls by id and de-dupes toolsCalled by name", async () => {

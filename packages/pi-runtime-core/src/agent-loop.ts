@@ -983,7 +983,7 @@ export async function runAgentLoop(
           existing.finished_at = finished;
           if (modelRouting) existing.model_routing = modelRouting;
           if (agentProfileRun) existing.agent_profile_run = agentProfileRun;
-        } else {
+        } else if (started !== undefined) {
           toolsCalled.add(event.toolName);
           toolInvocations.push({
             id: event.toolCallId,
@@ -999,6 +999,12 @@ export async function runAgentLoop(
             runtime: "pi",
           });
         }
+        // Completion with neither a live record nor a start observed THIS
+        // run is durable-session history replaying on resume (THINK-601):
+        // recording it would attribute prior turns' tools to this turn's
+        // usage. The authoritative per-turn record (tool_execution_events)
+        // dedups by idempotency key downstream; these arrays must scope to
+        // the current run the same way.
         emitActivitySafely(deps, {
           eventType: "tool_invocation_completed",
           message: event.toolName,
