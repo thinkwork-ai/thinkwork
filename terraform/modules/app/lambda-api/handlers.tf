@@ -915,7 +915,13 @@ resource "aws_lambda_function" "handler" {
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
   timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "requester-memory-dreaming" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "requester-memory-dreaming" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(8192, var.lambda_max_memory_mb) : each.key == "folder-bundle-import" ? 1024 : 256
+  # THINK-583 U2: chat-agent-invoke and workspace-renderer get a full vCPU
+  # (1769 MB). At 256 MB (~1/7 vCPU) the parallelized setup awaits starved on
+  # CPU — per-leg timing showed three independent {1 DB read + 1 S3/Secrets
+  # read} legs each taking ~1.5 s in parallel while sequential stage-1 reads
+  # were fast. Memory is priced per GB-s, but wall-clock drops far more than
+  # 7x cost rises on these short, provisioned-concurrency-warmed functions.
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "requester-memory-dreaming" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(8192, var.lambda_max_memory_mb) : each.key == "folder-bundle-import" ? 1024 : each.key == "chat-agent-invoke" ? 1769 : each.key == "workspace-renderer" ? 1769 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null
