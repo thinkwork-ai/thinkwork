@@ -408,6 +408,26 @@ interface RenderWorkspaceTupleForInvokeDeps {
   functionName?: string;
 }
 
+const RENDERER_INVOKE_RETRY_DELAY_MS = Number(
+  process.env.RENDERER_INVOKE_RETRY_DELAY_MS ?? "250",
+);
+
+function isTransientLambdaInvokeError(err: unknown): boolean {
+  const name = (err as { name?: string } | null)?.name ?? "";
+  if (
+    name === "ServiceException" ||
+    name === "TooManyRequestsException" ||
+    name === "EC2ThrottledException" ||
+    name === "ResourceNotReadyException" ||
+    name === "TimeoutError"
+  ) {
+    return true;
+  }
+  const status = (err as { $metadata?: { httpStatusCode?: number } } | null)
+    ?.$metadata?.httpStatusCode;
+  return typeof status === "number" && status >= 500;
+}
+
 export async function renderWorkspaceTupleForInvoke(
   input: RenderWorkspaceTupleForInvokeInput,
   deps: RenderWorkspaceTupleForInvokeDeps = {},
@@ -419,24 +439,39 @@ export async function renderWorkspaceTupleForInvoke(
   }
 
   const client = deps.lambda ?? lambdaClient;
-  const response = await client.send(
-    new InvokeCommand({
-      FunctionName: functionName,
-      InvocationType: "RequestResponse",
-      Payload: new TextEncoder().encode(
-        JSON.stringify({
-          tenantId: input.tenantId,
-          agentId: input.agentId,
-          spaceId: input.spaceId,
-          threadId: input.threadId ?? null,
-          threadSlug: input.threadSlug ?? input.threadId ?? null,
-          userId: input.userId ?? null,
-          agentBlockedTools: input.agentBlockedTools,
-          agentAllowedTools: input.agentAllowedTools,
-        }),
-      ),
-    }),
-  );
+  const invoke = () =>
+    client.send(
+      new InvokeCommand({
+        FunctionName: functionName,
+        InvocationType: "RequestResponse",
+        Payload: new TextEncoder().encode(
+          JSON.stringify({
+            tenantId: input.tenantId,
+            agentId: input.agentId,
+            spaceId: input.spaceId,
+            threadId: input.threadId ?? null,
+            threadSlug: input.threadSlug ?? input.threadId ?? null,
+            userId: input.userId ?? null,
+            agentBlockedTools: input.agentBlockedTools,
+            agentAllowedTools: input.agentAllowedTools,
+          }),
+        ),
+      }),
+    );
+  let response: Awaited<ReturnType<typeof invoke>>;
+  try {
+    response = await invoke();
+  } catch (err) {
+    // One retry on AWS-side transport failures (Lambda 5xx / throttle):
+    // a single blip here otherwise fails the whole turn via the R9 manifest
+    // guard (observed live 2026-08-04, ServiceException on a healthy fn).
+    // Caller-side errors (AccessDenied, ResourceNotFound) rethrow untouched.
+    if (!isTransientLambdaInvokeError(err)) throw err;
+    await new Promise((resolve) =>
+      setTimeout(resolve, RENDERER_INVOKE_RETRY_DELAY_MS),
+    );
+    response = await invoke();
+  }
 
   const rawPayload = response.Payload
     ? new TextDecoder().decode(response.Payload)
