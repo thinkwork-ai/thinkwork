@@ -83,6 +83,15 @@ export class WarmSessionCache<T> {
   }
 
   /**
+   * Gate-free lookup: lets the caller see whether a candidate exists
+   * BEFORE spending the (S3 head) freshness probe, and lets it dispose
+   * held resources when the subsequent gated {@link take} evicts.
+   */
+  peek(key: string): WarmSessionEntry<T> | null {
+    return this.entries.get(key) ?? null;
+  }
+
+  /**
    * Reuse gate: exact key hit AND both freshness signals match. Any
    * mismatch evicts and returns null (cold path). Never throws.
    */

@@ -77,6 +77,11 @@ import {
 } from "../../src/mcp.js";
 import { resolveSandboxFactory } from "../../src/runtime/sandbox-factory.js";
 import { buildMemoryTools, MemoryToolError } from "../../src/tools/memory.js";
+import {
+  WarmSessionCache,
+  createWarmSessionCacheIfRuntime,
+  warmSessionKey,
+} from "../../src/warm-session-cache.js";
 
 const REPO_ROOT = path.resolve(__dirname, "../../../../..");
 const PI_SRC = path.resolve(__dirname, "../../src");
@@ -400,6 +405,116 @@ describe("Memory tool tenant scope (audit item #4)", () => {
     // Distinct AgentTool instances per invocation (no module cache).
     expect(a[0]).not.toBe(b[0]);
     expect(a[1]).not.toBe(b[1]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Warm-session cache factory (THINK-586 U7, KTD6) — gating + keying audit.
+// ---------------------------------------------------------------------------
+
+describe("Warm-session cache factory (THINK-586 U7)", () => {
+  it("constructs ONLY under the exact runtime-only env signal — the Lambda-path env shape yields null", () => {
+    // Lambda-path shapes: the Pi Lambda's Terraform env never defines the
+    // variable; mirror drift that copies a truthy-but-wrong value must not
+    // enable the cache either.
+    expect(createWarmSessionCacheIfRuntime({})).toBeNull();
+    expect(
+      createWarmSessionCacheIfRuntime({ AGENTCORE_RUNTIME_SESSION_CACHE: "" }),
+    ).toBeNull();
+    expect(
+      createWarmSessionCacheIfRuntime({
+        AGENTCORE_RUNTIME_SESSION_CACHE: "true",
+      }),
+    ).toBeNull();
+    expect(
+      createWarmSessionCacheIfRuntime({
+        AGENTCORE_RUNTIME_SESSION_CACHE: "0",
+      }),
+    ).toBeNull();
+    // Runtime deploy path: overlay sets exactly "1".
+    expect(
+      createWarmSessionCacheIfRuntime({ AGENTCORE_RUNTIME_SESSION_CACHE: "1" }),
+    ).toBeInstanceOf(WarmSessionCache);
+  });
+
+  it("each factory call returns a distinct cache instance (no module-level sharing)", () => {
+    const env = { AGENTCORE_RUNTIME_SESSION_CACHE: "1" };
+    const a = createWarmSessionCacheIfRuntime(env);
+    const b = createWarmSessionCacheIfRuntime(env);
+    expect(a).not.toBe(b);
+  });
+
+  it("the cache key includes userId — same thread viewed by another user is a different key", () => {
+    const base = {
+      tenantSlug: "tenant-a",
+      agentSlug: "agent-a",
+      threadId: "11111111-1111-4111-8111-111111111111",
+      configFingerprint: "fp-1",
+    };
+    expect(warmSessionKey({ ...base, userId: "user-A" })).not.toBe(
+      warmSessionKey({ ...base, userId: "user-B" }),
+    );
+  });
+
+  it("every identity dimension separates keys (tenant, agent, thread, fingerprint)", () => {
+    const base = {
+      tenantSlug: "tenant-a",
+      agentSlug: "agent-a",
+      userId: "user-a",
+      threadId: "thread-a",
+      configFingerprint: "fp-1",
+    };
+    const key = warmSessionKey(base);
+    expect(warmSessionKey({ ...base, tenantSlug: "tenant-b" })).not.toBe(key);
+    expect(warmSessionKey({ ...base, agentSlug: "agent-b" })).not.toBe(key);
+    expect(warmSessionKey({ ...base, threadId: "thread-b" })).not.toBe(key);
+    expect(warmSessionKey({ ...base, configFingerprint: "fp-2" })).not.toBe(
+      key,
+    );
+  });
+
+  it("refuses empty key fields (no accidental cross-scope key collapse)", () => {
+    const base = {
+      tenantSlug: "tenant-a",
+      agentSlug: "agent-a",
+      userId: "user-a",
+      threadId: "thread-a",
+      configFingerprint: "fp-1",
+    };
+    for (const field of [
+      "tenantSlug",
+      "agentSlug",
+      "userId",
+      "threadId",
+      "configFingerprint",
+    ] as const) {
+      expect(() => warmSessionKey({ ...base, [field]: "" })).toThrow();
+    }
+  });
+
+  it("reuse gates evict on authorization-version or durable-marker mismatch", () => {
+    const cache = new WarmSessionCache<string>();
+    const key = warmSessionKey({
+      tenantSlug: "tenant-a",
+      agentSlug: "agent-a",
+      userId: "user-a",
+      threadId: "thread-a",
+      configFingerprint: "fp-1",
+    });
+    cache.set(key, {
+      value: "products",
+      durableStoreMarker: '"etag-1"',
+      authorizationVersion: "authz-1",
+      cachedAtMs: Date.now(),
+    });
+    // Rotated credentials: same identity, different authorization version.
+    expect(
+      cache.take(key, {
+        durableStoreMarker: '"etag-1"',
+        authorizationVersion: "authz-ROTATED",
+      }),
+    ).toBeNull();
+    expect(cache.size).toBe(0);
   });
 });
 

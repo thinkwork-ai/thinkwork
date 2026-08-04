@@ -3,6 +3,7 @@ import {
   access,
   mkdtemp,
   mkdir,
+  realpath,
   rm,
   symlink,
   writeFile,
@@ -23,7 +24,10 @@ import {
   handleInvocation,
   postCompletion,
   postFinalizeCallback,
+  type WarmTurnProducts,
 } from "../src/server.js";
+import { createWarmSessionCacheIfRuntime } from "../src/warm-session-cache.js";
+import type { McpConnectionRetention } from "../src/mcp-connect.js";
 import { HandleStore, type ConnectMcpServerFn } from "../src/mcp.js";
 import { McpToolRegistry } from "../src/mcp-registry.js";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
@@ -4569,6 +4573,10 @@ interface MakeDepsOptions {
   ) => void;
   /** Lambda client factory — overridden by retain integration tests. */
   lambdaClientFactory?: (region: string) => LambdaClient;
+  /** THINK-586 U7 — warm-session cache injection (undefined = env-gated). */
+  warmSessionCache?: import("../src/server.js").HandlerDependencies["warmSessionCache"];
+  /** THINK-586 U7 — MCP retention factory injection. */
+  mcpRetentionFactory?: () => McpConnectionRetention;
 }
 
 function fakeLambdaClient(): LambdaClient {
@@ -4598,6 +4606,8 @@ function makeDeps(opts: MakeDepsOptions = {}) {
     stageMessageAttachmentsImpl: opts.stageMessageAttachmentsImpl,
     discoverWorkspaceSkillsImpl: (async () => []) as never,
     onHandlerComplete: opts.onHandlerComplete,
+    warmSessionCache: opts.warmSessionCache,
+    mcpRetentionFactory: opts.mcpRetentionFactory,
   };
 }
 
@@ -4719,5 +4729,426 @@ describe("handleInvocation — capability manifest emission (U12)", () => {
     });
     expect(result.statusCode).toBe(200);
     expect(manifestPosts).toHaveLength(0);
+  });
+});
+
+// ─── Warm-session fast path (THINK-586 U7, KTD6) ────────────────────────────
+
+describe("handleInvocation — warm-session fast path (THINK-586 U7)", () => {
+  const WARM_BUCKET = "warm-bucket";
+
+  /** Cache constructed exactly the way production does — via the env-gated
+   * factory — so the gating contract stays exercised. */
+  function makeWarmCache() {
+    const cache = createWarmSessionCacheIfRuntime<WarmTurnProducts>({
+      AGENTCORE_RUNTIME_SESSION_CACHE: "1",
+    });
+    if (!cache) throw new Error("factory refused the runtime env signal");
+    return cache;
+  }
+
+  /**
+   * Stateful S3 fake: HeadObject answers the durable-session freshness
+   * probe from `state.headETag` (null = 404), GetObject 404s (no stored
+   * session), PutObject honors `state.failPut` and returns `state.putETag`.
+   */
+  function warmS3State() {
+    const state = {
+      headETag: null as string | null,
+      putETag: '"v1"',
+      failPut: false,
+    };
+    const client = {
+      send: vi.fn(async (cmd: { constructor: { name: string } }) => {
+        const name = cmd.constructor.name;
+        if (name === "HeadObjectCommand") {
+          if (state.headETag === null) {
+            throw Object.assign(new Error("not found"), { name: "NotFound" });
+          }
+          return { ETag: state.headETag };
+        }
+        if (name === "GetObjectCommand") {
+          throw Object.assign(new Error("no key"), { name: "NoSuchKey" });
+        }
+        if (name === "PutObjectCommand") {
+          if (state.failPut) throw new Error("s3 append failed");
+          return { ETag: state.putETag };
+        }
+        return {};
+      }),
+    } as unknown as S3Client;
+    return { state, client };
+  }
+
+  /** Bootstrap stub that writes the sibling hydrate stamp exactly like the
+   * real bootstrap — the warm workspace probe reads it. */
+  function warmBootstrap() {
+    const impl = vi.fn(
+      async (tenantSlug: string, agentSlug: string, localDir: string) => {
+        await mkdir(localDir, { recursive: true });
+        const real = await realpath(localDir).catch(() => localDir);
+        const prefix = `tenants/${tenantSlug}/agents/${agentSlug}/`;
+        await writeFile(
+          `${real}.hydrate-cache.json`,
+          JSON.stringify({ tenantSlug, agentSlug, prefix, entries: {} }),
+        );
+        return { synced: 1, deleted: 0, total: 1, prefix };
+      },
+    );
+    return impl as unknown as typeof import("../src/runtime/bootstrap-workspace.js").bootstrapWorkspace & {
+      mock: { calls: unknown[][] };
+    };
+  }
+
+  function finalizeCapture() {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchImpl = vi.fn(async (url: unknown, init?: RequestInit) => {
+      if (String(url).endsWith("/finalize")) {
+        bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      }
+      return Response.json({ ok: true }, { status: 200 });
+    });
+    return { bodies, fetchImpl };
+  }
+
+  // The finalize `usage` object becomes the platform's usage_json —
+  // session_reuse extends its existing diagnostics contract fields.
+  function sessionReuseOf(body: Record<string, unknown>): unknown {
+    const usage = body.usage as
+      | { diagnostics?: { session_reuse?: unknown } }
+      | undefined;
+    return usage?.diagnostics?.session_reuse;
+  }
+
+  const WARM_PAYLOAD = (overrides: Record<string, unknown> = {}) =>
+    VALID_PAYLOAD({
+      sandbox_interpreter_id: undefined,
+      workspace_bucket: WARM_BUCKET,
+      config_fingerprint: "fp-warm-1",
+      thread_turn_id: "turn-w1",
+      finalize_callback_url:
+        "https://api.example.com/api/threads/thread-1/finalize",
+      finalize_callback_secret: "test-secret-do-not-leak",
+      mcp_configs: [
+        {
+          name: "srv-warm",
+          url: "https://mcp.example.com/mcp",
+          auth: { token: "tok-warm" },
+        },
+      ],
+      ...overrides,
+    });
+
+  function warmDeps(shared: {
+    cache: ReturnType<typeof makeWarmCache> | null;
+    s3: S3Client;
+    bootstrap: ReturnType<typeof warmBootstrap>;
+    connect: ConnectMcpServerFn;
+    fetchImpl: typeof fetch;
+    runAgentLoop?: typeof import("../src/server.js").runAgentLoop;
+    mcpRetentionFactory?: () => McpConnectionRetention;
+  }) {
+    return makeDeps({
+      warmSessionCache: shared.cache,
+      s3ClientFactory: () => shared.s3,
+      bootstrapWorkspaceImpl: shared.bootstrap,
+      connectMcpServerFactory: shared.connect,
+      fetchImpl: shared.fetchImpl,
+      runAgentLoop: shared.runAgentLoop,
+      mcpRetentionFactory: shared.mcpRetentionFactory,
+    });
+  }
+
+  function countingConnect() {
+    const connect = vi.fn(async () => [
+      {
+        name: "mcp_srv_warm_tool",
+        label: "srv: tool",
+        description: "warm test tool",
+        parameters: { type: "object", properties: {} },
+        execute: async () => ({ content: [{ type: "text", text: "ok" }] }),
+      } as unknown as AgentTool<any>,
+    ]);
+    return connect as unknown as ConnectMcpServerFn & {
+      mock: { calls: unknown[][] };
+    };
+  }
+
+  it("warm hit skips bootstrap/MCP/tool assembly and reports session_reuse warm", async () => {
+    const cache = makeWarmCache();
+    const { client: s3 } = warmS3State();
+    const bootstrap = warmBootstrap();
+    const connect = countingConnect();
+    const { bodies, fetchImpl } = finalizeCapture();
+    const shared = { cache, s3, bootstrap, connect, fetchImpl };
+
+    const first = await handleInvocation({
+      payload: WARM_PAYLOAD(),
+      deps: warmDeps(shared),
+    });
+    expect(first.statusCode).toBe(200);
+    expect(bootstrap).toHaveBeenCalledTimes(1);
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(sessionReuseOf(bodies[0]!)).toBe("cold");
+    expect(cache.size).toBe(1);
+
+    const second = await handleInvocation({
+      payload: WARM_PAYLOAD({ message: "Hello again" }),
+      deps: warmDeps(shared),
+    });
+    expect(second.statusCode).toBe(200);
+    // The cached products were reused: no re-bootstrap, no MCP reconnect,
+    // no tool reassembly.
+    expect(bootstrap).toHaveBeenCalledTimes(1);
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(sessionReuseOf(bodies[1]!)).toBe("warm");
+    const diagnostics = (bodies[1]!.usage as Record<string, unknown>)
+      .diagnostics as { agentcore_phases: Array<Record<string, unknown>> };
+    const phaseStatus = new Map(
+      diagnostics.agentcore_phases.map((p) => [p.phase, p.status]),
+    );
+    expect(phaseStatus.get("runtime.workspace_bootstrap")).toBe("skipped");
+    expect(phaseStatus.get("runtime.tool_assembly")).toBe("skipped");
+  });
+
+  it("config_fingerprint change runs the full cold path and repopulates", async () => {
+    const cache = makeWarmCache();
+    const { client: s3 } = warmS3State();
+    const bootstrap = warmBootstrap();
+    const connect = countingConnect();
+    const { bodies, fetchImpl } = finalizeCapture();
+    const shared = { cache, s3, bootstrap, connect, fetchImpl };
+
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    await handleInvocation({
+      payload: WARM_PAYLOAD({ config_fingerprint: "fp-warm-2" }),
+      deps: warmDeps(shared),
+    });
+    expect(bootstrap).toHaveBeenCalledTimes(2);
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(sessionReuseOf(bodies[1]!)).toBe("cold");
+    // Repopulated under the new fingerprint: the next fp-warm-2 turn is warm.
+    await handleInvocation({
+      payload: WARM_PAYLOAD({ config_fingerprint: "fp-warm-2" }),
+      deps: warmDeps(shared),
+    });
+    expect(bootstrap).toHaveBeenCalledTimes(2);
+    expect(sessionReuseOf(bodies[2]!)).toBe("warm");
+  });
+
+  it("credential (mcp_configs) change evicts and reconnects fresh MCP clients", async () => {
+    const cache = makeWarmCache();
+    const { client: s3 } = warmS3State();
+    const bootstrap = warmBootstrap();
+    const connect = countingConnect();
+    const { bodies, fetchImpl } = finalizeCapture();
+    const shared = { cache, s3, bootstrap, connect, fetchImpl };
+
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    await handleInvocation({
+      payload: WARM_PAYLOAD({
+        mcp_configs: [
+          {
+            name: "srv-warm",
+            url: "https://mcp.example.com/mcp",
+            auth: { token: "tok-ROTATED" },
+          },
+        ],
+      }),
+      deps: warmDeps(shared),
+    });
+    expect(bootstrap).toHaveBeenCalledTimes(2);
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(sessionReuseOf(bodies[1]!)).toBe("cold");
+  });
+
+  it("stale durable store (S3 head moved past the cached marker) evicts and replays cold", async () => {
+    const cache = makeWarmCache();
+    const { state, client: s3 } = warmS3State();
+    const bootstrap = warmBootstrap();
+    const connect = countingConnect();
+    const { bodies, fetchImpl } = finalizeCapture();
+    const shared = { cache, s3, bootstrap, connect, fetchImpl };
+
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    expect(cache.size).toBe(1);
+    // Another writer appended a turn: the live head no longer matches the
+    // cached marker.
+    state.headETag = '"advanced-by-another-path"';
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    expect(bootstrap).toHaveBeenCalledTimes(2);
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(sessionReuseOf(bodies[1]!)).toBe("cold");
+  });
+
+  it("same thread, different user misses the cache (userId in the key)", async () => {
+    const cache = makeWarmCache();
+    const { client: s3 } = warmS3State();
+    const bootstrap = warmBootstrap();
+    const connect = countingConnect();
+    const { bodies, fetchImpl } = finalizeCapture();
+    const shared = { cache, s3, bootstrap, connect, fetchImpl };
+
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    await handleInvocation({
+      payload: WARM_PAYLOAD({ user_id: "user-2" }),
+      deps: warmDeps(shared),
+    });
+    expect(bootstrap).toHaveBeenCalledTimes(2);
+    expect(sessionReuseOf(bodies[1]!)).toBe("cold");
+    expect(cache.size).toBe(2);
+  });
+
+  it("a failed S3 session append on a warm turn evicts; the next turn is cold", async () => {
+    const cache = makeWarmCache();
+    const { state, client: s3 } = warmS3State();
+    const bootstrap = warmBootstrap();
+    const connect = countingConnect();
+    const { bodies, fetchImpl } = finalizeCapture();
+    // The loop persists the session through the store on every turn.
+    const persistingLoop: typeof import("../src/server.js").runAgentLoop =
+      async ({ sessionStore }) => {
+        if (sessionStore) {
+          await sessionStore
+            .write("thread-1.jsonl", '{"kind":"header"}\n', null)
+            .catch(() => undefined);
+        }
+        return {
+          content: "stub response",
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+        };
+      };
+    const shared = {
+      cache,
+      s3,
+      bootstrap,
+      connect,
+      fetchImpl,
+      runAgentLoop: persistingLoop,
+    };
+
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    expect(cache.size).toBe(1);
+    // Warm turn whose durable append fails: entry must be evicted.
+    state.headETag = state.putETag; // head matches the marker the write left
+    state.failPut = true;
+    const second = await handleInvocation({
+      payload: WARM_PAYLOAD(),
+      deps: warmDeps(shared),
+    });
+    expect(second.statusCode).toBe(200);
+    expect(sessionReuseOf(bodies[1]!)).toBe("warm");
+    expect(cache.size).toBe(0);
+    // Next turn re-syncs from scratch.
+    state.failPut = false;
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    expect(bootstrap).toHaveBeenCalledTimes(2);
+    expect(sessionReuseOf(bodies[2]!)).toBe("cold");
+  });
+
+  it("dead MCP transport on a warm hit evicts, runs cold, and the turn succeeds", async () => {
+    const cache = makeWarmCache();
+    const { client: s3 } = warmS3State();
+    const bootstrap = warmBootstrap();
+    const connect = countingConnect();
+    const { bodies, fetchImpl } = finalizeCapture();
+    let rebindShouldFail = false;
+    const retention: McpConnectionRetention & {
+      rebind: ReturnType<typeof vi.fn>;
+      close: ReturnType<typeof vi.fn>;
+    } = {
+      register: vi.fn(),
+      rebind: vi.fn(async () => {
+        if (rebindShouldFail) throw new Error("transport is dead");
+      }),
+      close: vi.fn(async () => {}),
+      size: 0,
+    };
+    const shared = {
+      cache,
+      s3,
+      bootstrap,
+      connect,
+      fetchImpl,
+      mcpRetentionFactory: () => retention,
+    };
+
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    expect(cache.size).toBe(1);
+    rebindShouldFail = true;
+    const second = await handleInvocation({
+      payload: WARM_PAYLOAD(),
+      deps: warmDeps(shared),
+    });
+    expect(second.statusCode).toBe(200);
+    expect(retention.rebind).toHaveBeenCalledTimes(1);
+    expect(retention.close).toHaveBeenCalled();
+    expect(bootstrap).toHaveBeenCalledTimes(2);
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(sessionReuseOf(bodies[1]!)).toBe("cold");
+  });
+
+  it("without the runtime env signal the cache factory is never constructed — every turn re-syncs", async () => {
+    // makeDeps passes warmSessionCache: undefined → handleInvocation falls
+    // back to the env-gated singleton, and this test env never defines
+    // AGENTCORE_RUNTIME_SESSION_CACHE (the Lambda-path shape).
+    expect(process.env.AGENTCORE_RUNTIME_SESSION_CACHE).toBeUndefined();
+    const { client: s3 } = warmS3State();
+    const bootstrap = warmBootstrap();
+    const connect = countingConnect();
+    const { bodies, fetchImpl } = finalizeCapture();
+    const shared = { cache: null, s3, bootstrap, connect, fetchImpl };
+
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    expect(bootstrap).toHaveBeenCalledTimes(2);
+    expect(connect).toHaveBeenCalledTimes(2);
+    // Lambda-path turns carry no session_reuse field at all.
+    expect(sessionReuseOf(bodies[0]!)).toBeUndefined();
+    expect(sessionReuseOf(bodies[1]!)).toBeUndefined();
+  });
+
+  it("concurrent invocations for the same thread serialize on the per-thread lock", async () => {
+    const cache = makeWarmCache();
+    const { client: s3 } = warmS3State();
+    const bootstrap = warmBootstrap();
+    const connect = countingConnect();
+    const { fetchImpl } = finalizeCapture();
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const trackingLoop: typeof import("../src/server.js").runAgentLoop =
+      async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        inFlight -= 1;
+        return {
+          content: "stub response",
+          modelId: "amazon-bedrock/test-model",
+          toolsCalled: [],
+          toolInvocations: [],
+        };
+      };
+    const shared = {
+      cache,
+      s3,
+      bootstrap,
+      connect,
+      fetchImpl,
+      runAgentLoop: trackingLoop,
+    };
+
+    const [first, second] = await Promise.all([
+      handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) }),
+      handleInvocation({
+        payload: WARM_PAYLOAD({ message: "second concurrent" }),
+        deps: warmDeps(shared),
+      }),
+    ]);
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(maxInFlight).toBe(1);
   });
 });

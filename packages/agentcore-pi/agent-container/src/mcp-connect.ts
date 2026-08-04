@@ -41,6 +41,127 @@ import { enrichMcpRecordLinks } from "./mcp-record-links.js";
 const DEFAULT_LIST_TOOLS_TIMEOUT_MS = 30_000;
 const DEFAULT_CALL_TOOL_TIMEOUT_MS = 60_000;
 const DEFAULT_READ_RESOURCE_TIMEOUT_MS = 30_000;
+const DEFAULT_WARM_PING_TIMEOUT_MS = 3_000;
+
+// ---------------------------------------------------------------------------
+// THINK-586 U7 — warm-session MCP connection retention.
+// ---------------------------------------------------------------------------
+
+/**
+ * One retained (warm-cached) MCP connection. `setFetch`/`setAuthorization`
+ * repoint the transport's egress at the CURRENT turn's scrubbing fetch and
+ * freshly minted handle — the per-turn HandleStore invariant holds because
+ * the connect-time handle dies with its turn and every warm reuse re-mints.
+ */
+export interface RetainedMcpConnection {
+  serverName: string;
+  /** MCP-level liveness probe (protocol ping over the retained transport). */
+  ping: (options: { timeout: number }) => Promise<unknown>;
+  close: () => Promise<void>;
+  setFetch: (fetchImpl: typeof fetch | undefined) => void;
+  setAuthorization: (value: string) => void;
+  /** True when the server connected with a handle-shaped Authorization. */
+  hasAuthorization: boolean;
+}
+
+export interface McpRetentionRebindArgs {
+  /** The current turn's egress (scrubbing) fetch. */
+  fetch: typeof fetch;
+  /**
+   * Current-turn Authorization header value for a server that connected
+   * with auth (`Handle <uuid>` minted into the current turn's HandleStore),
+   * or null when unavailable — which fails the rebind (cold path).
+   */
+  authorizationForServer: (serverName: string) => string | null;
+  pingTimeoutMs?: number;
+}
+
+/**
+ * Holds MCP clients across turns for the warm-session cache (KTD6):
+ * transport teardown is diverted here instead of the per-turn cleanup
+ * queue, so a cached client survives the turn's `finally` drain and is
+ * closed only when the cache entry is evicted (`close()`).
+ */
+export interface McpConnectionRetention {
+  register(connection: RetainedMcpConnection): void;
+  /** Repoint every retained transport at the current turn's fetch/handles,
+   * then liveness-ping each server. Throws on any failure (caller evicts). */
+  rebind(args: McpRetentionRebindArgs): Promise<void>;
+  close(): Promise<void>;
+  readonly size: number;
+}
+
+export function createMcpConnectionRetention(): McpConnectionRetention {
+  const connections: RetainedMcpConnection[] = [];
+  return {
+    register(connection) {
+      connections.push(connection);
+    },
+    async rebind(args) {
+      for (const connection of connections) {
+        connection.setFetch(args.fetch);
+        if (connection.hasAuthorization) {
+          const authorization = args.authorizationForServer(
+            connection.serverName,
+          );
+          if (!authorization) {
+            throw new Error(
+              `warm MCP rebind: no current-turn authorization for server ${connection.serverName}`,
+            );
+          }
+          connection.setAuthorization(authorization);
+        }
+      }
+      const timeout = args.pingTimeoutMs ?? DEFAULT_WARM_PING_TIMEOUT_MS;
+      await Promise.all(connections.map((c) => c.ping({ timeout })));
+    },
+    async close() {
+      await Promise.all(
+        connections.map((c) => c.close().catch(() => undefined)),
+      );
+    },
+    get size() {
+      return connections.length;
+    },
+  };
+}
+
+interface IndirectFetchState {
+  fetch: typeof fetch | undefined;
+  authorization: string | null;
+}
+
+/**
+ * Transport-egress indirection for retained connections: delegates to the
+ * mutable per-turn fetch, and rewrites an existing Authorization header
+ * (the connect-time `Handle <uuid>` frozen into the transport's
+ * requestInit) with the current turn's re-minted value. Only rewrites
+ * requests that already carry Authorization — unauthenticated servers
+ * never gain a header.
+ */
+function makeIndirectFetch(state: IndirectFetchState): typeof fetch {
+  const indirect = (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response> => {
+    const target = state.fetch ?? globalThis.fetch;
+    if (state.authorization !== null) {
+      if (input instanceof Request && input.headers.has("authorization")) {
+        const headers = new Headers(input.headers);
+        headers.set("authorization", state.authorization);
+        input = new Request(input, { headers });
+      } else if (init?.headers) {
+        const headers = new Headers(init.headers);
+        if (headers.has("authorization")) {
+          headers.set("authorization", state.authorization);
+          init = { ...init, headers };
+        }
+      }
+    }
+    return target(input as never, init);
+  };
+  return indirect as typeof fetch;
+}
 const MAX_EXPOSED_TOOL_NAME_LENGTH = 48;
 const TRUNCATED_TOOL_NAME_HASH_LENGTH = 8;
 
@@ -75,6 +196,14 @@ export interface CreateConnectMcpServerOptions {
    * Test seam — inject a custom Client factory. Production callers omit this.
    */
   clientFactory?: () => Client;
+  /**
+   * THINK-586 U7 — when present, connections are retained for the
+   * warm-session cache: transport teardown registers here instead of the
+   * per-turn cleanup queue, and the transport's fetch goes through a
+   * mutable indirection so later turns can repoint it. Omitted (Lambda
+   * path / non-cacheable turns) → behavior identical to before.
+   */
+  retention?: McpConnectionRetention;
 }
 
 export interface TransportFactoryArgs {
@@ -335,21 +464,26 @@ export function createConnectMcpServer(
   const transportFactory = options.transportFactory ?? defaultTransportFactory;
   const clientFactory = options.clientFactory ?? defaultClientFactory;
   const customFetch = options.fetch;
+  const retention = options.retention;
 
   return async function connectMcpServer(
     args: ConnectMcpServerArgs,
   ): Promise<AgentTool<any>[]> {
     const url = new URL(args.url);
+    const initialAuthorization = args.headers.Authorization ?? null;
+    const fetchState: IndirectFetchState | null = retention
+      ? { fetch: customFetch, authorization: initialAuthorization }
+      : null;
     const transport = transportFactory({
       url,
       headers: args.headers,
       transport: args.transport ?? "streamable-http",
-      fetch: customFetch,
+      fetch: fetchState ? makeIndirectFetch(fetchState) : customFetch,
     });
     const client = clientFactory();
     await client.connect(transport);
 
-    cleanupQueue.push(async () => {
+    const closeTransport = async () => {
       try {
         await transport.close();
       } catch {
@@ -357,7 +491,25 @@ export function createConnectMcpServer(
         // logger; throwing here would mask the real error from the agent
         // loop.
       }
-    });
+    };
+    if (retention && fetchState) {
+      // Warm-cache retention (U7): the connection outlives the turn; the
+      // per-turn cleanup drain must not tear it down. Eviction closes it.
+      retention.register({
+        serverName: args.serverName,
+        ping: (opts) => client.ping(opts),
+        close: closeTransport,
+        setFetch: (fetchImpl) => {
+          fetchState.fetch = fetchImpl;
+        },
+        setAuthorization: (value) => {
+          fetchState.authorization = value;
+        },
+        hasAuthorization: initialAuthorization !== null,
+      });
+    } else {
+      cleanupQueue.push(closeTransport);
+    }
 
     const listing = await client.listTools(undefined, {
       timeout: listToolsTimeoutMs,
