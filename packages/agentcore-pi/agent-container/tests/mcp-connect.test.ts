@@ -580,3 +580,56 @@ describe("createConnectMcpServer", () => {
     ).rejects.toThrow(/network error/);
   });
 });
+
+describe("McpConnectionRetention rebind ping tolerance (THINK-586 U7)", () => {
+  function retainedConnection(
+    ping: () => Promise<unknown>,
+  ): import("../src/mcp-connect.js").RetainedMcpConnection {
+    return {
+      serverName: "demo",
+      ping,
+      close: async () => undefined,
+      setFetch: () => undefined,
+      setAuthorization: () => undefined,
+      hasAuthorization: false,
+    };
+  }
+
+  it("treats JSON-RPC -32601 (ping unimplemented) as liveness proof", async () => {
+    const { createMcpConnectionRetention } = await import(
+      "../src/mcp-connect.js"
+    );
+    const retention = createMcpConnectionRetention();
+    retention.register(
+      retainedConnection(() =>
+        Promise.reject(
+          Object.assign(new Error("MCP error -32601: Method not found: ping"), {
+            code: -32601,
+          }),
+        ),
+      ),
+    );
+    await expect(
+      retention.rebind({
+        fetch: globalThis.fetch,
+        authorizationForServer: () => null,
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("still fails rebind on transport-level ping errors", async () => {
+    const { createMcpConnectionRetention } = await import(
+      "../src/mcp-connect.js"
+    );
+    const retention = createMcpConnectionRetention();
+    retention.register(
+      retainedConnection(() => Promise.reject(new Error("fetch failed"))),
+    );
+    await expect(
+      retention.rebind({
+        fetch: globalThis.fetch,
+        authorizationForServer: () => null,
+      }),
+    ).rejects.toThrow(/fetch failed/);
+  });
+});
