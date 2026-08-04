@@ -3115,18 +3115,22 @@ async function runInvocationTurn(
   // skill-creator commands): those always run the cold path and are never
   // cached.
   const warmConfigFingerprint = asString(args.payload.config_fingerprint);
-  const warmEligible = Boolean(
-    warmCache &&
-      workspaceBucket &&
-      warmConfigFingerprint &&
-      identity.tenantSlug &&
-      identity.agentSlug &&
-      identity.userId &&
-      !asString(args.payload.sandbox_interpreter_id) &&
-      !explicitMemoryTurn(args.payload.message) &&
-      parsePinnedSkillRefs(args.payload.pinned_skills).length === 0 &&
-      !parseSkillCreatorCommandPayload(args.payload.skill_creator_command),
-  );
+  const warmEligibility = {
+    cache: Boolean(warmCache),
+    bucket: Boolean(workspaceBucket),
+    fingerprint: Boolean(warmConfigFingerprint),
+    tenantSlug: Boolean(identity.tenantSlug),
+    agentSlug: Boolean(identity.agentSlug),
+    userId: Boolean(identity.userId),
+    noSandbox: !asString(args.payload.sandbox_interpreter_id),
+    noExplicitMemory: !explicitMemoryTurn(args.payload.message),
+    noPinnedSkills:
+      parsePinnedSkillRefs(args.payload.pinned_skills).length === 0,
+    noSkillCreator: !parseSkillCreatorCommandPayload(
+      args.payload.skill_creator_command,
+    ),
+  };
+  const warmEligible = Object.values(warmEligibility).every(Boolean);
   let warmKey = "";
   let warmAuthVersion = "";
   let warmEntry: WarmSessionEntry<WarmTurnProducts> | null = null;
@@ -4668,6 +4672,9 @@ async function runInvocationTurn(
         threadId: identity.threadId,
         detail: JSON.stringify({
           eligible: warmEligible,
+          // Per-leg breakdown: `false` legs name exactly why the fast path
+          // was disqualified (booleans only — never field values).
+          eligibility: warmEligibility,
           hasKey: Boolean(warmKey),
           hasProducts: Boolean(warmProducts),
           writeFailed: warmSessionWriteFailed,
