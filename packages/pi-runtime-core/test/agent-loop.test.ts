@@ -98,8 +98,12 @@ function assistantErrorMessage(errorMessage: string): AgentMessage {
 function makeFakeSession(options: {
   events?: AgentSessionEvent[];
   messages: AgentMessage[];
+  /** Transcript present BEFORE prompt() — models a resumed durable session
+   * carrying prior turns' messages (THINK-601 scoping). */
+  preMessages?: AgentMessage[];
 }): AgentSessionLike & { disposed: boolean; promptText?: string } {
   let listener: ((event: AgentSessionEvent) => void) | undefined;
+  let prompted = false;
   return {
     disposed: false,
     promptText: undefined,
@@ -111,10 +115,12 @@ function makeFakeSession(options: {
     },
     async prompt(text: string) {
       (this as { promptText?: string }).promptText = text;
+      prompted = true;
       for (const event of options.events ?? []) listener?.(event);
     },
     get messages() {
-      return options.messages;
+      const pre = options.preMessages ?? [];
+      return prompted ? [...pre, ...options.messages] : pre;
     },
     dispose() {
       (this as { disposed: boolean }).disposed = true;
@@ -1249,6 +1255,39 @@ describe("runAgentLoop", () => {
     expect(session.promptText).toContain("user: earlier ask");
     expect(session.promptText).toContain("assistant: earlier reply");
     expect(session.promptText).toContain("Current user message:\nfollow up");
+  });
+
+  it("excludes prior turns' transcript tool calls from this turn's usage (THINK-601)", async () => {
+    const historicalToolCall = {
+      role: "assistant",
+      content: [
+        {
+          type: "toolCall",
+          id: "tooluse_prior_turn",
+          name: "execute_code",
+          arguments: { code: "1+1" },
+        },
+      ],
+    } as unknown as AgentMessage;
+    const historicalResult = {
+      role: "toolResult",
+      toolCallId: "tooluse_prior_turn",
+      toolName: "execute_code",
+      content: [{ type: "text", text: "2" }],
+      isError: false,
+    } as unknown as AgentMessage;
+    const session = makeFakeSession({
+      preMessages: [historicalToolCall, historicalResult],
+      messages: [assistantMessage("just words this turn")],
+      events: [],
+    });
+
+    const result = await runAgentLoop(baseArgs(), {
+      openSession: async (inputs) => ({ session, modelId: inputs.modelId }),
+    });
+
+    expect(result.toolsCalled).toEqual([]);
+    expect(result.toolInvocations).toHaveLength(0);
   });
 
   it("ignores a tool_execution_end with no preceding start (history replay)", async () => {
