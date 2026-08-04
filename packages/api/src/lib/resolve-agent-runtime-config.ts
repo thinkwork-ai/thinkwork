@@ -455,6 +455,12 @@ export async function resolveAgentRuntimeConfig(
     stageTimings[label] = now - timingLast;
     timingLast = now;
   };
+  const timeLeg = <T>(label: string, work: PromiseLike<T>): Promise<T> => {
+    const legStart = Date.now();
+    return Promise.resolve(work).finally(() => {
+      stageTimings[label] = Date.now() - legStart;
+    });
+  };
 
   // Stage 1 (U2 setup-diet, mirrors chat-agent-invoke's "data-independent
   // setup reads start together"): every read here depends only on `opts`,
@@ -600,11 +606,14 @@ export async function resolveAgentRuntimeConfig(
     workspaceSkills,
     webExtractConfig,
   ] = await Promise.all([
-    resolveGuardrailSelection({
-      db,
-      tenantId: opts.tenantId,
-      agentGuardrailId: agent.guardrail_id,
-    }),
+    timeLeg(
+      "stage2.guardrail",
+      resolveGuardrailSelection({
+        db,
+        tenantId: opts.tenantId,
+        agentGuardrailId: agent.guardrail_id,
+      }),
+    ),
     agent.human_pair_id
       ? db
           .select({ name: users.name })
@@ -629,36 +638,48 @@ export async function resolveAgentRuntimeConfig(
           )
           .then((rows) => rows[0]?.email ?? "")
       : Promise.resolve(""),
-    db
-      .select({
-        capability: agentCapabilities.capability,
-        enabled: agentCapabilities.enabled,
-        config: agentCapabilities.config,
-      })
-      .from(agentCapabilities)
-      .where(
-        and(
-          eq(agentCapabilities.agent_id, opts.agentId),
-          eq(agentCapabilities.tenant_id, opts.tenantId),
+    timeLeg(
+      "stage2.capabilities",
+      db
+        .select({
+          capability: agentCapabilities.capability,
+          enabled: agentCapabilities.enabled,
+          config: agentCapabilities.config,
+        })
+        .from(agentCapabilities)
+        .where(
+          and(
+            eq(agentCapabilities.agent_id, opts.agentId),
+            eq(agentCapabilities.tenant_id, opts.tenantId),
+          ),
         ),
-      ),
+    ),
     // Fail-soft wrapper: the consumption site below preserves the original
     // try/catch degradation (warn + continue without built-in tools).
-    loadTenantBuiltinTools(opts.tenantId).then(
-      (tools) => ({ ok: true as const, tools }),
-      (err: unknown) => ({ ok: false as const, err }),
+    timeLeg(
+      "stage2.builtin_tools",
+      loadTenantBuiltinTools(opts.tenantId).then(
+        (tools) => ({ ok: true as const, tools }),
+        (err: unknown) => ({ ok: false as const, err }),
+      ),
     ),
-    loadWorkspaceSkillConfigs({
-      tenantSlug,
-      agentSlug,
-      spaceSlug: activeSpaceSlug,
-      logPrefix,
-    }),
-    templateWebExtractEnabled &&
-    !blockedTools.includes("web-extract") &&
-    !blockedTools.includes("web_extract")
-      ? loadTenantWebExtractConfig(opts.tenantId)
-      : Promise.resolve(null),
+    timeLeg(
+      "stage2.workspace_skills",
+      loadWorkspaceSkillConfigs({
+        tenantSlug,
+        agentSlug,
+        spaceSlug: activeSpaceSlug,
+        logPrefix,
+      }),
+    ),
+    timeLeg(
+      "stage2.web_extract",
+      templateWebExtractEnabled &&
+        !blockedTools.includes("web-extract") &&
+        !blockedTools.includes("web_extract")
+        ? loadTenantWebExtractConfig(opts.tenantId)
+        : Promise.resolve(null),
+    ),
   ]);
   markTiming("stage2_parallel_reads");
   const { guardrailId, guardrailConfig } = guardrailSelection;
