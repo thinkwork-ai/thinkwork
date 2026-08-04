@@ -3659,6 +3659,7 @@ async function runInvocationTurn(
   // same promise still observes (and rethrows) the rejection.
   stagedAttachmentsPromise.catch(() => {});
   let coldWarmProducts: WarmTurnProducts | null = null;
+  let warmSessionAssemblyCleanupCount = -1;
   if (warmEntry) {
     // Warm hit (THINK-586 U7): reuse the cached bootstrap products instead
     // of reconnecting MCP servers and reassembling tools. The per-turn
@@ -3751,6 +3752,7 @@ async function runInvocationTurn(
         // after the turn succeeds. An assembly-time cleanup closure (other
         // than the retained MCP teardowns, which were diverted) means the
         // toolset holds per-turn resources → not cacheable.
+        warmSessionAssemblyCleanupCount = cleanup.length;
         coldWarmProducts =
           cleanup.length === 0
             ? {
@@ -4656,6 +4658,23 @@ async function runInvocationTurn(
       detail: `toolsCalled=${runResult.toolsCalled.length}`,
     });
     runResult = mergeRuntimeDiagnostics(runResult, runtimeDiagnostics);
+    if (warmCache && !warmEntry) {
+      // THINK-586 U7 — name the exact reason a cold turn did not populate
+      // the cache; without this the warm path can silently never engage.
+      logStructured({
+        level: "info",
+        event: "warm_session_cold_reason",
+        tenantId: identity.tenantId,
+        threadId: identity.threadId,
+        detail: JSON.stringify({
+          eligible: warmEligible,
+          hasKey: Boolean(warmKey),
+          hasProducts: Boolean(warmProducts),
+          writeFailed: warmSessionWriteFailed,
+          assemblyCleanupCount: warmSessionAssemblyCleanupCount,
+        }),
+      });
+    }
     if (warmCache && warmKey && warmProducts && !warmSessionWriteFailed) {
       // THINK-586 U7 — populate/refresh the cache with this turn's products
       // and fresh freshness markers (durable head + authorization version).
