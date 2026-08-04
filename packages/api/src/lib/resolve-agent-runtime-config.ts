@@ -444,6 +444,18 @@ export async function resolveAgentRuntimeConfig(
   const thinkworkApiSecret =
     opts.thinkworkApiSecret ?? getApiAuthSecret() ?? "";
 
+  // Stage timing (U2 setup-diet follow-up): the api.runtime_config.resolved
+  // phase is the dominant setup cost and its internals are opaque in logs.
+  // One summary line per resolution shows where the time goes.
+  const timingStart = Date.now();
+  let timingLast = timingStart;
+  const stageTimings: Record<string, number> = {};
+  const markTiming = (label: string) => {
+    const now = Date.now();
+    stageTimings[label] = now - timingLast;
+    timingLast = now;
+  };
+
   // Stage 1 (U2 setup-diet, mirrors chat-agent-invoke's "data-independent
   // setup reads start together"): every read here depends only on `opts`,
   // is a pure read (DB/Secrets lookups, no writes), and so may safely start
@@ -513,6 +525,7 @@ export async function resolveAgentRuntimeConfig(
             )
         : Promise.resolve([] as Array<{ email: string | null }>),
     ]);
+  markTiming("stage1_parallel_reads");
   const [agent] = agentRows;
   if (!agent) throw new AgentNotFoundError(opts.agentId);
 
@@ -647,6 +660,7 @@ export async function resolveAgentRuntimeConfig(
       ? loadTenantWebExtractConfig(opts.tenantId)
       : Promise.resolve(null),
   ]);
+  markTiming("stage2_parallel_reads");
   const { guardrailId, guardrailConfig } = guardrailSelection;
   if (!currentUserEmail) currentUserEmail = humanPairFallbackEmail;
 
@@ -662,6 +676,7 @@ export async function resolveAgentRuntimeConfig(
     logPrefix,
     diagnostics,
   });
+  markTiming("skill_metadata");
 
   // Other default skills (always-on script skills).
   for (const ds of DEFAULT_SKILLS) {
@@ -756,6 +771,7 @@ export async function resolveAgentRuntimeConfig(
     skillIds: catalogSkillIds,
     logPrefix,
   });
+  markTiming("trusted_catalog");
   const runtimeAllowedSkillIds = new Set([
     ...trustedCatalogSkillIds,
     ...builtInSkillIds,
@@ -827,6 +843,8 @@ export async function resolveAgentRuntimeConfig(
     }
   }
 
+  markTiming("context_providers");
+
   // --- MCP configs ---------------------------------------------------------
 
   // Dispatch identity (plan 2026-06-12-001 U6): per-user OAuth servers
@@ -859,6 +877,7 @@ export async function resolveAgentRuntimeConfig(
           : { defer: true },
     },
   );
+  markTiming("mcp_configs");
 
   const resolvedConfig: AgentRuntimeConfig = {
     tenantId: opts.tenantId,
@@ -906,6 +925,7 @@ export async function resolveAgentRuntimeConfig(
     spaceId: opts.spaceId ?? null,
     logPrefix,
   });
+  markTiming("space_overrides");
 
   const overriddenConfig = applyRuntimeOverrides(resolvedConfig, overrides);
   // Subagent-folders U11: `agentProfilesConfig` stays [] — sub-agent
@@ -939,6 +959,15 @@ export async function resolveAgentRuntimeConfig(
   if (diagnostics) {
     overriddenConfig.capabilityDiagnostics = diagnostics.drops;
   }
+  markTiming("pi_extensions");
+  console.log(
+    JSON.stringify({
+      event: "runtime_config_timing",
+      agentId: opts.agentId,
+      totalMs: Date.now() - timingStart,
+      ...stageTimings,
+    }),
+  );
   return overriddenConfig;
 }
 
