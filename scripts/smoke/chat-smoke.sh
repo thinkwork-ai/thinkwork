@@ -10,7 +10,7 @@
 # What this covers:
 #   * Service-endpoint auth (Bearer API_AUTH_SECRET)
 #   * skill_runs insert under invocation_source=chat
-#   * agentcore-invoke Lambda dispatch (RequestResponse)
+#   * Pi AgentCore Lambda skill-run dispatch (Event enqueue)
 #   * Container lifecycle transition out of `running`
 #
 # What this does NOT cover:

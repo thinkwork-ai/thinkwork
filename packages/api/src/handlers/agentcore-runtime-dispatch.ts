@@ -42,7 +42,7 @@ export interface LwaInvocationEnvelope {
   isBase64Encoded?: boolean;
 }
 
-/** Cached SSM runtime ID with TTL (precedent: agentcore-invoke.ts:42). */
+/** Cached SSM runtime ID with TTL (same 5-min pattern the retired legacy Function URL invoker used). */
 let cachedRuntimeId: string | null = null;
 let cachedRuntimeIdAt = 0;
 const RUNTIME_ID_CACHE_TTL_MS = 5 * 60 * 1000;

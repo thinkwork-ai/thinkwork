@@ -5,7 +5,7 @@
 # directly invokes the job-trigger Lambda with a synthetic event that
 # matches what EventBridge Scheduler would send. The Lambda reads the
 # scheduled_jobs row, resolves input bindings, inserts a skill_runs row,
-# and calls agentcore-invoke. We then poll the resulting skill_runs row
+# and enqueues the run on the Pi AgentCore Lambda. We then poll the resulting skill_runs row
 # until it transitions out of `running`.
 #
 # This script MUTATES the scheduled_jobs table. Required --force flag
@@ -15,7 +15,7 @@
 # What this covers:
 #   * scheduled_jobs → job-trigger → skill_runs dispatch chain
 #   * Input-binding resolution (literal + today_plus_N)
-#   * agentcore-invoke under invocation_source=scheduled
+#   * Pi AgentCore Lambda dispatch under invocation_source=scheduled
 #
 # What this does NOT cover:
 #   * EventBridge Scheduler wiring (we invoke the Lambda directly)

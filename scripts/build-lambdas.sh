@@ -177,9 +177,6 @@ build_handler "document-conformance-judge" \
 echo ""
 echo "P1: Agent invoke + scheduling"
 
-build_handler "agentcore-invoke" \
-  "$REPO_ROOT/packages/api/agentcore-invoke.ts"
-
 build_handler "chat-agent-invoke" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-invoke.ts"
 
