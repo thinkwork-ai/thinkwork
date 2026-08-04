@@ -50,3 +50,10 @@ Reproduce with `scripts/latency-dashboard.sh --stage dev` (U1). Baseline full ev
 ## Blockers
 
 - None.
+
+| 2026-08-04 | U6 live verification | — | ([#4179](https://github.com/thinkwork-ai/thinkwork/pull/4179), [#4180](https://github.com/thinkwork-ai/thinkwork/pull/4180)) | Complete | 3 green turns through AgentCore runtime (cold 22.8 s, warm 8.3 s / 5.9 s), DLQ empty, `legacy_lambda_dispatch` sentinel correct on flag-off. Both failure modes proven live: ESM visibility rejection (#4179), missing invoke-grant AccessDenied — turn failed loudly, no silent fallback; flag-off restored the Lambda path. | Deploy pipeline was wiping the runtime env on every container build (build-container's inline no-env UpdateAgentRuntime) — removed in #4180; update-agentcore-runtimes job is now the sole env authority (KTD4). |
+| 2026-08-04 | U7 warm-session fast path | `feat/think-586-warm-session`, `u7-diag`, `u7-diag2` | [#4182](https://github.com/thinkwork-ai/thinkwork/pull/4182), [#4183](https://github.com/thinkwork-ai/thinkwork/pull/4183), [#4185](https://github.com/thinkwork-ai/thinkwork/pull/4185) | Code merged; **diagnosis in flight** | Runtime v847 (19 env vars incl. cache overlay — first proof of post-#4180 single-authority env path). BUG: `session_reuse: "cold"` on every same-thread follow-up; #4183 diagnostic shows `eligible:false` on both turns of a fresh-thread repro (thread `9ea93b3b`, cold 23.3 s / follow-up 6.0 s). #4185 breaks the 10-leg eligibility AND into per-leg booleans to name the blocker. | Ruled out: key-path mismatch, ETag semantics, persist ordering, payload truncation (dispatcher forwards `event.body` verbatim), env var name/value (`AGENTCORE_RUNTIME_SESSION_CACHE=1` present), identity slugs (bootstrap logs show `agentSlug: thinkwork`, tenant prefix `sleek-squirrel-230`). |
+
+### Decision log addendum
+
+- **2026-08-04 (Eric, in-session): U8 soak window cancelled.** All remaining units land ASAP today; Eric tests dev + TEI + McPherson himself today and resolves issues before tomorrow's meeting. U8 collapses to "dashboard shipped (#4181) + thresholds/runbook documented". Customer-stage flag flips remain user-owned and manual.
