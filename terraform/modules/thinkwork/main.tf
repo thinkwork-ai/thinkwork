@@ -1235,6 +1235,7 @@ module "api" {
   # THINK-583 U3 — warm chat path (KTD5: these two handlers only).
   chat_agent_invoke_provisioned_concurrency  = var.chat_agent_invoke_provisioned_concurrency
   workspace_renderer_provisioned_concurrency = var.workspace_renderer_provisioned_concurrency
+  agentcore_runtime_dispatch_enabled         = var.agentcore_runtime_dispatch_enabled
 
   mcp_custom_domain       = var.mcp_custom_domain
   mcp_custom_domain_ready = var.mcp_custom_domain_ready

@@ -45,6 +45,52 @@ export function normalizeAgentRuntimeType(value: unknown): AgentRuntimeType {
   throw new UnknownAgentRuntimeTypeError(String(value));
 }
 
+export type ChatDispatchTarget =
+  | { kind: "pi_lambda"; functionName: string; stageFlagOn: boolean }
+  | { kind: "agentcore_runtime"; functionName: string };
+
+/**
+ * THINK-585 U6 (KTD3): the dispatch seam. Flag-on (stage kill-switch AND
+ * per-agent flag) returns the agentcore-runtime-dispatch Lambda; flag-off
+ * returns the Pi Lambda. No silent fallback: a flag-on stage missing the
+ * dispatcher function name fails the turn loudly. The caller logs a
+ * `legacy_lambda_dispatch` sentinel when the stage flag is on but the
+ * agent rides the Lambda path (KTD3 soak signal).
+ */
+export function resolveChatDispatchTarget(
+  input: { runtimeType: AgentRuntimeType; agentFlagEnabled: boolean },
+  env: Partial<
+    Pick<
+      NodeJS.ProcessEnv,
+      | "AGENTCORE_FUNCTION_NAME"
+      | "AGENTCORE_PI_FUNCTION_NAME"
+      | "AGENTCORE_RUNTIME_DISPATCH_ENABLED"
+      | "AGENTCORE_RUNTIME_DISPATCH_FUNCTION_NAME"
+    >
+  > = process.env,
+): ChatDispatchTarget {
+  const stageFlagOn =
+    (env.AGENTCORE_RUNTIME_DISPATCH_ENABLED ??
+      getConfig("AGENTCORE_RUNTIME_DISPATCH_ENABLED")) === "true";
+  if (stageFlagOn && input.agentFlagEnabled) {
+    // Derivable thinkwork-<stage>-api-* names never ride env (R1/R10
+    // identity-only rule) — same as resolveRuntimeFunctionName below.
+    // deriveFunctionName throws when STAGE is unset: loud, no silent
+    // Lambda fallback.
+    return {
+      kind: "agentcore_runtime",
+      functionName:
+        env.AGENTCORE_RUNTIME_DISPATCH_FUNCTION_NAME ??
+        deriveFunctionName("agentcore-runtime-dispatch"),
+    };
+  }
+  return {
+    kind: "pi_lambda",
+    functionName: resolveRuntimeFunctionName(input.runtimeType, env),
+    stageFlagOn,
+  };
+}
+
 export function resolveRuntimeFunctionName(
   runtimeType: AgentRuntimeType,
   env: Partial<

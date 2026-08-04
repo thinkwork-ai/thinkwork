@@ -1530,3 +1530,9 @@ variable "lambda_max_memory_mb" {
   default     = 10240
   description = "Account-level Lambda memory ceiling in MB. Legacy AWS accounts cap function memory at 3008 (raised only via AWS support case); handlers requesting more are clamped so a capped account's deploy doesn't fail mid-apply. Set via the runner-secrets key lambdaMaxMemoryMb on managed deployments."
 }
+
+variable "agentcore_runtime_dispatch_enabled" {
+  description = "THINK-585 U6: stage kill-switch for AgentCore Runtime chat dispatch (see lambda-api module)."
+  type        = bool
+  default     = false
+}

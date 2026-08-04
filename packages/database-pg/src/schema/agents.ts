@@ -96,6 +96,17 @@ export const agents = pgTable(
       .notNull()
       .default(false),
     /**
+     * THINK-585 U6 (KTD3): when true AND the stage kill-switch
+     * (AGENTCORE_RUNTIME_DISPATCH_ENABLED runtime-config key) is on, chat
+     * turns dispatch through the agentcore-runtime-dispatch Lambda to the
+     * Bedrock AgentCore Runtime with a per-thread session instead of the
+     * Pi Lambda. Operator-flipped; the legacy path logs a
+     * legacy_lambda_dispatch sentinel while the stage flag is on.
+     */
+    agentcore_runtime_dispatch: boolean("agentcore_runtime_dispatch")
+      .notNull()
+      .default(false),
+    /**
      * Subagent-folders U10 per-agent authority flip: when true, the
      * compiled capabilities manifest (agent entries + synced
      * agents/<slug>/ folders) is the sub-agent profile truth — the

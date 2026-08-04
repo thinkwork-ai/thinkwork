@@ -82,7 +82,7 @@ build_handler() {
 
   mkdir -p "$out_dir"
   local flags_ref="ESBUILD_FLAGS[@]"
-  if [ "$name" = "graphql-http" ] || [ "$name" = "chat-agent-invoke" ] || [ "$name" = "memory-retain" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wakeup-processor" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "skills" ] || [ "$name" = "identity-graph-projector" ]; then
+  if [ "$name" = "graphql-http" ] || [ "$name" = "chat-agent-invoke" ] || [ "$name" = "agentcore-runtime-dispatch" ] || [ "$name" = "memory-retain" ] || [ "$name" = "memory-stage-worker" ] || [ "$name" = "memory-retraction-drainer" ] || [ "$name" = "mcp-user-memory" ] || [ "$name" = "mcp-context-engine" ] || [ "$name" = "requester-memory-dreaming" ] || [ "$name" = "eval-runner" ] || [ "$name" = "eval-worker" ] || [ "$name" = "wakeup-processor" ] || [ "$name" = "routine-task-python" ] || [ "$name" = "routine-exec-git" ] || [ "$name" = "compliance-export-runner" ] || [ "$name" = "model-converse" ] || [ "$name" = "chat-agent-activity" ] || [ "$name" = "artifact-share" ] || [ "$name" = "document-conformance-judge" ] || [ "$name" = "skills" ] || [ "$name" = "identity-graph-projector" ]; then
     flags_ref="BUNDLED_AGENTCORE_ESBUILD_FLAGS[@]"
   fi
   npx esbuild "$entry" \
@@ -182,6 +182,17 @@ build_handler "agentcore-invoke" \
 
 build_handler "chat-agent-invoke" \
   "$REPO_ROOT/packages/api/src/handlers/chat-agent-invoke.ts"
+
+# THINK-585 U6 — thin waiting dispatcher for AgentCore Runtime chat dispatch.
+# Uses BUNDLED_AGENTCORE_ESBUILD_FLAGS: it inlines
+# @aws-sdk/client-bedrock-agentcore (InvokeAgentRuntime), newer than the
+# Lambda-provided SDK.
+build_handler "agentcore-runtime-dispatch" \
+  "$REPO_ROOT/packages/api/src/handlers/agentcore-runtime-dispatch.ts"
+
+# THINK-585 U6 — DLQ redrive consumer marking lost-dispatch turns failed.
+build_handler "agentcore-dispatch-dlq-redrive" \
+  "$REPO_ROOT/packages/api/src/handlers/agentcore-dispatch-dlq-redrive.ts"
 
 # Mobile agent harness model proxy: stateless Bedrock Converse call per loop
 # step. Bundles the newer Bedrock SDK (Converse + tool-use). OPTIONS handled

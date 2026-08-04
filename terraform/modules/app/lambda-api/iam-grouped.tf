@@ -359,6 +359,22 @@ locals {
         )
       },
     ] : [],
+    # THINK-585 U6: the dispatcher's on-failure destination (Lambda sends
+    # with the function's execution role) + the redrive consumer's ESM
+    # polling, both on the agentcore-dispatch DLQ.
+    local.deploy_lambda_handlers ? [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage",
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:ChangeMessageVisibility",
+        ]
+        Resource = [for q in aws_sqs_queue.agentcore_dispatch_dlq : q.arn]
+      },
+    ] : [],
     var.brain_artifacts_kms_key_arn != "" ? [
       {
         Effect = "Allow"

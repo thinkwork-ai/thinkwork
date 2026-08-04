@@ -677,6 +677,7 @@ Join hints:
 | json_render_ui | jsonb |  |
 | is_platform_default | boolean | not null |
 | capability_folder_dispatch | boolean | not null |
+| agentcore_runtime_dispatch | boolean | not null |
 | agent_profile_manifest_authority | boolean | not null |
 | budget_monthly_cents | integer |  |
 | spent_monthly_cents | integer |  |

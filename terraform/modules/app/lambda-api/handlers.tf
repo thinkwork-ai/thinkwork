@@ -66,6 +66,11 @@ locals {
     SUBSCRIPTION_TICKET_PUBLIC_KEYS        = var.subscription_ticket_public_keys
     SUBSCRIPTION_TICKET_PRIVATE_KEY_SECRET = var.subscription_ticket_private_key_secret
     APPSYNC_API_ID                         = var.appsync_api_id
+    # THINK-585 U6 (KTD3): stage kill-switch for AgentCore Runtime chat
+    # dispatch. Empty when off (stripped from the document — getConfig sees
+    # unset). The per-agent agents.agentcore_runtime_dispatch flag gates on
+    # top; both must be on for a turn to ride the dispatcher.
+    AGENTCORE_RUNTIME_DISPATCH_ENABLED = var.agentcore_runtime_dispatch_enabled ? "true" : ""
     # Neptune endpoint for the
     # identity-graph-projector's nudge gate (THINK-339 U15: the twin READ
     # Lambdas retired to the platform service; the write/projection lane
@@ -357,6 +362,12 @@ locals {
       CONTEXT_ENGINE_MEMORY_QUERY_MODE = "reflect"
       CONTEXT_ENGINE_MEMORY_TIMEOUT_MS = "20000"
     }
+    "agentcore-runtime-dispatch" = {
+      # THINK-585 U6: the dispatcher resolves the Pi runtime id from SSM
+      # (5-min cache) and derives the ARN from identity env. Stage-scoped
+      # param name is config, not identity — env is the right layer.
+      AGENTCORE_PI_RUNTIME_SSM_NAME = "/thinkwork/${var.stage}/agentcore/runtime-id-pi"
+    }
     "chat-agent-invoke" = {
       # THINK-324 C18: mint the signed-turn assertion with the active key.
       AGENTCORE_TURN_ASSERTION_KMS_KEY_ID = local.turn_assertion_active_key_arn
@@ -550,6 +561,10 @@ resource "aws_lambda_function" "handler" {
   for_each = local.deploy_lambda_handlers ? setsubtract(toset([
     "graphql-http",
     "chat-agent-invoke",
+    # THINK-585 U6: thin waiting dispatcher (InvokeAgentRuntime, held
+    # connection) + its DLQ redrive consumer (see dispatch-dlq.tf).
+    "agentcore-runtime-dispatch",
+    "agentcore-dispatch-dlq-redrive",
     # Mobile agent harness: cloud Bedrock Converse proxy + completed-turn
     # persistence. Routes for these live in local.api_routes; the function
     # names must also be listed here (this set is the for_each source for
@@ -914,14 +929,14 @@ resource "aws_lambda_function" "handler" {
   # headroom for transient slowness.
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "requester-memory-dreaming" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "agentcore-runtime-dispatch" ? 900 : each.key == "agentcore-dispatch-dlq-redrive" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "requester-memory-dreaming" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
   # THINK-583 U2: chat-agent-invoke and workspace-renderer get a full vCPU
   # (1769 MB). At 256 MB (~1/7 vCPU) the parallelized setup awaits starved on
   # CPU — per-leg timing showed three independent {1 DB read + 1 S3/Secrets
   # read} legs each taking ~1.5 s in parallel while sequential stage-1 reads
   # were fast. Memory is priced per GB-s, but wall-clock drops far more than
   # 7x cost rises on these short, provisioned-concurrency-warmed functions.
-  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "requester-memory-dreaming" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(8192, var.lambda_max_memory_mb) : each.key == "folder-bundle-import" ? 1024 : each.key == "chat-agent-invoke" ? 1769 : each.key == "workspace-renderer" ? 1769 : 256
+  memory_size = each.key == "graphql-http" ? 512 : each.key == "wakeup-processor" ? 512 : each.key == "workspace-event-dispatcher" ? 512 : each.key == "eval-runner" ? 512 : each.key == "eval-worker" ? 512 : each.key == "requester-memory-dreaming" ? 512 : each.key == "identity-match" ? 512 : each.key == "identity-graph-projector" ? min(8192, var.lambda_max_memory_mb) : each.key == "folder-bundle-import" ? 1024 : each.key == "chat-agent-invoke" ? 1769 : each.key == "workspace-renderer" ? 1769 : each.key == "agentcore-runtime-dispatch" ? 512 : 256
 
   filename         = local.use_local_zips ? "${var.lambda_zips_dir}/${each.key}.zip" : null
   source_code_hash = local.use_local_zips ? filebase64sha256("${var.lambda_zips_dir}/${each.key}.zip") : null

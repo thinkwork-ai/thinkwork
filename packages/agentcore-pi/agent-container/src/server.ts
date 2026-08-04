@@ -40,6 +40,7 @@
  */
 
 import http from "node:http";
+import { createHash } from "node:crypto";
 import { mkdir, readlink, stat } from "node:fs/promises";
 import path from "node:path";
 import { Type } from "typebox";
@@ -4486,6 +4487,44 @@ async function handleHttpInvocation(
   } catch {
     sendJson(res, 400, { error: "invalid json", runtime: "pi" });
     return;
+  }
+  // THINK-585 U6 (KTD1): container-side session verification. When the
+  // AgentCore runtime exposes the session ID as a request header, recompute
+  // the expected per-thread session key from the envelope's identity fields
+  // and hard-fail a mismatch — a tampered envelope cannot ride another
+  // thread's warm session. Lambda-path requests carry no header and skip
+  // this check (LWA does not forward AgentCore session headers).
+  const sessionHeader =
+    req.headers["x-amzn-bedrock-agentcore-runtime-session-id"];
+  const presentedSessionId = Array.isArray(sessionHeader)
+    ? sessionHeader[0]
+    : sessionHeader;
+  if (presentedSessionId) {
+    const identity = [
+      payload.tenant_id,
+      payload.assistant_id,
+      payload.user_id,
+      payload.thread_id,
+    ];
+    if (identity.every((value) => typeof value === "string" && value !== "")) {
+      const expected = createHash("sha256")
+        .update(`session:${identity.join(":")}`)
+        .digest("hex");
+      if (presentedSessionId !== expected) {
+        logStructured({
+          level: "error",
+          event: "session_id_mismatch",
+          error:
+            "runtime session ID does not match the envelope identity fields",
+          statusCode: 403,
+        });
+        sendJson(res, 403, {
+          error: "session/identity mismatch",
+          runtime: "pi",
+        });
+        return;
+      }
+    }
   }
   try {
     const result = await handleInvocation({ payload });

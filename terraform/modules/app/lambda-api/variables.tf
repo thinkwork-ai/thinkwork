@@ -969,3 +969,9 @@ variable "workspace_renderer_provisioned_concurrency" {
   default     = 0
   description = "Provisioned concurrency on workspace-renderer's `live` alias. 0 = disabled (alias still exists)."
 }
+
+variable "agentcore_runtime_dispatch_enabled" {
+  description = "THINK-585 U6 (KTD3): stage kill-switch for chat dispatch through the Bedrock AgentCore Runtime (per-thread sessions). The per-agent agents.agentcore_runtime_dispatch flag gates on top. Default off; dev opts in via the deploy workflow, customer stages via runner-secrets on their own cadence."
+  type        = bool
+  default     = false
+}

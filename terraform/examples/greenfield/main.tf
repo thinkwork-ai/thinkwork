@@ -491,6 +491,12 @@ variable "platform_operator_emails" {
 # way. Dev sets 1/1 via scripts/deploy/terraform-vars.sh; customer stages
 # opt in through their runner-secrets tfvars on their release cadence.
 
+variable "agentcore_runtime_dispatch_enabled" {
+  description = "THINK-585 U6: stage kill-switch for AgentCore Runtime chat dispatch."
+  type        = bool
+  default     = false
+}
+
 variable "chat_agent_invoke_provisioned_concurrency" {
   description = "Provisioned concurrency on chat-agent-invoke's `live` alias. 0 = disabled (alias still exists)."
   type        = number
@@ -941,6 +947,7 @@ module "thinkwork" {
   enable_workspace_orchestration              = var.enable_workspace_orchestration
   api_auth_secret                             = var.api_auth_secret
   platform_operator_emails                    = var.platform_operator_emails
+  agentcore_runtime_dispatch_enabled          = var.agentcore_runtime_dispatch_enabled
   chat_agent_invoke_provisioned_concurrency   = var.chat_agent_invoke_provisioned_concurrency
   workspace_renderer_provisioned_concurrency  = var.workspace_renderer_provisioned_concurrency
 
