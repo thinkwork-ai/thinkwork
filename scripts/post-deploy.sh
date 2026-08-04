@@ -30,6 +30,7 @@ STRICT=0
 JSON=0
 REGION="${AWS_REGION:-us-east-1}"
 MIN_SOURCE_SHA=""
+EXPECTED_DIGEST=""
 RUNTIME="pi"
 AGENTCORE_CONTROL_TIMEOUT_SECONDS="${AGENTCORE_CONTROL_TIMEOUT_SECONDS:-20}"
 
@@ -41,6 +42,7 @@ while [[ $# -gt 0 ]]; do
     --region)   REGION="${2:?}"; shift 2 ;;
     --runtime)  RUNTIME="${2:?}"; shift 2 ;;
     --min-source-sha) MIN_SOURCE_SHA="${2:?}"; shift 2 ;;
+    --expected-digest) EXPECTED_DIGEST="${2:?}"; shift 2 ;;
     --help|-h)
       sed -n '3,30p' "$0"
       exit 0
@@ -54,6 +56,11 @@ done
 
 if [[ -z "$STAGE" ]]; then
   echo "ERROR: --stage <name> is required" >&2
+  exit 2
+fi
+
+if [[ -n "$EXPECTED_DIGEST" && ! "$EXPECTED_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+  echo "ERROR: --expected-digest must be sha256:<64 hex chars> (got '$EXPECTED_DIGEST')" >&2
   exit 2
 fi
 
@@ -91,8 +98,20 @@ log() {
 
 image_sha_from_uri() {
   local image_uri="$1"
+  # Digest-pinned URIs (repo@sha256:...) carry no tag; without this guard the
+  # first 40 hex chars of the digest would masquerade as a source commit sha.
+  if [[ "$image_uri" == *"@sha256:"* ]]; then
+    return 0
+  fi
   local tag="${image_uri##*:}"
   if [[ "$tag" =~ ([0-9a-f]{40}) ]]; then
+    echo "${BASH_REMATCH[1]}"
+  fi
+}
+
+digest_from_uri() {
+  local image_uri="$1"
+  if [[ "$image_uri" =~ @(sha256:[0-9a-f]{64})$ ]]; then
     echo "${BASH_REMATCH[1]}"
   fi
 }
@@ -200,6 +219,7 @@ while read -r rt_id rt_name rt_status; do
   rt_version=$(echo "$rt_detail" | jq -r '.agentRuntimeVersion // "null"')
   rt_image=$(echo "$rt_detail" | jq -r '.agentRuntimeArtifact.containerConfiguration.containerUri // ""')
   rt_image_sha=$(image_sha_from_uri "$rt_image")
+  rt_digest=$(digest_from_uri "$rt_image")
 
   # DEFAULT endpoint is the one Terraform manages for us
   eps=$(agentcore_control list-agent-runtime-endpoints \
@@ -248,7 +268,19 @@ while read -r rt_id rt_name rt_status; do
     is_clean=0
     reasons+=("endpoint liveVersion=$ep_live != runtime version=$rt_version")
   fi
-  if [[ -n "$MIN_SOURCE_SHA" && ( -z "$ACTIVE_RUNTIME_ID" || "$rt_id" == "$ACTIVE_RUNTIME_ID" ) ]] && ! image_contains_source_sha "$rt_image_sha" "$MIN_SOURCE_SHA"; then
+  # Digest pinning (THINK-584 U5): when the caller supplies the release
+  # image's immutable digest and the active runtime serves a digest-pinned
+  # image, they must match exactly. A digest match is stronger provenance
+  # than tag ancestry, so a digest-pinned image skips the min-source-sha
+  # ancestry check (it has no tag to attest). A legacy TAG-form runtime
+  # image is not a digest mismatch — it falls through to the ancestry
+  # check below, so the first post-merge deploy (runtime not yet
+  # re-pinned) doesn't false-fail.
+  if [[ -n "$EXPECTED_DIGEST" && -n "$rt_digest" && ( -z "$ACTIVE_RUNTIME_ID" || "$rt_id" == "$ACTIVE_RUNTIME_ID" ) ]] && [[ "$rt_digest" != "$EXPECTED_DIGEST" ]]; then
+    is_clean=0
+    reasons+=("runtime image digest=${rt_digest} != expected digest=$EXPECTED_DIGEST")
+  fi
+  if [[ -z "$rt_digest" && -n "$MIN_SOURCE_SHA" && ( -z "$ACTIVE_RUNTIME_ID" || "$rt_id" == "$ACTIVE_RUNTIME_ID" ) ]] && ! image_contains_source_sha "$rt_image_sha" "$MIN_SOURCE_SHA"; then
     is_clean=0
     reasons+=("runtime image sha=${rt_image_sha:-unknown} does not include required source sha=$MIN_SOURCE_SHA")
   fi
