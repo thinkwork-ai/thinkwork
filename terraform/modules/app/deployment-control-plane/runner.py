@@ -4612,6 +4612,17 @@ def write_runner_files(payload, runner_secrets):
             "agentCoreHarnessOwnerAllowlist",
             default="",
         ),
+        # THINK-585/587 — stage kill-switch for AgentCore Runtime chat
+        # dispatch. Environment posture: durable home is the runner-secrets
+        # document (agentcoreRuntimeDispatchEnabled); a reviewed payload can
+        # override per-deploy. Dark by default — flipping a customer stage is
+        # an explicit operator action.
+        "agentcore_runtime_dispatch_enabled": safe_get_bool(
+            runner_secrets,
+            reviewed_payload,
+            "agentcoreRuntimeDispatchEnabled",
+            default=False,
+        ),
         "platform_operator_emails": safe_get(
             runner_secrets,
             "adminEmail",
@@ -4971,6 +4982,11 @@ variable "agentcore_multiplayer_proof_tenant_slug" {{
 variable "agentcore_multiplayer_proof_owner_allowlist" {{
   type    = string
   default = ""
+}}
+
+variable "agentcore_runtime_dispatch_enabled" {{
+  type    = bool
+  default = false
 }}
 
 variable "platform_operator_emails" {{
@@ -5419,6 +5435,7 @@ module "thinkwork" {{
   enable_agentcore_multiplayer_proof          = var.enable_agentcore_multiplayer_proof
   agentcore_multiplayer_proof_tenant_slug     = var.agentcore_multiplayer_proof_tenant_slug
   agentcore_multiplayer_proof_owner_allowlist = var.agentcore_multiplayer_proof_owner_allowlist
+  agentcore_runtime_dispatch_enabled          = var.agentcore_runtime_dispatch_enabled
 
   twenty_provisioned     = var.twenty_provisioned
   twenty_runtime_enabled = var.twenty_runtime_enabled
