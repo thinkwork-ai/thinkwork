@@ -1156,8 +1156,12 @@ export async function runAgentLoop(
       throw new Error(assistantFailure);
     }
 
+    // Same pre-turn baseline the usage aggregation below uses: a resumed
+    // durable session's transcript carries PRIOR turns' toolCall/toolResult
+    // messages, and merging those attributed historical tools to every
+    // later turn's usage (THINK-601 — seen live on both dispatch paths).
     mergeTranscriptToolInvocations(
-      session.messages,
+      session.messages.slice(preTurnMessageCount),
       toolInvocations,
       toolsCalled,
     );
