@@ -3111,9 +3111,12 @@ async function runInvocationTurn(
 
   // ── THINK-586 U7: warm-session fast-path decision (KTD6) ────────────────
   // Eligibility excludes payload shapes whose tool surface is inherently
-  // per-turn (explicit memory turns, sandbox-backed tools, pinned skills,
-  // skill-creator commands): those always run the cold path and are never
-  // cached.
+  // per-turn (explicit memory turns, pinned skills, skill-creator
+  // commands): those always run the cold path and are never cached.
+  // A provisioned sandbox interpreter does NOT disqualify: execute_code is
+  // lazy (no session/cleanup until first call), stripped from the cached
+  // toolset, and rebuilt per warm turn bound to that turn's client +
+  // cleanup queue — so the cached products never hold sandbox state.
   const warmConfigFingerprint = asString(args.payload.config_fingerprint);
   const warmEligibility = {
     cache: Boolean(warmCache),
@@ -3122,7 +3125,6 @@ async function runInvocationTurn(
     tenantSlug: Boolean(identity.tenantSlug),
     agentSlug: Boolean(identity.agentSlug),
     userId: Boolean(identity.userId),
-    noSandbox: !asString(args.payload.sandbox_interpreter_id),
     noExplicitMemory: !explicitMemoryTurn(args.payload.message),
     noPinnedSkills:
       parsePinnedSkillRefs(args.payload.pinned_skills).length === 0,
@@ -3670,8 +3672,28 @@ async function runInvocationTurn(
     // bundle gets fresh array copies (later per-turn pushes — file_read,
     // profile tool, dynamic extensions — must never accrete into the
     // cache), this turn's HandleStore, and this turn's cleanup queue.
+    // The cached toolset never contains execute_code (stripped at snapshot):
+    // its closure holds the caching turn's lazy sandbox session + cleanup
+    // queue. Rebuild it here bound to THIS turn's client and cleanup — the
+    // build is closure-only (no session until first call), so this costs
+    // nothing on turns that don't run code.
+    const warmTools = [...warmEntry.value.tools];
+    const warmSandboxInterpreterId = asString(
+      args.payload.sandbox_interpreter_id,
+    );
+    if (warmSandboxInterpreterId) {
+      warmTools.push(
+        buildExecuteCodeTool({
+          sandboxFactory: resolveSandboxFactory(
+            args.payload as { sandbox_interpreter_id: string },
+            { client: agentCoreClient },
+          ),
+          cleanup,
+        }),
+      );
+    }
     bundle = {
-      tools: [...warmEntry.value.tools],
+      tools: warmTools,
       builtinToolNames: [...warmEntry.value.builtinToolNames],
       extensionFactories: [...warmEntry.value.extensionFactories],
       extensionToolNames: [...warmEntry.value.extensionToolNames],
@@ -3760,7 +3782,13 @@ async function runInvocationTurn(
         coldWarmProducts =
           cleanup.length === 0
             ? {
-                tools: [...bundle.tools],
+                // execute_code is stripped: its closure binds this turn's
+                // lazy sandbox session + cleanup queue. Warm reuse rebuilds
+                // it fresh from the then-current payload (see the warm
+                // bundle above).
+                tools: bundle.tools.filter(
+                  (tool) => tool.name !== "execute_code",
+                ),
                 builtinToolNames: [...bundle.builtinToolNames],
                 extensionFactories: [...bundle.extensionFactories],
                 extensionToolNames: [...bundle.extensionToolNames],
