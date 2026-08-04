@@ -222,7 +222,10 @@ import {
   retainConversation,
   type RetainPayloadInput,
 } from "./runtime/tools/memory-retain-client.js";
-import { buildExecuteCodeTool } from "./runtime/tools/execute-code.js";
+import {
+  buildExecuteCodeTool,
+  type ExecuteCodeExportContext,
+} from "./runtime/tools/execute-code.js";
 import { runAgentCoreBrowserAutomation } from "./runtime/browser-automation-runner.js";
 import {
   discoverWorkspaceSkills,
@@ -270,6 +273,23 @@ export type {
   ToolCostRecord,
   ToolInvocationRecord,
 };
+
+/** output_files export needs the workspace bucket + tenant/thread scoping
+ * + API auth for attachment registration; absent any piece, execute_code
+ * still works but refuses file exports with a clear message. */
+function resolveExecuteCodeExportContext(
+  payload: Record<string, unknown>,
+): ExecuteCodeExportContext | undefined {
+  const workspaceBucket = asString(payload.workspace_bucket);
+  const tenantId = asString(payload.tenant_id);
+  const threadId = asString(payload.thread_id);
+  const apiUrl = asString(payload.thinkwork_api_url);
+  const apiSecret = asString(payload.thinkwork_api_secret);
+  if (!workspaceBucket || !tenantId || !threadId || !apiUrl || !apiSecret) {
+    return undefined;
+  }
+  return { workspaceBucket, tenantId, threadId, apiUrl, apiSecret };
+}
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -847,14 +867,12 @@ async function ensureWorkspaceDir(workspaceDir: string): Promise<void> {
     await mkdir(workspaceDir, { recursive: true });
     return;
   } catch (err) {
-    if (
-      !(
-        err &&
-        typeof err === "object" &&
-        "code" in err &&
-        err.code === "ENOENT"
-      )
-    ) {
+    if (!(
+      err &&
+      typeof err === "object" &&
+      "code" in err &&
+      err.code === "ENOENT"
+    )) {
       throw err;
     }
   }
@@ -1325,9 +1343,7 @@ export interface WarmTurnProducts {
  * so the Lambda path resolves null here and takes today's cold path.
  */
 let warmSessionCacheSingleton:
-  | WarmSessionCache<WarmTurnProducts>
-  | null
-  | undefined;
+  WarmSessionCache<WarmTurnProducts> | null | undefined;
 
 function getWarmSessionCache(): WarmSessionCache<WarmTurnProducts> | null {
   if (warmSessionCacheSingleton === undefined) {
@@ -1678,7 +1694,13 @@ export async function buildInvocationResources(
         client: args.agentCoreClient,
       },
     );
-    tools.push(buildExecuteCodeTool({ sandboxFactory, cleanup }));
+    tools.push(
+      buildExecuteCodeTool({
+        sandboxFactory,
+        cleanup,
+        exportContext: resolveExecuteCodeExportContext(args.payload),
+      }),
+    );
   } else if (args.payload.sandbox_status === "ready") {
     throw new Error(
       "Pi sandbox status is ready but `sandbox_interpreter_id` is missing.",
@@ -2695,10 +2717,7 @@ export interface SkillRunContext {
 }
 
 export type CompletionStatus =
-  | "complete"
-  | "failed"
-  | "cancelled"
-  | "cost_bounded_error";
+  "complete" | "failed" | "cancelled" | "cost_bounded_error";
 
 export interface CompletionCallbackArgs {
   secrets: SecretsSnapshot;
@@ -3689,6 +3708,7 @@ async function runInvocationTurn(
             { client: agentCoreClient },
           ),
           cleanup,
+          exportContext: resolveExecuteCodeExportContext(args.payload),
         }),
       );
     }

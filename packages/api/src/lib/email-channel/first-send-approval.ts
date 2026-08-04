@@ -10,6 +10,13 @@ import {
 import type { Database } from "@thinkwork/database-pg";
 import type { EmailProviderSendResult } from "./provider-contract.js";
 import { sendComputerApprovalPush } from "../push-notifications.js";
+import { S3Client } from "@aws-sdk/client-s3";
+import { getConfig } from "@thinkwork/runtime-config";
+import { buildOutboundMime } from "./outbound-mime.js";
+import {
+  loadEmailAttachmentBytes,
+  type ResolvedEmailAttachment,
+} from "./email-attachments.js";
 
 type Db = Pick<Database, "select" | "insert" | "update">;
 
@@ -28,7 +35,9 @@ type EmailSendFunction = (
     from: string;
     to: string[];
     subject: string;
-    text: string;
+    text?: string;
+    /** Full MIME when the approved draft carries attachments. */
+    rawMessage?: string;
   },
 ) => Promise<EmailProviderSendResult>;
 
@@ -47,6 +56,8 @@ export interface EmailDraftApprovalInput {
   to: string[];
   subject: string;
   body: string;
+  /** Resolved attachment metadata (bytes re-fetched at approved send). */
+  attachments?: ResolvedEmailAttachment[];
 }
 
 export async function requestFirstSendApproval(
@@ -190,7 +201,9 @@ export async function requestFirstSendApproval(
       type: "computer_approval",
       title: `Review email to ${input.to.join(", ")}`,
       description:
-        "First outbound email in this conversation requires human review.",
+        (input.attachments?.length ?? 0) > 0
+          ? `First outbound email in this conversation requires human review. Attachments: ${input.attachments!.map((a) => a.name).join(", ")}.`
+          : "First outbound email in this conversation requires human review.",
       expires_at: new Date(
         Date.now() + EMAIL_APPROVAL_TTL_DAYS * 24 * 60 * 60 * 1000,
       ),
@@ -205,6 +218,7 @@ export async function requestFirstSendApproval(
           to: input.to.join(", "),
           subject: input.subject,
           body: input.body,
+          attachmentNames: (input.attachments ?? []).map((a) => a.name),
         },
         emailChannel: {
           conversationId: conversation.id,
@@ -216,6 +230,7 @@ export async function requestFirstSendApproval(
           threadId: input.threadId ?? null,
           draftBodyObjectId: bodyObject.id,
           draftBodyHash: bodyHash,
+          attachments: input.attachments ?? [],
         },
       },
     })
@@ -373,12 +388,40 @@ export async function bridgeEmailApprovalDecision(input: {
   });
 
   try {
+    // A draft with attachments must go out as full MIME — the structured
+    // {text} send has no attachment channel and would silently drop them.
+    // Bytes are re-fetched from S3 at approval time (refs were persisted
+    // in the inbox item config; drafts sit for up to a week).
+    const draftAttachments = attachmentArray(channel.attachments);
+    let rawMessage: string | undefined;
+    if (draftAttachments.length > 0) {
+      const bucket = getConfig("WORKSPACE_BUCKET") || "";
+      if (!bucket) {
+        throw new Error(
+          "WORKSPACE_BUCKET is not configured; cannot load approved email attachments.",
+        );
+      }
+      const mimeAttachments = await loadEmailAttachmentBytes({
+        s3: approvalS3(),
+        bucket,
+        attachments: draftAttachments,
+      });
+      rawMessage = buildOutboundMime({
+        from: commonLedger.from_email,
+        to: recipients,
+        replyTo: commonLedger.from_email,
+        subject,
+        messageId: `<${Date.now()}.${Math.random().toString(36).slice(2)}@agents.thinkwork.ai>`,
+        text: body,
+        attachments: mimeAttachments,
+      });
+    }
     const result = await input.send(channel.provider as EmailChannelProvider, {
       tenantId: input.inboxItem.tenant_id,
       from: commonLedger.from_email,
       to: recipients,
       subject,
-      text: body,
+      ...(rawMessage ? { rawMessage } : { text: body }),
     });
     await input.db
       .update(emailConversations)
@@ -408,6 +451,32 @@ export async function bridgeEmailApprovalDecision(input: {
     });
     throw err;
   }
+}
+
+let approvalS3Client: S3Client | null = null;
+function approvalS3(): S3Client {
+  approvalS3Client ??= new S3Client({});
+  return approvalS3Client;
+}
+
+function attachmentArray(value: unknown): ResolvedEmailAttachment[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const record = recordValue(item);
+    const attachmentId = textValue(record.attachmentId);
+    const s3Key = textValue(record.s3Key);
+    if (!attachmentId || !s3Key) return [];
+    return [
+      {
+        attachmentId,
+        s3Key,
+        name: textValue(record.name) ?? "attachment",
+        contentType:
+          textValue(record.contentType) ?? "application/octet-stream",
+        sizeBytes: typeof record.sizeBytes === "number" ? record.sizeBytes : 0,
+      },
+    ];
+  });
 }
 
 function conversationParticipantHash(recipients: string[]): string {

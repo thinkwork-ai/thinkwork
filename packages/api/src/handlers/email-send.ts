@@ -9,7 +9,8 @@
  * Auth: THINKWORK_API_SECRET bearer token (agent runtime → API)
  */
 
-import { getApiAuthSecret } from "@thinkwork/runtime-config";
+import { getApiAuthSecret, getConfig } from "@thinkwork/runtime-config";
+import { S3Client } from "@aws-sdk/client-s3";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "@thinkwork/database-pg";
@@ -27,9 +28,17 @@ import { renderForEmail } from "../lib/channel-rendering/email-renderer.js";
 import { createEmailChannelService } from "../lib/email-channel/channel-service.js";
 import { requestFirstSendApproval } from "../lib/email-channel/first-send-approval.js";
 import { evaluateOutboundEmailPolicy } from "../lib/email-channel/outbound-policy.js";
+import { buildOutboundMime } from "../lib/email-channel/outbound-mime.js";
+import {
+  EmailAttachmentError,
+  loadEmailAttachmentBytes,
+  resolveEmailAttachments,
+  type ResolvedEmailAttachment,
+} from "../lib/email-channel/email-attachments.js";
 
 const db = getDb();
 const emailChannel = createEmailChannelService();
+const s3ForAttachments = new S3Client({});
 
 interface SendEmailRequest {
   agentId: string;
@@ -46,6 +55,8 @@ interface SendEmailRequest {
   inReplyTo?: string;
   quotedFrom?: string;
   quotedBody?: string;
+  /** thread_attachments row ids to attach (tenant-validated, max 5). */
+  attachments?: Array<{ attachmentId?: string; name?: string }>;
 }
 
 export interface DirectSendEmailRequest {
@@ -271,26 +282,29 @@ export async function handler(
     expiresAt,
   });
 
+  // Resolve attachment refs before the approval gate so a bad ref fails
+  // fast and the approval draft records exactly what will be attached.
+  let resolvedAttachments: ResolvedEmailAttachment[] = [];
+  try {
+    resolvedAttachments = await resolveEmailAttachments({
+      db,
+      tenantId: agent.tenant_id,
+      refs: (req.attachments ?? [])
+        .map((ref) => ({
+          attachmentId: String(ref?.attachmentId ?? "").trim(),
+          name: ref?.name ? String(ref.name) : undefined,
+        }))
+        .filter((ref) => ref.attachmentId),
+    });
+  } catch (err) {
+    if (err instanceof EmailAttachmentError) {
+      return { statusCode: 400, body: JSON.stringify({ error: err.message }) };
+    }
+    throw err;
+  }
+
   // Build raw MIME email
   const messageId = `<${Date.now()}.${Math.random().toString(36).slice(2)}@agents.thinkwork.ai>`;
-
-  const rawHeaders = [
-    `From: ${emailAddress}`,
-    `To: ${recipients.join(", ")}`,
-    `Reply-To: ${emailAddress}`,
-    `Subject: ${req.subject}`,
-    `Message-ID: ${messageId}`,
-    `MIME-Version: 1.0`,
-    `X-Thinkwork-Reply-Token: ${token}`,
-  ];
-
-  if (req.inReplyTo) {
-    const replyId = req.inReplyTo.includes("<")
-      ? req.inReplyTo
-      : `<${req.inReplyTo}>`;
-    rawHeaders.push(`In-Reply-To: ${replyId}`);
-    rawHeaders.push(`References: ${replyId}`);
-  }
 
   // Build full body: agent reply + quoted original thread
   let fullBody = req.body;
@@ -304,27 +318,26 @@ export async function handler(
   }
 
   const rendered = renderForEmail(fullBody);
-  const boundary = `thinkwork-alt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  rawHeaders.push(
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-  );
-
-  const rawMessage = [
-    ...rawHeaders,
-    "",
-    `--${boundary}`,
-    `Content-Type: text/plain; charset=UTF-8`,
-    `Content-Transfer-Encoding: 8bit`,
-    "",
-    rendered.text,
-    `--${boundary}`,
-    `Content-Type: text/html; charset=UTF-8`,
-    `Content-Transfer-Encoding: 8bit`,
-    "",
-    rendered.html,
-    `--${boundary}--`,
-    "",
-  ].join("\r\n");
+  const mimeAttachments =
+    resolvedAttachments.length > 0
+      ? await loadEmailAttachmentBytes({
+          s3: s3ForAttachments,
+          bucket: getConfig("WORKSPACE_BUCKET") || "",
+          attachments: resolvedAttachments,
+        })
+      : [];
+  const rawMessage = buildOutboundMime({
+    from: emailAddress,
+    to: recipients,
+    replyTo: emailAddress,
+    subject: req.subject,
+    messageId,
+    extraHeaders: [`X-Thinkwork-Reply-Token: ${token}`],
+    inReplyTo: req.inReplyTo,
+    text: rendered.text,
+    html: rendered.html,
+    attachments: mimeAttachments,
+  });
 
   const policy = await evaluateOutboundEmailPolicy({
     db,
@@ -355,6 +368,7 @@ export async function handler(
       to: recipients,
       subject: req.subject,
       body: req.body,
+      attachments: resolvedAttachments,
     });
     if (approval.status === "pending_review") {
       return {
