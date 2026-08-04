@@ -10,6 +10,7 @@ export interface AgentCorePhaseLogInput {
   source:
     | "chat-agent-invoke"
     | "chat-agent-finalize"
+    | "agentcore-runtime-dispatch"
     | "spaces-client"
     | "mobile-client";
   traceId?: string | null;
