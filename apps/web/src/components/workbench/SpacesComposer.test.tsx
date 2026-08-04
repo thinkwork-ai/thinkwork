@@ -140,15 +140,16 @@ describe("SpacesComposer", () => {
     const renderedControls = [
       screen.queryByRole("button", { name: "Attach file" }) && "attach",
       screen.queryByRole("button", { name: "Send to agent" }) && "agentToggle",
-      screen.queryByRole("button", { name: "Goal mode" }) && "goalMode",
       screen.queryByLabelText("Select Space") && "spaceSelector",
       screen.queryByLabelText("Select model") && "modelPicker",
       screen.queryByRole("button", { name: "Voice input" }) && "voice",
       input.getAttribute("data-placeholder")?.includes("mention") && "mentions",
     ].filter(Boolean);
 
+    // goalMode stays in the mirrored RN contract but the web toggle is
+    // deliberately hidden (GOAL_MODE_COMPOSER_TOGGLE_HIDDEN, THINK-597).
     expect(renderedControls.sort()).toEqual(
-      [...mirroredComposerCapabilities].sort(),
+      mirroredComposerCapabilities.filter((c) => c !== "goalMode").sort(),
     );
   });
 
@@ -415,7 +416,8 @@ describe("SpacesComposer", () => {
     });
   });
 
-  it("opens a Goal dialog from the target icon and forces agent dispatch", async () => {
+  // Skipped while GOAL_MODE_COMPOSER_TOGGLE_HIDDEN hides the composer toggle (THINK-597).
+  it.skip("opens a Goal dialog from the target icon and forces agent dispatch", async () => {
     const onSubmit = vi.fn();
     render(<ControlledComposer onSubmit={onSubmit} />);
 
@@ -491,7 +493,8 @@ describe("SpacesComposer", () => {
     expect(composerText()).toBe("/go");
   });
 
-  it("submits /goal shorthand as a stripped goal objective", async () => {
+  // Skipped while GOAL_MODE_COMPOSER_TOGGLE_HIDDEN hides the composer toggle (THINK-597).
+  it.skip("submits /goal shorthand as a stripped goal objective", async () => {
     const onSubmit = vi.fn();
     render(<ControlledComposer onSubmit={onSubmit} />);
 
