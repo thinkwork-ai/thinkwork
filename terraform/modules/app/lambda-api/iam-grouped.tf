@@ -560,6 +560,9 @@ locals {
         Resource = [
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-renderer",
           "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-workspace-renderer:*",
+          # THINK-585 U6: chat-agent-invoke Event-invokes the runtime
+          # dispatcher at the flag-on dispatch seam.
+          "arn:aws:lambda:${var.region}:${var.account_id}:function:thinkwork-${var.stage}-api-agentcore-runtime-dispatch",
         ]
       },
       # (was standalone managed policy "thread_idle_memory_learning_invoke")

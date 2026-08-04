@@ -13,6 +13,9 @@ resource "aws_sqs_queue" "agentcore_dispatch_dlq" {
 
   name                              = "thinkwork-${var.stage}-agentcore-dispatch-dlq"
   message_retention_seconds         = 86400 # 24 h (R19)
+  # Must be ≥ the redrive consumer's 60 s timeout or CreateEventSourceMapping
+  # rejects the mapping; 6x is the AWS-recommended margin.
+  visibility_timeout_seconds        = 360
   kms_master_key_id                 = "alias/aws/sqs"
   kms_data_key_reuse_period_seconds = 300
 
