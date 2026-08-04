@@ -148,6 +148,10 @@ PI_RECONCILE_PAYLOAD = {
     "action": "update",
     "awsAccountId": "637423202447",
     "awsRegion": "us-east-1",
+    # The runtime reconcile resolves the arm64 mirror by release version tag
+    # (AgentCore is arm64-only); the amd64 Lambda pin below is NOT used for
+    # the runtime image (tei-e2e canary, 2026-08-04).
+    "releaseVersion": "v0.1.0-canary.434",
     "agentcorePiSourceImageUri": (
         "637423202447.dkr.ecr.us-east-1.amazonaws.com/thinkwork-tei-e2e-agentcore:pinned"
     ),
@@ -228,6 +232,10 @@ def test_pi_runtime_reconcile_creates_when_absent_and_writes_ssm(
     # AgentCore names forbid hyphens ([a-zA-Z][a-zA-Z0-9_]{0,47}) — the
     # tei-e2e canary proved the unsanitized name 400s (2026-08-04).
     assert request["runtimeName"] == "thinkwork_tei_e2e_pi"
+    # The runtime image resolves from the versioned arm64 mirror tag, never
+    # from the amd64 Lambda pin.
+    ecr_calls = [args for args in calls["output"] if args[1] == "ecr"]
+    assert any("imageTag=v0.1.0-canary.434-pi-arm64" in " ".join(args) for args in ecr_calls)
     assert request["imageUri"].endswith(f"@{PI_DIGEST}")
     assert request["environment"]["API_AUTH_SECRET"] == SECRET_API
     assert "\\n" in request["environment"]["CAPABILITY_SIGNING_PUBLIC_KEY"]
