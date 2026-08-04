@@ -43,6 +43,18 @@ const DEFAULT_CALL_TOOL_TIMEOUT_MS = 60_000;
 const DEFAULT_READ_RESOURCE_TIMEOUT_MS = 30_000;
 const DEFAULT_WARM_PING_TIMEOUT_MS = 3_000;
 
+/** JSON-RPC "Method not found" — the server answered, so the transport is
+ * alive even though it doesn't implement the optional MCP ping. */
+const JSONRPC_METHOD_NOT_FOUND = -32601;
+
+function isMethodNotFound(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (code === JSONRPC_METHOD_NOT_FOUND) return true;
+  return (
+    err instanceof Error && err.message.includes(`${JSONRPC_METHOD_NOT_FOUND}`)
+  );
+}
+
 // ---------------------------------------------------------------------------
 // THINK-586 U7 — warm-session MCP connection retention.
 // ---------------------------------------------------------------------------
@@ -113,7 +125,19 @@ export function createMcpConnectionRetention(): McpConnectionRetention {
         }
       }
       const timeout = args.pingTimeoutMs ?? DEFAULT_WARM_PING_TIMEOUT_MS;
-      await Promise.all(connections.map((c) => c.ping({ timeout })));
+      await Promise.all(
+        connections.map((c) =>
+          c.ping({ timeout }).catch((err) => {
+            // JSON-RPC -32601 (Method not found) IS a liveness proof: the
+            // server parsed the request and answered over the retained
+            // transport — it just doesn't implement the optional MCP ping.
+            // Only transport-level failures (network error, timeout) mean
+            // the connection is dead and the entry must be evicted.
+            if (isMethodNotFound(err)) return undefined;
+            throw err;
+          }),
+        ),
+      );
     },
     async close() {
       await Promise.all(
