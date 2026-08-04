@@ -59,6 +59,7 @@ import {
 import { buildPinnedSkillConfigs } from "../lib/skills/message-pinned-skills.js";
 import { documentPlatesForDispatch } from "../lib/artifacts/plate-registry.js";
 import {
+  resolveChatDispatchTarget,
   resolveRuntimeFunctionName,
   UnknownAgentRuntimeTypeError,
   type AgentRuntimeType,
@@ -1832,7 +1833,25 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // and while the runner is unprovisioned it throws
     // RuntimeNotProvisionedError, failing the turn setup loudly (R4: no
     // silent Pi fallback; AE2's structural half).
-    const agentcoreFunctionName = resolveRuntimeFunctionName(runtimeType);
+    // THINK-585 U6 (KTD3): the dispatch seam. Flag-on (stage kill-switch +
+    // per-agent flag) targets the agentcore-runtime-dispatch Lambda with the
+    // IDENTICAL envelope; flag-off keeps today's Pi Lambda path and logs a
+    // legacy_lambda_dispatch sentinel while the stage flag is on.
+    const dispatchTarget = resolveChatDispatchTarget({
+      runtimeType,
+      agentFlagEnabled: runtimeConfig.agentcoreRuntimeDispatch === true,
+    });
+    const agentcoreFunctionName = dispatchTarget.functionName;
+    if (dispatchTarget.kind === "pi_lambda" && dispatchTarget.stageFlagOn) {
+      console.log(
+        JSON.stringify({
+          event: "legacy_lambda_dispatch",
+          agentId,
+          threadId,
+          threadTurnId: turnId,
+        }),
+      );
+    }
 
     let workflowSkill: unknown = undefined;
 

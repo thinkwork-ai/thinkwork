@@ -305,6 +305,8 @@ export interface AgentRuntimeConfig {
    * policy filter (the manifest already carries the policy verdict).
    */
   capabilityFolderDispatch: boolean;
+  /** THINK-585 U6 (KTD3): per-agent AgentCore Runtime dispatch flag. */
+  agentcoreRuntimeDispatch: boolean;
   browserAutomationEnabled: boolean;
   threadJsonRenderUiEnabled: boolean;
   contextEngineEnabled: boolean;
@@ -477,6 +479,7 @@ export async function resolveAgentRuntimeConfig(
           system_prompt: agents.system_prompt,
           human_pair_id: agents.human_pair_id,
           capability_folder_dispatch: agents.capability_folder_dispatch,
+          agentcore_runtime_dispatch: agents.agentcore_runtime_dispatch,
           template_id: agents.template_id,
           runtime: agents.runtime,
           runtime_config: agents.runtime_config,
@@ -916,6 +919,7 @@ export async function resolveAgentRuntimeConfig(
     blockedTools,
     sandboxTemplate: (agent.sandbox as TemplateSandboxConfig | null) ?? null,
     capabilityFolderDispatch: agent.capability_folder_dispatch === true,
+    agentcoreRuntimeDispatch: agent.agentcore_runtime_dispatch === true,
     browserAutomationEnabled,
     threadJsonRenderUiEnabled,
     contextEngineEnabled,
