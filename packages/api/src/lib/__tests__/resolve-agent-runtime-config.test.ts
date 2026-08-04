@@ -3,8 +3,11 @@
  *
  * Exercises the DB-boundary contract without hitting a real database.
  * The drizzle chain is mocked via `vi.mock("@thinkwork/database-pg")` with
- * a scriptable queue — each test stages the rows each `select().from(...)`
- * call will receive in order.
+ * a shape-keyed store (precedent: chat-agent-invoke.setup-parallel.test.ts):
+ * each test stages rows under a logical key derived from the selected
+ * columns' table + field names — NOT call order — so the resolver's
+ * parallelized await groups (U2 setup diet) cannot desync the staging.
+ * Repeated same-shape queries consume staged entries FIFO.
  *
  * Plan: docs/plans/2026-04-24-008-feat-skill-run-dispatcher-plan.md §U1.
  */
@@ -12,7 +15,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
-  rowsQueue,
+  stagedRows,
+  takeStagedRows,
+  logicalKeyFromFields,
   whereCalls,
   mockBuildSkillEnvOverrides,
   mockLoadTenantBuiltinTools,
@@ -20,68 +25,89 @@ const {
   mockBuildMcpConfigs,
   mockListTenantModelCatalogByIds,
   mockS3Send,
-} = vi.hoisted(() => ({
-  rowsQueue: [] as Array<unknown[] | Error>,
-  whereCalls: [] as unknown[],
-  mockBuildSkillEnvOverrides: vi.fn(),
-  mockLoadTenantBuiltinTools: vi.fn(),
-  mockLoadTenantWebExtractConfig: vi.fn(),
-  mockBuildMcpConfigs: vi.fn(),
-  mockListTenantModelCatalogByIds: vi.fn(),
-  mockS3Send: vi.fn(),
-}));
-
-function takeRows(): unknown[] {
-  const next = rowsQueue.shift();
-  if (next instanceof Error) throw next;
-  if (next === undefined) return [];
-  return next;
-}
-
-function rowsResult() {
-  return {
-    then: (
-      fn: (rows: unknown[]) => unknown,
-      reject?: (err: unknown) => unknown,
-    ) => {
-      try {
-        return Promise.resolve(fn(takeRows()));
-      } catch (err) {
-        return reject ? Promise.resolve(reject(err)) : Promise.reject(err);
-      }
-    },
-    limit: () => rowsResult(),
+} = vi.hoisted(() => {
+  const stagedRows = new Map<string, Array<unknown[] | Error>>();
+  /**
+   * Derive the logical staging key for a `db.select(fields)` call. The
+   * mocked schema exports plain objects whose column values are strings
+   * like "agents.id", so the owning table falls out of the first selected
+   * column. Tables the resolver reads with more than one shape get a
+   * field-key discriminator suffix.
+   */
+  const logicalKeyFromFields = (fields?: Record<string, unknown>): string => {
+    const values = Object.values(fields ?? {});
+    const first = values.find((v): v is string => typeof v === "string") ?? "";
+    const table = first.split(".")[0] || "unknown";
+    const keys = fields ? Object.keys(fields) : [];
+    if (table === "users") {
+      return keys.includes("email") ? "users:email" : "users:name";
+    }
+    if (table === "spaces") {
+      return keys.includes("model_override")
+        ? "spaces:overrides"
+        : "spaces:folder";
+    }
+    if (table === "guardrails") {
+      // Tenant-default lookup selects `id`; agent-assigned and Space
+      // override lookups select only the bedrock columns.
+      return keys.includes("id") ? "guardrails:default" : "guardrails:by-id";
+    }
+    return table;
   };
-}
-
-function joinableRowsResult() {
-  return {
-    ...rowsResult(),
-    innerJoin: () => joinableRowsResult(),
-    leftJoin: () => joinableRowsResult(),
-    where: () => rowsResult(),
+  const takeStagedRows = (key: string): unknown[] => {
+    const next = stagedRows.get(key)?.shift();
+    if (next instanceof Error) throw next;
+    return next ?? [];
   };
+  return {
+    stagedRows,
+    takeStagedRows,
+    logicalKeyFromFields,
+    whereCalls: [] as unknown[],
+    mockBuildSkillEnvOverrides: vi.fn(),
+    mockLoadTenantBuiltinTools: vi.fn(),
+    mockLoadTenantWebExtractConfig: vi.fn(),
+    mockBuildMcpConfigs: vi.fn(),
+    mockListTenantModelCatalogByIds: vi.fn(),
+    mockS3Send: vi.fn(),
+  };
+});
+
+/** Stage one result set (or an Error rejection) for a logical query shape. */
+function stage(key: string, rows: unknown[] | Error) {
+  const queue = stagedRows.get(key) ?? [];
+  queue.push(rows);
+  stagedRows.set(key, queue);
 }
 
 vi.mock("@thinkwork/database-pg", () => ({
   getDb: () => ({
-    select: () => ({
-      from: () => ({
-        where: (pred: unknown) => ({
-          __capture: whereCalls.push(pred),
-          ...rowsResult(),
-          leftJoin: () => ({
-            where: () => rowsResult(),
-          }),
-          innerJoin: () => ({
-            where: () => rowsResult(),
-          }),
-          // Allow direct-await forms too (for chained calls that don't use .then).
-        }),
-        innerJoin: () => joinableRowsResult(),
-        leftJoin: () => joinableRowsResult(),
-      }),
-    }),
+    select: (fields?: Record<string, unknown>) => {
+      const key = logicalKeyFromFields(fields);
+      const rows = () => {
+        try {
+          return Promise.resolve(takeStagedRows(key));
+        } catch (err) {
+          return Promise.reject(err);
+        }
+      };
+      const chain: Record<string, unknown> = {};
+      Object.assign(chain, {
+        from: () => chain,
+        innerJoin: () => chain,
+        leftJoin: () => chain,
+        where: (pred: unknown) => {
+          whereCalls.push(pred);
+          return chain;
+        },
+        limit: () => chain,
+        then: (
+          resolve: (rowsValue: unknown[]) => unknown,
+          reject?: (err: unknown) => unknown,
+        ) => rows().then(resolve, reject),
+      });
+      return chain;
+    },
   }),
 }));
 
@@ -130,7 +156,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     trust_report_content_sha: "skillCatalog.trust_report_content_sha",
     trust_report_pipeline_version: "skillCatalog.trust_report_pipeline_version",
   },
-  tenants: { id: "tenants.id" },
+  tenants: { id: "tenants.id", slug: "tenants.slug" },
   tenantContextProviderSettings: {
     tenant_id: "tenantContextProviderSettings.tenant_id",
     provider_id: "tenantContextProviderSettings.provider_id",
@@ -143,15 +169,24 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     last_test_latency_ms: "tenantContextProviderSettings.last_test_latency_ms",
     last_test_error: "tenantContextProviderSettings.last_test_error",
   },
-  users: { id: "users.id", tenant_id: "users.tenant_id" },
+  users: {
+    id: "users.id",
+    tenant_id: "users.tenant_id",
+    email: "users.email",
+    name: "users.name",
+  },
   guardrails: {
     id: "guardrails.id",
     tenant_id: "guardrails.tenant_id",
     is_default: "guardrails.is_default",
+    bedrock_guardrail_id: "guardrails.bedrock_guardrail_id",
+    bedrock_version: "guardrails.bedrock_version",
   },
   spaces: {
     id: "spaces.id",
     tenant_id: "spaces.tenant_id",
+    slug: "spaces.slug",
+    workspace_folder_name: "spaces.workspace_folder_name",
     model_override: "spaces.model_override",
     guardrail_id_override: "spaces.guardrail_id_override",
     budget_monthly_cents_override: "spaces.budget_monthly_cents_override",
@@ -314,7 +349,7 @@ const DEFAULT_RUNTIME_SKILL_IDS = [
 ];
 
 function stageAgentRow(overrides?: Record<string, unknown>) {
-  rowsQueue.push([
+  stage("agents", [
     {
       id: AGENT_ID,
       name: "Ada",
@@ -341,7 +376,8 @@ function stageAgentRow(overrides?: Record<string, unknown>) {
 }
 
 function stageTemplateRow(overrides?: Record<string, unknown>) {
-  const lastRows = rowsQueue[rowsQueue.length - 1];
+  const agentQueue = stagedRows.get("agents");
+  const lastRows = agentQueue?.[agentQueue.length - 1];
   const stagedAgent = Array.isArray(lastRows)
     ? (lastRows[0] as Record<string, unknown> | undefined)
     : undefined;
@@ -351,7 +387,7 @@ function stageTemplateRow(overrides?: Record<string, unknown>) {
 }
 
 function stageTenantSlug(slug = "acme") {
-  rowsQueue.push([{ slug }]);
+  stage("tenants", [{ slug }]);
 }
 
 function trustedSkillRow(
@@ -380,7 +416,8 @@ function trustedSkillRow(
 }
 
 function stageTrustedRuntimeSkillRows(...additionalSkillIds: string[]) {
-  rowsQueue.push(
+  stage(
+    "skillCatalog",
     [...new Set([...DEFAULT_RUNTIME_SKILL_IDS, ...additionalSkillIds])].map(
       (slug) => trustedSkillRow(slug),
     ),
@@ -449,7 +486,7 @@ function piExtensionRuntimeRow(
 beforeEach(() => {
   mockResolveWorkspacePrefix.mockResolvedValue(null);
   mockReadAssignmentStates.mockResolvedValue(new Map());
-  rowsQueue.length = 0;
+  stagedRows.clear();
   whereCalls.length = 0;
   vi.clearAllMocks();
   mockListTenantModelCatalogByIds.mockReset();
@@ -485,7 +522,7 @@ function collectEqPairs(pred: unknown): Array<{ col: unknown; val: unknown }> {
 
 describe("resolveAgentRuntimeConfig", () => {
   it("throws AgentNotFoundError when the agent lookup returns no rows", async () => {
-    rowsQueue.push([]); // empty agents lookup
+    stage("agents", []); // empty agents lookup
     await expect(
       resolveAgentRuntimeConfig({ tenantId: TENANT_ID, agentId: AGENT_ID }),
     ).rejects.toBeInstanceOf(AgentNotFoundError);
@@ -494,9 +531,9 @@ describe("resolveAgentRuntimeConfig", () => {
   it("does not require a Template row when the Agent owns runtime fields", async () => {
     stageAgentRow({ template_id: null });
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
+    stage("guardrails:default", []); // default guardrail lookup
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // agent_skills metadata overlay
+    stage("agentSkills", []); // agent_skills metadata overlay
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -511,7 +548,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow();
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup (tenant_id + is_default=true)
+    stage("guardrails:default", []); // default guardrail lookup (tenant_id + is_default=true)
     stageTrustedRuntimeSkillRows();
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -548,8 +585,8 @@ describe("resolveAgentRuntimeConfig", () => {
   it("filters default runtime skills that have not passed the trust pipeline", async () => {
     stageAgentRow();
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
-    rowsQueue.push([]); // skill trust gate
+    stage("guardrails:default", []); // default guardrail lookup
+    stage("skillCatalog", []); // skill trust gate
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -590,8 +627,8 @@ describe("resolveAgentRuntimeConfig", () => {
     });
     stageAgentRow();
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
-    rowsQueue.push([]); // agent_skills metadata overlay
+    stage("guardrails:default", []); // default guardrail lookup
+    stage("agentSkills", []); // agent_skills metadata overlay
     stageTrustedRuntimeSkillRows("approve-receipt", "tag-vendor");
 
     const cfg = await resolveAgentRuntimeConfig({
@@ -639,9 +676,9 @@ describe("resolveAgentRuntimeConfig", () => {
     });
     stageAgentRow();
     stageTenantSlug("acme");
-    rowsQueue.push([{ slug: "customer", workspace_folder_name: null }]);
-    rowsQueue.push([]); // default guardrail lookup
-    rowsQueue.push([]); // agent_skills metadata overlay
+    stage("spaces:folder", [{ slug: "customer", workspace_folder_name: null }]);
+    stage("guardrails:default", []); // default guardrail lookup
+    stage("agentSkills", []); // agent_skills metadata overlay
     stageTrustedRuntimeSkillRows("ratio-review");
 
     const cfg = await resolveAgentRuntimeConfig({
@@ -687,9 +724,9 @@ describe("resolveAgentRuntimeConfig", () => {
     });
     stageAgentRow();
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
-    rowsQueue.push([]); // agent_skills metadata overlay
-    rowsQueue.push([
+    stage("guardrails:default", []); // default guardrail lookup
+    stage("agentSkills", []); // agent_skills metadata overlay
+    stage("skillCatalog", [
       ...DEFAULT_RUNTIME_SKILL_IDS.map((slug) => trustedSkillRow(slug)),
       trustedSkillRow("trusted-skill"),
       trustedSkillRow("stale-skill", {
@@ -731,8 +768,8 @@ describe("resolveAgentRuntimeConfig", () => {
     mockBuildSkillEnvOverrides.mockResolvedValueOnce({ GITHUB_TOKEN: "token" });
     stageAgentRow();
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
-    rowsQueue.push([
+    stage("guardrails:default", []); // default guardrail lookup
+    stage("agentSkills", [
       {
         skill_id: "github-issues",
         config: {
@@ -802,8 +839,8 @@ describe("resolveAgentRuntimeConfig", () => {
     mockBuildSkillEnvOverrides.mockResolvedValueOnce({});
     stageAgentRow();
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
-    rowsQueue.push([
+    stage("guardrails:default", []); // default guardrail lookup
+    stage("agentSkills", [
       {
         skill_id: "github-issues",
         config: { secretRef: "secret/from-row", mcpServer: "gh-row" },
@@ -821,11 +858,57 @@ describe("resolveAgentRuntimeConfig", () => {
     ).toMatchObject({ secretRef: "secret/from-file", mcpServer: "gh-file" });
   });
 
+  it("resolves per-skill env overrides concurrently (U2 N+1 diet)", async () => {
+    vi.stubEnv("WORKSPACE_BUCKET", "workspace-bucket");
+    mockS3Send.mockImplementation(async (command: { input?: any }) => {
+      if (command.input?.Prefix) {
+        return {
+          Contents: [
+            { Key: "tenants/acme/agents/ada/skills/skill-a/SKILL.md" },
+            { Key: "tenants/acme/agents/ada/skills/skill-b/SKILL.md" },
+          ],
+        };
+      }
+      return {
+        Body: { transformToString: async () => "---\nname: X\n---\n" },
+      };
+    });
+    let inFlight = 0;
+    let release!: () => void;
+    const bothStarted = new Promise<void>((resolve) => (release = resolve));
+    mockBuildSkillEnvOverrides.mockImplementation(async () => {
+      inFlight += 1;
+      if (inFlight === 2) release();
+      // Each call resolves only once BOTH are in flight — the previous
+      // sequential per-skill loop would deadlock here and time out.
+      await bothStarted;
+      return null;
+    });
+    stageAgentRow();
+    stageTenantSlug("acme");
+    stage("guardrails:default", []); // default guardrail lookup
+    stage("agentSkills", [
+      { skill_id: "skill-a", config: { oauthConnectionId: "c1" } },
+      { skill_id: "skill-b", config: { oauthConnectionId: "c2" } },
+    ]); // agent_skills metadata overlay
+    stageTrustedRuntimeSkillRows("skill-a", "skill-b");
+
+    const cfg = await resolveAgentRuntimeConfig({
+      tenantId: TENANT_ID,
+      agentId: AGENT_ID,
+    });
+
+    expect(mockBuildSkillEnvOverrides).toHaveBeenCalledTimes(2);
+    expect(cfg.skillsConfig.map((s) => s.skillId)).toEqual(
+      expect.arrayContaining(["skill-a", "skill-b"]),
+    );
+  });
+
   it("uses the agent runtime selector when present", async () => {
     stageAgentRow({ runtime: "pi" });
     stageTemplateRow({ runtime: "strands" });
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
+    stage("guardrails:default", []); // default guardrail lookup
     stageTrustedRuntimeSkillRows();
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -840,7 +923,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow({ runtime: null });
     stageTemplateRow({ runtime: "pi" });
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
+    stage("guardrails:default", []); // default guardrail lookup
     stageTrustedRuntimeSkillRows();
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -853,7 +936,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow({ runtime: "unknown" });
     stageTemplateRow({ runtime: "pi" });
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
+    stage("guardrails:default", []); // default guardrail lookup
     stageTrustedRuntimeSkillRows();
     await expect(
       resolveAgentRuntimeConfig({
@@ -867,7 +950,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow({ runtime: "agentcore" });
     stageTemplateRow({ runtime: "pi" });
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
+    stage("guardrails:default", []); // default guardrail lookup
     stageTrustedRuntimeSkillRows();
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -881,7 +964,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow({ blocked_tools: ["artifacts", "workspace-memory"] });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -898,7 +981,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow({ browser: { enabled: true } });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -911,9 +994,11 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow({ browser: null });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([{ capability: "browser_automation", enabled: true }]); // agent_capabilities
+    stage("agentCapabilities", [
+      { capability: "browser_automation", enabled: true },
+    ]); // agent_capabilities
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -925,9 +1010,11 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow({ browser: { enabled: true } });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([{ capability: "browser_automation", enabled: false }]); // agent_capabilities
+    stage("agentCapabilities", [
+      { capability: "browser_automation", enabled: false },
+    ]); // agent_capabilities
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -942,9 +1029,11 @@ describe("resolveAgentRuntimeConfig", () => {
       blocked_tools: ["browser_automation"],
     });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([{ capability: "browser_automation", enabled: true }]); // agent_capabilities
+    stage("agentCapabilities", [
+      { capability: "browser_automation", enabled: true },
+    ]); // agent_capabilities
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -956,9 +1045,9 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow({ json_render_ui: { enabled: true } });
     stageTemplateRow();
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // agent_capabilities
+    stage("agentCapabilities", []); // agent_capabilities
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -972,9 +1061,9 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow({ json_render_ui: { enabled: false } });
     stageTemplateRow();
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // agent_capabilities
+    stage("agentCapabilities", []); // agent_capabilities
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -989,16 +1078,16 @@ describe("resolveAgentRuntimeConfig", () => {
       "thread-json-render-ui",
       "emit_json_render_ui",
     ]) {
-      rowsQueue.length = 0;
+      stagedRows.clear();
       stageAgentRow({
         blocked_tools: [blockedTool],
         json_render_ui: { enabled: true },
       });
       stageTemplateRow();
       stageTenantSlug();
-      rowsQueue.push([]); // default guardrail
+      stage("guardrails:default", []); // default guardrail
       stageTrustedRuntimeSkillRows();
-      rowsQueue.push([]); // agent_capabilities
+      stage("agentCapabilities", []); // agent_capabilities
 
       const cfg = await resolveAgentRuntimeConfig({
         tenantId: TENANT_ID,
@@ -1013,7 +1102,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow({ send_email: null });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1026,7 +1115,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow({ context_engine: null });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1046,10 +1135,10 @@ describe("resolveAgentRuntimeConfig", () => {
       },
     });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // agent_capabilities
-    rowsQueue.push([]); // tenant context provider settings
+    stage("agentCapabilities", []); // agent_capabilities
+    stage("tenantContextProviderSettings", []); // tenant context provider settings
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -1068,10 +1157,10 @@ describe("resolveAgentRuntimeConfig", () => {
       },
     });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // agent_capabilities
-    rowsQueue.push([
+    stage("agentCapabilities", []); // agent_capabilities
+    stage("tenantContextProviderSettings", [
       {
         providerId: "memory",
         family: "memory",
@@ -1095,7 +1184,7 @@ describe("resolveAgentRuntimeConfig", () => {
       blocked_tools: ["query_context"],
     });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1108,7 +1197,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow({ guardrail_id: null });
     stageTenantSlug();
-    rowsQueue.push([
+    stage("guardrails:default", [
       {
         id: "guard-id",
         bedrock_guardrail_id: "bg-123",
@@ -1136,9 +1225,9 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow();
     stageTenantSlug();
-    rowsQueue.push([]); // guardrail
+    stage("guardrails:default", []); // guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // users lookup — empty because predicate rejects cross-tenant
+    stage("users:email", []); // users lookup — empty because predicate rejects cross-tenant
     await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -1161,7 +1250,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow();
     stageTenantSlug();
-    rowsQueue.push([]); // guardrail
+    stage("guardrails:default", []); // guardrail
     stageTrustedRuntimeSkillRows();
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1181,7 +1270,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow({ web_search: { enabled: true } });
     stageTenantSlug();
-    rowsQueue.push([]); // guardrail
+    stage("guardrails:default", []); // guardrail
     stageTrustedRuntimeSkillRows();
     mockLoadTenantBuiltinTools.mockResolvedValueOnce([
       {
@@ -1212,7 +1301,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow({ web_search: null });
     stageTenantSlug();
-    rowsQueue.push([]); // guardrail
+    stage("guardrails:default", []); // guardrail
     stageTrustedRuntimeSkillRows();
     mockLoadTenantBuiltinTools.mockResolvedValueOnce([
       {
@@ -1233,7 +1322,7 @@ describe("resolveAgentRuntimeConfig", () => {
   it("resolves Web Extraction runtime config only when the template opt-in and tenant config are present", async () => {
     stageAgentRow({ web_extract: { enabled: true } });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
     mockLoadTenantWebExtractConfig.mockResolvedValueOnce({
       toolSlug: "web-extract",
@@ -1260,7 +1349,7 @@ describe("resolveAgentRuntimeConfig", () => {
   it("does not resolve Web Extraction secrets when the template opt-in is null or blocked", async () => {
     stageAgentRow({ web_extract: null });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
 
     const disabledCfg = await resolveAgentRuntimeConfig({
@@ -1271,13 +1360,13 @@ describe("resolveAgentRuntimeConfig", () => {
     expect(disabledCfg.webExtractConfig).toBeUndefined();
     expect(mockLoadTenantWebExtractConfig).not.toHaveBeenCalled();
 
-    rowsQueue.length = 0;
+    stagedRows.clear();
     stageAgentRow({
       web_extract: { enabled: true },
       blocked_tools: ["web_extract"],
     });
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
 
     const blockedCfg = await resolveAgentRuntimeConfig({
@@ -1293,7 +1382,7 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow();
     stageTenantSlug();
-    rowsQueue.push([]); // guardrail
+    stage("guardrails:default", []); // guardrail
     stageTrustedRuntimeSkillRows();
     mockBuildMcpConfigs.mockResolvedValueOnce([
       {
@@ -1372,10 +1461,10 @@ describe("resolveAgentRuntimeConfig", () => {
     stageAgentRow();
     stageTemplateRow();
     stageTenantSlug();
-    rowsQueue.push([]); // guardrail
+    stage("guardrails:default", []); // guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // agent_capabilities
-    rowsQueue.push([
+    stage("agentCapabilities", []); // agent_capabilities
+    stage("piExtensionAssignments", [
       piExtensionRuntimeRow(),
       piExtensionRuntimeRow({
         assignment_id: "assignment-newer-unapproved",
@@ -1431,11 +1520,13 @@ describe("resolveAgentRuntimeConfig", () => {
 
     stageAgentRow();
     stageTenantSlug();
-    rowsQueue.push([{ slug: "engineering", workspace_folder_name: null }]);
-    rowsQueue.push([]); // default guardrail
+    stage("spaces:folder", [
+      { slug: "engineering", workspace_folder_name: null },
+    ]);
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // agent_capabilities
-    rowsQueue.push([
+    stage("agentCapabilities", []); // agent_capabilities
+    stage("piExtensionAssignments", [
       piExtensionRuntimeRow({
         assignment_id: "assignment-disabled",
         enabled: false,
@@ -1479,10 +1570,13 @@ describe("resolveAgentRuntimeConfig", () => {
   it("keeps chat runtime config available when Pi extension loading fails", async () => {
     stageAgentRow();
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // agent_capabilities
-    rowsQueue.push(new Error("pi extension table unavailable"));
+    stage("agentCapabilities", []); // agent_capabilities
+    stage(
+      "piExtensionAssignments",
+      new Error("pi extension table unavailable"),
+    );
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1496,11 +1590,11 @@ describe("resolveAgentRuntimeConfig", () => {
   it("overlays Space runtime overrides when spaceId is provided", async () => {
     stageAgentRow({ sandbox: { environment: "default-public" } });
     stageTenantSlug();
-    rowsQueue.push([{ slug: "finance", workspace_folder_name: null }]);
-    rowsQueue.push([]); // default guardrail
+    stage("spaces:folder", [{ slug: "finance", workspace_folder_name: null }]);
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // agent_capabilities
-    rowsQueue.push([
+    stage("agentCapabilities", []); // agent_capabilities
+    stage("spaces:overrides", [
       {
         model_override: "us.anthropic.claude-opus-4-7",
         guardrail_id_override: "guardrail-finance",
@@ -1509,7 +1603,7 @@ describe("resolveAgentRuntimeConfig", () => {
         sandbox_override: false,
       },
     ]); // Space overrides
-    rowsQueue.push([
+    stage("guardrails:by-id", [
       {
         bedrock_guardrail_id: "bg-finance",
         bedrock_version: "2",
@@ -1536,16 +1630,15 @@ describe("resolveAgentRuntimeConfig", () => {
 
 // ─── Capability diagnostics channel (capability-mapping plan U1) ────────────
 // Opt-in via `collectDiagnostics`; the flag-off path must be byte-identical
-// to today's output and issue no additional queries (the scriptable rowsQueue
-// enforces the query count — an unconditional new select would desync every
-// staged test above).
+// to today's output (asserted directly below by comparing flag-off and
+// flag-on resolutions of the same staged shapes).
 
 describe("capability diagnostics channel (U1)", () => {
   function stageHappyPath() {
     stageAgentRow();
     stageTemplateRow();
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail lookup
+    stage("guardrails:default", []); // default guardrail lookup
     stageTrustedRuntimeSkillRows();
   }
 
@@ -1582,7 +1675,7 @@ describe("capability diagnostics channel (U1)", () => {
   it("blocked-tools filter emits one blocked_by_policy row per removed skill", async () => {
     stageAgentRow({ blocked_tools: ["artifacts"] });
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
@@ -1603,8 +1696,8 @@ describe("capability diagnostics channel (U1)", () => {
   it("trust gate emits trust_gate rows for untrusted catalog skills", async () => {
     stageAgentRow();
     stageTenantSlug("acme");
-    rowsQueue.push([]); // default guardrail
-    rowsQueue.push([]); // skill trust gate — nothing trusted
+    stage("guardrails:default", []); // default guardrail
+    stage("skillCatalog", []); // skill trust gate — nothing trusted
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
       agentId: AGENT_ID,
@@ -1627,14 +1720,14 @@ describe("capability diagnostics channel (U1)", () => {
   it("extension diagnostics: disabled, not approved, validation failure, unavailable_provider prediction", async () => {
     stageAgentRow();
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // agent_capabilities
+    stage("agentCapabilities", []); // agent_capabilities
     const stale = piExtensionRuntimeRow({
       assignment_id: "assignment-stale",
       artifact_hash: "stale-artifact-hash",
     });
-    rowsQueue.push([
+    stage("piExtensionAssignments", [
       piExtensionRuntimeRow(), // approved, granted ["network"] → unavailable_provider prediction
       piExtensionRuntimeRow({
         assignment_id: "assignment-disabled",
@@ -1688,10 +1781,13 @@ describe("capability diagnostics channel (U1)", () => {
   it("extension resolution fault degrades to empty extensions and carries resolution_fault", async () => {
     stageAgentRow();
     stageTenantSlug();
-    rowsQueue.push([]); // default guardrail
+    stage("guardrails:default", []); // default guardrail
     stageTrustedRuntimeSkillRows();
-    rowsQueue.push([]); // agent_capabilities
-    rowsQueue.push(new Error("pi extension table unavailable"));
+    stage("agentCapabilities", []); // agent_capabilities
+    stage(
+      "piExtensionAssignments",
+      new Error("pi extension table unavailable"),
+    );
 
     const cfg = await resolveAgentRuntimeConfig({
       tenantId: TENANT_ID,
