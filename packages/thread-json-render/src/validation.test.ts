@@ -437,3 +437,36 @@ function codes(
 function clonePart(part: ThreadJsonRenderPart): ThreadJsonRenderPart {
   return JSON.parse(JSON.stringify(part)) as ThreadJsonRenderPart;
 }
+
+describe("Tabs value leniency (2026-08-04 churn fix)", () => {
+  function tabsPart(
+    tabs: Array<Record<string, unknown>>,
+  ): ThreadJsonRenderPart {
+    return createThreadJsonRenderPart(
+      "tabs-part",
+      {
+        root: "tabs",
+        elements: {
+          tabs: {
+            type: "Tabs",
+            props: { tabs, defaultValue: null, value: null },
+            children: [],
+          },
+        },
+      } as unknown as ThreadJsonRenderSpec,
+      { title: "Tabs", summary: "Tabs fallback" },
+    );
+  }
+
+  it("accepts tabs entries without a value (falls back to label)", () => {
+    const result = validateThreadJsonRenderPart(
+      tabsPart([{ label: "Overview" }, { label: "Details" }]),
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("still rejects tabs entries without a label", () => {
+    const result = validateThreadJsonRenderPart(tabsPart([{ value: "x" }]));
+    expect(result.ok).toBe(false);
+  });
+});

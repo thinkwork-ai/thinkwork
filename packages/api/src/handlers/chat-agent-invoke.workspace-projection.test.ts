@@ -101,3 +101,40 @@ describe("chat dispatch site (source contract)", () => {
     expect(writeAt).toBeLessThan(invokeAt);
   });
 });
+
+describe("renderWorkspaceTupleForInvoke — transient invoke retry", () => {
+  it("retries once on a Lambda ServiceException and succeeds", async () => {
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Service failure"), {
+          name: "ServiceException",
+        }),
+      )
+      .mockResolvedValueOnce({
+        Payload: new TextEncoder().encode(JSON.stringify(okPayload)),
+      });
+    const result = await renderWorkspaceTupleForInvoke(
+      { tenantId: "t", agentId: "a", spaceId: "s" },
+      { lambda: { send } as never, functionName: "ws-renderer" },
+    );
+    expect(result.rendered).toBe(true);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry caller-side errors", async () => {
+    const send = vi.fn().mockRejectedValue(
+      Object.assign(new Error("denied"), {
+        name: "AccessDeniedException",
+        $metadata: { httpStatusCode: 403 },
+      }),
+    );
+    await expect(
+      renderWorkspaceTupleForInvoke(
+        { tenantId: "t", agentId: "a", spaceId: "s" },
+        { lambda: { send } as never, functionName: "ws-renderer" },
+      ),
+    ).rejects.toThrow("denied");
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+});

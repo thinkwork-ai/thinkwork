@@ -229,13 +229,20 @@ const Separator = ({ props }: P<"Separator">) => (
     orientation={props?.orientation ?? "horizontal"}
     className={cn(
       "shrink-0 bg-border",
-      props?.orientation === "vertical" ? "mx-2 h-full w-px" : "my-3 h-px w-full",
+      props?.orientation === "vertical"
+        ? "mx-2 h-full w-px"
+        : "my-3 h-px w-full",
     )}
   />
 );
 
 const TabsComponent = ({ props, children, bindings, emit }: P<"Tabs">) => {
-  const tabs = props?.tabs ?? [];
+  // Generated specs may omit per-tab `value` (schema treats it as optional);
+  // the label doubles as the switching value so the tabs stay functional.
+  const tabs = (props?.tabs ?? []).map((tab) => ({
+    ...tab,
+    value: tab.value ?? tab.label,
+  }));
   const [boundValue, setBoundValue] = useBoundProp(
     props?.value,
     bindings?.value,
@@ -428,7 +435,10 @@ const Heading = ({ props }: P<"Heading">) => {
     h3: "text-base font-semibold",
     h4: "text-sm font-semibold",
   };
-  const className = cn(classByLevel[level] ?? classByLevel.h2, "text-left text-foreground");
+  const className = cn(
+    classByLevel[level] ?? classByLevel.h2,
+    "text-left text-foreground",
+  );
   if (level === "h1") return <h1 className={className}>{text}</h1>;
   if (level === "h3") return <h3 className={className}>{text}</h3>;
   if (level === "h4") return <h4 className={className}>{text}</h4>;
@@ -486,7 +496,11 @@ const Avatar = ({ props }: P<"Avatar">) => {
     .slice(0, 2)
     .toUpperCase();
   const sizeClass =
-    props?.size === "lg" ? "size-12" : props?.size === "sm" ? "size-8" : "size-10";
+    props?.size === "lg"
+      ? "size-12"
+      : props?.size === "sm"
+        ? "size-8"
+        : "size-10";
   return (
     <BaseAvatar.Root
       className={cn(
@@ -586,7 +600,11 @@ const Skeleton = ({ props }: P<"Skeleton">) => (
 
 const Spinner = ({ props }: P<"Spinner">) => {
   const sizeClass =
-    props?.size === "lg" ? "size-8" : props?.size === "sm" ? "size-4" : "size-6";
+    props?.size === "lg"
+      ? "size-8"
+      : props?.size === "sm"
+        ? "size-4"
+        : "size-6";
   return (
     <div className="flex items-center gap-2">
       <svg
@@ -833,7 +851,10 @@ const CheckboxComponent = ({ props, bindings, emit }: P<"Checkbox">) => {
             ✓
           </Checkbox.Indicator>
         </Checkbox.Root>
-        <label htmlFor={props?.name ?? undefined} className="cursor-pointer text-sm text-foreground">
+        <label
+          htmlFor={props?.name ?? undefined}
+          className="cursor-pointer text-sm text-foreground"
+        >
           {props?.label}
         </label>
       </div>
@@ -885,7 +906,10 @@ const RadioComponent = ({ props, bindings, emit }: P<"Radio">) => {
               >
                 <Radio.Indicator className="size-2 rounded-full bg-primary" />
               </Radio.Root>
-              <label htmlFor={id} className="cursor-pointer text-sm text-foreground">
+              <label
+                htmlFor={id}
+                className="cursor-pointer text-sm text-foreground"
+              >
                 {opt}
               </label>
             </div>
@@ -917,7 +941,10 @@ const SwitchComponent = ({ props, bindings, emit }: P<"Switch">) => {
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
-        <label htmlFor={props?.name ?? undefined} className="cursor-pointer text-sm text-foreground">
+        <label
+          htmlFor={props?.name ?? undefined}
+          className="cursor-pointer text-sm text-foreground"
+        >
           {props?.label}
         </label>
         <Switch.Root
@@ -1156,7 +1183,10 @@ const ButtonGroup = ({ props, bindings, emit }: P<"ButtonGroup">) => {
   );
 };
 
-function paginationRange(current: number, total: number): (number | "ellipsis")[] {
+function paginationRange(
+  current: number,
+  total: number,
+): (number | "ellipsis")[] {
   if (total <= 7) {
     return Array.from({ length: total }, (_, i) => i + 1);
   }

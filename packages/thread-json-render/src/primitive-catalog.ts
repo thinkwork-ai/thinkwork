@@ -82,7 +82,10 @@ export const threadJsonRenderPrimitiveComponentDefinitions = {
       tabs: z.array(
         z.object({
           label: z.string(),
-          value: z.string(),
+          // Optional: renderers fall back to the label as the switching
+          // value. Generated specs frequently omit it, and a hard reject
+          // here made agents churn re-emitting the same UI (2026-08-04).
+          value: z.string().optional(),
         }),
       ),
       defaultValue: z.string().nullable(),
@@ -91,7 +94,13 @@ export const threadJsonRenderPrimitiveComponentDefinitions = {
     slots: ["default"],
     events: ["change"],
     description:
-      "Tab navigation. Use { $bindState } on value for active tab binding.",
+      "Tab navigation. tabs as [{label, value?}] — value defaults to label. Use { $bindState } on value for active tab binding.",
+    example: {
+      tabs: [
+        { label: "Overview", value: "overview" },
+        { label: "Details", value: "details" },
+      ],
+    },
   },
   Accordion: {
     props: z.object({
@@ -356,8 +365,7 @@ export const threadJsonRenderPrimitiveComponentDefinitions = {
       value: z.number().nullable(),
     }),
     events: ["change"],
-    description:
-      "Range slider input. Use { $bindState } on value for binding.",
+    description: "Range slider input. Use { $bindState } on value for binding.",
   },
   // ==========================================================================
   // Action Components
@@ -463,4 +471,6 @@ export type ThreadJsonRenderPrimitiveComponentDefinition = {
  */
 export type ThreadJsonRenderPrimitiveProps<
   K extends keyof typeof threadJsonRenderPrimitiveComponentDefinitions,
-> = z.output<(typeof threadJsonRenderPrimitiveComponentDefinitions)[K]["props"]>;
+> = z.output<
+  (typeof threadJsonRenderPrimitiveComponentDefinitions)[K]["props"]
+>;
