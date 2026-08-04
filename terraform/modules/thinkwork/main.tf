@@ -1232,6 +1232,10 @@ module "api" {
   redirect_success_url       = var.redirect_success_url
   platform_operator_emails   = var.platform_operator_emails
 
+  # THINK-583 U3 — warm chat path (KTD5: these two handlers only).
+  chat_agent_invoke_provisioned_concurrency  = var.chat_agent_invoke_provisioned_concurrency
+  workspace_renderer_provisioned_concurrency = var.workspace_renderer_provisioned_concurrency
+
   mcp_custom_domain       = var.mcp_custom_domain
   mcp_custom_domain_ready = var.mcp_custom_domain_ready
 

@@ -133,6 +133,25 @@ variable "platform_operator_emails" {
   default     = ""
 }
 
+# THINK-583 U3 — provisioned concurrency for the two chat-critical zip
+# Lambdas ONLY (KTD5: never the Pi Lambda). Safe default 0 = disabled;
+# the `live` alias is still created so alias-qualified invokers work on
+# every stage and customer stages opt in on their own release cadence.
+# Dev enables 1/1 via scripts/deploy/terraform-vars.sh (deploy.yml is
+# dev-only — same pattern as enable_capability_broker).
+
+variable "chat_agent_invoke_provisioned_concurrency" {
+  description = "Provisioned concurrency on chat-agent-invoke's `live` alias. 0 = disabled (alias still exists)."
+  type        = number
+  default     = 0
+}
+
+variable "workspace_renderer_provisioned_concurrency" {
+  description = "Provisioned concurrency on workspace-renderer's `live` alias. 0 = disabled (alias still exists)."
+  type        = number
+  default     = 0
+}
+
 variable "okf_wiki_efs_enabled" {
   description = "DEPRECATED (THINK-589): no-op, removal pending. The OKF wiki EFS feature is dead — no mount, access point, mount target, or client security group is created regardless of this value. It currently only retains the already-provisioned EFS filesystem (PR 2 deletes it behind the destructive-step gates) and, with okf_wiki_create_nat_gateway, the shared NAT egress that non-OKF VPC workloads still ride. Declaration retained so customer-stage passthroughs and tfvars keep working."
   type        = bool

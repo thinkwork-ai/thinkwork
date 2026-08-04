@@ -288,7 +288,10 @@ export function deriveChatAgentInvokeFnArn(): string | null {
   const accountId = process.env.AWS_ACCOUNT_ID;
   const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
   if (!stage || !accountId || !region) return null;
-  return `arn:aws:lambda:${region}:${accountId}:function:thinkwork-${stage}-api-chat-agent-invoke`;
+  // Alias-qualified (THINK-583 U3): provisioned concurrency only serves
+  // invokes addressed to the `live` alias — an unqualified invoke hits
+  // $LATEST and silently bypasses the warm pool.
+  return `arn:aws:lambda:${region}:${accountId}:function:thinkwork-${stage}-api-chat-agent-invoke:live`;
 }
 
 let _chatAgentInvokeFnArn: string | null | undefined;
@@ -322,8 +325,9 @@ export async function getChatAgentInvokeFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } =
-      await import("@aws-sdk/client-ssm");
+    const { SSMClient, GetParameterCommand } = await import(
+      "@aws-sdk/client-ssm"
+    );
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -399,8 +403,9 @@ export async function invokeChatAgent(payload: {
       );
       return false;
     }
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
     await lambda.send(
       new InvokeCommand({
@@ -434,8 +439,9 @@ export async function getJobScheduleManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } =
-      await import("@aws-sdk/client-ssm");
+    const { SSMClient, GetParameterCommand } = await import(
+      "@aws-sdk/client-ssm"
+    );
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -464,8 +470,9 @@ export async function invokeJobScheduleManager(
       console.error("[graphql]", msg);
       return { ok: false, error: msg };
     }
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
     const res = await lambda.send(
       new InvokeCommand({
@@ -634,8 +641,9 @@ export async function invokeSkillRun(
         error: `${runtimeType} agentcore-invoke Lambda name not configured`,
       };
     }
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
     const body = JSON.stringify(payload);
     const lambdaPayload = JSON.stringify({

@@ -187,9 +187,14 @@ function workspaceRendererFunctionName(): string {
   // Derived from the per-stage naming convention (R7); a config/env
   // override still wins. "" preserves the legacy unconfigured guard
   // path for non-Lambda contexts without STAGE (vitest).
+  // Alias-qualified (THINK-583 U3): provisioned concurrency only serves
+  // invokes addressed to the `live` alias — an unqualified invoke hits
+  // $LATEST and silently bypasses the warm pool.
   const explicit = getConfig("WORKSPACE_RENDERER_FUNCTION_NAME");
   if (explicit) return explicit;
-  return process.env.STAGE ? deriveFunctionName("workspace-renderer") : "";
+  return process.env.STAGE
+    ? `${deriveFunctionName("workspace-renderer")}:live`
+    : "";
 }
 
 /**

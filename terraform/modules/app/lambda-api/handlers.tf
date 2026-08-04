@@ -879,6 +879,11 @@ resource "aws_lambda_function" "handler" {
   ]), toset(local.optional_integration_handler_names)) : toset([])
 
   function_name = "thinkwork-${var.stage}-api-${each.key}"
+  # THINK-583 U3: publish a numbered version for the two chat-critical
+  # handlers only — provisioned concurrency requires a published version
+  # behind the `live` alias (resources below). Scoped so the other ~90
+  # handlers don't accumulate a version per apply.
+  publish = contains(local.provisioned_concurrency_handlers, each.key)
   # S2 (THINK-193 U2): memory-retraction-drainer runs under a DEDICATED role
   # so its destructive evidence-snapshot S3 capability (version enumeration +
   # bulk version deletion) never leaks into the 90+ handlers on the shared
@@ -956,6 +961,56 @@ resource "aws_lambda_function" "handler" {
 }
 
 # ---------------------------------------------------------------------------
+# Warm sessions (THINK-583 U3): published version + `live` alias +
+# provisioned concurrency for chat-agent-invoke and workspace-renderer
+# ---------------------------------------------------------------------------
+# KTD5: these two zip Lambdas ONLY — never the Pi Lambda (its warmth is
+# superseded by AgentCore session reuse, and deploy.yml publishes Pi code
+# to $LATEST out-of-band).
+#
+# Provisioned concurrency only serves invokes addressed to the alias, so
+# EVERY invoker resolves `<fn>:live` (graphql/utils.ts, mobile-turns/
+# managed-dispatch.ts, and the workspaceRendererFunctionName helpers in
+# chat-agent-invoke.ts / wakeup-processor.ts). The alias exists even when
+# the concurrency count is 0 — an alias with no PC config serves normally
+# from $LATEST-equivalent cold starts — so disabled stages keep working
+# unchanged and opt in purely by raising the count variable.
+
+locals {
+  provisioned_concurrency_handlers = toset([
+    "chat-agent-invoke",
+    "workspace-renderer",
+  ])
+  provisioned_concurrency_counts = {
+    "chat-agent-invoke"  = var.chat_agent_invoke_provisioned_concurrency
+    "workspace-renderer" = var.workspace_renderer_provisioned_concurrency
+  }
+}
+
+resource "aws_lambda_alias" "live" {
+  for_each = local.deploy_lambda_handlers ? local.provisioned_concurrency_handlers : toset([])
+
+  name             = "live"
+  description      = "Warm-session alias (THINK-583 U3) — provisioned-concurrency target; all invokers alias-qualify."
+  function_name    = aws_lambda_function.handler[each.key].function_name
+  function_version = aws_lambda_function.handler[each.key].version
+}
+
+resource "aws_lambda_provisioned_concurrency_config" "live" {
+  # aws_lambda_provisioned_concurrency_config rejects a count of 0, so a
+  # disabled handler simply has no config resource (the alias remains).
+  for_each = local.deploy_lambda_handlers ? {
+    for name in local.provisioned_concurrency_handlers :
+    name => local.provisioned_concurrency_counts[name]
+    if local.provisioned_concurrency_counts[name] > 0
+  } : {}
+
+  function_name                     = aws_lambda_function.handler[each.key].function_name
+  qualifier                         = aws_lambda_alias.live[each.key].name
+  provisioned_concurrent_executions = each.value
+}
+
+# ---------------------------------------------------------------------------
 # Async retry configuration
 # ---------------------------------------------------------------------------
 
@@ -973,6 +1028,18 @@ resource "aws_lambda_function" "handler" {
 resource "aws_lambda_function_event_invoke_config" "chat_agent_invoke" {
   count                        = local.deploy_lambda_handlers ? 1 : 0
   function_name                = aws_lambda_function.handler["chat-agent-invoke"].function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 3600
+}
+
+# THINK-583 U3: the resolver now Event-invokes the `live` alias, and async
+# invoke config is per-qualifier — without this duplicate on the alias the
+# alias path would regress to AWS's default 2 retries and the 5-min stall
+# cascade above could recur. Same retry-0 posture, pinned explicitly.
+resource "aws_lambda_function_event_invoke_config" "chat_agent_invoke_live" {
+  count                        = local.deploy_lambda_handlers ? 1 : 0
+  function_name                = aws_lambda_function.handler["chat-agent-invoke"].function_name
+  qualifier                    = aws_lambda_alias.live["chat-agent-invoke"].name
   maximum_retry_attempts       = 0
   maximum_event_age_in_seconds = 3600
 }
@@ -2629,7 +2696,10 @@ resource "aws_ssm_parameter" "cloudflare_namespace_token" {
 
 resource "aws_ssm_parameter" "lambda_arns" {
   for_each = local.deploy_lambda_handlers ? {
-    "chat-agent-invoke-fn-arn"    = aws_lambda_function.handler["chat-agent-invoke"].arn
+    # THINK-583 U3: alias-qualified so the SSM-fallback path in
+    # getChatAgentInvokeFnArn (graphql/utils.ts) also lands on the
+    # provisioned-concurrency alias, not $LATEST.
+    "chat-agent-invoke-fn-arn"    = aws_lambda_alias.live["chat-agent-invoke"].arn
     "job-schedule-manager-fn-arn" = aws_lambda_function.handler["job-schedule-manager"].arn
     "memory-retain-fn-arn"        = aws_lambda_function.handler["memory-retain"].arn
     "eval-runner-fn-arn"          = aws_lambda_function.handler["eval-runner"].arn
