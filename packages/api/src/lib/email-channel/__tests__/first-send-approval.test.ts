@@ -446,12 +446,14 @@ describe("first-send email approval", () => {
   });
 
   it("rebuilds full MIME with attachments on approved send", async () => {
-    const send = vi.fn(async () => ({
-      provider: "ses" as const,
-      providerMessageId: "ses-raw-1",
-      status: "sent" as const,
-      metadata: {},
-    }));
+    const send = vi.fn(
+      async (_provider: string, _input: Record<string, unknown>) => ({
+        provider: "ses" as const,
+        providerMessageId: "ses-raw-1",
+        status: "sent" as const,
+        metadata: {},
+      }),
+    );
     const db = fakeEmailDb({
       inboxRows: [
         {
@@ -507,7 +509,7 @@ describe("first-send email approval", () => {
         attachments: [expect.objectContaining({ attachmentId: "att-1" })],
       }),
     );
-    const sendInput = send.mock.calls[0]![1] as Record<string, unknown>;
+    const sendInput = send.mock.calls[0]![1];
     expect(sendInput.text).toBeUndefined();
     const raw = String(sendInput.rawMessage);
     expect(raw).toContain("multipart/mixed");
