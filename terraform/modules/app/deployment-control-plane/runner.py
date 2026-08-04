@@ -3393,12 +3393,20 @@ def reconcile_agentcore_pi_runtime(vars_json, payload):
     if not role_arn or not account_id:
         raise RuntimeError("AgentCore Pi runtime reconcile: Lambda did not report Role/ARN")
 
-    source_image_uri = resolve_agentcore_pi_source_image_uri(payload)
-    image_tag = (
-        f"pi-{hashlib.sha256(source_image_uri.encode('utf-8')).hexdigest()[:16]}"
-        if source_image_uri
-        else "pi-latest"
+    # AgentCore runtimes are arm64-only ("Supported platforms: [arm64]" —
+    # first tei-e2e canary, 2026-08-04). The Lambda's amd64 pin
+    # (agentcorePiSourceImageUri) is the WRONG architecture for the runtime;
+    # the runtime image is mirrored into the customer ECR under the release
+    # version tag by the release-ops mirror step.
+    release_version = os.environ.get("THINKWORK_RELEASE_VERSION", "") or str(
+        safe_get(payload, "releaseVersion", default="")
     )
+    if not release_version:
+        raise RuntimeError(
+            "AgentCore Pi runtime reconcile: no release version available to "
+            "resolve the arm64 runtime image tag."
+        )
+    image_tag = f"{release_version}-pi-arm64"
     repository = f"thinkwork-{stage}-agentcore"
     digest = output(
         [
@@ -3420,7 +3428,9 @@ def reconcile_agentcore_pi_runtime(vars_json, payload):
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
         raise RuntimeError(
             f"AgentCore Pi runtime reconcile: could not resolve an immutable digest for "
-            f"{repository}:{image_tag} (got '{digest}')"
+            f"{repository}:{image_tag} (got '{digest}'). Mirror the release's "
+            "arm64 Pi runtime image into this customer's ECR under that tag "
+            "before retrying."
         )
     image_uri = f"{account_id}.dkr.ecr.{region}.amazonaws.com/{repository}@{digest}"
 
