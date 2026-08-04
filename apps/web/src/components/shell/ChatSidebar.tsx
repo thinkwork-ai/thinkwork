@@ -1281,7 +1281,9 @@ export function ChatSidebar() {
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            {pendingApprovalCount > 0 || isApprovalsRoute ? (
+            {/* Nav entry only while decisions are actually pending (Eric,
+                2026-08-04) — being ON /approvals no longer pins it. */}
+            {pendingApprovalCount > 0 ? (
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild

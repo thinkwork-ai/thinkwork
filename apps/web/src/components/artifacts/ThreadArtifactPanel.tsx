@@ -171,19 +171,6 @@ export function ThreadArtifactPanel({
               ? `${knowledgeDocumentFileName(kbDoc.key)}${kbDoc.page ? ` · p.${kbDoc.page}` : ""}`
               : (artifact?.title ?? "Artifact")}
         </h2>
-        {artifact && isCanvas ? (
-          <CanvasHeaderActions
-            artifact={{
-              id: artifact.id,
-              title: artifact.title,
-              status: artifact.status,
-              // THINK-167 owner-refresh dispatch target: the canvas's thread.
-              threadId: artifact.threadId ?? null,
-            }}
-            hasBindings={hasBindings}
-            onChanged={refetch}
-          />
-        ) : null}
         {kbDoc ? (
           <TooltipIconButton
             asChild
@@ -218,6 +205,19 @@ export function ThreadArtifactPanel({
               <SquareArrowOutUpRight className="size-4" />
             </Link>
           </TooltipIconButton>
+        ) : null}
+        {artifact && isCanvas ? (
+          <CanvasHeaderActions
+            artifact={{
+              id: artifact.id,
+              title: artifact.title,
+              status: artifact.status,
+              // THINK-167 owner-refresh dispatch target: the canvas's thread.
+              threadId: artifact.threadId ?? null,
+            }}
+            hasBindings={hasBindings}
+            onChanged={refetch}
+          />
         ) : null}
         <TooltipIconButton
           type="button"

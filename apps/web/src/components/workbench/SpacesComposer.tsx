@@ -17,6 +17,7 @@ import {
 } from "@/components/workbench/SkillTokenInput";
 import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
 import {
+  GOAL_MODE_COMPOSER_TOGGLE_HIDDEN,
   GoalModeDialog,
   GoalModeToggle,
 } from "@/components/workbench/GoalModeControls";
@@ -539,12 +540,16 @@ export function SpacesComposer({
               >
                 <Bot className="size-5" />
               </button>
-              <GoalModeToggle
-                enabled={goalModeSubmission.requested && effectiveAgentEnabled}
-                objective={goalModeSubmission.content}
-                disabled={isComposerDisabled || !effectiveAgentEnabled}
-                onClick={() => setGoalDialogOpen(true)}
-              />
+              {GOAL_MODE_COMPOSER_TOGGLE_HIDDEN ? null : (
+                <GoalModeToggle
+                  enabled={
+                    goalModeSubmission.requested && effectiveAgentEnabled
+                  }
+                  objective={goalModeSubmission.content}
+                  disabled={isComposerDisabled || !effectiveAgentEnabled}
+                  onClick={() => setGoalDialogOpen(true)}
+                />
+              )}
               <ComposerModelPicker
                 models={approvedModels}
                 value={selectedModelId}

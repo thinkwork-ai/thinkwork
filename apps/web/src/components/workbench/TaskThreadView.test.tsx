@@ -4519,7 +4519,8 @@ describe("TaskThreadView", () => {
     });
   });
 
-  it("opens a Goal dialog for follow-up goal mode", async () => {
+  // Skipped while GOAL_MODE_COMPOSER_TOGGLE_HIDDEN hides the composer toggle (THINK-597).
+  it.skip("opens a Goal dialog for follow-up goal mode", async () => {
     const onSendFollowUp = vi.fn();
     render(
       <TaskThreadView
@@ -4648,7 +4649,8 @@ describe("TaskThreadView", () => {
     expect(followUpValue(screen.getByLabelText("Follow up"))).toContain("/go");
   });
 
-  it("submits /goal follow-up shorthand as stripped goal content", async () => {
+  // Skipped while GOAL_MODE_COMPOSER_TOGGLE_HIDDEN hides the composer toggle (THINK-597).
+  it.skip("submits /goal follow-up shorthand as stripped goal content", async () => {
     const onSendFollowUp = vi.fn();
     render(
       <TaskThreadView
@@ -4690,7 +4692,8 @@ describe("TaskThreadView", () => {
     });
   });
 
-  it("resets follow-up Goal mode after a successful send", async () => {
+  // Skipped while GOAL_MODE_COMPOSER_TOGGLE_HIDDEN hides the composer toggle (THINK-597).
+  it.skip("resets follow-up Goal mode after a successful send", async () => {
     const onSendFollowUp = vi.fn();
     render(
       <TaskThreadView
