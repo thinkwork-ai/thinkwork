@@ -188,6 +188,12 @@ variable "twenty_provisioned" {
   default     = false
 }
 
+variable "release_image_mirror_principal_arns" {
+  description = "IAM principals allowed to push release runtime images into this stage's AgentCore ECR repository (THINK-616). ThinkWork-operated customer stages set [\"arn:aws:iam::487219502366:root\"] so the release workflow can mirror `<releaseVersion>-pi-arm64`; leave empty for self-hosted deployments."
+  type        = list(string)
+  default     = []
+}
+
 variable "twenty_runtime_enabled" {
   description = "Run Twenty CRM server/worker tasks when the retained substrate is provisioned."
   type        = bool
@@ -900,6 +906,7 @@ module "thinkwork" {
   neptune_load_bucket                         = var.neptune_load_bucket
   neptune_loader_role_arn                     = var.neptune_loader_role_arn
   memory_engine                               = var.memory_engine
+  release_image_mirror_principal_arns         = var.release_image_mirror_principal_arns
   twenty_provisioned                          = var.twenty_provisioned
   twenty_runtime_enabled                      = var.twenty_runtime_enabled
   twenty_image_uri                            = var.twenty_image_uri

@@ -992,9 +992,9 @@ variable "skill_trust_runner_enabled" {
 }
 
 variable "release_image_mirror_principal_arns" {
-  description = "IAM principals allowed to push release runtime images (`<releaseVersion>-pi-arm64`) into this stage's AgentCore ECR repository. Defaults to the ThinkWork release account, whose release workflow mirrors the arm64 AgentCore Runtime image into every customer account (THINK-616). Set to [] to opt out and mirror by hand."
+  description = "IAM principals allowed to push release runtime images (`<releaseVersion>-pi-arm64`) into this stage's AgentCore ECR repository, so the vendor's release pipeline can mirror the arm64 AgentCore Runtime image into this account (THINK-616). Empty by default: cross-account push is opt-in per stage, never implied by deploying this module. ThinkWork-operated customer stages set this to the ThinkWork release account (arn:aws:iam::487219502366:root)."
   type        = list(string)
-  default     = ["arn:aws:iam::487219502366:root"]
+  default     = []
 }
 
 variable "manage_bedrock_invocation_logging" {

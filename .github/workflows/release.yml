@@ -297,9 +297,15 @@ jobs:
           if [[ -n "${RELEASE_MIRROR_TARGETS}" ]]; then
             printf '%s' "${RELEASE_MIRROR_TARGETS}" > mirror-targets.json
             echo "Using RELEASE_MIRROR_TARGETS repository variable."
-          else
+          elif [[ -f .github/release-mirror-targets.json ]]; then
             cp .github/release-mirror-targets.json mirror-targets.json
             echo "Using checked-in .github/release-mirror-targets.json."
+          else
+            # Checkouts are pinned to the release tag, so re-publishing a tag cut
+            # before this file landed finds nothing to mirror. That is a no-op,
+            # not a release failure.
+            echo '{"targets":[]}' > mirror-targets.json
+            echo "::warning::${RELEASE_REF_NAME} predates .github/release-mirror-targets.json; skipping the customer image mirror. Mirror by hand if this release is deployed to a customer stage."
           fi
 
           targets="$(jq -c '.targets // []' mirror-targets.json)"
