@@ -258,9 +258,8 @@ beforeEach(() => {
 
 describe("chat-agent-invoke runtime routing", () => {
   it("honors an explicit Pi thread pin while the configured runtime is Harness", async () => {
-    const { resolveChatInvocationRuntimeType } = await import(
-      "./chat-agent-invoke.js"
-    );
+    const { resolveChatInvocationRuntimeType } =
+      await import("./chat-agent-invoke.js");
 
     expect(
       resolveChatInvocationRuntimeType({
@@ -271,9 +270,8 @@ describe("chat-agent-invoke runtime routing", () => {
   });
 
   it("resolves legacy harness requests and configs to Pi (THINK-324)", async () => {
-    const { resolveChatInvocationRuntimeType } = await import(
-      "./chat-agent-invoke.js"
-    );
+    const { resolveChatInvocationRuntimeType } =
+      await import("./chat-agent-invoke.js");
     expect(
       resolveChatInvocationRuntimeType({
         configuredRuntimeType: "agentcore",
@@ -396,36 +394,6 @@ describe("chat-agent-invoke runtime routing", () => {
     };
     const body = decodeInvokeBody(command);
     expect(body.thread_json_render_ui_enabled).toBe(true);
-  });
-
-  it("passes the normalized goal_mode runtime envelope to Pi dispatch", async () => {
-    const { handler } = await import("./chat-agent-invoke.js");
-
-    await handler({
-      tenantId: "tenant-1",
-      threadId: "thread-1",
-      agentId: "agent-1",
-      userMessage: "finish the rollout",
-      messageId: "message-1",
-      goalMode: {
-        enabled: true,
-        action: "start",
-        objective: "finish the rollout",
-        resolvedBudget: { tokenBudget: 150000 },
-      },
-    });
-
-    const command = mocks.lambdaSend.mock.calls[0][0] as {
-      input: { Payload: Uint8Array };
-    };
-    const body = decodeInvokeBody(command);
-
-    expect(body.goal_mode).toEqual({
-      enabled: true,
-      action: "start",
-      objective: "finish the rollout",
-      resolved_budget: { token_budget: 150000 },
-    });
   });
 
   it("narrows plugin MCP configs when the user explicitly names n8n", async () => {

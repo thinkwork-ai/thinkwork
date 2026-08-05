@@ -89,6 +89,8 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(wakeupSource).toContain('wakeup.source === "agent_loop"');
   });
 
+  // THINK-597 removed the composer Goal surface, so `chat_message` wakeups no
+  // longer carry a goalMode. AgentLoop / workflow_step goal dispatch stays.
   it("keeps AgentLoop goal metadata out of Pi while forwarding it to AgentCore", () => {
     const wakeupSource = handlerSource("wakeup-processor.ts");
 
@@ -98,8 +100,8 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
     expect(wakeupSource).toContain(
       "goal_mode: toRuntimeGoalModePayload(agentLoopPayload.goalMode)",
     );
-    expect(wakeupSource).toContain(
-      'if (wakeup.source === "chat_message" && payload?.goalMode)',
+    expect(wakeupSource).not.toContain(
+      'wakeup.source === "chat_message" && payload?.goalMode',
     );
     expect(wakeupSource).toContain("goal_mode: toRuntimeGoalModePayload");
   });
@@ -124,9 +126,9 @@ describe("dispatch payload parity (chat-agent-invoke vs wakeup-processor)", () =
   it("carries the workflowRun block into agentCorePayload for a workflow_step wakeup (THINK-219 U6)", () => {
     const wakeupSource = handlerSource("wakeup-processor.ts");
 
-    // The interpreter path is wakeup-only, so a gap is invisible on chat E2E:
-    // the workflowRun block must reach the runtime payload, and the goalMode
-    // must ride the same runtime goal-mode path as chat.
+    // The interpreter path is wakeup-only, so a gap is invisible outside a
+    // real loop run: the workflowRun block must reach the runtime payload, and
+    // the goalMode must ride the shared runtime goal-mode path.
     expect(wakeupSource).toContain('wakeup.source === "workflow_step"');
     expect(wakeupSource).toContain("workflow_run: payload.workflowRun");
     // goalMode reuses toRuntimeGoalModePayload inside the workflow_step block.
@@ -592,7 +594,9 @@ describe("platform-tool capability source parity", () => {
     const wakeupSource = handlerSource("wakeup-processor.ts");
     for (const column of CAPABILITY_COLUMNS) {
       expect(wakeupSource).toContain(`${column}: agents.${column},`);
-      expect(wakeupSource).not.toContain(`${column}: agentTemplates.${column},`);
+      expect(wakeupSource).not.toContain(
+        `${column}: agentTemplates.${column},`,
+      );
     }
   });
 

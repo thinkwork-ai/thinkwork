@@ -77,11 +77,6 @@ import {
 } from "@/components/workbench/SkillTokenInput";
 import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
 import {
-  GOAL_MODE_COMPOSER_TOGGLE_HIDDEN,
-  GoalModeDialog,
-  GoalModeToggle,
-} from "@/components/workbench/GoalModeControls";
-import {
   WorkItemAssigneeSelector,
   WorkItemStatusIconSelector,
 } from "@/components/work-items/WorkItemInlineControls";
@@ -89,15 +84,6 @@ import type {
   WorkItemAssigneeSummary,
   WorkItemStatusSummary,
 } from "@/components/work-items/work-item-display";
-import {
-  resolveStartGoalModeSubmission,
-  type ComposerGoalModeIntent,
-} from "@/components/workbench/goal-mode";
-import {
-  GoalRunCard,
-  goalRunFromTurnEvidence,
-  type GoalRunEvidence,
-} from "@/components/workbench/GoalRunCard";
 import { IconCircleCheckFilled, IconPlus } from "@tabler/icons-react";
 import {
   Reasoning,
@@ -318,7 +304,6 @@ interface TaskThreadViewProps {
     agentDispatch?: AgentDispatchRequestValue,
     pinnedSkills?: string[],
     selectedModelId?: string,
-    goalMode?: ComposerGoalModeIntent,
   ) => Promise<void> | void;
   approvedModels?: ApprovedModelOption[];
   selectedModelId?: string | null;
@@ -2049,7 +2034,6 @@ function TranscriptSegment({
     agentDispatch?: AgentDispatchRequestValue,
     pinnedSkills?: string[],
     selectedModelId?: string,
-    goalMode?: ComposerGoalModeIntent,
   ) => Promise<void> | void;
   isSending?: boolean;
   threadAttachments: ThreadInfoAttachment[];
@@ -2269,7 +2253,6 @@ function ThreadTurnActivity({
     agentDispatch?: AgentDispatchRequestValue,
     pinnedSkills?: string[],
     selectedModelId?: string,
-    goalMode?: ComposerGoalModeIntent,
   ) => Promise<void> | void;
 }) {
   const status = normalizeStatus(turn?.status);
@@ -2294,7 +2277,6 @@ function ThreadTurnActivity({
   const knowledgeSources = knowledgeSourcesFromInvocations(
     parseArray(usage.tool_invocations),
   );
-  const goalRun = goalRunFromTurnEvidence(turn.resultJson, turn.usageJson);
 
   // Single source of truth for the header label (KTD2): derived from
   // turn.status, never from "assistant message present". skipped → null.
@@ -2348,17 +2330,6 @@ function ThreadTurnActivity({
                   projection,
                   latestProjection ?? null,
                 )}
-              />
-            ) : null}
-            {goalRun ? (
-              <GoalRunCard
-                goalRun={goalRun}
-                onResume={
-                  goalRun.resumeEligible && onSendFollowUp
-                    ? (resumeGoalRun) =>
-                        resumeGoalRunFromThread(onSendFollowUp, resumeGoalRun)
-                    : undefined
-                }
               />
             ) : null}
             {rows.map((row, index) => (
@@ -2682,21 +2653,6 @@ function hasAssistantAfterLatestUser(messages: TaskThreadMessage[]) {
   return messages
     .slice(latestUserIndex + 1)
     .some((message) => message.role.toUpperCase() === "ASSISTANT");
-}
-
-function resumeGoalRunFromThread(
-  onSendFollowUp: NonNullable<TaskThreadViewProps["onSendFollowUp"]>,
-  goalRun: GoalRunEvidence,
-) {
-  const content = goalRun.objective
-    ? `Resume goal: ${goalRun.objective}`
-    : "Resume goal";
-  return onSendFollowUp(content, [], [], "FORCE_ON", undefined, undefined, {
-    enabled: true,
-    action: "resume",
-    ...(goalRun.objective ? { objective: goalRun.objective } : {}),
-    ...(goalRun.goalId ? { goalRunId: goalRun.goalId } : {}),
-  });
 }
 
 // 10 lines x leading-5 (20px) of the user bubble's text rhythm.
@@ -3542,7 +3498,6 @@ function FollowUpComposer({
     agentDispatch?: AgentDispatchRequestValue,
     pinnedSkills?: string[],
     selectedModelId?: string,
-    goalMode?: ComposerGoalModeIntent,
   ) => Promise<void> | void;
   approvedModels?: ApprovedModelOption[];
   selectedModelId?: string | null;
@@ -3584,8 +3539,6 @@ function FollowUpComposer({
   // false, the toggle tracks the derived default; once true, the manual choice
   // persists until the thread changes (which clears it).
   const agentOverriddenRef = useRef(false);
-  const [goalModeEnabled, setGoalModeEnabled] = useState(false);
-  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const prefillText = prefill?.text;
   const prefillToken = prefill?.token;
   const mentionQuery = useMemo(
@@ -3626,29 +3579,20 @@ function FollowUpComposer({
       hasStructuredDefaultAgentMention(mentions, defaultAgentTarget),
     [composer.text, defaultAgentTarget, mentions],
   );
-  const goalModeSubmission = useMemo(
-    () => resolveStartGoalModeSubmission(composer.text, goalModeEnabled),
-    [composer.text, goalModeEnabled],
-  );
   const effectiveAgentEnabled = agentForcedOn || agentEnabled;
-  const goalModeBlocked =
-    goalModeSubmission.requested && !effectiveAgentEnabled;
   const skillPins = useComposerSkillPins({
     value: composer.text,
     onChange: composer.setText,
     catalog: skillCatalog,
-    goalDisabled: !effectiveAgentEnabled,
   });
   const modelSelectionBlocked =
     approvedModels !== undefined &&
     (approvedModels.length === 0 || !selectedModelId);
   const canSubmit =
-    (goalModeSubmission.content.length > 0 ||
-      (composer.files.length > 0 && !goalModeSubmission.requested)) &&
+    (composer.text.trim().length > 0 || composer.files.length > 0) &&
     !disabled &&
     !isSending &&
-    !modelSelectionBlocked &&
-    !goalModeBlocked;
+    !modelSelectionBlocked;
 
   useEffect(() => {
     if (agentForcedOn) setAgentEnabled(true);
@@ -3658,7 +3602,6 @@ function FollowUpComposer({
   useEffect(() => {
     agentOverriddenRef.current = false;
     setAgentEnabled(agentDefaultOn);
-    setGoalModeEnabled(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId]);
 
@@ -3727,12 +3670,6 @@ function FollowUpComposer({
     composer.setSubmitting(true);
     let files: File[];
     try {
-      if (goalModeSubmission.requested && !goalModeSubmission.goalMode) {
-        throw new Error("Goal mode needs an objective.");
-      }
-      if (goalModeBlocked) {
-        throw new Error("Turn on agent handling to use Goal.");
-      }
       // PromptInput emits FileUIPart entries with blob URLs. Fetch the
       // blob and rebuild File objects so the route's upload helper can
       // POST the bytes through presign + PUT + finalize.
@@ -3742,21 +3679,17 @@ function FollowUpComposer({
       composer.setSubmitting(false);
       return;
     }
-    const content = goalModeSubmission.content;
+    const content = composer.text.trim();
     const submittedMentions = mentions.filter((mention) =>
       content.includes(mention.rawText),
     );
     const pinnedSkills = extractPinnedSkillSlugs(content, skillCatalog);
-    const submittedGoalMode = goalModeSubmission.goalMode;
-    // KTD2 tri-state: goal mode requires dispatch (FORCE_ON); otherwise the
-    // toggle maps untouched -> AUTO (server decides from Thread Mode),
-    // manually ON -> FORCE_ON, manually OFF -> FORCE_OFF.
-    const submittedDispatch: AgentDispatchRequestValue = submittedGoalMode
-      ? "FORCE_ON"
-      : deriveAgentDispatch({
-          overridden: agentOverriddenRef.current,
-          enabled: effectiveAgentEnabled,
-        });
+    // KTD2 tri-state: the toggle maps untouched -> AUTO (server decides from
+    // Thread Mode), manually ON -> FORCE_ON, manually OFF -> FORCE_OFF.
+    const submittedDispatch: AgentDispatchRequestValue = deriveAgentDispatch({
+      overridden: agentOverriddenRef.current,
+      enabled: effectiveAgentEnabled,
+    });
 
     // Reset the composer BEFORE the upload + sendMessage round-trip. The
     // route renders the optimistic user bubble as soon as onSubmit starts,
@@ -3768,11 +3701,10 @@ function FollowUpComposer({
     const draftMentions = mentions;
     composer.clear();
     setMentions([]);
-    setGoalModeEnabled(false);
 
     void (async () => {
       try {
-        if (selectedModelId && submittedGoalMode) {
+        if (selectedModelId) {
           await onSubmit(
             content,
             files,
@@ -3780,26 +3712,6 @@ function FollowUpComposer({
             submittedDispatch,
             pinnedSkills,
             selectedModelId,
-            submittedGoalMode,
-          );
-        } else if (selectedModelId) {
-          await onSubmit(
-            content,
-            files,
-            submittedMentions,
-            submittedDispatch,
-            pinnedSkills,
-            selectedModelId,
-          );
-        } else if (submittedGoalMode) {
-          await onSubmit(
-            content,
-            files,
-            submittedMentions,
-            submittedDispatch,
-            pinnedSkills,
-            undefined,
-            submittedGoalMode,
           );
         } else {
           await onSubmit(
@@ -3817,7 +3729,6 @@ function FollowUpComposer({
         // the error banner names the failed file when uploads break.
         composer.setText(draftText);
         setMentions(draftMentions);
-        if (submittedGoalMode) setGoalModeEnabled(true);
         composer.setError(
           err instanceof Error ? err.message : "Failed to send",
         );
@@ -3830,11 +3741,9 @@ function FollowUpComposer({
   const hasTaskQueue = Boolean(taskQueue);
   const agentToggleTitle = agentForcedOn
     ? "Agent handling is required by @agent or @think"
-    : goalModeSubmission.requested
-      ? "Goal mode requires agent handling"
-      : effectiveAgentEnabled
-        ? "Agent will respond"
-        : "Send without waking the agent";
+    : effectiveAgentEnabled
+      ? "Agent will respond"
+      : "Send without waking the agent";
 
   function selectMention(target: MentionTarget) {
     const trigger = target.targetType === "AGENT_PROFILE" ? "#" : "@";
@@ -3863,12 +3772,6 @@ function FollowUpComposer({
     if (target.targetType === "AGENT" && target.isDefaultAgent) {
       setAgentEnabled(true);
     }
-  }
-
-  function applyGoalObjective(objective: string) {
-    composer.setText(`/goal ${objective}`);
-    setGoalModeEnabled(false);
-    window.requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -4001,16 +3904,6 @@ function FollowUpComposer({
               >
                 <Bot className="size-5" />
               </button>
-              {GOAL_MODE_COMPOSER_TOGGLE_HIDDEN ? null : (
-                <GoalModeToggle
-                  enabled={
-                    goalModeSubmission.requested && effectiveAgentEnabled
-                  }
-                  objective={goalModeSubmission.content}
-                  disabled={disabled || isSending || !effectiveAgentEnabled}
-                  onClick={() => setGoalDialogOpen(true)}
-                />
-              )}
               <ComposerModelPicker
                 models={approvedModels}
                 value={selectedModelId}
@@ -4040,15 +3933,6 @@ function FollowUpComposer({
       {composer.error ? (
         <p className="text-sm text-destructive">{composer.error}</p>
       ) : null}
-      <GoalModeDialog
-        open={goalDialogOpen}
-        initialObjective={
-          goalModeSubmission.content ||
-          (composer.text.startsWith("/") ? "" : composer.text)
-        }
-        onOpenChange={setGoalDialogOpen}
-        onSubmit={applyGoalObjective}
-      />
     </div>
   );
 }

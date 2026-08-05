@@ -1,7 +1,6 @@
 export const ComposerCapabilities = [
   "attach",
   "agentToggle",
-  "goalMode",
   "spaceSelector",
   "modelPicker",
   "voice",

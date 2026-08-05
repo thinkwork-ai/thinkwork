@@ -325,9 +325,8 @@ export async function getChatAgentInvokeFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } = await import(
-      "@aws-sdk/client-ssm"
-    );
+    const { SSMClient, GetParameterCommand } =
+      await import("@aws-sdk/client-ssm");
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -386,7 +385,6 @@ export async function invokeChatAgent(payload: {
    */
   pendingQuestionAnswers?: import("../lib/user-questions/runtime-payload.js").PendingQuestionAnswersPayload;
   requestedModelId?: string;
-  goalMode?: import("../lib/goal-mode.js").RuntimeGoalMode;
   skillCreatorCommand?: import("../lib/skill-creator/command-metadata.js").RuntimeSkillCreatorCommandPayload;
   /**
    * THINK-263 U6: palette "ask" turn. chat-agent-invoke reads this off the
@@ -403,9 +401,8 @@ export async function invokeChatAgent(payload: {
       );
       return false;
     }
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     await lambda.send(
       new InvokeCommand({
@@ -439,9 +436,8 @@ export async function getJobScheduleManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } = await import(
-      "@aws-sdk/client-ssm"
-    );
+    const { SSMClient, GetParameterCommand } =
+      await import("@aws-sdk/client-ssm");
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -470,9 +466,8 @@ export async function invokeJobScheduleManager(
       console.error("[graphql]", msg);
       return { ok: false, error: msg };
     }
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const res = await lambda.send(
       new InvokeCommand({
@@ -641,9 +636,8 @@ export async function invokeSkillRun(
         error: `${runtimeType} agentcore-invoke Lambda name not configured`,
       };
     }
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({});
     const body = JSON.stringify(payload);
     const lambdaPayload = JSON.stringify({

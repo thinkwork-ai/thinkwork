@@ -1,4 +1,3 @@
-import { IconTargetArrow } from "@tabler/icons-react";
 import { Sparkles } from "lucide-react";
 import { Button } from "@thinkwork/ui";
 import { cn } from "@/lib/utils";
@@ -8,7 +7,6 @@ export interface SkillOption {
   displayName?: string | null;
   description?: string | null;
   installed?: boolean;
-  reserved?: "goal";
   disabled?: boolean;
   disabledReason?: string;
 }
@@ -35,9 +33,6 @@ export function currentSlashQuery(content: string): string | null {
 
 const skillLabel = (skill: SkillOption) =>
   skill.displayName?.trim() || skill.slug;
-
-const isGoalOption = (skill: SkillOption) =>
-  skill.reserved === "goal" || skill.slug === "goal";
 
 export function filterSkillCatalog(
   options: SkillOption[],
@@ -99,22 +94,12 @@ export function SkillMenu({
               if (!skill.disabled) onSelect(skill);
             }}
           >
-            {isGoalOption(skill) ? (
-              <IconTargetArrow
-                stroke={2}
-                className={cn(
-                  "mt-0.5 size-4 shrink-0 text-[#54a9ff]",
-                  isActive && "text-accent-foreground",
-                )}
-              />
-            ) : (
-              <Sparkles
-                className={cn(
-                  "mt-0.5 size-4 shrink-0 text-[#54a9ff]",
-                  isActive && "text-accent-foreground",
-                )}
-              />
-            )}
+            <Sparkles
+              className={cn(
+                "mt-0.5 size-4 shrink-0 text-[#54a9ff]",
+                isActive && "text-accent-foreground",
+              )}
+            />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm">
                 {skillLabel(skill)}

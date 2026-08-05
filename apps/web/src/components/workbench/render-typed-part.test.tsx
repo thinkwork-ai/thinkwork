@@ -239,7 +239,11 @@ describe("renderTypedPart", () => {
     expect(container.textContent).not.toContain("unknown.panel");
   });
 
-  it("renders goal-run data parts with compact status evidence", () => {
+  // THINK-597: the composer Goal surface (and GoalRunCard) is removed. No
+  // message in any stage ever persisted a `data-goal-run` part, but if one
+  // ever arrived it must degrade to the unsupported-part placeholder rather
+  // than crash the thread render.
+  it("degrades a retired goal-run data part to the unsupported placeholder", () => {
     const part: AccumulatedPart = {
       type: "data-goal-run",
       id: "goal-run-1",
@@ -247,19 +251,14 @@ describe("renderTypedPart", () => {
         source: "pi_goal",
         status: "complete",
         objective: "Prepare launch report",
-        completion_summary: "Launch report is complete.",
-        tokens_used: 28000,
-        token_budget: 125000,
       },
     };
 
-    render(<>{renderTypedPart(part, rk())}</>);
+    const { container } = render(<>{renderTypedPart(part, rk())}</>);
 
-    expect(screen.getByText("Goal")).toBeTruthy();
-    expect(screen.getByText("Completed")).toBeTruthy();
-    expect(screen.getByText("Prepare launch report")).toBeTruthy();
-    expect(screen.getByText("Launch report is complete.")).toBeTruthy();
-    expect(screen.getByText("Tokens: 28.0K / 125.0K")).toBeTruthy();
+    expect(screen.getByTestId("unsupported-generated-view")).toBeTruthy();
+    expect(screen.getByText("data-goal-run")).toBeTruthy();
+    expect(container.textContent).not.toContain("Prepare launch report");
   });
 
   it("renders a source-url part as an anchor", () => {

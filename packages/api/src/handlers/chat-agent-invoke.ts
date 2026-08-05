@@ -94,10 +94,6 @@ import {
   toRuntimePendingUserQuestions,
   type PendingQuestionAnswersPayload,
 } from "../lib/user-questions/runtime-payload.js";
-import {
-  toRuntimeGoalModePayload,
-  type RuntimeGoalMode,
-} from "../lib/goal-mode.js";
 import type { RuntimeSkillCreatorCommandPayload } from "../lib/skill-creator/command-metadata.js";
 import { buildAgentDispatchControlFields } from "../lib/agent-dispatch-payload.js";
 import { mintTurnAssertion } from "../lib/turn-assertion.js";
@@ -333,7 +329,6 @@ interface InvokeEvent {
    * invocation_source 'question_answer' from the wakeup row.
    */
   pendingQuestionAnswers?: PendingQuestionAnswersPayload;
-  goalMode?: RuntimeGoalMode;
   skillCreatorCommand?: RuntimeSkillCreatorCommandPayload;
   /**
    * THINK-263 U6: this turn opens a palette "ask". The invoke payload sends
@@ -1222,7 +1217,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
                 ...(event.requestedProfileSlug
                   ? { requestedProfileSlug: event.requestedProfileSlug }
                   : {}),
-                ...(event.goalMode ? { goalMode: event.goalMode } : {}),
                 ...(event.skillCreatorCommand
                   ? { skillCreatorCommand: event.skillCreatorCommand }
                   : {}),
@@ -2021,9 +2015,6 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       // the runtime prompt block from this; here we only deliver the field.
       pending_user_questions: event.pendingQuestionAnswers
         ? toRuntimePendingUserQuestions(event.pendingQuestionAnswers)
-        : undefined,
-      goal_mode: event.goalMode
-        ? toRuntimeGoalModePayload(event.goalMode)
         : undefined,
       skill_creator_command: event.skillCreatorCommand,
       cost_owner_user_id: currentUserId || undefined,

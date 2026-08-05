@@ -70,22 +70,6 @@ describe("sendMessage mention collaboration path", () => {
     expect(source).toContain("requestedModelId,");
   });
 
-  it("normalizes goal mode metadata before persisting and dispatches the resolved runtime budget", () => {
-    expect(source).toContain("normalizeMessageGoalModeMetadata");
-    expect(source).toContain("resolveTenantGoalTokenBudget");
-    expect(source).toContain("toRuntimeGoalMode");
-    expect(source.indexOf("normalizeMessageGoalModeMetadata")).toBeLessThan(
-      source.indexOf(".insert(messages)"),
-    );
-    expect(source.indexOf("resolveTenantGoalTokenBudget")).toBeLessThan(
-      source.indexOf(".insert(messages)"),
-    );
-    expect(source).toContain(
-      "...(resolvedGoalMode ? { goalMode: resolvedGoalMode } : {})",
-    );
-    expect(source).not.toContain("tokenBudget: parsedMetadata");
-  });
-
   it("rejects agent-dispatching sends before persistence when the sender is over budget", () => {
     expect(source).toContain("getUserBudgetStatus");
     expect(source).toContain('extensions: { code: "BUDGET_EXCEEDED" }');
@@ -98,13 +82,6 @@ describe("sendMessage mention collaboration path", () => {
     // Only sends that would dispatch an agent turn are gated; multiplayer
     // human-to-human messages stay free.
     expect(source).toContain("wouldDispatchAgentTurn");
-  });
-
-  it("rejects goal mode before persistence when it cannot dispatch the default agent", () => {
-    expect(source).toContain("Goal mode requires default agent dispatch.");
-    expect(
-      source.indexOf("Goal mode requires default agent dispatch"),
-    ).toBeLessThan(source.indexOf(".insert(messages)"));
   });
 
   it("preserves sender defaults while allowing agent-authenticated senders", () => {
@@ -424,14 +401,5 @@ describe("sendMessage tri-state dispatch wiring (plan 2026-07-03-003 U4, R1/R4/R
     expect(source).toContain(
       "!shouldSuppressAgentMentionDispatch({ agentDispatch: i.agentDispatch })",
     );
-  });
-
-  it("predicts the pre-transaction goal-mode check by unioning sender and user mentions", () => {
-    const goalCheck = source.indexOf(
-      "Goal mode requires default agent dispatch",
-    );
-    const before = source.slice(0, goalCheck);
-    expect(before).toContain("extraUserIds");
-    expect(before).toContain('senderType === "user" ? senderId : null');
   });
 });

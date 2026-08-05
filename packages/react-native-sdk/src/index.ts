@@ -19,7 +19,6 @@ export {
 export {
   useMessages,
   useSendMessage,
-  type SendMessageGoalMode,
   type SendMessageOptions,
 } from "./hooks/use-messages";
 export { buildSendMessageMutationVariables } from "./send-message-options";

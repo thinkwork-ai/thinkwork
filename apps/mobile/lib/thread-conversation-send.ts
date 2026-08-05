@@ -1,9 +1,6 @@
 import type { MessageInputMention } from "@/components/input/MessageInputFooter";
 import { sendMessageMentionsForInput } from "@/lib/thread-mentions";
-import {
-  buildSendMessageMutationVariables,
-  type SendMessageGoalMode,
-} from "@thinkwork/react-native-sdk";
+import { buildSendMessageMutationVariables } from "@thinkwork/react-native-sdk";
 
 export interface ThreadConversationSendVariablesArgs {
   threadId: string;
@@ -11,7 +8,6 @@ export interface ThreadConversationSendVariablesArgs {
   currentUserId?: string | null;
   mentions?: MessageInputMention[];
   modelId?: string | null;
-  goalMode?: SendMessageGoalMode | null;
 }
 
 export function sendableThreadConversationMentions(
@@ -29,14 +25,12 @@ export function buildThreadConversationSendVariables({
   currentUserId,
   mentions = [],
   modelId,
-  goalMode,
 }: ThreadConversationSendVariablesArgs) {
   const mentionsToSend = sendableThreadConversationMentions(content, mentions);
   const variables = buildSendMessageMutationVariables(threadId, content, {
     senderType: "user",
     ...(currentUserId ? { senderId: currentUserId } : {}),
     ...(modelId ? { modelId } : {}),
-    ...(goalMode ? { goalMode } : {}),
   });
 
   return {
