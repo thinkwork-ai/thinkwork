@@ -17,6 +17,8 @@ import {
   loadEmailAttachmentBytes,
   type ResolvedEmailAttachment,
 } from "./email-attachments.js";
+import { withSendLedger } from "./ledger.js";
+import { postEmailDecisionThreadEvent } from "./approval-thread-event.js";
 
 type Db = Pick<Database, "select" | "insert" | "update">;
 
@@ -361,6 +363,17 @@ export async function bridgeEmailApprovalDecision(input: {
       reason_code: "reviewer_rejected",
       metadata: { reviewNotes: input.decisionPayload?.reviewNotes ?? null },
     });
+    await postEmailDecisionThreadEvent({
+      db: input.db,
+      tenantId: input.inboxItem.tenant_id,
+      threadId: commonLedger.thread_id,
+      decision: "rejected",
+      recipients:
+        recipients.length > 0 ? recipients : normalizedEditedRecipients,
+      subject,
+      actorId: input.actorId,
+      reviewNotes: input.decisionPayload?.reviewNotes ?? null,
+    });
     return { sent: false, reason: "rejected" };
   }
 
@@ -381,76 +394,102 @@ export async function bridgeEmailApprovalDecision(input: {
       reviewNotes: input.decisionPayload?.reviewNotes ?? null,
     },
   });
-  await input.db.insert(emailLedgerEvents).values({
-    ...commonLedger,
-    event_type: "send_attempted",
-    metadata: { source: "first_send_approval" },
-  });
+  const ledgerContext = {
+    db: input.db,
+    tenantId: input.inboxItem.tenant_id,
+    conversationId,
+    spaceId: commonLedger.space_id,
+    threadId: commonLedger.thread_id,
+    inboxItemId: input.inboxItem.id,
+    providerInstallId: commonLedger.provider_install_id,
+    actorUserId: input.actorId,
+    subject,
+    fromEmail: commonLedger.from_email,
+    toEmails: recipients,
+    source: "first_send_approval",
+  };
 
+  let result: EmailProviderSendResult;
   try {
-    // A draft with attachments must go out as full MIME — the structured
-    // {text} send has no attachment channel and would silently drop them.
-    // Bytes are re-fetched from S3 at approval time (refs were persisted
-    // in the inbox item config; drafts sit for up to a week).
-    const draftAttachments = attachmentArray(channel.attachments);
-    let rawMessage: string | undefined;
-    if (draftAttachments.length > 0) {
-      const bucket = getConfig("WORKSPACE_BUCKET") || "";
-      if (!bucket) {
-        throw new Error(
-          "WORKSPACE_BUCKET is not configured; cannot load approved email attachments.",
-        );
+    result = await withSendLedger(ledgerContext, async () => {
+      // A draft with attachments must go out as full MIME — the structured
+      // {text} send has no attachment channel and would silently drop them.
+      // Bytes are re-fetched from S3 at approval time (refs were persisted
+      // in the inbox item config; drafts sit for up to a week).
+      const draftAttachments = attachmentArray(channel.attachments);
+      let rawMessage: string | undefined;
+      if (draftAttachments.length > 0) {
+        const bucket = getConfig("WORKSPACE_BUCKET") || "";
+        if (!bucket) {
+          throw new Error(
+            "WORKSPACE_BUCKET is not configured; cannot load approved email attachments.",
+          );
+        }
+        const mimeAttachments = await loadEmailAttachmentBytes({
+          s3: approvalS3(),
+          bucket,
+          attachments: draftAttachments,
+        });
+        rawMessage = buildOutboundMime({
+          from: commonLedger.from_email!,
+          to: recipients,
+          replyTo: commonLedger.from_email!,
+          subject,
+          messageId: `<${Date.now()}.${Math.random().toString(36).slice(2)}@agents.thinkwork.ai>`,
+          text: body,
+          attachments: mimeAttachments,
+        });
       }
-      const mimeAttachments = await loadEmailAttachmentBytes({
-        s3: approvalS3(),
-        bucket,
-        attachments: draftAttachments,
-      });
-      rawMessage = buildOutboundMime({
-        from: commonLedger.from_email,
+      return input.send(channel.provider as EmailChannelProvider, {
+        tenantId: input.inboxItem.tenant_id,
+        from: commonLedger.from_email!,
         to: recipients,
-        replyTo: commonLedger.from_email,
         subject,
-        messageId: `<${Date.now()}.${Math.random().toString(36).slice(2)}@agents.thinkwork.ai>`,
-        text: body,
-        attachments: mimeAttachments,
+        ...(rawMessage ? { rawMessage } : { text: body }),
       });
-    }
-    const result = await input.send(channel.provider as EmailChannelProvider, {
-      tenantId: input.inboxItem.tenant_id,
-      from: commonLedger.from_email,
-      to: recipients,
-      subject,
-      ...(rawMessage ? { rawMessage } : { text: body }),
     });
-    await input.db
-      .update(emailConversations)
-      .set({
-        status: "approved",
-        approved_at: sql`now()`,
-        approved_by_user_id: input.actorId,
-        last_message_at: sql`now()`,
-        updated_at: sql`now()`,
-      })
-      .where(eq(emailConversations.id, conversationId));
-    await input.db.insert(emailLedgerEvents).values({
-      ...commonLedger,
-      event_type: "send_succeeded",
-      provider_message_id: result.providerMessageId,
-      metadata: { provider: result.provider, status: result.status },
-    });
-    return { sent: true, providerMessageId: result.providerMessageId };
   } catch (err) {
-    await input.db.insert(emailLedgerEvents).values({
-      ...commonLedger,
-      event_type: "send_failed",
-      reason_code: "provider_send_failed",
-      metadata: {
-        message: err instanceof Error ? err.message : "Unknown provider error",
+    // Ground truth for the agent even when the approved send blows up —
+    // otherwise its last word on this email stays "pending human review".
+    await postEmailDecisionThreadEvent({
+      db: input.db,
+      tenantId: input.inboxItem.tenant_id,
+      threadId: commonLedger.thread_id,
+      decision: "approved",
+      recipients,
+      subject,
+      actorId: input.actorId,
+      reviewNotes: input.decisionPayload?.reviewNotes ?? null,
+      outcome: {
+        sent: false,
+        error: err instanceof Error ? err.message : "Unknown provider error",
       },
     });
     throw err;
   }
+
+  await input.db
+    .update(emailConversations)
+    .set({
+      status: "approved",
+      approved_at: sql`now()`,
+      approved_by_user_id: input.actorId,
+      last_message_at: sql`now()`,
+      updated_at: sql`now()`,
+    })
+    .where(eq(emailConversations.id, conversationId));
+  await postEmailDecisionThreadEvent({
+    db: input.db,
+    tenantId: input.inboxItem.tenant_id,
+    threadId: commonLedger.thread_id,
+    decision: "approved",
+    recipients,
+    subject,
+    actorId: input.actorId,
+    reviewNotes: input.decisionPayload?.reviewNotes ?? null,
+    outcome: { sent: true, providerMessageId: result.providerMessageId },
+  });
+  return { sent: true, providerMessageId: result.providerMessageId };
 }
 
 let approvalS3Client: S3Client | null = null;

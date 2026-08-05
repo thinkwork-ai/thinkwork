@@ -31,6 +31,7 @@ import {
   emailProviderInstalls,
   emailReadinessChecks,
   inboxItems,
+  messages,
 } from "@thinkwork/database-pg/schema";
 import {
   bridgeEmailApprovalDecision,
@@ -518,6 +519,125 @@ describe("first-send email approval", () => {
     expect(raw).toContain("Attached.");
   });
 
+  it("posts a thread-visible ground-truth event on approved send", async () => {
+    // THINK-600: the agent's only record of this email was its own
+    // "pending human review" tool result. The decision has to land in the
+    // thread as a role the history loader actually keeps (user/assistant),
+    // or the agent keeps reporting the stale state.
+    const send = vi.fn(async () => ({
+      provider: "ses" as const,
+      providerMessageId: "ses-approved-1",
+      status: "sent" as const,
+      metadata: {},
+    }));
+    const db = fakeEmailDb({ inboxRows: [emailApprovalInboxRow()] });
+
+    await bridgeEmailApprovalDecision({
+      db,
+      inboxItem: db.rowsFor(inboxItems)[0],
+      decision: "approved",
+      actorId: "reviewer-1",
+      decisionPayload: {},
+      send,
+    });
+
+    const [event] = db.rowsFor(messages);
+    expect(event).toMatchObject({
+      thread_id: "thread-1",
+      tenant_id: "tenant-1",
+      role: "assistant",
+      sender_type: "system",
+    });
+    expect(event.content).toContain("buyer@example.com");
+    expect(event.content).toContain("APPROVED");
+    expect(event.content).toContain("SENT");
+    expect(event.content).toContain("ses-approved-1");
+    expect(event.metadata).toMatchObject({
+      kind: "email_approval_decision",
+      decision: "approved",
+      recipients: ["buyer@example.com"],
+      decidedByUserId: "reviewer-1",
+      sent: true,
+      providerMessageId: "ses-approved-1",
+    });
+  });
+
+  it("posts a thread-visible event on denial", async () => {
+    const send = vi.fn();
+    const db = fakeEmailDb({ inboxRows: [emailApprovalInboxRow()] });
+
+    await bridgeEmailApprovalDecision({
+      db,
+      inboxItem: db.rowsFor(inboxItems)[0],
+      decision: "rejected",
+      actorId: "reviewer-1",
+      decisionPayload: { reviewNotes: "Needs a rewrite" },
+      send,
+    });
+
+    const [event] = db.rowsFor(messages);
+    expect(event).toMatchObject({ role: "assistant", sender_type: "system" });
+    expect(event.content).toContain("DENIED");
+    expect(event.content).toContain("was NOT sent");
+    expect(event.content).toContain("Needs a rewrite");
+    expect(event.metadata).toMatchObject({
+      decision: "rejected",
+      sent: false,
+      providerMessageId: null,
+    });
+  });
+
+  it("records send_failed and a failure thread event when the approved send throws", async () => {
+    const send = vi.fn(async () => {
+      throw new Error("SES throttled");
+    });
+    const db = fakeEmailDb({ inboxRows: [emailApprovalInboxRow()] });
+
+    await expect(
+      bridgeEmailApprovalDecision({
+        db,
+        inboxItem: db.rowsFor(inboxItems)[0],
+        decision: "approved",
+        actorId: "reviewer-1",
+        decisionPayload: {},
+        send,
+      }),
+    ).rejects.toThrow("SES throttled");
+
+    expect(
+      db
+        .rowsFor(emailLedgerEvents)
+        .map((row: Record<string, any>) => row.event_type),
+    ).toEqual(["approval_approved", "send_attempted", "send_failed"]);
+    const [event] = db.rowsFor(messages);
+    expect(event.content).toContain("FAILED");
+    expect(event.content).toContain("SES throttled");
+    expect(event.metadata).toMatchObject({ sent: false });
+  });
+
+  it("skips the thread event when the send has no originating thread", async () => {
+    const send = vi.fn(async () => ({
+      provider: "ses" as const,
+      providerMessageId: "ses-approved-2",
+      status: "sent" as const,
+      metadata: {},
+    }));
+    const inboxRow = emailApprovalInboxRow();
+    (inboxRow.config as any).emailChannel.threadId = null;
+    const db = fakeEmailDb({ inboxRows: [inboxRow] });
+
+    await bridgeEmailApprovalDecision({
+      db,
+      inboxItem: db.rowsFor(inboxItems)[0],
+      decision: "approved",
+      actorId: "reviewer-1",
+      decisionPayload: {},
+      send,
+    });
+
+    expect(db.rowsFor(messages)).toEqual([]);
+  });
+
   it("identifies email send approval inbox items", () => {
     expect(
       isEmailSendApprovalInboxItem({
@@ -533,6 +653,31 @@ describe("first-send email approval", () => {
     ).toBe(false);
   });
 });
+
+function emailApprovalInboxRow(): Record<string, any> {
+  return {
+    id: "inbox-1",
+    tenant_id: "tenant-1",
+    type: "computer_approval",
+    config: {
+      actionType: "email_send",
+      emailDraft: {
+        to: "buyer@example.com",
+        subject: "Pipeline follow-up",
+        body: "Original draft",
+      },
+      emailChannel: {
+        conversationId: "conversation-1",
+        providerInstallId: "provider-1",
+        provider: "ses",
+        from: "sales@acme.thinkwork.ai",
+        to: ["buyer@example.com"],
+        spaceId: "space-1",
+        threadId: "thread-1",
+      },
+    },
+  };
+}
 
 function readiness(check_key: string, status: string) {
   return {

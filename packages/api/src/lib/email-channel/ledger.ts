@@ -3,7 +3,87 @@ import {
   emailLedgerEvents,
   emailProviderEvents,
 } from "@thinkwork/database-pg/schema";
+import type { Database } from "@thinkwork/database-pg";
 import type { NormalizedProviderEvent } from "./provider-contract.js";
+
+type LedgerDb = Pick<Database, "insert">;
+
+/**
+ * Identity of an outbound send for the audit trail. Shared by the gated
+ * (approval) path and the fast path so both write the same row shape.
+ */
+export interface OutboundSendLedgerContext {
+  db: LedgerDb;
+  tenantId: string;
+  conversationId?: string | null;
+  spaceId?: string | null;
+  threadId?: string | null;
+  inboxItemId?: string | null;
+  providerInstallId?: string | null;
+  actorUserId?: string | null;
+  subject: string;
+  fromEmail: string;
+  toEmails: string[];
+  /** Where the send came from — "first_send_approval" | "approved_fast_path". */
+  source: string;
+}
+
+function ledgerRowBase(ctx: OutboundSendLedgerContext) {
+  return {
+    tenant_id: ctx.tenantId,
+    conversation_id: ctx.conversationId ?? null,
+    space_id: ctx.spaceId ?? null,
+    thread_id: ctx.threadId ?? null,
+    inbox_item_id: ctx.inboxItemId ?? null,
+    provider_install_id: ctx.providerInstallId ?? null,
+    actor_user_id: ctx.actorUserId ?? null,
+    subject: ctx.subject,
+    from_email: ctx.fromEmail,
+    to_emails: ctx.toEmails,
+  };
+}
+
+/**
+ * Wrap a provider send with the send_attempted → send_succeeded/send_failed
+ * ledger trio. Every outbound send belongs in the audit trail, not just the
+ * ones a human had to approve (THINK-600): sends that skip review through an
+ * already-approved recipient set used to leave no evidence at all.
+ */
+export async function withSendLedger<
+  T extends { provider?: string; providerMessageId?: string; status?: string },
+>(ctx: OutboundSendLedgerContext, send: () => Promise<T>): Promise<T> {
+  const base = ledgerRowBase(ctx);
+  await ctx.db.insert(emailLedgerEvents).values({
+    ...base,
+    event_type: "send_attempted",
+    metadata: { source: ctx.source },
+  });
+  try {
+    const result = await send();
+    await ctx.db.insert(emailLedgerEvents).values({
+      ...base,
+      event_type: "send_succeeded",
+      provider_message_id: result?.providerMessageId ?? null,
+      metadata: {
+        source: ctx.source,
+        provider: result?.provider ?? null,
+        status: result?.status ?? null,
+      },
+    });
+    return result;
+  } catch (err) {
+    await ctx.db.insert(emailLedgerEvents).values({
+      ...base,
+      event_type: "send_failed",
+      reason_code: "provider_send_failed",
+      metadata: {
+        source: ctx.source,
+        message: err instanceof Error ? err.message : "Unknown provider error",
+      },
+    });
+    throw err;
+  }
+}
 
 export interface RecordProviderEventInput {
   db: {

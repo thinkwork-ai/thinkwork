@@ -29,6 +29,7 @@ import { createEmailChannelService } from "../lib/email-channel/channel-service.
 import { requestFirstSendApproval } from "../lib/email-channel/first-send-approval.js";
 import { evaluateOutboundEmailPolicy } from "../lib/email-channel/outbound-policy.js";
 import { buildOutboundMime } from "../lib/email-channel/outbound-mime.js";
+import { withSendLedger } from "../lib/email-channel/ledger.js";
 import {
   EmailAttachmentError,
   loadEmailAttachmentBytes,
@@ -354,6 +355,9 @@ export async function handler(
       }),
     };
   }
+  // Non-null when review was skipped because this recipient set is already
+  // approved somewhere in the tenant — the "fast path".
+  let approvedConversationId: string | null = null;
   if (policy.firstSendReviewRequired) {
     const approval = await requestFirstSendApproval({
       db,
@@ -381,16 +385,36 @@ export async function handler(
         }),
       };
     }
+    approvedConversationId = approval.conversationId;
   }
 
   try {
-    const result = await emailChannel.send(policy.provider, {
-      tenantId: agent.tenant_id,
-      from: emailAddress,
-      to: recipients,
-      subject: req.subject,
-      rawMessage,
-    });
+    // Every outbound send lands in the ledger, not just reviewed ones
+    // (THINK-600) — the fast path used to be audit-invisible.
+    const result = await withSendLedger(
+      {
+        db,
+        tenantId: agent.tenant_id,
+        conversationId: approvedConversationId,
+        spaceId,
+        threadId: req.threadId ?? null,
+        providerInstallId: policy.providerInstallId,
+        subject: req.subject,
+        fromEmail: emailAddress,
+        toEmails: recipients,
+        source: approvedConversationId
+          ? "approved_fast_path"
+          : "review_not_required",
+      },
+      () =>
+        emailChannel.send(policy.provider, {
+          tenantId: agent.tenant_id,
+          from: emailAddress,
+          to: recipients,
+          subject: req.subject,
+          rawMessage,
+        }),
+    );
     const sesMessageId = result.providerMessageId;
 
     // Store reply token in DB
@@ -580,6 +604,7 @@ async function sendRoutineChannelEmail(input: {
       }),
     };
   }
+  let approvedConversationId: string | null = null;
   if (policy.firstSendReviewRequired) {
     const approval = await requestFirstSendApproval({
       db,
@@ -606,29 +631,47 @@ async function sendRoutineChannelEmail(input: {
         }),
       };
     }
+    approvedConversationId = approval.conversationId;
   }
 
   const rendered =
     input.req.bodyFormat === "markdown" ? renderForEmail(input.body) : null;
-  const result = await emailChannel.send(policy.provider, {
-    tenantId,
-    providerInstallId: policy.providerInstallId ?? undefined,
-    from: fromAddress,
-    to: input.recipients,
-    cc: input.cc,
-    subject: input.subject,
-    idempotencyKey: input.req.idempotencyKey,
-    text: rendered
-      ? rendered.text
-      : input.req.bodyFormat === "html"
-        ? undefined
-        : input.body,
-    html: rendered
-      ? rendered.html
-      : input.req.bodyFormat === "html"
-        ? input.body
-        : undefined,
-  });
+  const result = await withSendLedger(
+    {
+      db,
+      tenantId,
+      conversationId: approvedConversationId,
+      spaceId,
+      threadId: input.req.threadId ?? null,
+      providerInstallId: policy.providerInstallId,
+      subject: input.subject,
+      fromEmail: fromAddress,
+      toEmails: input.recipients,
+      source: approvedConversationId
+        ? "approved_fast_path"
+        : "review_not_required",
+    },
+    () =>
+      emailChannel.send(policy.provider, {
+        tenantId,
+        providerInstallId: policy.providerInstallId ?? undefined,
+        from: fromAddress,
+        to: input.recipients,
+        cc: input.cc,
+        subject: input.subject,
+        idempotencyKey: input.req.idempotencyKey,
+        text: rendered
+          ? rendered.text
+          : input.req.bodyFormat === "html"
+            ? undefined
+            : input.body,
+        html: rendered
+          ? rendered.html
+          : input.req.bodyFormat === "html"
+            ? input.body
+            : undefined,
+      }),
+  );
 
   return {
     messageId: result.providerMessageId || null,
