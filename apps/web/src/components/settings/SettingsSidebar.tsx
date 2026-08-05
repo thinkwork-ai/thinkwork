@@ -42,11 +42,11 @@ export function SettingsSidebar({
         >
           <img
             src="/logo.png"
-            alt="ThinkWork Harness"
+            alt="ThinkWork Agent"
             className="h-7 w-7 shrink-0 object-contain"
           />
           <span className="truncate text-base font-semibold leading-none tracking-tight">
-            ThinkWork Harness
+            ThinkWork Agent
           </span>
         </Link>
       </div>

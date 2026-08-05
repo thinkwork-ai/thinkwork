@@ -8,16 +8,16 @@ This is the durable artifact derived from the 2026-04-25 messaging-feedback memo
 
 ## Product naming
 
-Decided 2026-07-29. Two products, two brands:
+Decided 2026-07-29; product brand amended 2026-08-05. Two products, two brands:
 
-- **ThinkWork Harness** — this product and this repo. The open Agent Harness for Business. Not "ThinkWork Agent" — the harness is the engineered structure around agents (threads, memory, tools, controls, cost, evaluations, audit), not an agent.
-- **ThinkWork Brain** — the company brain as a separate product with its own repo (the ontology / knowledge-graph capability lives there, not here). The Harness consumes the Brain; it does not contain it.
+- **ThinkWork Agent** — this product and this repo. The open Agent Harness for Business. Renamed from "ThinkWork Harness" on 2026-08-05 after customer feedback that "Harness" read as jargon and obscured what the product is. The harness is still the category and still the thing we build — the engineered structure around agents (threads, memory, tools, controls, cost, evaluations, audit) — but it is what the product _is_, not what the product is _called_.
+- **ThinkWork Brain** — the company brain as a separate product with its own repo (the ontology / knowledge-graph capability lives there, not here). ThinkWork Agent consumes the Brain; it does not contain it.
 
 "ThinkWork" alone refers to the company or the product family. When one product must be named, name it.
 
 ## Category
 
-**ThinkWork Harness is the open Agent Harness for Business.**
+**ThinkWork Agent is the open Agent Harness for Business.**
 
 The harness is the engineered runtime around the model — threads, memory, sandboxing, tools, controls, cost, evaluations, and audit, deployed in the customer's AWS account. It turns raw model capability into production-grade agent work.
 
@@ -67,7 +67,7 @@ If a paragraph could describe any AI vendor with a few words swapped out, it isn
 
 The vocabulary the rest of the surface should pull from. Use these verbatim where they fit; rephrase only when copy demands it.
 
-- **ThinkWork Harness** — the product name (never "ThinkWork Agent")
+- **ThinkWork Agent** — the product name (as of 2026-08-05; "ThinkWork Harness" is retired)
 - **ThinkWork Brain** — the sibling company-brain product (separate repo)
 - **Agent Harness for Business** — the category line
 - **The harness stays yours** — the strategic refrain
@@ -100,7 +100,7 @@ CI-enforced and review-enforced. Edits that introduce these fail the build or fa
 
 **Generic-platform traps:**
 
-- **"ThinkWork Agent"** as a product name — the harness is more than an agent; the product is ThinkWork Harness.
+- **"ThinkWork Harness"** as a product name — retired 2026-08-05. The product is **ThinkWork Agent**; "harness" survives only as the category ("Agent Harness for Business") and as the teaching noun for what the product is.
 - **"AI platform" / "AI infrastructure"** without "agent harness" anchoring it. Generic descriptors that describe any vendor.
 - **"AI adoption journey"** — retired category framing. The rollout-path framing replaced it.
 - **"AgentCore platform"** — AgentCore is an adapter, not the product.
@@ -118,7 +118,7 @@ CI-enforced and review-enforced. Edits that introduce these fail the build or fa
 
 Added 2026-07-22, following the Company Brain arc (THINK-325); product noun updated to **Company Brain** 2026-07-23 (user-directed reversal of the earlier Digital Twin decision). This section governs every surface that talks about the graph or company knowledge.
 
-**Updated 2026-07-29:** the company brain ships as **ThinkWork Brain**, a separate product with its own repo (the ontology / knowledge-graph capability moved out of this repo). Harness surfaces that mention the brain are describing a sibling product, not a Harness feature. This section stays here as the naming contract until the Brain repo carries its own positioning doc.
+**Updated 2026-07-29:** the company brain ships as **ThinkWork Brain**, a separate product with its own repo (the ontology / knowledge-graph capability moved out of this repo). ThinkWork Agent surfaces that mention the brain are describing a sibling product, not a ThinkWork Agent feature. This section stays here as the naming contract until the Brain repo carries its own positioning doc.
 
 ### The naming contract
 
