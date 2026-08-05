@@ -92,7 +92,9 @@ export function PageHeaderProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const docTitle = actions?.documentTitle ?? actions?.title;
-    document.title = docTitle ? `${docTitle} · ThinkWork Harness` : "ThinkWork Harness";
+    document.title = docTitle
+      ? `${docTitle} · ThinkWork Agent`
+      : "ThinkWork Agent";
   }, [actions]);
 
   return (
