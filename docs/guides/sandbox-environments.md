@@ -19,17 +19,24 @@ Pi runtime (invocation env → sandbox payload)
 Agent calls execute_code(code)
     ↓  POST /api/sandbox/quota/check-and-increment  (circuit breaker)
     ↓  StartCodeInterpreterSession                  (per-turn)
-    ↓  executeCode(preamble)                        (sitecustomize readiness check only)
-    ↓  executeCode(user_code)                       (actual agent work)
+    ↓  executeCode(user_code)                       (actual agent work, prefixed
+                                                     by an on-demand pip install
+                                                     line when the code needs a
+                                                     library the AWS-managed
+                                                     image may lack)
     ↓  POST /api/sandbox/invocations                (audit row)
     ↓
 Turn end: StopCodeInterpreterSession
 ```
 
-`execute_code` is a pure-compute primitive. The preamble confirms the
-stdio redactor is installed, then user code runs. The session does not
-carry per-user OAuth credentials — agents that need OAuth-ed work call
-composable-skill connector scripts.
+`execute_code` is a pure-compute primitive. Sessions always run the
+**AWS-managed** Code Interpreter image — AgentCore has no custom-image
+parameter, so the once-planned "blessed" base image with an in-image stdio
+redactor was never attachable and has been retired (THINK-617). Libraries the
+managed image may lack (e.g. `openpyxl`) are installed on demand, inline, in
+the same `executeCode` call. The session does not carry per-user OAuth
+credentials — agents that need OAuth-ed work call composable-skill connector
+scripts.
 
 ## Toggling tenant policy
 
@@ -255,28 +262,26 @@ The error message includes the full ARN + action string — copy-pasteable strai
 The substrate ships with these residuals explicit. They are **not
 bugs**.
 
-| Track                            | Class                                                                                                                                              | Mitigation plan                                                                                                                                                                                                                                                               |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **T2** — malicious `pip install` | runtime `pip install` has no allowlist; typo-squatted / compromised packages execute at import time with access to whatever data the session reads | v2 private PyPI mirror + install allowlist                                                                                                                                                                                                                                    |
-| **T3** — PHI/PII handling        | sandbox isn't HIPAA-certified; regulated-tenant default is `sandbox_enabled = false`                                                               | v2 regulated-tenant-specific environment with per-log-group encryption + shorter retention                                                                                                                                                                                    |
-| **Stdout-bypass** class          | `os.write(fd, ...)`, subprocess inheriting fds, C-extension writes, `multiprocessing` workers, split-writes                                        | CloudWatch subscription-filter backstop covers the subset whose values match known OAuth prefixes (in case an agent _prints_ a token fetched from an API response); primary stdio redactor in `sitecustomize.py` covers everything flowing through Python's normal print path |
+| Track                            | Class                                                                                                                                              | Mitigation plan                                                                                                                                                                                                                                                                       |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **T2** — malicious `pip install` | runtime `pip install` has no allowlist; typo-squatted / compromised packages execute at import time with access to whatever data the session reads | v2 private PyPI mirror + install allowlist                                                                                                                                                                                                                                            |
+| **T3** — PHI/PII handling        | sandbox isn't HIPAA-certified; regulated-tenant default is `sandbox_enabled = false`                                                               | v2 regulated-tenant-specific environment with per-log-group encryption + shorter retention                                                                                                                                                                                            |
+| **Token in logs** class          | any value an agent prints or leaks to stdout/stderr, including `os.write(fd, ...)`, subprocess env dumps, C-extension writes, split-writes         | Only the CloudWatch subscription-filter backstop applies — it redacts values matching known OAuth shapes. The planned in-image value-based redactor (`sitecustomize.py`) was retired with the unattachable base image (THINK-617); values with no recognizable shape are not redacted |
 
-## Stdio redactor invariant — honestly scoped
+## Log-redaction invariant — honestly scoped
 
 The sandbox guarantees: **no value matching a known OAuth prefix
 (`ghp_`, `xoxb-`, `ya29.`, `Authorization: Bearer`, JWT triples) reaches
-a persisted log via Python's stdio, and a CloudWatch subscription-filter
-backstop catches matches that slip past the primary wrapper.**
+the long-term CloudWatch tier — the subscription-filter scrubber redacts
+it in flight.**
 
 **Explicitly out of scope** (named residuals, not gaps):
 
-- Direct `os.write(fd, ...)` writes
-- `subprocess.run(['env'])`, `subprocess.run(['cat', '/proc/self/environ'])`
-- C extensions writing to fd 1 directly
-- `multiprocessing` workers in fresh Python processes (the redactor's
-  session state is empty there)
-- Adversarial split-writes fragmenting a token across more bytes than
-  the rolling-buffer window
+- Any secret whose _shape_ the pattern set does not recognize (bespoke
+  token formats, high-entropy opaque strings with no prefix). There is no
+  value-based redactor: it was planned for a custom base image AgentCore
+  cannot attach, and was retired in THINK-617
+- Values visible in the streamed tool result before logs are filtered
 
 When investigating a "how did a token leak" incident, **check the
 residual list first**. If the leak matches a named residual class, the
@@ -302,10 +307,10 @@ Dashboard candidates for v1.1:
 ## When to call platform security
 
 - Any `SandboxError` accompanied by a known-shape OAuth prefix in a
-  CloudWatch message that the primary wrapper **did not redact**
+  CloudWatch message that the scrubber **did not redact**
   (matches any string starting with `ghp_`, `ghs_`, `gho_`, `xoxb-`,
   `xoxp-`, `ya29.`, or a JWT triple) — regression in the
-  `sitecustomize.py` scrubber.
+  `sandbox-log-scrubber` subscription filter.
 - A `compliance_tier` change executed by an actor not in the
   `THINKWORK_PLATFORM_OPERATOR_EMAILS` allowlist — app-gate bypass
   attempt; `tenant_policy_events` source would read `sql`.

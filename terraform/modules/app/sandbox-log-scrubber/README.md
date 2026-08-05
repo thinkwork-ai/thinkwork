@@ -5,17 +5,18 @@ redacts known-shape OAuth tokens in AgentCore `APPLICATION_LOGS` before they
 land in the long-term CloudWatch tier. See plan Unit 12 +
 `docs/brainstorms/2026-04-22-agentcore-code-sandbox-requirements.md` R13.
 
-## Relationship to the primary scrubber
+## The only scrubbing layer (THINK-617)
 
-The primary layer is the base-image `sitecustomize.py` stdio wrapper shipped
-by [`terraform/modules/app/agentcore-code-interpreter`](../agentcore-code-interpreter/)
-(plan Unit 4). That layer redacts by **value** — session-scoped token
-strings registered by the preamble — and can therefore catch any token the
-agent's own preamble has handled.
+The plan's primary layer was a base-image `sitecustomize.py` stdio wrapper
+redacting by **value** (plan Unit 4). It never ran: AgentCore Code Interpreter
+has no custom-image parameter, so the blessed image was unattachable and the
+[`agentcore-code-interpreter`](../agentcore-code-interpreter/) image substrate
+has been retired. Sandboxes run the AWS-managed image, so this filter is the
+only scrubbing in force.
 
-This backstop redacts by **pattern**: it has no access to session values,
-only to the bytes that reach CloudWatch. It exists to mitigate *stdio-bypass
-classes* named in R13's residual list:
+It redacts by **pattern**: it has no access to session values, only to the
+bytes that reach CloudWatch. It covers the _stdio-bypass_ classes named in
+R13's residual list —
 
 - `subprocess.run(['env'])`, `subprocess.run(['cat', '/proc/self/environ'])`
 - `os.write(fd, ...)` at the file-descriptor level
@@ -25,7 +26,7 @@ classes* named in R13's residual list:
 - Adversarial split-writes that fragment a token across more bytes than the
   rolling-buffer window
 
-When those bytes carry a token whose *shape* is recognizable, this backstop
+When those bytes carry a token whose _shape_ is recognizable, this backstop
 catches it. When they don't (bespoke token formats, high-entropy opaque
 strings with no prefix), only the v2 in-process credential proxy can help.
 

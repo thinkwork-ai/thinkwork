@@ -87,7 +87,7 @@ On error paths — cap breach, provisioning failure, timeout — `ok` is `false`
 
 Agents are expected to recover gracefully — the cap-breach shape is "I've hit the daily cap, please try again at 00:00 UTC."
 
-The first thing any sandbox session does is a one-line **readiness check**: `executeCode` call #1 imports `sitecustomize` and confirms the stdio redactor wrapped `sys.stdout`. If the check fails, the session aborts before user code runs on an unmitigated image. User code runs as `executeCode` call #2+.
+Sessions always run the **AWS-managed** Code Interpreter image — AgentCore exposes no custom-image parameter, so the once-planned "blessed" base image was unattachable and was retired (THINK-617). When submitted code references a library the managed image may lack (currently `openpyxl`), the runtime prefixes the same `executeCode` call with a guarded `pip install` line rather than failing on `ImportError`.
 
 ## Per-turn lifecycle
 
@@ -98,7 +98,7 @@ One line per step, in order, for one turn that calls `execute_code` once:
 3. **Tool register** — `execute_code` appears in the runtime tool surface for this turn only.
 4. **Agent calls `execute_code(code)`** — the substrate call begins.
 5. **Quota check** — atomic `WHERE count < cap` increment against `sandbox_tenant_daily_counters` + `sandbox_agent_hourly_counters`. Breach ⇒ `SandboxCapExceeded`, no session created.
-6. **Session start** — raw boto3 `bedrock-agentcore.StartCodeInterpreterSession` against the tenant's interpreter, followed by the readiness preamble (`sitecustomize.installed()` check) as `InvokeCodeInterpreter` call #1.
+6. **Session start** — raw boto3 `bedrock-agentcore.StartCodeInterpreterSession` against the tenant's interpreter.
 7. **User code** — `InvokeCodeInterpreter` with `name="executeCode"` runs the agent's Python. Response is an event stream of MCP tool-result envelopes (`result.content[]` for streaming text + `result.structuredContent` for `{stdout, stderr, exitCode}`).
 8. **Audit row** — one `sandbox_invocations` row written with exit_status, byte counts, executed_code_hash, session_id.
 9. **Session stop** — `StopCodeInterpreterSession`.

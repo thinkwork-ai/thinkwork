@@ -185,7 +185,7 @@ export async function assertNoTokenLeak(
         .slice(0, 3)
         .map((m) => `${m.pattern}=${hashSample(m.sample)}`)
         .join(", ")}. ` +
-      `THIS IS A REGRESSION IN THE UNIT 4 sitecustomize.py WRAPPER. Page platform security. Runbook: docs/guides/sandbox-environments.md → "When to call platform security".`,
+      `THIS IS A REGRESSION IN THE sandbox-log-scrubber SUBSCRIPTION FILTER. Page platform security. Runbook: docs/guides/sandbox-environments.md → "When to call platform security".`,
   );
 }
 

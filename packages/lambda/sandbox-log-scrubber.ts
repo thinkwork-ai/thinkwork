@@ -3,12 +3,15 @@
  * pattern-redacts sandbox log events before they land in the long-term
  * tier (Unit 12 of the AgentCore Code Sandbox plan).
  *
- * This is the **secondary** R13 layer. The primary layer is the base-image
- * sitecustomize.py stdio wrapper (Unit 4). This backstop catches bytes
- * that bypass Python stdio — subprocess env dumps, os.write at fd level,
- * C-extension direct writes, multiprocessing-worker output — *when those
- * bytes contain a known-shape OAuth token prefix*. It does not have access
- * to the session-scoped token values, so it cannot catch arbitrary leaks.
+ * This is the **only** R13 scrubbing layer in force (THINK-617): the planned
+ * primary layer lived in a custom sandbox base image (Unit 4's
+ * sitecustomize.py stdio wrapper), but AgentCore Code Interpreter has no
+ * custom-image parameter, so that image was never attachable and has been
+ * retired. This filter catches log bytes — including those that bypass
+ * Python stdio (subprocess env dumps, os.write at fd level, C-extension
+ * direct writes, multiprocessing-worker output) — *when they contain a
+ * known-shape OAuth token prefix*. It has no access to session-scoped token
+ * values, so it cannot catch arbitrary leaks.
  *
  * Pattern set (conservative — false positives cost readability; misses cost
  * security, so prefer additions over deletions):

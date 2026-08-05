@@ -1,53 +1,45 @@
-# `agentcore-code-interpreter` — stage-level base image substrate
+# `agentcore-code-interpreter` — stage-level sandbox substrate
 
-Stage-scoped artifacts for the AgentCore Code Interpreter sandbox. **Per-tenant
+Stage-scoped substrate for the AgentCore Code Interpreter sandbox. **Per-tenant
 Code Interpreter instances are created at runtime** by the `agentcore-admin`
 Lambda (see `docs/adrs/per-tenant-aws-resource-fanout.md`) — this module
-stops at the substrate everything else depends on.
+stops at the stage-level pieces everything else depends on.
 
-## What it creates
+## What it provides
 
-- **ECR repository** `thinkwork-{stage}-sandbox-base` — immutable tags, last 10
-  kept, scan-on-push.
-- **Outputs** consumed by downstream modules + the provisioning Lambda:
-  - `ecr_repository_url` — where the blessed image lives.
-  - `environment_ids` + `environments` — the v1 environment catalog (`default-public`,
-    `internal-only`) with network modes.
-  - `tenant_role_trust_policy_template` / `tenant_role_inline_policy_template` —
-    JSON templates the provisioning Lambda substitutes `{tenant_id}` into at
-    `CreateRole` time (plan Unit 5).
+The module creates no AWS resources today; it is a typed catalog + policy-template
+surface consumed by the provisioning Lambda and by downstream modules:
 
-## Files
+- `environment_ids` + `environments` — the environment catalog (`default-public`,
+  `internal-only`, `capability-private`) with network modes.
+- `tenant_role_trust_policy_template` / `tenant_role_inline_policy_template` —
+  JSON templates the provisioning Lambda substitutes `{tenant_id}` into at
+  `CreateRole` time (plan Unit 5).
+- `capability_private_role_inline_policy_template` — logs-only policy for the
+  THINK-280 U4 capability-private interpreter role.
+- `capability_private_subnet_ids` / `capability_private_security_group_ids` —
+  pass-through of the broker's no-NAT VPC placement (empty when the broker is
+  disabled); wired into the `agentcore-admin` module.
 
-| File                                     | Purpose                                                                                                                                   |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `main.tf`                                | ECR + outputs. No per-tenant resources.                                                                                                   |
-| `Dockerfile.sandbox-base`                | Python 3.12 + pinned libs + `sitecustomize.py`. Build context is the **repo root** so the COPY can reach the module-owned sandbox helper. |
-| `scripts/build_and_push_sandbox_base.sh` | CI builds + pushes. Not called from Terraform — image lifecycle is a reviewable-PR concern.                                               |
+## No custom sandbox image (THINK-617)
 
-The Python source `sitecustomize.py` and its pytest suite `test_sitecustomize.py`
-live under `terraform/modules/app/agentcore-code-interpreter/sandbox/`, next to
-the sandbox base image they protect.
+This module used to own an ECR repo (`thinkwork-{stage}-sandbox-base`), a
+`Dockerfile.sandbox-base` (Python 3.12 + pinned libs + a `sitecustomize.py`
+stdio scrubber) and a CI build script. **AgentCore Code Interpreter cannot use
+a custom image** — `CreateCodeInterpreterRequest` has no image/container
+parameter (verified against `@aws-sdk/client-bedrock-agentcore-control`
+3.1103.0), and `agentcore-admin` has only ever created interpreters on the
+AWS-managed image.
+
+The practical need (openpyxl et al. in the sandbox) is covered by the runtime's
+on-demand install preamble — `ON_DEMAND_LIBRARIES` in
+`packages/agentcore-pi/agent-container/src/runtime/tools/execute-code.ts`.
+
+Consequence for log scrubbing: the value-based in-image redactor never ran in
+production. The `sandbox-log-scrubber` CloudWatch subscription filter
+(pattern-based, known OAuth token shapes) is the only scrubbing layer.
 
 ## What this module does **not** do
 
-- Create per-tenant Code Interpreter instances — that's Unit 5 (agentcore-admin Lambda).
-- Build or push the Docker image — that's CI, via the shell script above.
-- Grant the provisioning Lambda IAM permissions on the new resources — that's added in Unit 5 when the Lambda resource lands.
-
-## Bumping the image
-
-1. Edit `Dockerfile.sandbox-base` (pin a new pandas / add a lib / etc.).
-2. Edit `terraform/modules/app/agentcore-code-interpreter/sandbox/sitecustomize.py` if the R13 invariant or its coverage gaps shift.
-3. PR. CI runs `pytest` on the scrubber plus a build-then-startup-assertion smoke test.
-4. After merge, `build_and_push_sandbox_base.sh` tags with the merge-commit SHA.
-
-## Named residual
-
-The R13 invariant this module's scrubber enforces is **honestly scoped** to
-Python-stdio-mediated writes + known-shape CloudWatch patterns. See the
-brainstorm and the `sitecustomize.py` module docstring for the full list of
-stdio-bypass classes (os.write, subprocess env dumps, C-extension direct
-writes, multiprocessing workers, adversarial split-writes) that the Unit 12
-pattern backstop catches partially and the v2 in-process credential proxy
-addresses structurally.
+- Create per-tenant Code Interpreter instances — that's the `agentcore-admin` Lambda.
+- Build or push any container image.
