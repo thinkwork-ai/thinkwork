@@ -305,9 +305,8 @@ export async function invokeAgentCore(
   }
 
   if (functionName) {
-    const { LambdaClient, InvokeCommand } = await import(
-      "@aws-sdk/client-lambda"
-    );
+    const { LambdaClient, InvokeCommand } =
+      await import("@aws-sdk/client-lambda");
     const lambda = new LambdaClient({
       region: process.env.AWS_REGION || "us-east-1",
     });
@@ -424,9 +423,8 @@ export async function renderWorkspaceTupleForWakeup(input: {
     return { rendered: false, reason: "workspace_renderer_unconfigured" };
   }
 
-  const { LambdaClient, InvokeCommand } = await import(
-    "@aws-sdk/client-lambda"
-  );
+  const { LambdaClient, InvokeCommand } =
+    await import("@aws-sdk/client-lambda");
   const lambda = new LambdaClient({
     region: process.env.AWS_REGION || "us-east-1",
   });
@@ -1444,15 +1442,12 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     if ((childCount?.count || 0) === 0) {
       try {
-        const { parseProcessTemplate } = await import(
-          "../lib/orchestration/process-parser.js"
-        );
-        const { materializeProcess } = await import(
-          "../lib/orchestration/process-materializer.js"
-        );
-        const { S3Client, GetObjectCommand } = await import(
-          "@aws-sdk/client-s3"
-        );
+        const { parseProcessTemplate } =
+          await import("../lib/orchestration/process-parser.js");
+        const { materializeProcess } =
+          await import("../lib/orchestration/process-materializer.js");
+        const { S3Client, GetObjectCommand } =
+          await import("@aws-sdk/client-s3");
 
         const s3 = new S3Client({});
         let processSkill: (typeof skillsConfig)[number] | null = null;
@@ -2528,14 +2523,6 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
       }
     }
 
-    if (wakeup.source === "chat_message" && payload?.goalMode) {
-      Object.assign(agentCorePayload, {
-        goal_mode: toRuntimeGoalModePayload(
-          payload.goalMode as RuntimeGoalMode,
-        ),
-      });
-    }
-
     // AgentLoop iterations need canonical goal evidence so the loop projector
     // can distinguish a completed step from a missing/failed worker result.
     // Pi keeps its existing AgentLoop orchestration contract, but the native
@@ -2594,9 +2581,9 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
 
     // Workflow interpreter agent step (THINK-219 U6): the wakeup runs in Pi
     // goal mode (action 'start', per-iteration goal_run_id), so its goalMode
-    // rides the same runtime goal-mode path as chat. The workflowRun block
+    // rides the shared runtime goal-mode path. The workflowRun block
     // must ALSO reach the runtime payload — the interpreter path is
-    // wakeup-only, so a gap here is invisible on chat E2E (payload parity).
+    // wakeup-only, so a gap here is invisible outside a real loop run.
     // (The turn's context_snapshot already carries workflowRun since it
     // spreads the wakeup payload; the finalize hook keys on that.)
     if (wakeup.source === "workflow_step") {
@@ -3415,9 +3402,8 @@ async function processWakeup(wakeup: WakeupRow): Promise<void> {
     // Send push notification to user devices
     if (runThreadId) {
       try {
-        const { sendTurnCompletedPush } = await import(
-          "../lib/push-notifications.js"
-        );
+        const { sendTurnCompletedPush } =
+          await import("../lib/push-notifications.js");
         await sendTurnCompletedPush({
           threadId: runThreadId,
           tenantId: wakeup.tenant_id,

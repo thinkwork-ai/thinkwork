@@ -1,17 +1,3 @@
-export type SendMessageGoalModeAction =
-  | "start"
-  | "resume"
-  | "pause"
-  | "cancel"
-  | "clear";
-
-export interface SendMessageGoalMode {
-  enabled: true;
-  action: SendMessageGoalModeAction;
-  objective?: string;
-  goalRunId?: string;
-}
-
 export interface SendMessageOptions {
   /** Optional attribution. Defaults to `"user"` if not provided. */
   senderType?: string;
@@ -25,8 +11,6 @@ export interface SendMessageOptions {
   agentRequested?: boolean;
   /** Optional server dispatch mode enum value. */
   dispatchMode?: string;
-  /** Optional Goal mode intent. Serialized under metadata.goalMode. */
-  goalMode?: SendMessageGoalMode;
 }
 
 export function buildSendMessageMutationVariables(
@@ -34,9 +18,7 @@ export function buildSendMessageMutationVariables(
   content: string,
   opts?: SendMessageOptions,
 ) {
-  const metadata = opts?.goalMode
-    ? { ...(opts.metadata ?? {}), goalMode: opts.goalMode }
-    : opts?.metadata;
+  const metadata = opts?.metadata;
 
   return {
     input: {

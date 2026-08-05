@@ -15,7 +15,6 @@ import {
 } from "../thread-attachments/message-attachment-refs.js";
 import { resolveDispatchPinnedSkills } from "../skills/message-pinned-skills.js";
 import type { PendingQuestionAnswersPayload } from "../user-questions/runtime-payload.js";
-import type { RuntimeGoalMode } from "../goal-mode.js";
 import type {
   RuntimeSkillCreatorCommandPayload,
   SkillCreatorCommandMetadata,
@@ -71,7 +70,6 @@ export interface DispatchDefaultAgentTurnInput {
    */
   agentIdOverride?: string | null;
   requestedProfileSlug?: string | null;
-  goalMode?: RuntimeGoalMode | null;
   skillCreatorCommand?: SkillCreatorCommandMetadata | null;
   /**
    * ask_user_question (plan 2026-06-09-005 U3): when the dispatching
@@ -131,7 +129,6 @@ export interface DefaultAgentChatInvoke {
   /** THINK-311 U5b: per-turn AgentCore trial selection (chat path only). */
   requestedRuntime?: "pi";
   requestedProfileSlug?: string;
-  goalMode?: RuntimeGoalMode;
   skillCreatorCommand?: RuntimeSkillCreatorCommandPayload;
   /**
    * THINK-263 U6: opens a palette "ask" turn. chat-agent-invoke sends
@@ -238,7 +235,6 @@ export async function dispatchDefaultAgentChatTurn(
     ...(input.requestedProfileSlug
       ? { requestedProfileSlug: input.requestedProfileSlug }
       : {}),
-    ...(input.goalMode ? { goalMode: input.goalMode } : {}),
     ...(input.skillCreatorCommand
       ? {
           skillCreatorCommand: toRuntimeSkillCreatorCommandPayload(
@@ -385,7 +381,6 @@ export function buildDefaultAgentTurnWakeup(
       ...(input.requestedProfileSlug
         ? { requestedProfileSlug: input.requestedProfileSlug }
         : {}),
-      ...(input.goalMode ? { goalMode: input.goalMode } : {}),
       ...(input.skillCreatorCommand
         ? {
             skillCreatorCommand: toRuntimeSkillCreatorCommandPayload(

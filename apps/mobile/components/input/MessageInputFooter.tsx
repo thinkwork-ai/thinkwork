@@ -31,7 +31,6 @@ import {
   Plus,
   Bot,
   X,
-  Target,
 } from "lucide-react-native";
 import { IconPlanet } from "@tabler/icons-react-native";
 import { COLORS } from "@/lib/theme";
@@ -42,7 +41,6 @@ import {
 } from "./VoiceDictationBar";
 import { WorkspaceChip } from "./WorkspaceChip";
 import { ComposerModelPicker } from "./ComposerModelPicker";
-import { GoalIntentCard } from "./GoalIntentCard";
 import {
   ComposerPickerOverlay,
   MentionAutocomplete,
@@ -51,7 +49,6 @@ import {
 } from "@/components/chat/MentionAutocomplete";
 import { currentMentionQuery } from "@/lib/thread-mentions";
 import type { ApprovedComposerModel } from "@/lib/composer-model-selection";
-import type { GoalIntentDraft } from "@/lib/composer-goal-intent";
 
 export interface SelectedWorkspace {
   id: string;
@@ -108,12 +105,6 @@ interface MessageInputFooterProps {
   modelOptions?: ApprovedComposerModel[] | null;
   selectedModelId?: string | null;
   onModelSelect?: (model: ApprovedComposerModel) => void;
-  goalDraft?: GoalIntentDraft;
-  goalActive?: boolean;
-  onGoalDraftChange?: (draft: GoalIntentDraft) => void;
-  onGoalApply?: (draft: GoalIntentDraft) => void;
-  onGoalCancel?: () => void;
-  onGoalClear?: () => void;
   /** Disable composing and submission while keeping the footer visible. */
   disabled?: boolean;
   /** Currently selected workspaces shown as chips */
@@ -154,12 +145,6 @@ export const MessageInputFooter = forwardRef<
     modelOptions,
     selectedModelId,
     onModelSelect,
-    goalDraft,
-    goalActive,
-    onGoalDraftChange,
-    onGoalApply,
-    onGoalCancel,
-    onGoalClear,
     disabled,
     selectedWorkspaces,
     onRemoveWorkspace,
@@ -192,7 +177,6 @@ export const MessageInputFooter = forwardRef<
   } | null>(null);
   const [spacePickerVisible, setSpacePickerVisible] = useState(false);
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
-  const [goalCardVisible, setGoalCardVisible] = useState(false);
   const [dismissedMentionKey, setDismissedMentionKey] = useState<string | null>(
     null,
   );
@@ -443,30 +427,6 @@ export const MessageInputFooter = forwardRef<
   ) {
     setModelPickerVisible(false);
     onModelSelect?.(option.model);
-  }
-
-  function handleGoalPress() {
-    if (disabled || !goalDraft || !onGoalDraftChange) return;
-    Keyboard.dismiss();
-    if (mentionKey) setDismissedMentionKey(mentionKey);
-    setSpacePickerVisible(false);
-    setModelPickerVisible(false);
-    setGoalCardVisible(true);
-  }
-
-  function handleGoalApply(draft: GoalIntentDraft) {
-    onGoalApply?.(draft);
-    setGoalCardVisible(false);
-  }
-
-  function handleGoalCancel() {
-    onGoalCancel?.();
-    setGoalCardVisible(false);
-  }
-
-  function handleGoalClear() {
-    onGoalClear?.();
-    setGoalCardVisible(false);
   }
 
   function handlePickerDismiss() {
@@ -738,28 +698,6 @@ export const MessageInputFooter = forwardRef<
                 />
               </Pressable>
             )}
-            {goalDraft && onGoalDraftChange ? (
-              <Pressable
-                onPress={handleGoalPress}
-                disabled={disabled}
-                accessibilityLabel="Goal"
-                accessibilityState={{ selected: goalActive }}
-                className="p-1 active:opacity-70"
-                hitSlop={8}
-                style={{
-                  minWidth: 44,
-                  minHeight: 44,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  opacity: disabled ? 0.35 : 1,
-                }}
-              >
-                <Target
-                  size={24}
-                  color={goalActive ? "#54a9ff" : colors.mutedForeground}
-                />
-              </Pressable>
-            ) : null}
             <ComposerModelPicker
               ref={modelAnchorRef}
               models={modelOptions}
@@ -851,18 +789,6 @@ export const MessageInputFooter = forwardRef<
         style={modelPicker.style}
         width={modelPicker.width}
       />
-      {goalDraft && onGoalDraftChange ? (
-        <GoalIntentCard
-          visible={goalCardVisible}
-          draft={goalDraft}
-          colors={colors}
-          isDark={isDark}
-          onChangeDraft={onGoalDraftChange}
-          onApply={handleGoalApply}
-          onCancel={handleGoalCancel}
-          onClear={handleGoalClear}
-        />
-      ) : null}
     </View>
   );
 });

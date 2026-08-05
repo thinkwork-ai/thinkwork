@@ -3,13 +3,12 @@ import { useMutation, useQuery } from "urql";
 import { MessagesQuery, SendMessageMutation } from "../graphql/queries";
 import {
   buildSendMessageMutationVariables,
-  type SendMessageGoalMode,
   type SendMessageOptions,
 } from "../send-message-options";
 import type { Message } from "../types";
 import { useNewMessageSubscription } from "./use-subscriptions";
 
-export type { SendMessageGoalMode, SendMessageOptions };
+export type { SendMessageOptions };
 
 interface MessageEdge {
   node: Message;

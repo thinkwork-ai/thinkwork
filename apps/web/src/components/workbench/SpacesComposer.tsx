@@ -16,15 +16,6 @@ import {
   type SkillTokenInputHandle,
 } from "@/components/workbench/SkillTokenInput";
 import { ComposerModelPicker } from "@/components/workbench/ComposerModelPicker";
-import {
-  GOAL_MODE_COMPOSER_TOGGLE_HIDDEN,
-  GoalModeDialog,
-  GoalModeToggle,
-} from "@/components/workbench/GoalModeControls";
-import {
-  resolveStartGoalModeSubmission,
-  type ComposerGoalModeIntent,
-} from "@/components/workbench/goal-mode";
 import { IconPlanet, IconPlus } from "@tabler/icons-react";
 import {
   useEffect,
@@ -81,7 +72,7 @@ interface SpacesComposerProps {
    *
    * Return `false` (or a promise resolving to `false`) when the send
    * failed: the parent keeps the draft text on screen, so the composer
-   * keeps its mention/goal draft state too — otherwise a retry renders
+   * keeps its mention draft state too — otherwise a retry renders
    * the mention chips from the text but silently sends no mentions.
    * Any other return value counts as success and clears the draft state.
    */
@@ -91,7 +82,6 @@ interface SpacesComposerProps {
     agentRequested: boolean,
     pinnedSkills: string[],
     selectedModelId?: string,
-    goalMode?: ComposerGoalModeIntent,
   ) => void | boolean | Promise<void | boolean>;
   mentionTargets?: MentionTarget[];
   /** The signed-in user; excluded from the draft user-mention scan. */
@@ -192,21 +182,12 @@ export function SpacesComposer({
   // Once the user manually toggles, their choice persists until the draft is
   // cleared; until then the toggle tracks the derived default.
   const agentOverriddenRef = useRef(false);
-  const [goalModeEnabled, setGoalModeEnabled] = useState(false);
-  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
-  const goalModeSubmission = useMemo(
-    () => resolveStartGoalModeSubmission(value, goalModeEnabled),
-    [value, goalModeEnabled],
-  );
   const agentForcedOn = hasDefaultAgentMentionAlias(value);
   const effectiveAgentEnabled = agentForcedOn || agentEnabled;
-  const goalModeBlocked =
-    goalModeSubmission.requested && !effectiveAgentEnabled;
   const skillPins = useComposerSkillPins({
     value,
     onChange,
     catalog: skillCatalog,
-    goalDisabled: !effectiveAgentEnabled,
   });
 
   useEffect(() => {
@@ -268,16 +249,8 @@ export function SpacesComposer({
   async function handlePromptSubmit(message: PromptInputMessage) {
     if (disabled || isSubmitting) return;
     if (modelSelectionBlocked) return;
-    if (goalModeBlocked) {
-      toast.error("Turn on agent handling to use Goal.");
-      return;
-    }
     const files = await fileUiPartsToFiles(message.files);
-    if (goalModeSubmission.requested && !goalModeSubmission.goalMode) {
-      toast.error("Goal mode needs an objective.");
-      return;
-    }
-    const submittedContent = goalModeSubmission.content;
+    const submittedContent = value.trim();
     const hasText = submittedContent.length > 0;
     if (!hasText && files.length === 0) return;
     const submittedMentions = mentions.filter((mention) =>
@@ -287,48 +260,25 @@ export function SpacesComposer({
       submittedContent,
       skillCatalog,
     );
-    const submittedGoalMode = goalModeSubmission.goalMode;
-    let result: void | boolean;
-    if (selectedModelId && submittedGoalMode) {
-      result = await onSubmit(
-        files,
-        submittedMentions,
-        true,
-        pinnedSkills,
-        selectedModelId,
-        submittedGoalMode,
-      );
-    } else if (selectedModelId) {
-      result = await onSubmit(
-        files,
-        submittedMentions,
-        effectiveAgentEnabled,
-        pinnedSkills,
-        selectedModelId,
-      );
-    } else if (submittedGoalMode) {
-      result = await onSubmit(
-        files,
-        submittedMentions,
-        true,
-        pinnedSkills,
-        undefined,
-        submittedGoalMode,
-      );
-    } else {
-      result = await onSubmit(
-        files,
-        submittedMentions,
-        effectiveAgentEnabled,
-        pinnedSkills,
-      );
-    }
-    // A failed send keeps the draft on screen, so the mention/goal state must
+    const result: void | boolean = selectedModelId
+      ? await onSubmit(
+          files,
+          submittedMentions,
+          effectiveAgentEnabled,
+          pinnedSkills,
+          selectedModelId,
+        )
+      : await onSubmit(
+          files,
+          submittedMentions,
+          effectiveAgentEnabled,
+          pinnedSkills,
+        );
+    // A failed send keeps the draft on screen, so the mention state must
     // survive for the retry (THINK-136 acceptance regression: the retry sent
     // the chips as plain text with no mentions attached).
     if (result === false) return;
     setMentions([]);
-    setGoalModeEnabled(false);
     // Fresh draft after send: drop the manual override so the next new thread
     // starts from the derived default again.
     agentOverriddenRef.current = false;
@@ -355,12 +305,6 @@ export function SpacesComposer({
         rawText: replacement.trim(),
       },
     ]);
-  }
-
-  function applyGoalObjective(objective: string) {
-    onChange(`/goal ${objective}`);
-    setGoalModeEnabled(false);
-    window.requestAnimationFrame(() => textareaRef.current?.focus());
   }
 
   function handleComposerKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -401,11 +345,9 @@ export function SpacesComposer({
 
   const agentToggleTitle = agentForcedOn
     ? "Agent handling is required by @agent or @think"
-    : goalModeSubmission.requested
-      ? "Goal mode requires agent handling"
-      : effectiveAgentEnabled
-        ? "Agent will respond"
-        : "Send without waking the agent";
+    : effectiveAgentEnabled
+      ? "Agent will respond"
+      : "Send without waking the agent";
 
   return (
     <div className="grid gap-2">
@@ -540,16 +482,6 @@ export function SpacesComposer({
               >
                 <Bot className="size-5" />
               </button>
-              {GOAL_MODE_COMPOSER_TOGGLE_HIDDEN ? null : (
-                <GoalModeToggle
-                  enabled={
-                    goalModeSubmission.requested && effectiveAgentEnabled
-                  }
-                  objective={goalModeSubmission.content}
-                  disabled={isComposerDisabled || !effectiveAgentEnabled}
-                  onClick={() => setGoalDialogOpen(true)}
-                />
-              )}
               <ComposerModelPicker
                 models={approvedModels}
                 value={selectedModelId}
@@ -567,9 +499,8 @@ export function SpacesComposer({
                 disabled={disabled || isSubmitting}
               />
               <ConditionalSubmit
-                hasText={goalModeSubmission.content.length > 0}
-                requiresText={goalModeSubmission.requested}
-                disabled={disabled || modelSelectionBlocked || goalModeBlocked}
+                hasText={value.trim().length > 0}
+                disabled={disabled || modelSelectionBlocked}
                 isSubmitting={isSubmitting}
               />
             </div>
@@ -579,14 +510,6 @@ export function SpacesComposer({
       {displayError ? (
         <p className="text-sm text-destructive">{displayError}</p>
       ) : null}
-      <GoalModeDialog
-        open={goalDialogOpen}
-        initialObjective={
-          goalModeSubmission.content || (value.startsWith("/") ? "" : value)
-        }
-        onOpenChange={setGoalDialogOpen}
-        onSubmit={applyGoalObjective}
-      />
     </div>
   );
 }
@@ -600,19 +523,16 @@ export function SpacesComposer({
  */
 function ConditionalSubmit({
   hasText,
-  requiresText,
   disabled,
   isSubmitting,
 }: {
   hasText: boolean;
-  requiresText?: boolean;
   disabled: boolean;
   isSubmitting: boolean;
 }) {
   const attachments = usePromptInputAttachments();
   const hasFile = attachments.files.length > 0;
-  const canSubmit =
-    (hasText || (hasFile && !requiresText)) && !disabled && !isSubmitting;
+  const canSubmit = (hasText || hasFile) && !disabled && !isSubmitting;
   return (
     <PromptInputSubmit
       className="rounded-full"

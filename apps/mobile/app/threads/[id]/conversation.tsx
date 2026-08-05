@@ -25,7 +25,6 @@ import {
   type MessageInputMention,
 } from "@/components/input/MessageInputFooter";
 import {
-  type SendMessageGoalMode,
   useNewMessageSubscription,
   useThread,
 } from "@thinkwork/react-native-sdk";
@@ -41,13 +40,6 @@ import { useMe } from "@/lib/hooks/use-users";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import { mentionCandidatesForTargets } from "@/lib/thread-mentions";
 import { buildThreadConversationSendVariables } from "@/lib/thread-conversation-send";
-import {
-  applyGoalIntent,
-  cancelGoalIntent,
-  clearGoalIntent,
-  emptyGoalIntentDraft,
-  type GoalIntentDraft,
-} from "@/lib/composer-goal-intent";
 import type { ApprovedComposerModel } from "@/lib/composer-model-selection";
 import { pickImage } from "@/lib/agent/capture-image";
 import {
@@ -142,10 +134,6 @@ export default function ThreadConversationScreen() {
   const [attachedImageUri, setAttachedImageUri] = useState<string | null>(null);
   const [attachedFile, setAttachedFile] = useState<PickedDocument | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
-  const [goalDraft, setGoalDraft] =
-    useState<GoalIntentDraft>(emptyGoalIntentDraft);
-  const [activeGoalMode, setActiveGoalMode] =
-    useState<SendMessageGoalMode | null>(null);
   const [showSystemMessages, setShowSystemMessages] = useState(false);
   const approvedModels = useMemo<ApprovedComposerModel[] | null>(() => {
     const models = modelCatalogData?.myApprovedModelCatalog;
@@ -287,15 +275,9 @@ export default function ThreadConversationScreen() {
           currentUserId: currentUser?.id,
           mentions: pendingMentions,
           modelId: selectedModel?.modelId,
-          goalMode: activeGoalMode,
         }) as any,
       );
       markThreadActive(id);
-      if (activeGoalMode) {
-        const next = clearGoalIntent();
-        setGoalDraft(next.draft);
-        setActiveGoalMode(next.activeGoalMode);
-      }
     } catch (e) {
       console.error("[ThreadChat] send failed:", e);
     }
@@ -418,30 +400,6 @@ export default function ThreadConversationScreen() {
               modelOptions={approvedModels}
               selectedModelId={selectedModelId}
               onModelSelect={(model) => setSelectedModelId(model.modelId)}
-              goalDraft={goalDraft}
-              goalActive={Boolean(activeGoalMode)}
-              onGoalDraftChange={setGoalDraft}
-              onGoalApply={(draft) => {
-                const next = applyGoalIntent(
-                  { draft: goalDraft, activeGoalMode },
-                  draft,
-                );
-                setGoalDraft(next.draft);
-                setActiveGoalMode(next.activeGoalMode);
-              }}
-              onGoalCancel={() => {
-                const next = cancelGoalIntent({
-                  draft: goalDraft,
-                  activeGoalMode,
-                });
-                setGoalDraft(next.draft);
-                setActiveGoalMode(next.activeGoalMode);
-              }}
-              onGoalClear={() => {
-                const next = clearGoalIntent();
-                setGoalDraft(next.draft);
-                setActiveGoalMode(next.activeGoalMode);
-              }}
             />
           </WebContent>
         </KeyboardAvoidingView>

@@ -3,19 +3,13 @@ import { ComposerCapabilities } from "../../../../packages/react-native-sdk/src/
 import { buildSendMessageMutationVariables } from "../../../../packages/react-native-sdk/src/send-message-options";
 
 describe("react-native-sdk send message options", () => {
-  it("includes model, dispatch, agent, and Goal mode options in mutation variables", () => {
+  it("includes model, dispatch, and agent options in mutation variables", () => {
     const variables = buildSendMessageMutationVariables("thread-1", "Ship it", {
       senderId: "user-1",
       metadata: { source: "mobile" },
       modelId: "anthropic.claude-sonnet",
       agentRequested: true,
       dispatchMode: "ASYNC",
-      goalMode: {
-        enabled: true,
-        action: "start",
-        objective: "Finish mobile parity",
-        goalRunId: "goal-run-1",
-      },
     });
 
     expect(variables).toEqual({
@@ -25,15 +19,7 @@ describe("react-native-sdk send message options", () => {
         content: "Ship it",
         senderType: "user",
         senderId: "user-1",
-        metadata: JSON.stringify({
-          source: "mobile",
-          goalMode: {
-            enabled: true,
-            action: "start",
-            objective: "Finish mobile parity",
-            goalRunId: "goal-run-1",
-          },
-        }),
+        metadata: JSON.stringify({ source: "mobile" }),
         modelId: "anthropic.claude-sonnet",
         agentRequested: true,
         dispatchMode: "ASYNC",
@@ -73,11 +59,6 @@ describe("react-native-sdk send message options", () => {
       modelId: "anthropic.claude-haiku",
       agentRequested: false,
       dispatchMode: "SYNC",
-      goalMode: {
-        enabled: true,
-        action: "resume" as const,
-        goalRunId: "goal-run-1",
-      },
     } as const;
 
     const first = buildSendMessageMutationVariables("thread-1", "Retry", opts);
@@ -91,7 +72,6 @@ describe("react-native-sdk send message options", () => {
       [
         "attach",
         "agentToggle",
-        "goalMode",
         "spaceSelector",
         "modelPicker",
         "voice",

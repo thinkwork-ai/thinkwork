@@ -22,10 +22,6 @@ import {
   mergeAgentProfileMentionTargets,
   type AgentProfileMentionSource,
 } from "@/components/workbench/agent-profile-mention-targets";
-import {
-  appendGoalModeMetadata,
-  type ComposerGoalModeIntent,
-} from "@/components/workbench/goal-mode";
 import { normalizeSkillCreatorCommandContent } from "@/lib/skill-creator-command";
 import { describeSendMessageError } from "@/lib/send-message-error";
 import { useTenant } from "@/context/TenantContext";
@@ -328,12 +324,8 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
     agentRequested: boolean,
     pinnedSkills: string[] = [],
     requestedModelId?: string,
-    goalMode?: ComposerGoalModeIntent,
   ): Promise<boolean> {
-    const rawTrimmed =
-      goalMode?.action === "start" && goalMode.objective
-        ? goalMode.objective.trim()
-        : prompt.trim();
+    const rawTrimmed = prompt.trim();
     const skillCreatorCommand = normalizeSkillCreatorCommandContent(rawTrimmed);
     const trimmed = skillCreatorCommand.content;
     if (!trimmed && files.length === 0) return false;
@@ -477,7 +469,6 @@ export function SpacesWorkbench({ spaceId }: SpacesWorkbenchProps = {}) {
           sendInput.modelId = turnModelId;
           metadata.requestedModelId = turnModelId;
         }
-        metadata = appendGoalModeMetadata(metadata, goalMode);
         if (Object.keys(metadata).length > 0) {
           sendInput.metadata = JSON.stringify(metadata);
         }

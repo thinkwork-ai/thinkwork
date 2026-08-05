@@ -11,26 +11,36 @@ const wakeupProcessorSource = readFileSync(
 );
 
 describe("goal mode dispatch payload boundary", () => {
-  it("maps direct chat goalMode into AgentCore goal_mode", () => {
-    expect(chatAgentInvokeSource).toContain("goalMode?: RuntimeGoalMode");
-    expect(chatAgentInvokeSource).toContain("toRuntimeGoalModePayload");
-    expect(chatAgentInvokeSource).toContain("goal_mode: event.goalMode");
+  // THINK-597: the composer Goal surface is gone. Chat sends no longer carry a
+  // goalMode intent, so the chat dispatch path must not reintroduce one.
+  it("keeps chat dispatch free of composer goal-mode plumbing", () => {
+    expect(chatAgentInvokeSource).not.toContain("goalMode");
+    expect(chatAgentInvokeSource).not.toContain("goal_mode");
+    expect(wakeupProcessorSource).not.toContain(
+      'wakeup.source === "chat_message" && payload?.goalMode',
+    );
   });
 
-  it("maps fallback chat-message wakeups into AgentCore goal_mode", () => {
-    expect(wakeupProcessorSource).toContain("toRuntimeGoalModePayload");
+  it("maps AgentLoop wakeups into AgentCore goal_mode", () => {
+    expect(wakeupProcessorSource).toContain('wakeup.source === "agent_loop"');
     expect(wakeupProcessorSource).toContain(
-      'wakeup.source === "chat_message" && payload?.goalMode',
+      "goal_mode: toRuntimeGoalModePayload(agentLoopPayload.goalMode)",
+    );
+  });
+
+  it("maps workflow_step wakeups into AgentCore goal_mode", () => {
+    expect(wakeupProcessorSource).toContain(
+      'wakeup.source === "workflow_step"',
     );
     expect(wakeupProcessorSource).toContain(
       "goal_mode: toRuntimeGoalModePayload",
     );
   });
 
-  it("keeps AgentLoop wakeups visible instead of converting them to Pi goal mode", () => {
-    expect(wakeupProcessorSource).toContain('wakeup.source === "agent_loop"');
-    expect(wakeupProcessorSource).not.toContain(
-      'wakeup.source === "chat_message" || wakeup.source === "agent_loop"',
+  it("resumes a paused goal across the user-question card boundary", () => {
+    expect(wakeupProcessorSource).toContain("goalModeFromQuestionSourceTurn");
+    expect(wakeupProcessorSource).toContain(
+      "goal_mode: toRuntimeGoalModePayload(resumedGoal)",
     );
   });
 });

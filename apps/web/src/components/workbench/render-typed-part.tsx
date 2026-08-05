@@ -42,10 +42,6 @@ import { RunbookConfirmation } from "@/components/runbooks/RunbookConfirmation";
 import { ThreadJsonRenderRenderer } from "@/components/workbench/json-render/ThreadJsonRenderRenderer";
 import type { JsonRenderActionSuccessHandler } from "@/components/workbench/json-render/use-json-render-action";
 import { McpAppFrame } from "@/components/workbench/McpAppFrame";
-import {
-  GoalRunCard,
-  normalizeGoalRunEvidence,
-} from "@/components/workbench/GoalRunCard";
 import { UserQuestionCard } from "@/components/workbench/UserQuestionCard";
 import type { AccumulatedPart } from "@/lib/ui-message-merge";
 import type {
@@ -235,10 +231,6 @@ export function renderTypedPart(
           onActionSuccess={onJsonRenderActionSuccess}
         />
       );
-    }
-    if (part.type === "data-goal-run") {
-      const goalRun = normalizeGoalRunEvidence(part.data);
-      return goalRun ? <GoalRunCard key={key} goalRun={goalRun} /> : null;
     }
     if (part.type === "data-mcp-app") {
       const data = recordData(part.data);
