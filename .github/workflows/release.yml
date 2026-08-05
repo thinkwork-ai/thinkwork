@@ -45,6 +45,9 @@ jobs:
       packages: write
     outputs:
       manifest_sha256: ${{ steps.manifest_digest.outputs.sha256 }}
+      # THINK-616: the customer-ECR mirror copies this exact arm64 image.
+      pi_arm64_digest: ${{ steps.pi-arm64.outputs.digest }}
+      pi_arm64_source_repository: ${{ steps.mirror_source_repository.outputs.value }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -131,6 +134,22 @@ jobs:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           N8N_RUNTIME_IMAGE_REPOSITORY: ${{ vars.N8N_RUNTIME_IMAGE_REPOSITORY || '' }}
 
+      # THINK-616: the arm64 Pi image is also pushed to the ThinkWork dev ECR so
+      # the customer-ECR mirror job has an AWS-native (no GHCR token) copy source.
+      # A CI-token GHCR pull previously failed with 403 (token lacked
+      # read:packages), which is why the mirror reads from ECR.
+      - name: Resolve arm64 mirror source repository
+        id: mirror_source_repository
+        run: |
+          if [[ -n "${RELEASE_MIRROR_SOURCE_REPOSITORY:-}" ]]; then
+            echo "value=${RELEASE_MIRROR_SOURCE_REPOSITORY}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${ECR_REGISTRY}/thinkwork-dev-agentcore" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          RELEASE_MIRROR_SOURCE_REPOSITORY: ${{ vars.RELEASE_MIRROR_SOURCE_REPOSITORY || '' }}
+
       - name: Compute build timestamp
         id: build_time
         run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
@@ -164,6 +183,8 @@ jobs:
           tags: |
             ${{ steps.release.outputs.agentcore_repository }}:${{ env.RELEASE_REF_NAME }}-pi-arm64
             ${{ steps.release.outputs.agentcore_repository }}:${{ steps.release.outputs.commit }}-pi-arm64
+            ${{ steps.mirror_source_repository.outputs.value }}:${{ env.RELEASE_REF_NAME }}-pi-arm64
+            ${{ steps.mirror_source_repository.outputs.value }}:${{ steps.release.outputs.commit }}-pi-arm64
           build-args: |
             GIT_SHA=${{ steps.release.outputs.commit }}
             BUILD_TIME=${{ steps.build_time.outputs.value }}
@@ -249,6 +270,137 @@ jobs:
             dist/release/platform-artifacts.tar.gz
             dist/release/runner/thinkwork-runner.py
           retention-days: 7
+
+  # ── Resolve customer image-mirror targets ───────────────────────
+  #
+  # THINK-616. Customer accounts come from `.github/release-mirror-targets.json`
+  # (or the RELEASE_MIRROR_TARGETS repo variable, same shape) so a new enterprise
+  # account inherits the mirror without editing this workflow.
+  resolve-mirror-targets:
+    name: Resolve customer mirror targets
+    needs: verify
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.targets.outputs.value }}
+      count: ${{ steps.targets.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_REF_NAME }}
+
+      - name: Load mirror targets
+        id: targets
+        env:
+          RELEASE_MIRROR_TARGETS: ${{ vars.RELEASE_MIRROR_TARGETS || '' }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${RELEASE_MIRROR_TARGETS}" ]]; then
+            printf '%s' "${RELEASE_MIRROR_TARGETS}" > mirror-targets.json
+            echo "Using RELEASE_MIRROR_TARGETS repository variable."
+          else
+            cp .github/release-mirror-targets.json mirror-targets.json
+            echo "Using checked-in .github/release-mirror-targets.json."
+          fi
+
+          targets="$(jq -c '.targets // []' mirror-targets.json)"
+          # Every target must be fully specified; a half-configured account would
+          # otherwise mirror into the wrong registry or silently no-op.
+          bad="$(jq -r '[.targets // [] | .[] | select((.stage // "") == "" or (.accountId // "") == "" or (.region // "") == "" or (.repository // "") == "") | .stage // "<unnamed>"] | join(", ")' mirror-targets.json)"
+          if [[ -n "$bad" ]]; then
+            echo "::error::Mirror targets missing stage/accountId/region/repository: ${bad}"
+            exit 1
+          fi
+          count="$(jq -r 'length' <<<"$targets")"
+          echo "Resolved ${count} customer mirror target(s)."
+          jq -r '.[] | "  - \(.stage): \(.accountId)/\(.repository) (\(.region))"' <<<"$targets"
+          echo "value=${targets}" >> "$GITHUB_OUTPUT"
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+
+  # ── Mirror the arm64 Pi image into customer ECRs ────────────────
+  #
+  # AgentCore Runtime is arm64-only and the customer deployment runner resolves
+  # the runtime image from the CUSTOMER ECR by the exact tag
+  # `<releaseVersion>-pi-arm64` (runner.py, Pi runtime reconcile). Without this
+  # job every customer release needs a manual docker mirror before
+  # `release deploy` can succeed.
+  #
+  # Auth: the release workflow's ThinkWork AWS credentials (dev account) are used
+  # directly against each customer registry. The customer-side grant is the ECR
+  # repository policy in terraform/modules/app/agentcore-platform (variable
+  # `release_mirror_principal_arns`), so no new IAM user, key, or role is needed.
+  #
+  # Copy: skopeo copies the source *manifest* by digest, so the pushed image is
+  # the single-platform arm64 manifest — not a manifest list missing the arch.
+  mirror-customer-images:
+    name: Mirror arm64 Pi image (${{ matrix.target.stage }})
+    needs: [build-deploy-artifacts, resolve-mirror-targets]
+    if: ${{ needs.resolve-mirror-targets.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    strategy:
+      # One customer failing must not hide or cancel the others.
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.resolve-mirror-targets.outputs.targets) }}
+    steps:
+      - name: Install skopeo
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Mirror ${{ env.RELEASE_REF_NAME }}-pi-arm64 to ${{ matrix.target.stage }}
+        env:
+          SOURCE_REPOSITORY: ${{ needs.build-deploy-artifacts.outputs.pi_arm64_source_repository }}
+          SOURCE_DIGEST: ${{ needs.build-deploy-artifacts.outputs.pi_arm64_digest }}
+          TARGET_STAGE: ${{ matrix.target.stage }}
+          TARGET_ACCOUNT_ID: ${{ matrix.target.accountId }}
+          TARGET_REGION: ${{ matrix.target.region }}
+          TARGET_REPOSITORY: ${{ matrix.target.repository }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SOURCE_REPOSITORY" || -z "$SOURCE_DIGEST" ]]; then
+            echo "::error::Build job did not expose the arm64 Pi image repository/digest."
+            exit 1
+          fi
+
+          SOURCE_REGISTRY="${SOURCE_REPOSITORY%%/*}"
+          TARGET_REGISTRY="${TARGET_ACCOUNT_ID}.dkr.ecr.${TARGET_REGION}.amazonaws.com"
+          TARGET_TAG="${RELEASE_REF_NAME}-pi-arm64"
+
+          # ECR authorization tokens carry the calling identity; the customer
+          # registry authorizes the push through its repository policy.
+          aws ecr get-login-password --region "${AWS_REGION}" \
+            | skopeo login --username AWS --password-stdin "$SOURCE_REGISTRY"
+          aws ecr get-login-password --region "${TARGET_REGION}" \
+            | skopeo login --username AWS --password-stdin "$TARGET_REGISTRY"
+
+          echo "Mirroring ${SOURCE_REPOSITORY}@${SOURCE_DIGEST} -> ${TARGET_REGISTRY}/${TARGET_REPOSITORY}:${TARGET_TAG}"
+          if ! skopeo copy \
+            "docker://${SOURCE_REPOSITORY}@${SOURCE_DIGEST}" \
+            "docker://${TARGET_REGISTRY}/${TARGET_REPOSITORY}:${TARGET_TAG}"; then
+            echo "::error::Mirror to ${TARGET_STAGE} (${TARGET_ACCOUNT_ID}/${TARGET_REPOSITORY}) FAILED; 'release deploy ${RELEASE_REF_NAME} --stage ${TARGET_STAGE}' cannot resolve ${TARGET_TAG}. Confirm the customer ECR repository policy grants the ThinkWork release principal push access."
+            exit 1
+          fi
+
+          # The runner resolves this tag to an immutable digest; prove it lands.
+          MIRRORED_DIGEST="$(aws ecr describe-images \
+            --registry-id "$TARGET_ACCOUNT_ID" \
+            --repository-name "$TARGET_REPOSITORY" \
+            --region "$TARGET_REGION" \
+            --image-ids "imageTag=${TARGET_TAG}" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)"
+          if [[ "$MIRRORED_DIGEST" != "$SOURCE_DIGEST" ]]; then
+            echo "::error::${TARGET_STAGE}: ${TARGET_TAG} resolved to ${MIRRORED_DIGEST}, expected ${SOURCE_DIGEST}."
+            exit 1
+          fi
+          echo "Mirrored ${TARGET_STAGE}: ${TARGET_REPOSITORY}:${TARGET_TAG} = ${MIRRORED_DIGEST}"
 
   # ── Publish CLI to npm ──────────────────────────────────────────
   publish-npm:

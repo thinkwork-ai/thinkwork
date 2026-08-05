@@ -1274,7 +1274,8 @@ module "agentcore_memory" {
 module "agentcore_platform" {
   source = "../app/agentcore-platform"
 
-  stage = var.stage
+  stage                         = var.stage
+  release_mirror_principal_arns = var.release_image_mirror_principal_arns
 }
 
 ################################################################################

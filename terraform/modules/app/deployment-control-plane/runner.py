@@ -3397,7 +3397,8 @@ def reconcile_agentcore_pi_runtime(vars_json, payload):
     # first tei-e2e canary, 2026-08-04). The Lambda's amd64 pin
     # (agentcorePiSourceImageUri) is the WRONG architecture for the runtime;
     # the runtime image is mirrored into the customer ECR under the release
-    # version tag by the release-ops mirror step.
+    # version tag by the release workflow's `mirror-customer-images` job
+    # (THINK-616; targets listed in .github/release-mirror-targets.json).
     release_version = os.environ.get("THINKWORK_RELEASE_VERSION", "") or str(
         safe_get(payload, "releaseVersion", default="")
     )
