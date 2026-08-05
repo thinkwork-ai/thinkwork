@@ -1,23 +1,25 @@
 ################################################################################
 # AgentCore Code Interpreter — App Module (stage-level)
 #
-# Stage-scoped artifacts for the AgentCore Code Interpreter sandbox:
-#   * ECR repository for the blessed sandbox base image (Python 3.12 +
-#     pinned libs + sitecustomize.py R13 scrubber baked in).
-#   * Lifecycle policy to trim old images.
-#   * Outputs the per-tenant provisioning Lambda (Unit 5) consumes to
-#     CreateCodeInterpreter for each tenant on demand.
+# Stage-scoped substrate for the AgentCore Code Interpreter sandbox:
+#   * The environment catalog (network modes) the runtime selects from.
+#   * IAM policy templates + capability-private VPC placement the per-tenant
+#     provisioning Lambda (Unit 5) consumes to CreateCodeInterpreter for each
+#     tenant on demand.
 #
 # **Per-tenant resources live elsewhere.** AgentCore Code Interpreter
 # instances are created per-tenant by the ``agentcore-admin`` Lambda at
 # tenant-create time — see docs/adrs/per-tenant-aws-resource-fanout.md.
 # This module stops at the stage-level substrate.
 #
-# **Image build.** The Dockerfile.sandbox-base next to this file is built
-# and pushed by a CI job (scripts/build_and_push_sandbox_base.sh) — not by
-# Terraform. Terraform owns the ECR repo and IAM plumbing; the image
-# lifecycle is intentionally owned by CI so a repository bump is a
-# reviewable PR rather than a ``terraform apply`` side-effect.
+# **No custom image (THINK-617).** This module used to own an ECR repo for a
+# "blessed" sandbox base image (Python 3.12 + pinned libs + a sitecustomize.py
+# stdio scrubber). AgentCore Code Interpreter has no way to attach one:
+# CreateCodeInterpreterRequest carries no image/container parameter. Sandboxes
+# always run the AWS-managed image; libraries that image may lack are installed
+# on demand by the runtime's execute_code preamble (ON_DEMAND_LIBRARIES in
+# packages/agentcore-pi/.../tools/execute-code.ts). The image substrate was
+# retired — git history and THINK-617 preserve it.
 ################################################################################
 
 terraform {
@@ -42,12 +44,6 @@ variable "region" {
 variable "account_id" {
   description = "AWS account ID (used to construct IAM resource ARNs)."
   type        = string
-}
-
-variable "image_retention_count" {
-  description = "Keep the last N image tags in ECR; older ones are lifecycle-expired."
-  type        = number
-  default     = 10
 }
 
 # THINK-280 U4 — VPC placement for the capability-private interpreter. Sourced
@@ -89,45 +85,6 @@ locals {
       network_mode = "VPC"
     }
   }
-}
-
-################################################################################
-# ECR repository — stage-level base image
-################################################################################
-
-resource "aws_ecr_repository" "sandbox_base" {
-  name                 = "thinkwork-${var.stage}-sandbox-base"
-  image_tag_mutability = "IMMUTABLE"
-  force_delete         = true
-
-  image_scanning_configuration {
-    scan_on_push = true
-  }
-
-  tags = {
-    Name    = "thinkwork-${var.stage}-sandbox-base"
-    Stage   = var.stage
-    Purpose = "agentcore-code-interpreter-base-image"
-  }
-}
-
-resource "aws_ecr_lifecycle_policy" "sandbox_base" {
-  repository = aws_ecr_repository.sandbox_base.name
-
-  policy = jsonencode({
-    rules = [{
-      rulePriority = 1
-      description  = "Keep last ${var.image_retention_count} images"
-      selection = {
-        tagStatus   = "any"
-        countType   = "imageCountMoreThan"
-        countNumber = var.image_retention_count
-      }
-      action = {
-        type = "expire"
-      }
-    }]
-  })
 }
 
 ################################################################################
@@ -206,16 +163,6 @@ locals {
 ################################################################################
 # Outputs
 ################################################################################
-
-output "ecr_repository_name" {
-  description = "Name of the sandbox base image ECR repo."
-  value       = aws_ecr_repository.sandbox_base.name
-}
-
-output "ecr_repository_url" {
-  description = "Full URL of the sandbox base image ECR repo."
-  value       = aws_ecr_repository.sandbox_base.repository_url
-}
 
 output "environment_ids" {
   description = "Enum of valid sandbox environment identifiers."

@@ -5,11 +5,11 @@
 # (plan Unit 12). Pattern-redacts known-shape OAuth tokens in AgentCore
 # APPLICATION_LOGS before they land in the long-term CloudWatch tier.
 #
-# **This is not the primary R13 layer.** The primary layer is the base-image
-# sitecustomize.py stdio wrapper (plan Unit 4, terraform/modules/app/
-# agentcore-code-interpreter) which redacts by *value* using the session-
-# scoped token set. That layer can catch any token the preamble registered,
-# regardless of shape.
+# **This is the only scrubbing layer that actually runs (THINK-617).** The plan
+# called for a primary value-based layer in a blessed base image's
+# sitecustomize.py (Unit 4), but AgentCore Code Interpreter has no custom-image
+# parameter, so that image was never attachable and has been retired. Sandboxes
+# run the AWS-managed image; only this pattern backstop is in force.
 #
 # This backstop redacts by *pattern* — Authorization: Bearer, JWTs, and
 # known OAuth prefixes (gh[opsru]_, xox[abep]-, ya29.). It does not have

@@ -20,8 +20,8 @@ const EXPORT_PRESIGN_SECONDS = 300;
 /**
  * Libraries the AWS-managed Code Interpreter image may lack, keyed by the
  * code signals that predict their use. AgentCore CreateCodeInterpreter has
- * NO custom-image parameter (verified against SDK 3.1103.0 — the
- * Dockerfile.sandbox-base substrate is unattachable), so the only way to
+ * NO custom-image parameter (verified against SDK 3.1103.0; the custom
+ * base-image substrate was retired in THINK-617), so the only way to
  * guarantee a library is a runtime install. The guard below installs
  * inline, inside the same tool call, only when the code references the
  * library — one ~5-10s cost per sandbox session instead of a full
