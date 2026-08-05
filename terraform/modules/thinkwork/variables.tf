@@ -991,6 +991,12 @@ variable "skill_trust_runner_enabled" {
   default     = true
 }
 
+variable "release_image_mirror_principal_arns" {
+  description = "IAM principals allowed to push release runtime images (`<releaseVersion>-pi-arm64`) into this stage's AgentCore ECR repository, so the vendor's release pipeline can mirror the arm64 AgentCore Runtime image into this account (THINK-616). Empty by default: cross-account push is opt-in per stage, never implied by deploying this module. ThinkWork-operated customer stages set this to the ThinkWork release account (arn:aws:iam::487219502366:root)."
+  type        = list(string)
+  default     = []
+}
+
 variable "manage_bedrock_invocation_logging" {
   description = "Own the account/region-level Bedrock model-invocation logging (log group /thinkwork/bedrock/model-invocations, IAM role, and the account logging configuration). Exactly ONE stage per account+region may manage it — a second stack collides on the log group and would clobber/destroy the account-level config (harness cycle-5 ledger entry)."
   type        = bool

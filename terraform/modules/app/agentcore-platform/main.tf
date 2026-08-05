@@ -10,6 +10,12 @@ variable "stage" {
   type        = string
 }
 
+variable "release_mirror_principal_arns" {
+  description = "IAM principals allowed to mirror release runtime images into this stage's AgentCore ECR repository. AgentCore Runtime is arm64-only and the deployment runner resolves the runtime image from THIS account's ECR by the '<releaseVersion>-pi-arm64' tag, so the ThinkWork release pipeline must be able to push it (THINK-616). Set to [] to disable the cross-account grant and mirror by hand."
+  type        = list(string)
+  default     = []
+}
+
 ################################################################################
 # ECR Repository
 ################################################################################
@@ -45,6 +51,68 @@ resource "aws_ecr_lifecycle_policy" "agentcore" {
         type = "expire"
       }
     }]
+  })
+}
+
+################################################################################
+# Cross-account release-image mirror grant (THINK-616)
+#
+# The release workflow's `mirror-customer-images` job pushes
+# `<releaseVersion>-pi-arm64` into this repository from the ThinkWork release
+# account. A repository policy is the whole grant — no role, user, or key is
+# provisioned here.
+#
+# `aws_ecr_repository_policy` REPLACES the repository policy document, so the
+# Lambda image-retrieval statement that Lambda auto-attaches when a container
+# function is created is restated here; dropping it would leave the Pi Lambda's
+# image pull ungranted.
+################################################################################
+
+data "aws_caller_identity" "current" {}
+
+resource "aws_ecr_repository_policy" "agentcore" {
+  count = length(var.release_mirror_principal_arns) > 0 ? 1 : 0
+
+  repository = aws_ecr_repository.agentcore.name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "LambdaECRImageRetrievalPolicy"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+        Action = [
+          "ecr:BatchGetImage",
+          "ecr:GetDownloadUrlForLayer",
+        ]
+        Condition = {
+          StringLike = {
+            "aws:sourceArn" = "arn:aws:lambda:*:${data.aws_caller_identity.current.account_id}:function:*"
+          }
+        }
+      },
+      {
+        Sid    = "ThinkWorkReleaseImageMirror"
+        Effect = "Allow"
+        Principal = {
+          AWS = var.release_mirror_principal_arns
+        }
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:BatchGetImage",
+          "ecr:CompleteLayerUpload",
+          "ecr:DescribeImages",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:InitiateLayerUpload",
+          "ecr:ListImages",
+          "ecr:PutImage",
+          "ecr:UploadLayerPart",
+        ]
+      },
+    ]
   })
 }
 
