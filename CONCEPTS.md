@@ -441,6 +441,20 @@ The `@` and `#` sigils are disjoint by target type, not interchangeable delegati
 
 The rule that an agent turn is contextualized by whoever triggered it: the sending user's workspace projection and memory bank are injected into that turn, on every dispatch path. In multiplayer threads this means consecutive turns can carry different users' contexts.
 
+## Agent Dispatch Topology
+
+### Chat Dispatch Chain
+
+The path a user chat message takes to the agent: `sendMessage` → `chat-agent-invoke` Lambda (setup phase) → `resolveChatDispatchTarget` → `agentcore-runtime-dispatch` Lambda → Bedrock **AgentCore Runtime**, which holds a warm per-thread session. Live on `dev`, `tei-e2e`, and `mcpherson`. When the per-agent or per-stage dispatch flag is off, `resolveChatDispatchTarget` returns the `legacy_lambda_dispatch` sentinel and the turn falls back to the Pi Lambda.
+
+### Active Runtime
+
+The single AgentCore runtime per stage that actually serves traffic: `thinkwork_<stage>_pi`. Its ID lives in SSM at `/thinkwork/<stage>/agentcore/runtime-id-pi` and is the only runtime the deploy pipeline reconciles. Any other AgentCore runtime in a ThinkWork account is stale by definition and bills for idle health-cycling — the retired set (`thinkwork_<stage>_strands_*`, `thinkwork_<stage>_flue`, THINK-324's `harness_Thinkwork_*` Harness trial) was deleted in THINK-588.
+
+### Two Pi Copies
+
+The deliberate arrangement where the same Pi container image runs both as an AgentCore Runtime (chat) and as the `thinkwork-<stage>-agentcore-pi` Lambda (background). The Lambda copy is **not** legacy: wakeups, evals, and skill runs invoke it directly via `AGENTCORE_PI_FUNCTION_NAME`, and its provisioned concurrency is intentional. THINK-588 recorded this explicitly so the duplication is not rediscovered as a surprise and "cleaned up".
+
 ## Workflows and Runs
 
 ### Workflow
