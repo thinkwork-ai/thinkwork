@@ -2,7 +2,9 @@ import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  emailLedgerEventsTable,
   evaluateOutboundPolicyMock,
+  insertedLedgerEvents,
   insertedReplyTokens,
   mockSesSend,
   requestFirstSendApprovalMock,
@@ -12,14 +14,18 @@ const {
   process.env.THINKWORK_API_SECRET = "test-secret";
   const rows: unknown[][] = [];
   const inserts: unknown[] = [];
+  const ledger: Array<Record<string, any>> = [];
   return {
+    emailLedgerEventsTable: { __table: "email_ledger_events" },
     evaluateOutboundPolicyMock: vi.fn(),
+    insertedLedgerEvents: ledger,
     insertedReplyTokens: inserts,
     mockSesSend: vi.fn(),
     requestFirstSendApprovalMock: vi.fn(),
     resetDb: () => {
       rows.length = 0;
       inserts.length = 0;
+      ledger.length = 0;
     },
     selectRows: rows,
   };
@@ -44,9 +50,13 @@ vi.mock("@aws-sdk/client-ses", () => ({
 
 vi.mock("@thinkwork/database-pg", () => ({
   getDb: () => ({
-    insert: () => ({
+    insert: (table: unknown) => ({
       values: (value: unknown) => {
-        insertedReplyTokens.push(value);
+        if (table === emailLedgerEventsTable) {
+          insertedLedgerEvents.push(value as Record<string, any>);
+        } else {
+          insertedReplyTokens.push(value);
+        }
         return Promise.resolve();
       },
     }),
@@ -70,6 +80,7 @@ vi.mock("@thinkwork/database-pg/schema", () => ({
     capability: "agentCapabilities.capability",
   },
   emailReplyTokens: {},
+  emailLedgerEvents: emailLedgerEventsTable,
   spaces: {
     id: "spaces.id",
     tenant_id: "spaces.tenant_id",
@@ -314,6 +325,88 @@ describe("email-send HTTP agent invocation", () => {
       recipient_email: "recipient@example.com",
       ses_message_id: "ses-space-1",
       tenant_id: tenantId,
+    });
+  });
+
+  it("writes send_attempted/send_succeeded ledger rows on the approved fast path", async () => {
+    // THINK-600: a send that skipped review because the recipient set was
+    // already approved used to leave no ledger evidence at all.
+    selectRows.push(
+      [
+        {
+          id: agentId,
+          tenant_id: tenantId,
+          slug: "finance-agent",
+          send_email: { enabled: true },
+        },
+      ],
+      [{ enabled: true, config: {} }],
+    );
+
+    await handler(
+      emailSendEvent({
+        agentId,
+        to: "recipient@example.com",
+        subject: "Quarterly close",
+        body: "Here is the brief.",
+        threadId: "thread-finance",
+        spaceTenantSlug: "acme",
+        spaceSlug: "finance",
+      }),
+    );
+
+    expect(insertedLedgerEvents.map((row) => row.event_type)).toEqual([
+      "send_attempted",
+      "send_succeeded",
+    ]);
+    expect(insertedLedgerEvents[0]).toMatchObject({
+      tenant_id: tenantId,
+      conversation_id: "conversation-approved",
+      thread_id: "thread-finance",
+      provider_install_id: "provider-1",
+      subject: "Quarterly close",
+      from_email: "finance@acme.thinkwork.ai",
+      to_emails: ["recipient@example.com"],
+      metadata: { source: "approved_fast_path" },
+    });
+    expect(insertedLedgerEvents[1]).toMatchObject({
+      provider_message_id: "ses-space-1",
+    });
+  });
+
+  it("records send_failed when the provider send throws on the fast path", async () => {
+    selectRows.push(
+      [
+        {
+          id: agentId,
+          tenant_id: tenantId,
+          slug: "finance-agent",
+          send_email: { enabled: true },
+        },
+      ],
+      [{ enabled: true, config: {} }],
+    );
+    mockSesSend.mockRejectedValueOnce(new Error("SES throttled"));
+
+    const result = await handler(
+      emailSendEvent({
+        agentId,
+        to: "recipient@example.com",
+        subject: "Quarterly close",
+        body: "Here is the brief.",
+        threadId: "thread-finance",
+        spaceTenantSlug: "acme",
+        spaceSlug: "finance",
+      }),
+    );
+
+    expect(result).toMatchObject({ statusCode: 500 });
+    expect(insertedLedgerEvents.map((row) => row.event_type)).toEqual([
+      "send_attempted",
+      "send_failed",
+    ]);
+    expect(insertedLedgerEvents[1]).toMatchObject({
+      reason_code: "provider_send_failed",
     });
   });
 
