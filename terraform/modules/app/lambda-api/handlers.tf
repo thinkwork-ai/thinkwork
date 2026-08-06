@@ -929,7 +929,7 @@ resource "aws_lambda_function" "handler" {
   # headroom for transient slowness.
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout     = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "agentcore-runtime-dispatch" ? 900 : each.key == "agentcore-dispatch-dlq-redrive" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "requester-memory-dreaming" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  timeout = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "agentcore-runtime-dispatch" ? 900 : each.key == "agentcore-dispatch-dlq-redrive" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "requester-memory-dreaming" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
   # THINK-583 U2: chat-agent-invoke and workspace-renderer get a full vCPU
   # (1769 MB). At 256 MB (~1/7 vCPU) the parallelized setup awaits starved on
   # CPU — per-leg timing showed three independent {1 DB read + 1 S3/Secrets
@@ -2588,6 +2588,48 @@ resource "aws_s3_bucket_lifecycle_configuration" "brain_artifacts" {
 
     noncurrent_version_expiration {
       noncurrent_days = 365
+    }
+  }
+
+  # THINK-630: async brain_ask task records are a polling buffer, not an
+  # archive — they hold answer content and principal metadata, so they must
+  # not accumulate. Seven days far exceeds any task's useful life. The
+  # brain-mcp module (company-brain repo) deliberately does NOT manage this
+  # bucket's lifecycle (it would silently drop the rules above); this stack
+  # is the bucket's single lifecycle author.
+  rule {
+    id     = "expire-brain-ask-tasks"
+    status = "Enabled"
+
+    filter {
+      prefix = "brain-ask-tasks/"
+    }
+
+    expiration {
+      days = 7
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 7
+    }
+  }
+
+  # THINK-629 C2: ask exchange records (follow-up continuity) age out the
+  # same way — the durable record is the thread itself.
+  rule {
+    id     = "expire-brain-ask-exchanges"
+    status = "Enabled"
+
+    filter {
+      prefix = "brain-ask-exchanges/"
+    }
+
+    expiration {
+      days = 7
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 7
     }
   }
 }
