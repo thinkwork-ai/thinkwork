@@ -827,6 +827,12 @@ resource "aws_lambda_function" "handler" {
     # (or older than the TTL, for rows predating it). Keeps the approvals
     # queue a list of live decisions instead of a months-deep graveyard.
     "inbox-approval-sweeper",
+    # Hourly retention sweeper for auth_subscription_tickets. Tickets are
+    # single-use and expire 60s after mint but were never deleted; the
+    # table reached 551k rows / 306 MB (idx_scan=0) on a customer stage.
+    # Batched ctid DELETEs, 1h grace past expires_at. Triggered by
+    # EventBridge (aws_scheduler_schedule.auth_ticket_sweeper).
+    "auth-ticket-sweeper",
     # Finance pilot U2 — thread-attachment upload (presign + finalize).
     # presign issues a 5-min PUT URL the end-user client uses to push
     # Excel/CSV bytes directly to S3; finalize sniffs magic bytes, scans
@@ -934,7 +940,7 @@ resource "aws_lambda_function" "handler" {
   # headroom for transient slowness.
   # reference QBR run was ~2 min; 900s is the ceiling — a longer run is a
   # legitimate trial limitation, recorded, not engineered around).
-  timeout = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "agentcore-runtime-dispatch" ? 900 : each.key == "agentcore-dispatch-dlq-redrive" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "requester-memory-dreaming" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
+  timeout = each.key == "wakeup-processor" ? 300 : each.key == "chat-agent-invoke" ? 60 : each.key == "agentcore-runtime-dispatch" ? 900 : each.key == "agentcore-dispatch-dlq-redrive" ? 60 : each.key == "chat-agent-finalize" ? 60 : each.key == "workspace-event-dispatcher" ? 60 : each.key == "eval-runner" ? 900 : each.key == "eval-worker" ? 240 : each.key == "requester-memory-dreaming" ? 300 : each.key == "identity-match" ? 300 : each.key == "identity-graph-projector" ? 900 : each.key == "folder-bundle-import" ? 300 : each.key == "routine-task-python" ? 360 : each.key == "routine-exec-git" ? 360 : each.key == "job-trigger" ? 600 : each.key == "model-converse" ? 60 : each.key == "memory-retain" ? 300 : each.key == "memory-stage-worker" ? 900 : each.key == "memory-stage-sweeper" ? 120 : each.key == "auth-ticket-sweeper" ? 120 : each.key == "memory-retraction-drainer" ? 300 : each.key == "canvas-refresh" ? 120 : each.key == "document-conformance-judge" ? 300 : each.key == "workflow-step-dispatch" ? 600 : each.key == "workflow-execution-callback" ? 60 : each.key == "workflow-resume" ? 60 : 30
   # THINK-583 U2: chat-agent-invoke and workspace-renderer get a full vCPU
   # (1769 MB). At 256 MB (~1/7 vCPU) the parallelized setup awaits starved on
   # CPU — per-leg timing showed three independent {1 DB read + 1 S3/Secrets
@@ -2012,6 +2018,31 @@ resource "aws_scheduler_schedule" "inbox_approval_sweeper" {
 
   target {
     arn      = aws_lambda_function.handler["inbox-approval-sweeper"].arn
+    role_arn = aws_iam_role.scheduler.arn
+  }
+}
+
+# auth_subscription_tickets retention. Unlike the approval sweepers this is
+# a volume problem, not a queue-hygiene one: ~30 tickets/min are minted on
+# every connect + subscription registration and nothing deleted them
+# (551k rows / 306 MB and +24 MB/day on a customer stage, idx_scan=0).
+# Hourly rather than daily so each tick's backlog stays small enough that a
+# single batch usually drains it; the handler's own 45s budget bounds the
+# first few catch-up runs on a stage with an existing backlog.
+resource "aws_scheduler_schedule" "auth_ticket_sweeper" {
+  count = local.deploy_lambda_handlers ? 1 : 0
+
+  name                = "thinkwork-${var.stage}-auth-ticket-sweeper"
+  group_name          = "default"
+  schedule_expression = "rate(1 hour)"
+  state               = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.handler["auth-ticket-sweeper"].arn
     role_arn = aws_iam_role.scheduler.arn
   }
 }

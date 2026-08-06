@@ -123,6 +123,22 @@ variable "backups_bucket_arn" {
   default     = null
 }
 
+# ---------------------------------------------------------------------------
+# CloudWatch saturation alarms (aurora-serverless engine only; see alarms.tf)
+# ---------------------------------------------------------------------------
+
+variable "cpu_utilization_alarm_threshold" {
+  description = "Average CPUUtilization percentage that, sustained for 3x5min, raises the Aurora CPU alarm. Evaluated against the Average statistic — the Maximum statistic is meaningless on RDS (1-second sampling pins it near 100%)."
+  type        = number
+  default     = 70
+}
+
+variable "acu_utilization_alarm_threshold" {
+  description = "Average ACUUtilization percentage (share of max_capacity consumed) that, sustained for 3x5min, raises the Aurora Serverless v2 scaling-headroom alarm."
+  type        = number
+  default     = 85
+}
+
 variable "enable_aws_s3" {
   description = "Plan-time gate for the aws_s3 Aurora extension IAM role. Set true when Aurora should be allowed to PutObject into backups_bucket_arn. Only effective when database_engine = 'aurora-serverless'. Defaults to false to preserve the prior 'opt-in by passing backups_bucket_arn' shape when this variable is omitted."
   type        = bool

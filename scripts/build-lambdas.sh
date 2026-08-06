@@ -675,6 +675,14 @@ build_handler "mcp-approval-sweeper" \
 build_handler "inbox-approval-sweeper" \
   "$REPO_ROOT/packages/api/src/handlers/inbox-approval-sweeper.ts"
 
+# Hourly retention sweeper — batch-deletes auth_subscription_tickets rows
+# more than an hour past expires_at. Tickets are single-use and dead 60s
+# after mint, but nothing deleted them (551k rows / 306 MB on McPherson,
+# growing ~24 MB/day). Triggered by EventBridge
+# (aws_scheduler_schedule.auth_ticket_sweeper).
+build_handler "auth-ticket-sweeper" \
+  "$REPO_ROOT/packages/api/src/handlers/auth-ticket-sweeper.ts"
+
 build_handler "github-workspace" \
   "$REPO_ROOT/packages/lambda/github-workspace.ts"
 
