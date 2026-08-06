@@ -298,6 +298,16 @@ export const tenantSettings = pgTable(
     goal_default_token_budget: integer("goal_default_token_budget"),
     auto_close_thread_minutes: integer("auto_close_thread_minutes").default(30),
     max_agents: integer("max_agents"),
+    /**
+     * Safety interlock for the Company Brain user-claims manifest
+     * (THINK-625). While false, user_brain_claims rows are editable but
+     * NOTHING is published — the Brain keeps its legacy group-mapping
+     * behavior. Flipping on publishes the tenant's full manifest; flipping
+     * off deletes the object. Default false: backfill order AND kill switch.
+     */
+    brain_user_claims_enabled: boolean("brain_user_claims_enabled")
+      .notNull()
+      .default(false),
     features: jsonb("features"),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()

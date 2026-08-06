@@ -61,6 +61,7 @@ export * from "./workflow-task-tokens";
 export * from "./mcp-servers";
 export * from "./mcp-admin-keys";
 export * from "./mcp-twin-keys";
+export * from "./user-brain-claims";
 export * from "./builtin-tools";
 export * from "./evaluations";
 export * from "./wiki";

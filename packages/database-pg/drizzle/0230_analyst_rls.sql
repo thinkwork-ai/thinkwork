@@ -1487,6 +1487,15 @@ BEGIN
   ELSE
     missing := missing || 'twin_materialization_suggestions'::text;
   END IF;
+  IF to_regclass('public.user_brain_claims') IS NOT NULL THEN
+    ALTER TABLE public.user_brain_claims ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS analyst_tenant_isolation ON public.user_brain_claims;
+    CREATE POLICY analyst_tenant_isolation ON public.user_brain_claims
+      FOR SELECT TO analyst_reader
+      USING (tenant_id = current_setting('thinkwork.analyst_tenant', true)::uuid);
+  ELSE
+    missing := missing || 'user_brain_claims'::text;
+  END IF;
   IF to_regclass('public.user_model_approvals') IS NOT NULL THEN
     ALTER TABLE public.user_model_approvals ENABLE ROW LEVEL SECURITY;
     DROP POLICY IF EXISTS analyst_tenant_isolation ON public.user_model_approvals;
@@ -1707,6 +1716,7 @@ BEGIN
     RAISE WARNING 'analyst RLS skipped for tables missing on this database: %', missing;
   END IF;
 END $$;
+
 -- END GENERATED ANALYST RLS
 
 COMMIT;
