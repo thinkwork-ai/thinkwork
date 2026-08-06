@@ -10,6 +10,7 @@ import {
   type ModelRoutingPolicy,
 } from "@thinkwork/pi-runtime-core";
 import type { McpToolRegistry } from "./mcp-registry.js";
+import type { OnBehalfOfIdentity } from "./mcp-connect.js";
 
 /**
  * Plan §005 U7 — MCP wiring with handle-shaped Authorization.
@@ -152,6 +153,13 @@ export interface ConnectMcpServerArgs {
    */
   longRunning?: boolean;
   /**
+   * THINK-626 — the acting end-user to assert on every tools/call from
+   * this connection, as `params._meta["thinkwork.io/on_behalf_of"]`.
+   * Present ONLY when the server opted in (`McpServerConfig.onBehalfOf`)
+   * AND this turn has a signed-in human; absent/null sends no assertion.
+   */
+  onBehalfOf?: OnBehalfOfIdentity | null;
+  /**
    * Plan §006 U2/U4 — per-invocation registry the connect path populates
    * with each whitelist-filtered tool's metadata. The MCP proxy AgentTool
    * (U3) reads from this registry for its list/search modes; the proxy's
@@ -270,6 +278,21 @@ export interface McpServerConfig {
    */
   longRunning?: boolean;
   /**
+   * THINK-626 — opt in to per-call on-behalf-of assertion. When set AND
+   * the turn carries a signed-in human, every tools/call to THIS server
+   * gets `params._meta["thinkwork.io/on_behalf_of"] = { sub?, email? }`,
+   * so a server that trusts this runtime (the Brain, whose key is marked
+   * `trustedSubsystem` in the key manifest) scopes the call to that
+   * person's own claims instead of the shared connector credential.
+   *
+   * Opt-in per server on purpose: telling a server who is asking is a
+   * disclosure, so it never becomes a runtime-wide default. Sourced from
+   * the runtime MCP config JSON (`onBehalfOf: true`), which
+   * `packages/api` emits from the server row's
+   * `runtime_metadata.onBehalfOf`.
+   */
+  onBehalfOf?: boolean;
+  /**
    * Server-built trust marker for plugin-owned tenant-internal MCP endpoints.
    * Allows no-auth connects; URL validation remains owned by the trusted
    * handler before this builder runs.
@@ -304,6 +327,13 @@ export interface BuildMcpToolsOptions {
    * Omit to retain the legacy "AgentTools-only, no registry" behavior.
    */
   registry?: McpToolRegistry;
+  /**
+   * THINK-626 — the turn's acting end-user, built by the trusted handler
+   * from the dispatch payload (never from model output). Forwarded ONLY
+   * to servers that set `onBehalfOf`; omit it (wakeups, evals, scheduled
+   * runs have no signed-in human) and no server receives an assertion.
+   */
+  onBehalfOfIdentity?: OnBehalfOfIdentity | null;
   /** Optional TOOLS.md policy for wrapping matched MCP tools in child-model work. */
   modelRoutingPolicy?: ModelRoutingPolicy;
   approvedModelIds?: string[];
@@ -567,6 +597,7 @@ export async function buildMcpTools(
     connectMcpServer,
     onConnectError,
     registry,
+    onBehalfOfIdentity,
     modelRoutingPolicy = { routes: [] },
     approvedModelIds = [],
     childModelCaller,
@@ -625,6 +656,10 @@ export async function buildMcpTools(
         recordLinkHints: config.recordLinkHints,
         resultTransforms: config.resultTransforms,
         longRunning: config.longRunning,
+        // THINK-626 — the opt-in gate lives here, not in mcp-connect: a
+        // server that did not ask for the assertion is never handed the
+        // identity in the first place.
+        onBehalfOf: config.onBehalfOf ? (onBehalfOfIdentity ?? null) : null,
         registry,
       });
       tools.push(

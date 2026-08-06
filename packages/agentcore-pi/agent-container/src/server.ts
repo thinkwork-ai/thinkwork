@@ -146,6 +146,7 @@ import {
   createConnectMcpServer,
   createMcpConnectionRetention,
   type McpConnectionRetention,
+  type OnBehalfOfIdentity,
 } from "./mcp-connect.js";
 import {
   createWarmSessionCacheIfRuntime,
@@ -883,6 +884,35 @@ async function ensureWorkspaceDir(workspaceDir: string): Promise<void> {
   await mkdir(workspaceDir, { recursive: true });
 }
 
+/**
+ * THINK-626 — the acting end-user for this turn, for MCP servers that
+ * opted into on-behalf-of assertion.
+ *
+ * The ONLY trustworthy source is the dispatch payload the platform builds
+ * server-side: `current_user_email` is written by `chat-agent-invoke.ts`
+ * from a `users` row keyed on the resolved human invoker (message sender →
+ * thread creator → paired human), and `current_user_cognito_sub` is the
+ * same row's Cognito subject when the producer supplies it. Never read
+ * identity from model output, tool arguments, or the conversation — the
+ * whole point of the assertion is that the agent cannot choose whose
+ * claims it runs under.
+ *
+ * Returns null when the turn has no signed-in human (wakeups, evals,
+ * scheduled runs, webhook/email channels), which is exactly when no
+ * assertion should be sent.
+ */
+export function resolveOnBehalfOfIdentity(
+  payload: Record<string, unknown>,
+): OnBehalfOfIdentity | null {
+  const sub = asString(payload.current_user_cognito_sub);
+  const email = asString(payload.current_user_email);
+  if (!sub && !email) return null;
+  return {
+    ...(sub ? { sub } : {}),
+    ...(email ? { email } : {}),
+  };
+}
+
 function parseMcpConfigs(value: unknown): McpServerConfig[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
@@ -920,6 +950,7 @@ function parseMcpConfigs(value: unknown): McpServerConfig[] {
         ...(Object.keys(extraHeaders).length > 0 ? { extraHeaders } : {}),
         ...(trustedInternal ? { trustedInternal } : {}),
         ...(record.longRunning === true ? { longRunning: true } : {}),
+        ...(record.onBehalfOf === true ? { onBehalfOf: true } : {}),
         transport: record.transport === "sse" ? "sse" : "streamable-http",
         toolWhitelist: Array.isArray(record.tools)
           ? (record.tools.filter(
@@ -2187,6 +2218,8 @@ export async function buildInvocationResources(
     // Plan §006 U4 — populate the per-invocation registry as part of the
     // existing tools/list pass. No extra network round-trip.
     registry: args.mcpRegistry,
+    // THINK-626 — server-built identity only; reaches opted-in servers.
+    onBehalfOfIdentity: resolveOnBehalfOfIdentity(args.payload),
     modelRoutingPolicy,
     approvedModelIds,
     childModelCaller:
