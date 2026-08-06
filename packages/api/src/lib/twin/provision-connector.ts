@@ -80,13 +80,29 @@ export const TWIN_KEY_ALL_GRANTS = [TWIN_KEY_GRANT_WILDCARD] as const;
  * with zero tools — burned on dev, 2026-07-22).
  */
 export const TWIN_CONNECTOR_OPERATIONS = [
-  "brain_describe_ontology",
-  "brain_cypher",
+  "brain_search",
+  "brain_ask",
+  "brain_ask_submit",
+  "brain_ask_result",
+  "brain_capabilities",
+  "brain_counts",
   "brain_describe_entity",
-  "brain_describe_property",
-  "brain_search_meaning",
-  "brain_provenance_of",
 ] as const;
+
+/**
+ * Deliberately absent from the list above (THINK-629):
+ *
+ *  - `brain_cypher` / `brain_describe_ontology` — the raw query surface and
+ *    the schema-addressing doc that exists to author against it. Both are
+ *    operator-only server-side under the retrieval-agent cutover, so an
+ *    end-user agent that named them would list tools the Brain refuses.
+ *    Graph questions go through `brain_ask`, which plans retrieval
+ *    server-side and cites what it used.
+ *  - `brain_describe_property` / `brain_search_meaning` /
+ *    `brain_provenance_of` — catalog-authoring aides that only pay for
+ *    themselves while hand-writing openCypher. With the query surface gone
+ *    they are context cost, not capability.
+ */
 
 /** `tkt_` distinguishes twin keys from admin-ops' `tkm_` at a glance. */
 export function generateTwinKey(): { raw: string; hash: string } {
@@ -169,16 +185,31 @@ export function twinConnectorRowValues(input: {
 export const TWIN_CONNECTION_GUIDANCE = `
 ## Querying the company brain
 
-Call \`brain_describe_ontology\` FIRST — it returns this company's entity
-types, facet properties (\`f_<facet>__<attribute>\`), relationship types,
-and worked openCypher examples. Then answer cross-system questions with
-\`brain_cypher\` (read-only openCypher; the server scopes every query to
-this tenant and clamps rows). \`brain_describe_entity\` explains ONE
-entity type's properties with source, authority, and freshness;
-\`brain_describe_property\` drills into one property;
-\`brain_search_meaning\` finds entities/properties/datasets by keyword;
-\`brain_provenance_of\` traces a catalog object upstream and downstream.
-Cite source systems when the facets carry them; never guess entity ids.
+Two lanes. Route on the question, not on habit.
+
+**Knowledge, document, and policy questions** — "what does our handbook
+say", "how do we handle X", "find the contract clause about Y": call
+\`brain_search\` directly and answer from the excerpts it returns. It is
+reranked and cited server-side with no agent loop in the way, so it is
+both the fastest and the highest-fidelity lane for documents. Never route
+a pure document question through \`brain_ask\`.
+
+**Graph and data questions** — counts, lookups, rankings, relationships
+between records across source systems: call \`brain_ask\` with the question
+in plain language. It plans retrieval server-side and cites what it used;
+you do not write queries. Pass the \`context_id\` it returns back on a
+follow-up about the same topic.
+
+**Deep multi-hop asks** that may outlive this call: \`brain_ask_submit\`,
+then poll \`brain_ask_result\` with the task id.
+
+Unsure whether this brain covers the subject at all? Call
+\`brain_capabilities\` once — it lists the entity types, populations, and
+knowledge collections your access can reach. \`brain_counts\` gives
+populations alone; \`brain_describe_entity\` explains ONE entity type's
+properties with source, authority, and freshness.
+
+Cite source systems when the results carry them; never guess entity ids.
 `;
 
 export interface TwinProvisionResult {

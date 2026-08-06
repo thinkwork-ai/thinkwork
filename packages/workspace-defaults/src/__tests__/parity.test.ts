@@ -79,12 +79,32 @@ describe("workspace-defaults parity", () => {
     );
   });
 
+  it("routes Company Brain questions to the two lanes (THINK-629)", () => {
+    // Routing a KB/document question through brain_ask cost real answer
+    // quality on 2026-08-06: the direct search tool returns reranked, cited
+    // excerpts with zero Brain-side model calls. The default TOOLS.md must
+    // keep naming the direct lane, or agents drift back to brain_ask.
+    const tools = loadDefaults()["TOOLS.md"];
+    expect(tools).toContain("## Company Brain Tool Choice");
+    expect(tools).toContain("call `brain_search` directly");
+    expect(tools).toContain(
+      "Never route a pure document question through `brain_ask`",
+    );
+    expect(tools).toContain("call `brain_ask` with the question in plain");
+    expect(tools).toContain("`brain_ask_submit`, then poll `brain_ask_result`");
+    expect(tools).toContain("call `brain_capabilities` once per thread");
+    // Raw query surface is operator-only server-side — never advertised
+    // to an end-user agent.
+    expect(tools).not.toContain("brain_cypher");
+    expect(tools).not.toContain("brain_describe_ontology");
+  });
+
   it("does not materialize upstream json-render runtime skills in workspace defaults", () => {
     const defaults = loadDefaults();
     const fileNames = Object.keys(defaults);
     const combined = Object.values(defaults).join("\n");
 
-    expect(DEFAULTS_VERSION).toBe(47);
+    expect(DEFAULTS_VERSION).toBe(48);
     expect(fileNames).not.toContain("skills/json-render/SKILL.md");
     expect(fileNames).not.toContain("skills/a2ui/SKILL.md");
     expect(fileNames).not.toContain("skills/ag-ui/SKILL.md");

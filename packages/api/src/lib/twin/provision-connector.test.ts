@@ -90,6 +90,7 @@ vi.mock("../mcp/assignment-state.js", () => ({
 
 import {
   generateTwinKey,
+  TWIN_CONNECTION_GUIDANCE,
   TWIN_CONNECTOR_OPERATIONS,
   hashTwinKey,
   provisionTwinConnector,
@@ -462,6 +463,79 @@ describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", (
       expect(errorSpy).toHaveBeenCalled();
     } finally {
       errorSpy.mockRestore();
+    }
+  });
+});
+
+describe("Brain tool surface + routing guidance (THINK-629)", () => {
+  // The operations list IS the runtime toolAllowlist. Pinning the exact
+  // names here is deliberate: a rename on the Brain side must fail this
+  // test rather than silently strand the agent with a connected server
+  // and zero tools.
+  it("names exactly the end-user Brain tools", () => {
+    expect([...TWIN_CONNECTOR_OPERATIONS]).toEqual([
+      "brain_search",
+      "brain_ask",
+      "brain_ask_submit",
+      "brain_ask_result",
+      "brain_capabilities",
+      "brain_counts",
+      "brain_describe_entity",
+    ]);
+  });
+
+  it("never grants the operator-only query surface", () => {
+    // brain_cypher and brain_describe_ontology are gated operator-only
+    // server-side under the retrieval-agent cutover — listing them would
+    // advertise tools the Brain refuses to run for this key.
+    for (const operatorOnly of ["brain_cypher", "brain_describe_ontology"]) {
+      expect([...TWIN_CONNECTOR_OPERATIONS]).not.toContain(operatorOnly);
+      expect(TWIN_CONNECTION_GUIDANCE).not.toContain(operatorOnly);
+    }
+  });
+
+  it("teaches the two lanes in the generated CONNECTION.md", () => {
+    // Routing KB/document questions through brain_ask was a customer-
+    // visible quality regression (2026-08-06): the direct search tool
+    // returns reranked, cited excerpts with no Brain-side model call.
+    // Reflowed to one line — the source is hard-wrapped prose.
+    const guidance = TWIN_CONNECTION_GUIDANCE.replace(/\s+/g, " ");
+    expect(guidance).toContain("call `brain_search` directly");
+    expect(guidance).toContain(
+      "Never route a pure document question through `brain_ask`",
+    );
+    expect(guidance).toContain("call `brain_ask` with the question");
+    expect(guidance).toContain("`brain_ask_submit`");
+    expect(guidance).toContain("poll `brain_ask_result`");
+    expect(guidance).toContain("Call `brain_capabilities` once");
+  });
+
+  it("appends the guidance to every materialized connector folder", async () => {
+    selectQueue.push([]); // no outgoing active keys
+    returningQueue.push([{ id: "key-1" }]);
+    selectQueue.push([]); // no existing server row
+    returningQueue.push([{ id: "server-1" }]);
+    selectQueue.push([
+      {
+        id: "server-1",
+        slug: "digital-twin",
+        name: "Company Brain",
+        url: INPUT.twinMcpUrl,
+        transport: "streamable-http",
+        tools: null,
+        status: "approved",
+      },
+    ]);
+    selectQueue.push([{ id: "agent-1" }, { id: "agent-2" }]);
+
+    await provisionTwinConnector(INPUT, { sm });
+
+    expect(folderCalls.length).toBe(2);
+    for (const call of folderCalls) {
+      const definition = String(call.definition);
+      expect(definition).toContain("## Querying the company brain");
+      expect(definition).toContain("brain_search");
+      expect(definition).toContain("brain_ask");
     }
   });
 });
