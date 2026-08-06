@@ -218,6 +218,51 @@ function makeIndirectFetch(state: IndirectFetchState): typeof fetch {
   };
   return indirect as typeof fetch;
 }
+/**
+ * THINK-626 — the `params._meta` key under which a trusted subsystem
+ * carries the identity of the signed-in human a tools/call is being made
+ * for. The consumer (company-brain brain-mcp) accepts an object with
+ * `sub` and/or `email` and rejects the call outright if ANY other field is
+ * present, so `buildOnBehalfOfMeta` below emits those two keys and
+ * nothing else. Cross-repo contract: renaming this string breaks the
+ * assertion silently (the Brain would fall back to the key's own grants).
+ */
+export const ON_BEHALF_OF_META_KEY = "thinkwork.io/on_behalf_of";
+
+/**
+ * The acting end-user, as asserted to an opted-in MCP server. Identity
+ * ONLY — never grants: what the person may see is decided by the Brain
+ * from its own user-claims manifest, so nothing this side sends can widen
+ * anyone. Both fields are optional but at least one must be non-empty or
+ * no assertion is sent at all.
+ */
+export interface OnBehalfOfIdentity {
+  /** Cognito `sub` of the acting user. */
+  sub?: string | null;
+  /** Email of the acting user. */
+  email?: string | null;
+}
+
+/**
+ * Build the `_meta` block for one tools/call, or null when there is
+ * nothing trustworthy to assert. Absent is a meaningful answer: the
+ * consumer treats a call with no assertion as running under the key's own
+ * grants, which is the correct fail-closed behaviour for a turn with no
+ * signed-in human (wakeups, evals, scheduled runs).
+ */
+export function buildOnBehalfOfMeta(
+  identity: OnBehalfOfIdentity | null | undefined,
+): Record<string, unknown> | null {
+  if (!identity) return null;
+  const assertion: { sub?: string; email?: string } = {};
+  const sub = typeof identity.sub === "string" ? identity.sub.trim() : "";
+  const email = typeof identity.email === "string" ? identity.email.trim() : "";
+  if (sub) assertion.sub = sub;
+  if (email) assertion.email = email;
+  if (Object.keys(assertion).length === 0) return null;
+  return { [ON_BEHALF_OF_META_KEY]: assertion };
+}
+
 const MAX_EXPOSED_TOOL_NAME_LENGTH = 48;
 const TRUNCATED_TOOL_NAME_HASH_LENGTH = 8;
 
@@ -565,6 +610,14 @@ export function createConnectMcpServer(
         }
       : { timeout: callToolTimeoutMs };
 
+    // THINK-626 — resolved once per connection because the identity is
+    // fixed for the turn (buildMcpTools re-runs every turn, warm sessions
+    // included, so a thread whose next turn has a different sender gets a
+    // freshly-built closure). Null for every server that did not opt in
+    // and for every turn with no signed-in human — in both cases the
+    // tools/call params stay byte-identical to the pre-THINK-626 wire.
+    const onBehalfOfMeta = buildOnBehalfOfMeta(args.onBehalfOf);
+
     const closeTransport = async () => {
       try {
         await transport.close();
@@ -630,6 +683,11 @@ export function createConnectMcpServer(
               {
                 name: tool.name,
                 arguments: paramsRecord(params),
+                // Never model-controlled: `_meta` is built from the
+                // platform's dispatch payload, sits outside `arguments`,
+                // and is overwritten here even if a tool schema somehow
+                // invited one.
+                ...(onBehalfOfMeta ? { _meta: onBehalfOfMeta } : {}),
               },
               undefined,
               callToolOptions,

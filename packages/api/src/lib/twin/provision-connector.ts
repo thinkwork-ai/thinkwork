@@ -118,6 +118,29 @@ export function twinConnectorAuthConfig(
   };
 }
 
+/**
+ * Runtime metadata for the provisioned Brain connector row — the only
+ * writer of `tenant_mcp_servers.runtime_metadata` on this manual (non-
+ * plugin) row, and the reason `toMcpServerConfig` reads `longRunning`
+ * ungated by plugin provenance.
+ *
+ *  - `longRunning` (THINK-623): Brain's deep-retrieval tools routinely run
+ *    past the fixed 60s callTool wall; the long-call profile swaps it for
+ *    progress-reset + a total-timeout budget.
+ *  - `onBehalfOf` (THINK-626): opt this server into per-call
+ *    `_meta["thinkwork.io/on_behalf_of"]`, so the Brain scopes the call to
+ *    the signed-in human's own claims instead of the connector key's
+ *    wildcard grants. Opt-in per server — never a blanket runtime default,
+ *    because asserting an identity at a server that does not expect one is
+ *    an unreviewed disclosure of who is asking.
+ *
+ * Re-provisioning rewrites this key, so both opt-ins survive a reinstall.
+ */
+export const TWIN_CONNECTOR_RUNTIME_METADATA = {
+  longRunning: true,
+  onBehalfOf: true,
+} as const;
+
 /** Full registry row values — born approved with the hash pinned. */
 export function twinConnectorRowValues(input: {
   tenantId: string;
@@ -126,6 +149,7 @@ export function twinConnectorRowValues(input: {
 }) {
   const auth_config = twinConnectorAuthConfig(input.secretRef);
   return {
+    runtime_metadata: { ...TWIN_CONNECTOR_RUNTIME_METADATA },
     tenant_id: input.tenantId,
     name: TWIN_CONNECTOR_NAME,
     slug: TWIN_CONNECTOR_SLUG,
@@ -211,6 +235,7 @@ export async function provisionTwinConnector(
       created_at: tenantMcpTwinKeys.created_at,
       security_groups: tenantMcpTwinKeys.security_groups,
       kb_collections: tenantMcpTwinKeys.kb_collections,
+      trusted_subsystem: tenantMcpTwinKeys.trusted_subsystem,
     })
     .from(tenantMcpTwinKeys)
     .where(
@@ -229,6 +254,7 @@ export async function provisionTwinConnector(
     createdAt: row.created_at ? row.created_at.toISOString() : null,
     securityGroups: row.security_groups ?? [],
     kbCollections: row.kb_collections ?? [],
+    ...(row.trusted_subsystem ? { trustedSubsystem: true as const } : {}),
   }));
 
   const { raw, hash } = generateTwinKey();
@@ -253,6 +279,11 @@ export async function provisionTwinConnector(
       // per-key restrictions can never narrow what the console sees.
       security_groups: [...TWIN_KEY_ALL_GRANTS],
       kb_collections: [...TWIN_KEY_ALL_GRANTS],
+      // THINK-626: this is the ONE key the platform itself holds — the Pi
+      // runtime's connector credential — so it is the only key allowed to
+      // assert `on_behalf_of` and run a tools/call under the signed-in
+      // human's own user-claims entry. Every user-minted key stays false.
+      trusted_subsystem: true,
       created_by_user_id: input.createdByUserId ?? null,
     })
     .returning({ id: tenantMcpTwinKeys.id });

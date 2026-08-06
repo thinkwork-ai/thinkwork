@@ -1662,8 +1662,7 @@ describe("handleInvocation — happy path", () => {
     let seenSystemPrompt: string | undefined = "unset";
     let seenTools: AgentTool<any>[] = [];
     let capturedBundle:
-      | import("../src/server.js").InvocationResourceBundle
-      | undefined;
+      import("../src/server.js").InvocationResourceBundle | undefined;
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
         message: "Summarize the file attached in Slack.",
@@ -2112,6 +2111,60 @@ describe("handleInvocation — MCP URL validator", () => {
     });
 
     expect(captured).toEqual([true, undefined]);
+  });
+
+  it("hands the payload's acting user only to onBehalfOf servers (THINK-626)", async () => {
+    const captured: Array<unknown> = [];
+    await handleInvocation({
+      payload: VALID_PAYLOAD({
+        current_user_email: "person@customer.example",
+        mcp_configs: [
+          {
+            name: "brain",
+            url: "https://brain.example.com/mcp",
+            auth: { token: "test-bearer" },
+            onBehalfOf: true,
+          },
+          {
+            name: "slack",
+            url: "https://mcp.example.com/",
+            auth: { token: "test-bearer" },
+          },
+        ],
+      }),
+      deps: makeDeps({
+        connectMcpServerFactory: async (args) => {
+          captured.push(args.onBehalfOf);
+          return [];
+        },
+      }),
+    });
+
+    expect(captured).toEqual([{ email: "person@customer.example" }, null]);
+  });
+
+  it("sends no acting user when the turn has no signed-in human (THINK-626)", async () => {
+    const captured: Array<unknown> = [];
+    await handleInvocation({
+      payload: VALID_PAYLOAD({
+        mcp_configs: [
+          {
+            name: "brain",
+            url: "https://brain.example.com/mcp",
+            auth: { token: "test-bearer" },
+            onBehalfOf: true,
+          },
+        ],
+      }),
+      deps: makeDeps({
+        connectMcpServerFactory: async (args) => {
+          captured.push(args.onBehalfOf);
+          return [];
+        },
+      }),
+    });
+
+    expect(captured).toEqual([null]);
   });
 
   it("skips configs with non-https schemes BEFORE handle minting", async () => {
@@ -4844,8 +4897,7 @@ describe("handleInvocation — warm-session fast path (THINK-586 U7)", () => {
   // session_reuse extends its existing diagnostics contract fields.
   function sessionReuseOf(body: Record<string, unknown>): unknown {
     const usage = body.usage as
-      | { diagnostics?: { session_reuse?: unknown } }
-      | undefined;
+      { diagnostics?: { session_reuse?: unknown } } | undefined;
     return usage?.diagnostics?.session_reuse;
   }
 

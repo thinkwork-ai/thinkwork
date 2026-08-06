@@ -382,6 +382,121 @@ describe("brain-api-keys grants PATCH", () => {
   });
 });
 
+/**
+ * THINK-626 — `trustedSubsystem` is the right to speak for another human,
+ * so it sits behind the PLATFORM trust boundary (shared-secret: CI, the
+ * CLI, the provisioning ceremony), not the tenant one. A tenant owner or
+ * admin who asks for it is refused loudly rather than silently ignored.
+ */
+describe("brain-api-keys trustedSubsystem gate", () => {
+  const createPath = `/api/tenants/${TENANT}/brain-api-keys`;
+  const patchPath = `/api/tenants/${TENANT}/brain-api-keys/${KEY_ID}`;
+
+  function asOperator() {
+    requireTenantMembership.mockResolvedValue({
+      ok: true,
+      tenantId: TENANT,
+      userId: null,
+      role: null,
+      auth: { authType: "apikey" },
+    });
+  }
+
+  function asTenantAdmin() {
+    requireTenantMembership.mockResolvedValue({
+      ok: true,
+      tenantId: TENANT,
+      userId: "user-1",
+      role: "admin",
+      auth: { authType: "cognito" },
+    });
+  }
+
+  it("an operator may mint a trusted-subsystem key", async () => {
+    asOperator();
+    const res = await handler(
+      event({
+        method: "POST",
+        path: createPath,
+        body: { name: "pi-runtime", trustedSubsystem: true },
+      }),
+    );
+    expect(res.statusCode).toBe(201);
+    expect(insertReturning).toHaveBeenCalledWith(
+      expect.objectContaining({ trusted_subsystem: true }),
+    );
+    expect(JSON.parse(res.body!).trusted_subsystem).toBe(true);
+  });
+
+  it("keys are born untrusted when the field is omitted", async () => {
+    asOperator();
+    const res = await handler(
+      event({ method: "POST", path: createPath, body: { name: "chatgpt" } }),
+    );
+    expect(res.statusCode).toBe(201);
+    expect(insertReturning).toHaveBeenCalledWith(
+      expect.objectContaining({ trusted_subsystem: false }),
+    );
+  });
+
+  it("a tenant admin asking for it is refused 403, and nothing is written", async () => {
+    asTenantAdmin();
+    const res = await handler(
+      event({
+        method: "POST",
+        path: createPath,
+        body: { name: "chatgpt", trustedSubsystem: true },
+      }),
+    );
+    expect(res.statusCode).toBe(403);
+    expect(insertReturning).not.toHaveBeenCalled();
+  });
+
+  it("an operator may turn the flag back off via PATCH", async () => {
+    asOperator();
+    const res = await handler(
+      event({
+        method: "PATCH",
+        path: patchPath,
+        body: { trustedSubsystem: false },
+      }),
+    );
+    expect(res.statusCode).toBe(200);
+    expect(updateWhere).toHaveBeenCalledWith(
+      { trusted_subsystem: false },
+      expect.anything(),
+    );
+    // The platform sees the flag only through the manifest.
+    expect(publishTwinKeyManifest).toHaveBeenCalledWith(TENANT, { db });
+  });
+
+  it("a tenant admin cannot PATCH the flag", async () => {
+    asTenantAdmin();
+    const res = await handler(
+      event({
+        method: "PATCH",
+        path: patchPath,
+        body: { trustedSubsystem: true },
+      }),
+    );
+    expect(res.statusCode).toBe(403);
+    expect(updateWhere).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-boolean value with 400 even from an operator", async () => {
+    asOperator();
+    const res = await handler(
+      event({
+        method: "PATCH",
+        path: patchPath,
+        body: { trustedSubsystem: "yes" },
+      }),
+    );
+    expect(res.statusCode).toBe(400);
+    expect(updateWhere).not.toHaveBeenCalled();
+  });
+});
+
 describe("brain-api-keys revoke", () => {
   it("revokes and republishes the manifest", async () => {
     const res = await handler(
