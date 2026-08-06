@@ -3,6 +3,7 @@ import type {
   APIGatewayProxyEventV2,
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { getConfig } from "@thinkwork/runtime-config";
 
 import { admitCognitoTenant } from "../lib/auth-admission.js";
@@ -25,6 +26,14 @@ import {
 } from "../lib/subscription-ticket-signing.js";
 
 const MAX_TICKET_TTL_SECONDS = 60;
+
+/**
+ * Backstop against a looping client. A healthy client reconnects roughly once a
+ * minute at worst (connect tickets are reusable for 45s of their 60s TTL), so
+ * 10 per minute is ~10x headroom while still capping a runaway tab.
+ */
+const CONNECT_TICKET_RATE_WINDOW_SECONDS = 60;
+const MAX_CONNECT_TICKETS_PER_WINDOW = 10;
 
 interface TicketRequest {
   kind: "connect" | "registration";
@@ -63,6 +72,11 @@ export interface AuthSubscriptionTicketDependencies {
     nonceDigest: string;
     claims: SubscriptionTicketClaims;
   }): Promise<void>;
+  countRecentConnectTickets(input: {
+    cognitoIssuer: string;
+    cognitoSub: string;
+    since: Date;
+  }): Promise<number>;
   now(): number;
   stage(): string;
   audience(): string;
@@ -92,6 +106,21 @@ const defaultDependencies: AuthSubscriptionTicketDependencies = {
       resource_id: claims.resourceId ?? null,
       expires_at: new Date(claims.expiresAt * 1000),
     });
+  },
+  // Counts against the leading columns of idx_auth_subscription_tickets_principal.
+  async countRecentConnectTickets({ cognitoIssuer, cognitoSub, since }) {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(authSubscriptionTickets)
+      .where(
+        and(
+          eq(authSubscriptionTickets.cognito_issuer, cognitoIssuer),
+          eq(authSubscriptionTickets.cognito_sub, cognitoSub),
+          eq(authSubscriptionTickets.kind, "connect"),
+          gte(authSubscriptionTickets.created_at, since),
+        ),
+      );
+    return row?.count ?? 0;
   },
   now: () => Math.floor(Date.now() / 1000),
   stage: () => getConfig("STAGE", ""),
@@ -130,6 +159,19 @@ export function createAuthSubscriptionTicketHandler(
         "[auth-subscription-ticket] signing configuration unavailable",
       );
       return error("Realtime authorization unavailable", 503);
+    }
+    if (request.kind === "connect") {
+      const recent = await countRecentConnectTickets(dependencies, {
+        cognitoIssuer: auth.cognitoIssuer,
+        cognitoSub: auth.principalId,
+      });
+      if (recent !== null && recent >= MAX_CONNECT_TICKETS_PER_WINDOW) {
+        console.warn("[auth-subscription-ticket] connect ticket rate limited", {
+          cognitoSub: auth.principalId,
+          recent,
+        });
+        return error("Too many realtime connection attempts", 429);
+      }
     }
     try {
       const admitted = await dependencies.admit(auth, request.tenantId);
@@ -194,6 +236,30 @@ export function createAuthSubscriptionTicketHandler(
       return forbidden("Subscription is not authorized");
     }
   };
+}
+
+/**
+ * Fail open (null) if the counting query itself fails — the rate limit is a
+ * backstop, not an authorization control, and must not take realtime down.
+ */
+async function countRecentConnectTickets(
+  dependencies: AuthSubscriptionTicketDependencies,
+  principal: { cognitoIssuer: string; cognitoSub: string },
+): Promise<number | null> {
+  const since = new Date(
+    (dependencies.now() - CONNECT_TICKET_RATE_WINDOW_SECONDS) * 1000,
+  );
+  try {
+    return await dependencies.countRecentConnectTickets({
+      ...principal,
+      since,
+    });
+  } catch (cause) {
+    console.warn("[auth-subscription-ticket] rate-limit count failed", {
+      cause,
+    });
+    return null;
+  }
 }
 
 function parseRequest(event: APIGatewayProxyEventV2): TicketRequest | null {

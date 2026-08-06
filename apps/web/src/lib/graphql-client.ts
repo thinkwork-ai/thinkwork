@@ -32,6 +32,7 @@ let currentTenantId: string | null = null;
 const TOKEN_REFRESH_INTERVAL_MS = 15_000;
 
 export function setAuthToken(token: string | null) {
+  if (token !== cachedToken) clearConnectTicketCache();
   cachedToken = token;
 }
 
@@ -167,13 +168,68 @@ function deriveRealtimeUrl(graphqlUrl: string): string {
   return `${url.protocol}//${url.host}${url.pathname || "/graphql"}`;
 }
 
+/**
+ * True when both halves of the realtime endpoint (the AppSync auth host and a
+ * websocket URL) resolve from runtime config. Checked *before* minting a
+ * connect ticket — an unconfigured endpoint used to mint one ticket per
+ * reconnect attempt forever.
+ */
+export function isRealtimeEndpointConfigured(
+  graphqlUrl = graphqlAppsyncUrl(),
+  realtimeUrl = graphqlWsUrl(),
+): boolean {
+  try {
+    const host = buildAppSyncAuthHost(graphqlUrl, realtimeUrl);
+    const websocketUrl = realtimeUrl
+      ? normalizeWebSocketUrl(realtimeUrl)
+      : deriveRealtimeUrl(graphqlUrl);
+    return Boolean(host && websocketUrl);
+  } catch {
+    return false;
+  }
+}
+
+/** 3s → 6s → 12s → 24s → 48s → 60s (capped), ±15% jitter. */
+export const RECONNECT_BASE_DELAY_MS = 3_000;
+export const RECONNECT_MAX_DELAY_MS = 60_000;
+/** Consecutive failed connect attempts before the client goes dormant. */
+export const MAX_CONSECUTIVE_CONNECT_FAILURES = 10;
+/** Connect tickets live 60s server-side; reuse inside this window. */
+export const CONNECT_TICKET_REUSE_MS = 45_000;
+
+export function reconnectDelayMs(
+  failureCount: number,
+  random: number = Math.random(),
+): number {
+  const exponent = Math.max(0, failureCount - 1);
+  const base = Math.min(
+    RECONNECT_BASE_DELAY_MS * 2 ** exponent,
+    RECONNECT_MAX_DELAY_MS,
+  );
+  const jittered = Math.round(base * (0.85 + random * 0.3));
+  return Math.min(jittered, RECONNECT_MAX_DELAY_MS);
+}
+
 type Sink<T = unknown> = {
   next: (value: T) => void;
   error: (error: unknown) => void;
   complete: () => void;
 };
 
-class AppSyncSubscriptionClient {
+const REALTIME_UNCONFIGURED_REASON =
+  "Realtime endpoint is not configured; live updates are unavailable";
+
+/**
+ * Logged at most once per page session — an unconfigured endpoint does not heal
+ * on a timer, so repeating the message per attempt is pure noise.
+ */
+let realtimeConfigErrorLogged = false;
+
+export function resetRealtimeConfigWarningForTest() {
+  realtimeConfigErrorLogged = false;
+}
+
+export class AppSyncSubscriptionClient {
   private ws: WebSocket | null = null;
   private subs = new Map<
     string,
@@ -185,26 +241,104 @@ class AppSyncSubscriptionClient {
   private kaTimer: ReturnType<typeof setTimeout> | null = null;
 
   private connecting = false;
+  /** Consecutive failures since the last `connection_ack`. */
+  private failureCount = 0;
+  /** Dormant = no reconnects are scheduled until an explicit wake trigger. */
+  private dormant = false;
+
+  constructor() {
+    this.bindWakeListeners();
+  }
+
+  /** Test/inspection surface — not used by production code paths. */
+  get state() {
+    return {
+      dormant: this.dormant,
+      failureCount: this.failureCount,
+      subscriptionCount: this.subs.size,
+      reconnectScheduled: this.reconnectTimer !== null,
+    };
+  }
+
+  private onOnline = () => this.wake("online");
+  private onVisibilityChange = () => {
+    if (document.visibilityState === "visible") this.wake("visible");
+  };
+
+  private bindWakeListeners() {
+    if (typeof window === "undefined") return;
+    window.addEventListener("online", this.onOnline);
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", this.onVisibilityChange);
+    }
+  }
+
+  /** Detach wake listeners. Used by tests; the app client lives for the tab. */
+  dispose() {
+    if (typeof window === "undefined") return;
+    window.removeEventListener("online", this.onOnline);
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.dormant = true;
+  }
+
+  /**
+   * Leave dormancy and retry. Resets the failure counter so the backoff ladder
+   * starts over, and re-runs the config check by way of `connect()`.
+   */
+  wake(_reason: "online" | "visible" | "subscribe") {
+    if (!this.dormant) return;
+    this.dormant = false;
+    this.failureCount = 0;
+    if (this.subs.size === 0) return;
+    void this.connect();
+  }
 
   async connect() {
-    if (this.connecting || this.ws?.readyState === WebSocket.CONNECTING) return;
+    if (this.dormant) return;
+    if (this.reconnectTimer) return;
+    if (
+      this.connecting ||
+      this.ws?.readyState === WebSocket.CONNECTING ||
+      this.ws?.readyState === WebSocket.OPEN
+    )
+      return;
+
+    // Validate *before* minting: a ticket burned on an unreachable endpoint is
+    // the whole runaway-loop bug.
+    if (!isRealtimeEndpointConfigured()) {
+      if (!realtimeConfigErrorLogged) {
+        realtimeConfigErrorLogged = true;
+        console.error(
+          "[graphql-client] realtime endpoint is not configured (VITE_GRAPHQL_URL / VITE_GRAPHQL_WS_URL). Subscriptions are disabled for this session.",
+        );
+      }
+      this.goDormant(REALTIME_UNCONFIGURED_REASON, { log: false });
+      return;
+    }
+
     this.connecting = true;
     let url: string;
     try {
-      const ticket = await requestSubscriptionTicket({ kind: "connect" });
+      const ticket = await requestConnectTicket();
       url = buildAppSyncRealtimeUrl(undefined, undefined, ticket);
-      if (!url) throw new Error("Realtime endpoint is not configured");
-    } catch {
+      if (!url) throw new Error(REALTIME_UNCONFIGURED_REASON);
+    } catch (cause) {
       this.connecting = false;
-      this.scheduleReconnect();
+      this.handleConnectFailure(cause);
       return;
     }
 
     try {
       this.ws = new WebSocket(url, ["graphql-ws"]);
-    } catch {
+    } catch (cause) {
       this.connecting = false;
-      this.scheduleReconnect();
+      this.handleConnectFailure(cause);
       return;
     }
 
@@ -219,6 +353,7 @@ class AppSyncSubscriptionClient {
       switch (msg.type) {
         case "connection_ack": {
           this.connected = true;
+          this.failureCount = 0;
           this.resetKaTimer(msg.payload?.connectionTimeoutMs || 300000);
           for (const [id, sub] of this.subs) {
             void this.sendStart(id, sub.query, sub.variables);
@@ -256,12 +391,49 @@ class AppSyncSubscriptionClient {
     this.ws.onclose = () => {
       this.connecting = false;
       this.connected = false;
-      this.scheduleReconnect();
+      this.ws = null;
+      this.handleConnectFailure(new Error("Realtime socket closed"));
     };
 
     this.ws.onerror = () => {
       this.connected = false;
     };
+  }
+
+  private handleConnectFailure(cause: unknown) {
+    this.failureCount += 1;
+    // Rate-limited: first failure, then every 5th, then the dormancy log.
+    if (this.failureCount === 1 || this.failureCount % 5 === 0) {
+      console.error("[graphql-client] realtime connect failed", {
+        attempt: this.failureCount,
+        cause,
+      });
+    }
+    if (this.failureCount >= MAX_CONSECUTIVE_CONNECT_FAILURES) {
+      this.goDormant(
+        `Realtime updates are unavailable after ${this.failureCount} failed connection attempts`,
+      );
+      return;
+    }
+    this.scheduleReconnect();
+  }
+
+  /**
+   * Stop retrying and tell mounted sinks, so UI shows a degraded state instead
+   * of hanging on `fetching` forever. Only an explicit wake trigger resumes.
+   */
+  private goDormant(reason: string, options: { log?: boolean } = {}) {
+    this.dormant = true;
+    this.connecting = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (options.log !== false) {
+      console.error("[graphql-client] realtime subscriptions dormant:", reason);
+    }
+    const failure = new Error(reason);
+    for (const [, sub] of this.subs) sub.sink.error(failure);
   }
 
   private resetKaTimer(timeout: number) {
@@ -272,11 +444,13 @@ class AppSyncSubscriptionClient {
   }
 
   private scheduleReconnect() {
-    if (this.reconnectTimer) return;
+    if (this.reconnectTimer || this.dormant) return;
+    // Nothing is listening — reconnecting would only mint tickets.
+    if (this.subs.size === 0) return;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       void this.connect();
-    }, 3000);
+    }, reconnectDelayMs(this.failureCount));
   }
 
   private async sendStart(
@@ -321,6 +495,9 @@ class AppSyncSubscriptionClient {
     const id = String(++this.subCounter);
     this.subs.set(id, { query, variables, sink });
 
+    // A new subscriber is an explicit wake trigger.
+    this.wake("subscribe");
+
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       if (!this.ws) void this.connect();
     } else if (this.connected) {
@@ -338,6 +515,35 @@ class AppSyncSubscriptionClient {
 
 function subscriptionOperationName(query: string): string {
   return query.match(/\bsubscription\s+([_A-Za-z][_0-9A-Za-z]*)/)?.[1] ?? "";
+}
+
+/**
+ * Connect tickets are not operation-bound, so one can serve several reconnects
+ * inside its 60s server TTL. Keyed by the access token that minted it so a
+ * token refresh or sign-out can never reuse a stale principal's ticket.
+ */
+let connectTicketCache: {
+  token: string;
+  fetchedAt: number;
+  identity: string;
+} | null = null;
+
+export function clearConnectTicketCache() {
+  connectTicketCache = null;
+}
+
+async function requestConnectTicket(): Promise<string> {
+  const identity = cachedToken ?? "";
+  if (
+    connectTicketCache &&
+    connectTicketCache.identity === identity &&
+    Date.now() - connectTicketCache.fetchedAt < CONNECT_TICKET_REUSE_MS
+  ) {
+    return connectTicketCache.token;
+  }
+  const token = await requestSubscriptionTicket({ kind: "connect" });
+  connectTicketCache = { token, fetchedAt: Date.now(), identity };
+  return token;
 }
 
 async function requestSubscriptionTicket(input: {
