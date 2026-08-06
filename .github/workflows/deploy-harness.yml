@@ -29,7 +29,7 @@ env:
 
 jobs:
   harness-cycle:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4

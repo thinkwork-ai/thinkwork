@@ -25,7 +25,7 @@ env:
 jobs:
   validate:
     name: Validate signed catalog build
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
         with:
@@ -82,7 +82,7 @@ jobs:
   detect-catalog-source-change:
     name: Detect catalog source change
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       should_publish: ${{ steps.detect.outputs.should_publish }}
       changed_files: ${{ steps.detect.outputs.changed_files }}
@@ -135,7 +135,7 @@ jobs:
     if: >
       github.event_name != 'pull_request' &&
       needs.detect-catalog-source-change.outputs.should_publish == 'true'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
     steps:

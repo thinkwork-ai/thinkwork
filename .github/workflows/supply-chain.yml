@@ -7,7 +7,7 @@ on:
 
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # Bound the job: pnpm install --frozen-lockfile against a warm registry
     # cache completes in well under 2 minutes; 15 leaves headroom for cold
     # starts and brief network degradation without bleeding into a 6-hour

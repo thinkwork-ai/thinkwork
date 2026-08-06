@@ -20,7 +20,7 @@ jobs:
   # ── Build + test ────────────────────────────────────────────────
   verify:
     name: Verify
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,7 +39,7 @@ jobs:
   build-deploy-artifacts:
     name: Build deployable artifacts
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
       packages: write
@@ -279,7 +279,7 @@ jobs:
   resolve-mirror-targets:
     name: Resolve customer mirror targets
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       targets: ${{ steps.targets.outputs.value }}
       count: ${{ steps.targets.outputs.count }}
@@ -341,7 +341,7 @@ jobs:
     name: Mirror arm64 Pi image (${{ matrix.target.stage }})
     needs: [build-deploy-artifacts, resolve-mirror-targets]
     if: ${{ needs.resolve-mirror-targets.outputs.count != '0' }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     strategy:
       # One customer failing must not hide or cancel the others.
       fail-fast: false
@@ -415,7 +415,7 @@ jobs:
     # Web canary tags share the v* release workflow for deployable assets, but
     # they must not mutate or publish the CLI package version.
     if: ${{ !contains(inputs.release_tag || github.ref_name, '-canary.') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
         with:
@@ -451,7 +451,7 @@ jobs:
     name: Update Homebrew Tap
     needs: publish-npm
     if: ${{ !contains(inputs.release_tag || github.ref_name, '-canary.') }}
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Wait for npm propagation
         run: sleep 30
@@ -516,7 +516,7 @@ jobs:
           needs.publish-homebrew.result == 'skipped'
         )
       )
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write
     steps:
