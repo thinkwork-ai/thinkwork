@@ -210,6 +210,15 @@ export interface McpServerComponent {
   resultTransforms?: McpResultTransform[];
   /** Optional human notes about the tools the server exposes. */
   toolNotes?: string[];
+  /**
+   * THINK-623 — opt in to the long-call profile for this server's tools.
+   * Set it only when the server streams MCP progress notifications during
+   * long calls: the runtime then resets the per-attempt `callTool` wall on
+   * every notification (bounded by an absolute total ceiling) instead of
+   * killing the call at the fixed 60s wall. Servers that go quiet for
+   * longer than the per-attempt wall still time out.
+   */
+  longRunning?: boolean;
 }
 
 export interface SkillSupportingFile {
@@ -670,6 +679,12 @@ function validateMcpServerComponent(
         `${prefix}.toolNotes must be an array of strings`,
       );
     }
+  }
+  if (
+    component.longRunning !== undefined &&
+    typeof component.longRunning !== "boolean"
+  ) {
+    throw new PluginManifestError(`${prefix}.longRunning must be a boolean`);
   }
   const auth = component.auth as Partial<McpServerAuth> | undefined;
   if (!auth || typeof auth !== "object" || Array.isArray(auth)) {

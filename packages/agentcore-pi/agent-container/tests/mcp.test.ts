@@ -74,6 +74,7 @@ function captureFakeConnect(capture: {
   transport?: string;
   recordLinkHints?: unknown;
   resultTransforms?: unknown;
+  longRunning?: boolean;
 }): ConnectMcpServerFn {
   return async (args) => {
     capture.url = args.url;
@@ -81,6 +82,7 @@ function captureFakeConnect(capture: {
     capture.transport = args.transport;
     capture.recordLinkHints = args.recordLinkHints;
     capture.resultTransforms = args.resultTransforms;
+    capture.longRunning = args.longRunning;
     return [makeFakeTool("captured", args.headers)];
   };
 }
@@ -1031,5 +1033,40 @@ describe("buildMcpTools — McpToolRegistry population (Plan §006 U4)", () => {
       // registry intentionally omitted
     });
     expect(captured.registry).toBeUndefined();
+  });
+});
+
+describe("buildMcpTools — long-call opt-in (THINK-623)", () => {
+  it("forwards the config's longRunning flag to the connect factory", async () => {
+    const captured: any = {};
+    await buildMcpTools({
+      mcpConfigs: [
+        {
+          serverName: "brain",
+          url: "https://brain.example/mcp",
+          bearer: BEARER_FIXTURES.slack,
+          longRunning: true,
+        },
+      ],
+      handleStore: new HandleStore(),
+      connectMcpServer: captureFakeConnect(captured),
+    });
+    expect(captured.longRunning).toBe(true);
+  });
+
+  it("leaves longRunning undefined for servers that did not opt in", async () => {
+    const captured: any = {};
+    await buildMcpTools({
+      mcpConfigs: [
+        {
+          serverName: "slack",
+          url: "https://mcp.slack.example/mcp",
+          bearer: BEARER_FIXTURES.slack,
+        },
+      ],
+      handleStore: new HandleStore(),
+      connectMcpServer: captureFakeConnect(captured),
+    });
+    expect(captured.longRunning).toBeUndefined();
   });
 });

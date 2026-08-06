@@ -89,6 +89,8 @@ interface RuntimeRecordLinkHints extends McpRecordLinkHints {
 interface McpRuntimeMetadata {
   recordLinkHints?: RuntimeRecordLinkHints;
   resultTransforms?: McpResultTransform[];
+  /** THINK-623 — manifest-declared long-call opt-in for this server. */
+  longRunning?: boolean;
 }
 
 export function pluginMcpServerSlug(
@@ -241,6 +243,10 @@ function pluginMcpRuntimeMetadata(
       ...transform,
     }));
   }
+  // THINK-623 — manifest-declared long-call opt-in; `buildMcpConfigs` reads
+  // it back off runtime_metadata and the Pi runtime turns it into a
+  // progress-resetting `callTool` wall.
+  if (component.longRunning) metadata.longRunning = true;
   return Object.keys(metadata).length > 0 ? metadata : null;
 }
 

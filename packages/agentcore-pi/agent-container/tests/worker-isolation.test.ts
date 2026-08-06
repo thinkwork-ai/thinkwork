@@ -350,6 +350,10 @@ describe("createScrubbingFetch — content-type-aware buffering (SSE streaming p
     });
 
     expect(response).toBe(sseResponse);
+    // THINK-623 — long MCP calls depend on server-initiated progress
+    // notifications arriving mid-stream; a buffered body would have
+    // consumed the stream here and starved the SDK's parser.
+    expect(sseResponse.bodyUsed).toBe(false);
   });
 
   it("buffers and scrubs `application/json` responses (the MCP RPC channel)", async () => {

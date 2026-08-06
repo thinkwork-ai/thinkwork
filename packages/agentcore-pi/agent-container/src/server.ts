@@ -919,6 +919,7 @@ function parseMcpConfigs(value: unknown): McpServerConfig[] {
         ...(bearer ? { bearer } : {}),
         ...(Object.keys(extraHeaders).length > 0 ? { extraHeaders } : {}),
         ...(trustedInternal ? { trustedInternal } : {}),
+        ...(record.longRunning === true ? { longRunning: true } : {}),
         transport: record.transport === "sse" ? "sse" : "streamable-http",
         toolWhitelist: Array.isArray(record.tools)
           ? (record.tools.filter(
