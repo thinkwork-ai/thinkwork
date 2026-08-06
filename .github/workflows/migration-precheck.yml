@@ -43,7 +43,7 @@ env:
 jobs:
   migration-drift-precheck:
     name: Migration Drift Precheck (dev)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@v4
         with:
