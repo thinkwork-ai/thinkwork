@@ -9,7 +9,7 @@ import { getConfig } from "@thinkwork/runtime-config";
 import { admitCognitoTenant } from "../lib/auth-admission.js";
 import {
   authStateStoreMode,
-  bumpCounter,
+  ttlCounter,
   putTicket,
 } from "../lib/auth-state-store.js";
 import { authenticate, type AuthResult } from "../lib/cognito-auth.js";
@@ -216,7 +216,7 @@ export async function countRecentConnectTicketsDynamo({
   cognitoIssuer: string;
   cognitoSub: string;
 }): Promise<number> {
-  const count = await bumpCounter(
+  const count = await ttlCounter(
     `connect#${cognitoIssuer}#${cognitoSub}`,
     CONNECT_TICKET_RATE_WINDOW_SECONDS,
   );

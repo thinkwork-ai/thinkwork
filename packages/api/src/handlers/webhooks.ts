@@ -28,6 +28,11 @@ import {
   connectProviders,
 } from "@thinkwork/database-pg/schema";
 import { db } from "../lib/db.js";
+import {
+  authStateStoreMode,
+  claimReceipt,
+  getReceipt,
+} from "../lib/auth-state-store.js";
 import { json, error, notFound } from "../lib/response.js";
 import { startSpaceWebhookThread } from "../lib/spaces/space-webhook-thread-start.js";
 import { dispatchAutomationWebhook } from "../lib/webhooks/automation-webhook-dispatch.js";
@@ -49,6 +54,98 @@ function checkRateLimit(webhookId: string, limit: number): boolean {
   if (entry.count >= limit) return false;
   entry.count++;
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Idempotency receipts (THINK-644)
+//
+// `webhook_idempotency` is a receipt table wearing a domain table's clothes: a
+// row records "delivery already handled", nothing reads it but the dedupe check
+// below, and nothing ever deletes it. It has no retention — rows survive until
+// the parent webhook is dropped (FK cascade) — so a chatty provider that sends
+// an `X-Idempotency-Key` grows the primary Aurora cluster forever. That is the
+// exact shape the THINK-643 DynamoDB store exists for, so when
+// `AUTH_STATE_STORE=dynamo` the check and the write move there and DynamoDB TTL
+// does the retention Postgres never had.
+//
+// TTL = 7 days. There is no Postgres retention to match, so the number is
+// chosen from what the receipts are *for*: provider retry windows. Stripe,
+// GitHub, Linear and Slack all abandon a delivery well inside 72h, so 7 days is
+// better than 2x the longest window any real caller retries across, while still
+// bounding the store. Deduplication past that point was never a promise the
+// Postgres table made in practice either — it just never cleaned up.
+// ---------------------------------------------------------------------------
+
+const WEBHOOK_RECEIPT_KIND = "webhook";
+const WEBHOOK_RECEIPT_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+/** Mirrors the Postgres unique index: (webhook_id, idempotency_key). */
+function webhookReceiptKey(webhookId: string, idempotencyKey: string): string {
+  return `${webhookId}:${idempotencyKey}`;
+}
+
+/**
+ * Look for a prior receipt for this delivery.
+ *
+ * Returns null when this key has not been seen, or the recorded turn id when it
+ * has. `turnId` is deliberately `string | null` on both paths: the Postgres
+ * column is nullable, so a hit with no turn id must stay a hit — collapsing the
+ * two into one nullable return would make an existing-but-null row read as
+ * "never seen" and re-dispatch the delivery.
+ */
+async function findWebhookReceipt(
+  webhookId: string,
+  idempotencyKey: string,
+): Promise<{ turnId: string | null } | null> {
+  if (authStateStoreMode() === "dynamo") {
+    const receipt = await getReceipt(
+      WEBHOOK_RECEIPT_KIND,
+      webhookReceiptKey(webhookId, idempotencyKey),
+    );
+    return receipt ? { turnId: receipt.value?.turnId ?? null } : null;
+  }
+  const [existing] = await db
+    .select()
+    .from(webhookIdempotency)
+    .where(
+      and(
+        eq(webhookIdempotency.webhook_id, webhookId),
+        eq(webhookIdempotency.idempotency_key, idempotencyKey),
+      ),
+    );
+  return existing ? { turnId: existing.turn_id } : null;
+}
+
+/**
+ * Record the delivery as handled.
+ *
+ * Placed exactly where the Postgres INSERT was — after the wakeup/turn exists,
+ * not at the check above. A receipt is a record of work *done*: claiming before
+ * dispatch would mean a delivery that 500s leaves a receipt behind, and every
+ * retry of it would then be answered "already handled" for the whole TTL. The
+ * conditional write is still worth having: two concurrent deliveries of the
+ * same key both dispatch (as they do on Postgres today), but the loser gets a
+ * clean `duplicate` instead of the unique-violation 500 Postgres raises.
+ */
+async function writeWebhookReceipt(
+  webhookId: string,
+  idempotencyKey: string,
+  turnId: string,
+): Promise<void> {
+  if (authStateStoreMode() === "dynamo") {
+    await claimReceipt(
+      WEBHOOK_RECEIPT_KIND,
+      webhookReceiptKey(webhookId, idempotencyKey),
+      WEBHOOK_RECEIPT_TTL_SECONDS,
+      { turnId },
+    );
+    return;
+  }
+  await db.insert(webhookIdempotency).values({
+    webhook_id: webhookId,
+    idempotency_key: idempotencyKey,
+    turn_id: turnId,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +202,11 @@ function extractSignaturePrefix(
 // ---------------------------------------------------------------------------
 
 type SignatureStatus =
-  "verified" | "invalid" | "missing" | "skipped_dev" | "not_required";
+  | "verified"
+  | "invalid"
+  | "missing"
+  | "skipped_dev"
+  | "not_required";
 
 type ResolutionStatus =
   | "ok"
@@ -287,7 +388,7 @@ async function triggerByToken(
     };
   }
 
-  // 3. Idempotency check.
+  // 3. Idempotency check — see findWebhookReceipt for the store split.
   //
   // The automation branch (THINK-137 U6) does NOT use webhook_idempotency: its
   // load-bearing idempotency is the dispatcher's derived key on agent_loop_runs
@@ -300,20 +401,12 @@ async function triggerByToken(
     targetType !== "workflow" &&
     idempotencyKey
   ) {
-    const [existing] = await db
-      .select()
-      .from(webhookIdempotency)
-      .where(
-        and(
-          eq(webhookIdempotency.webhook_id, webhook.id),
-          eq(webhookIdempotency.idempotency_key, idempotencyKey),
-        ),
-      );
+    const existing = await findWebhookReceipt(webhook.id, idempotencyKey);
     if (existing) {
       record.resolution_status = "ok";
       record.is_replay = true;
       record.status_code = 200;
-      return json({ ok: true, turnId: existing.turn_id, deduplicated: true });
+      return json({ ok: true, turnId: existing.turnId, deduplicated: true });
     }
   }
 
@@ -475,11 +568,7 @@ async function dispatchAgent(
     .returning();
 
   if (idempotencyKey) {
-    await db.insert(webhookIdempotency).values({
-      webhook_id: webhook.id,
-      idempotency_key: idempotencyKey,
-      turn_id: wakeup.id,
-    });
+    await writeWebhookReceipt(webhook.id, idempotencyKey, wakeup.id);
   }
 
   await db
@@ -542,11 +631,7 @@ async function dispatchRoutine(
     .returning();
 
   if (idempotencyKey) {
-    await db.insert(webhookIdempotency).values({
-      webhook_id: webhook.id,
-      idempotency_key: idempotencyKey,
-      turn_id: turn.id,
-    });
+    await writeWebhookReceipt(webhook.id, idempotencyKey, turn.id);
   }
 
   await db
