@@ -72,6 +72,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@/components/settings/SettingsContent";
+import { UserBrainClaimsSection } from "@/components/settings/UserBrainClaimsSection";
 import { UserModelsSection } from "@/components/settings/UserModelsSection";
 import { ScopedWorkspaceEditor } from "@/components/workspace-settings/ScopedWorkspaceEditor";
 
@@ -238,6 +239,7 @@ export function SettingsUserDetail() {
         onSaved={() => refetch({ requestPolicy: "network-only" })}
       />
       <UserModelsSection userId={user.id} />
+      <UserBrainClaimsSection userId={user.id} />
       <UserWorkspaceSection memberId={memberId} />
       <DangerSection
         displayName={displayName}

@@ -61,43 +61,13 @@ import { error, json, notFound } from "../lib/response.js";
 import { requireTenantMembership } from "../lib/tenant-membership.js";
 import { generateTwinKey } from "../lib/twin/provision-connector.js";
 import { publishTwinKeyManifest } from "../lib/twin/key-manifest.js";
+import { parseGrantList } from "../lib/twin/grants.js";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const KEY_SUFFIX_CHARS = 8;
 /** 10 years — the UI's "no expiry" cap guard; anything above is rejected. */
 const MAX_EXPIRES_IN_DAYS = 3650;
-/** Grant list guards — a manifest entry is not a place to dump free text. */
-const MAX_GRANT_ENTRIES = 100;
-const MAX_GRANT_LENGTH = 200;
-
-/**
- * Validate one grant list (`securityGroups` / `kbCollections`): an array of
- * non-empty strings, `"*"` allowed as the all-of wildcard. Trims and
- * de-duplicates, order preserved. Returns an error string on rejection —
- * fail the request rather than silently storing a grant we mangled.
- */
-function parseGrantList(
-  value: unknown,
-  field: string,
-): { values: string[] } | { error: string } {
-  if (!Array.isArray(value))
-    return { error: `${field}: array of non-empty strings required` };
-  if (value.length > MAX_GRANT_ENTRIES)
-    return { error: `${field}: max ${MAX_GRANT_ENTRIES} entries` };
-  const values: string[] = [];
-  for (const entry of value) {
-    if (typeof entry !== "string")
-      return { error: `${field}: array of non-empty strings required` };
-    const trimmed = entry.trim();
-    if (!trimmed)
-      return { error: `${field}: array of non-empty strings required` };
-    if (trimmed.length > MAX_GRANT_LENGTH)
-      return { error: `${field}: each entry max ${MAX_GRANT_LENGTH} chars` };
-    if (!values.includes(trimmed)) values.push(trimmed);
-  }
-  return { values };
-}
 
 export async function handler(
   event: APIGatewayProxyEventV2,

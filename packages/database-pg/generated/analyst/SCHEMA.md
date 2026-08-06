@@ -173,6 +173,7 @@ Conventions:
 - [trace_runs](#trace-runs)
 - [trace_source_evidence](#trace-source-evidence)
 - [twin_materialization_suggestions](#twin-materialization-suggestions)
+- [user_brain_claims](#user-brain-claims)
 - [user_model_approvals](#user-model-approvals)
 - [user_plugin_activations](#user-plugin-activations)
 - [user_profiles](#user-profiles)
@@ -3721,7 +3722,7 @@ Join hints:
 
 Enum values:
 
-- `event_type`: `sandbox_enabled`, `compliance_tier`
+- `event_type`: `sandbox_enabled`, `compliance_tier`, `user_brain_claims`
 - `source`: `graphql`, `reconciler`, `sql`
 
 Join hints:
@@ -3762,6 +3763,7 @@ Join hints:
 | goal_default_token_budget | integer |  |
 | auto_close_thread_minutes | integer |  |
 | max_agents | integer |  |
+| brain_user_claims_enabled | boolean | not null |
 | features | jsonb |  |
 | created_at | timestamp with time zone | not null |
 | updated_at | timestamp with time zone | not null |
@@ -4317,6 +4319,31 @@ Join hints:
 Join hints:
 
 - `twin_materialization_suggestions.tenant_id` → `tenants.id`
+
+## user_brain_claims
+
+| column | type | flags |
+| --- | --- | --- |
+| id | uuid | PK, not null |
+| tenant_id | uuid | not null |
+| user_id | uuid | not null |
+| security_groups | text[] | not null |
+| kb_collections | text[] | not null |
+| kb_bundles | jsonb | not null |
+| default_kb_bundle | text |  |
+| tool_allowlist | text[] |  |
+| is_operator | boolean | not null |
+| kb_trace | boolean | not null |
+| enabled | boolean | not null |
+| notes | text |  |
+| created_at | timestamp with time zone | not null |
+| updated_at | timestamp with time zone | not null |
+| updated_by_user_id | uuid |  |
+
+Join hints:
+
+- `user_brain_claims.tenant_id` → `tenants.id`
+- `user_brain_claims.user_id` → `users.id`
 
 ## user_model_approvals
 

@@ -2,7 +2,8 @@
  * tenant_policy_events — append-only audit of tenant-level policy changes.
  *
  * Today's scope: sandbox_enabled flips and compliance_tier changes, both
- * written by updateTenantPolicy (plan Unit 6). Rows are insert-only by
+ * written by updateTenantPolicy (plan Unit 6), plus user_brain_claims edits
+ * written by the Brain claims resolvers (THINK-625). Rows are insert-only by
  * convention; any consumer that needs to amend a policy decision writes a
  * new row rather than updating an existing one.
  *
@@ -25,6 +26,11 @@ import { tenants } from "./core";
 export const TENANT_POLICY_EVENT_TYPES = [
   "sandbox_enabled",
   "compliance_tier",
+  /**
+   * Company Brain per-user claims edits (THINK-625). before/after values are
+   * JSON snapshots of the user_brain_claims row (never any secret material).
+   */
+  "user_brain_claims",
 ] as const;
 export type TenantPolicyEventType = (typeof TENANT_POLICY_EVENT_TYPES)[number];
 
@@ -59,9 +65,14 @@ export const tenantPolicyEvents = pgTable(
       table.tenant_id,
       table.created_at,
     ),
+    // Renamed to _v2 by drizzle/0284_user_brain_claims.sql when
+    // 'user_brain_claims' joined the allowed set — a fresh name is what
+    // makes the widened constraint visible to the manual-migration drift
+    // reporter (an in-place ALTER of the old name would probe as APPLIED
+    // even where it had never run).
     check(
-      "tenant_policy_events_event_type_allowed",
-      sql`${table.event_type} IN ('sandbox_enabled','compliance_tier')`,
+      "tenant_policy_events_event_type_allowed_v2",
+      sql`${table.event_type} IN ('sandbox_enabled','compliance_tier','user_brain_claims')`,
     ),
     check(
       "tenant_policy_events_source_allowed",

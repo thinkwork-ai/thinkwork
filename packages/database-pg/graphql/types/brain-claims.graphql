@@ -1,0 +1,125 @@
+# Company Brain per-user claims (THINK-625).
+#
+# Claims are per-(tenant, user) authorization for the Company Brain MCP
+# server. They reach the Brain only through the per-tenant manifest at
+# `user-claims/<tenantId>/latest.json`, so every mutation here returns the
+# publish outcome alongside the row — a claims change that never reached S3
+# has not taken effect, and the operator has to be able to see that.
+#
+# Publishing is gated on `TenantSettings.brainUserClaimsEnabled`. While that
+# flag is false these rows are editable but nothing is published.
+
+"""
+Outcome of a whole-document manifest rewrite. Publish failures never roll
+back or block the mutation that triggered them — they surface here.
+`reason` is `no_bucket` (unconfigured), `claims_disabled` (the tenant's
+enable flag is off, so the object was deleted instead), or the underlying
+S3 error message.
+"""
+type ManifestSyncResult {
+  published: Boolean!
+  key: String
+  reason: String
+}
+
+type UserBrainClaims {
+  id: ID!
+  tenantId: ID!
+  userId: ID!
+  """
+  Graph security groups on top of the always-visible PUBLIC group. Empty =
+  PUBLIC only; ["*"] = every group.
+  """
+  securityGroups: [String!]!
+  """
+  KB collection slugs. KB is grant-only: empty = no KB access at all;
+  ["*"] = every collection.
+  """
+  kbCollections: [String!]!
+  """
+  Named collection bundles as `{ "<bundle>": ["<collection>", ...] }`.
+  """
+  kbBundles: AWSJSON!
+  defaultKbBundle: String
+  """
+  Allowed Brain tool names. Null = the Brain's surface default applies (no
+  narrowing); an empty list = no tools at all. The distinction is
+  load-bearing — do not coalesce null into [].
+  """
+  toolAllowlist: [String!]
+  """
+  Enables operator-only Brain tools, always subject to the account's own
+  env gates — never widens past them.
+  """
+  isOperator: Boolean!
+  """
+  Diagnostic, not a grant: echo KB retrieval traces back to the user.
+  """
+  kbTrace: Boolean!
+  """
+  False still publishes the user as `disabled: true` so the Brain fails
+  closed rather than falling back to legacy group grants.
+  """
+  enabled: Boolean!
+  notes: String
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  updatedByUserId: ID
+}
+
+"""
+Partial update: omitted fields are left untouched. Explicit null clears the
+nullable fields (`defaultKbBundle`, `toolAllowlist`, `notes`) — clearing
+`toolAllowlist` returns the user to the Brain's surface default, which is
+NOT the same as passing an empty list.
+"""
+input UserBrainClaimsInput {
+  securityGroups: [String!]
+  kbCollections: [String!]
+  kbBundles: AWSJSON
+  defaultKbBundle: String
+  toolAllowlist: [String!]
+  isOperator: Boolean
+  kbTrace: Boolean
+  enabled: Boolean
+  notes: String
+}
+
+type UserBrainClaimsPayload {
+  """
+  Null after clearUserBrainClaims.
+  """
+  claims: UserBrainClaims
+  manifest: ManifestSyncResult!
+}
+
+extend type Query {
+  """
+  Claims for one user in one tenant. Null when none are configured.
+  """
+  userBrainClaims(tenantId: ID!, userId: ID!): UserBrainClaims
+  """
+  Every configured claims row in the tenant.
+  """
+  tenantUserBrainClaims(tenantId: ID!): [UserBrainClaims!]!
+}
+
+extend type Mutation {
+  """
+  Create or update one user's Brain claims, then republish the manifest.
+  """
+  setUserBrainClaims(
+    tenantId: ID!
+    userId: ID!
+    input: UserBrainClaimsInput!
+  ): UserBrainClaimsPayload!
+  """
+  Delete one user's claims row, then republish the manifest.
+  """
+  clearUserBrainClaims(tenantId: ID!, userId: ID!): UserBrainClaimsPayload!
+  """
+  Rewrite the tenant's manifest from current state. Backfill/repair entry
+  point and the UI's "Retry sync".
+  """
+  republishUserClaimsManifest(tenantId: ID!): ManifestSyncResult!
+}

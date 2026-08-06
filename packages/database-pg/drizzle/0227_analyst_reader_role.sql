@@ -978,6 +978,11 @@ BEGIN
   ELSE
     missing := missing || 'twin_materialization_suggestions'::text;
   END IF;
+  IF to_regclass('public.user_brain_claims') IS NOT NULL THEN
+    GRANT SELECT ON public.user_brain_claims TO analyst_reader;
+  ELSE
+    missing := missing || 'user_brain_claims'::text;
+  END IF;
   IF to_regclass('public.user_model_approvals') IS NOT NULL THEN
     GRANT SELECT ON public.user_model_approvals TO analyst_reader;
   ELSE
@@ -1103,6 +1108,7 @@ BEGIN
     RAISE WARNING 'analyst grants skipped for tables missing on this database: %', missing;
   END IF;
 END $$;
+
 -- END GENERATED ANALYST GRANTS
 
 COMMIT;

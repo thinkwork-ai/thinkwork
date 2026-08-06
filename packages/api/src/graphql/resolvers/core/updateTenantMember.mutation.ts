@@ -4,6 +4,7 @@ import type { GraphQLContext } from "../../context.js";
 import { db, eq, and, tenantMembers, snakeToCamel } from "../../utils.js";
 import { resolveCaller } from "./resolve-auth-user.js";
 import { requireTenantAdmin } from "./authz.js";
+import { republishUserClaimsQuietly } from "./userBrainClaims.js";
 
 /**
  * Update a tenant member's role and/or status.
@@ -23,7 +24,12 @@ export const updateTenantMember = async (
 ) => {
   const { userId: callerUserId } = await resolveCaller(ctx);
 
-  return db.transaction(async (tx) => {
+  // Set inside the transaction, acted on after it commits: a membership that
+  // leaves `active` must be republished to the Brain's user-claims manifest,
+  // or the user keeps their claims until someone edits them by hand.
+  let claimsRepublishTenantId: string | null = null;
+
+  const updated = await db.transaction(async (tx) => {
     const [target] = await tx
       .select()
       .from(tenantMembers)
@@ -95,7 +101,13 @@ export const updateTenantMember = async (
         resource_kind: "membership",
         reason: "membership_disabled",
       });
+      claimsRepublishTenantId = target.tenant_id;
     }
     return snakeToCamel(row);
   });
+
+  if (claimsRepublishTenantId) {
+    await republishUserClaimsQuietly(claimsRepublishTenantId);
+  }
+  return updated;
 };

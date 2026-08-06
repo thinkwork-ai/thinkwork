@@ -51,6 +51,14 @@ const {
     SettingsUpdateUserMutation: Symbol("updateUser"),
     SettingsUpdateUserProfileMutation: Symbol("updateProfile"),
     SettingsUpdateTenantMemberMutation: Symbol("updateMember"),
+    // Brain access section (THINK-625). The `tenant` mock above declares no
+    // `isOperator`/`roleResolved`, so that section gates itself off here —
+    // these docs only need to exist for its module imports to resolve.
+    SettingsUserBrainClaimsQuery: Symbol("userBrainClaims"),
+    SettingsSetUserBrainClaimsMutation: Symbol("setUserBrainClaims"),
+    SettingsRepublishUserClaimsManifestMutation: Symbol(
+      "republishUserClaimsManifest",
+    ),
   },
   members: [] as unknown[],
   userBudgetStatus: { current: null as unknown },
