@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://thinkwork.ai/contracts/user-claims.v1.schema.json",
+  "title": "Company Brain per-user claims manifest (user-claims/v1)",
+  "description": "Whole-document rewrite published to user-claims/<tenantId>/latest.json in the brain-artifacts bucket. Cross-repo contract with the company-brain reader — change it in lockstep or not at all. Contains NO secret material: no key hashes, no tokens, no passwords.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "tenantId", "generatedAt", "users"],
+  "properties": {
+    "formatVersion": {
+      "const": "user-claims/v1"
+    },
+    "tenantId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "users": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/userClaimsEntry" }
+    }
+  },
+  "definitions": {
+    "grantList": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "userClaimsEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "userId",
+        "subject",
+        "email",
+        "disabled",
+        "operator",
+        "securityGroups",
+        "kbCollections",
+        "kbBundles",
+        "defaultKbBundle",
+        "toolAllowlist",
+        "kbTrace"
+      ],
+      "properties": {
+        "userId": { "type": "string", "minLength": 1 },
+        "subject": {
+          "description": "Cognito sub. Null until users.cognito_sub is backfilled; the reader then falls back to lowercased email matching.",
+          "type": ["string", "null"]
+        },
+        "email": {
+          "description": "Lowercased email. PII but not a credential.",
+          "type": ["string", "null"]
+        },
+        "disabled": {
+          "description": "True for members whose tenant membership is not active. Disabled users are EMITTED, not omitted, so the reader fails closed instead of falling back to legacy group grants.",
+          "type": "boolean"
+        },
+        "operator": {
+          "description": "Enables operator-only Brain tools, always subject to the account's own env gates — never widens past them.",
+          "type": "boolean"
+        },
+        "securityGroups": { "$ref": "#/definitions/grantList" },
+        "kbCollections": { "$ref": "#/definitions/grantList" },
+        "kbBundles": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/grantList" }
+        },
+        "defaultKbBundle": { "type": ["string", "null"] },
+        "toolAllowlist": {
+          "description": "Null = the Brain surface default applies (no narrowing). Empty array = no tools at all. The distinction is load-bearing.",
+          "oneOf": [{ "$ref": "#/definitions/grantList" }, { "type": "null" }]
+        },
+        "kbTrace": { "type": "boolean" }
+      }
+    }
+  }
+}

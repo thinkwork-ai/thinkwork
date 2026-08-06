@@ -34,6 +34,7 @@ import { getConfig } from "@thinkwork/runtime-config";
 import { tenantMcpTwinKeys } from "@thinkwork/database-pg/schema";
 
 import { db as defaultDb } from "../../graphql/utils.js";
+import { twinKeyManifestKey as buildTwinKeyManifestKey } from "./artifact-keys.js";
 
 type DbLike = typeof defaultDb;
 type ManifestS3Client = Pick<S3Client, "send">;
@@ -43,9 +44,10 @@ export const TWIN_KEY_MANIFEST_FORMAT = "twin-mcp-keys/v2";
 /** Grant value meaning "every group" / "every collection". */
 export const TWIN_KEY_GRANT_WILDCARD = "*";
 
-export function twinKeyManifestKey(tenantId: string): string {
-  return `twin-mcp-keys/${tenantId}/latest.json`;
-}
+// Re-exported from artifact-keys so this module's many importers keep their
+// import site; the derivation itself is shared with the user-claims manifest
+// (THINK-625) so the two paths cannot drift apart.
+export { twinKeyManifestKey } from "./artifact-keys.js";
 
 export interface TwinKeyManifestEntry {
   /** SHA-256 hex digest of the raw `tkt_` key. */
@@ -174,7 +176,7 @@ export async function publishTwinKeyManifest(
     };
 
     const s3 = opts.s3 ?? new S3Client({});
-    const key = twinKeyManifestKey(tenantId);
+    const key = buildTwinKeyManifestKey(tenantId);
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket,
