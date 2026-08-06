@@ -410,6 +410,12 @@ locals {
     # counter; appsync-subscription-authorizer reads and conditionally consumes
     # them. Both run on this shared role. Empty (→ no grant) while
     # auth_state_store is "postgres", so the grant appears with the table.
+    #
+    # THINK-644 adds the `webhooks` handler (idempotency receipts) as a third
+    # consumer. It needs no separate statement: every handler in the
+    # aws_lambda_function.api for_each runs on aws_iam_role.lambda — the sole
+    # exception is memory-retraction-drainer, which does not touch this table.
+    # A future consumer on a sibling role would need its own grant.
     local.auth_state_enabled ? [
       {
         Effect = "Allow"

@@ -1,5 +1,5 @@
 /**
- * THINK-643 — DynamoDB auth-flow state store.
+ * THINK-643/644 — DynamoDB short-lived state store.
  *
  * Short-lived auth-flow state (60s AppSync subscription tickets, per-principal
  * connect counters, single-use OAuth transaction state) is pure churn on the
@@ -8,6 +8,13 @@
  * DynamoDB is the right shape — native TTL sweeps the garbage, conditional
  * writes give the same single-use guarantee the `status = 'issued'` predicate
  * gave, and the table is reachable from the non-VPC auth Lambdas.
+ *
+ * THINK-644 extends the same table past auth: any TTL-shaped receipt — a record
+ * whose only job is "I already handled this, don't handle it twice" — belongs
+ * here rather than in Aurora, where it is unbounded append-only garbage. One
+ * table, one flag: `AUTH_STATE_STORE` flips tickets, counters, and receipts
+ * together, because they share a table and a blast radius. There is no case for
+ * running half of a stage's scratch state on each store.
  *
  * Everything here is flag-gated by `AUTH_STATE_STORE` (see
  * {@link authStateStoreMode}). While the flag reads "postgres" none of these
@@ -20,6 +27,8 @@
  *   ticket    ticket#<tenantId>               <nonceDigest>     ticket claims
  *   counter   counter#<key>                   w#<windowStart>   count
  *   oauth     oauth#<stateId>                 state             payload
+ *   receipt   receipt#<kind>#<keyDigest>      r                 receipt_key,
+ *                                                               value
  *
  * `expires_at` (N, epoch seconds) is the table's TTL attribute on every item.
  * For tickets it is deliberately NOT the ticket's own expiry — DynamoDB TTL
@@ -38,6 +47,7 @@ import {
   type AttributeValue,
 } from "@aws-sdk/client-dynamodb";
 import { getConfig } from "@thinkwork/runtime-config";
+import { createHash } from "node:crypto";
 
 export type AuthStateStoreMode = "postgres" | "dynamo";
 
@@ -287,16 +297,22 @@ function readTicketItem(
 }
 
 // ---------------------------------------------------------------------------
-// TTL-windowed counters (rate limiting)
+// TTL-windowed counters
 // ---------------------------------------------------------------------------
 
 /**
- * Atomically increment a fixed-window counter and return the post-increment
- * value. The window is derived from the clock (`floor(now / windowSeconds)`),
- * so each window is a distinct item that TTL sweeps on its own — no cleanup
- * job, and no read-modify-write race between concurrent Lambda invocations.
+ * The shared TTL-counter primitive. Atomically increments a fixed-window
+ * counter and returns the post-increment value. The window is derived from the
+ * clock (`floor(now / windowSeconds)`), so each window is a distinct item that
+ * TTL sweeps on its own — no cleanup job, and no read-modify-write race between
+ * concurrent Lambda invocations.
+ *
+ * Nothing about this is auth-specific: `key` is an opaque caller-namespaced
+ * string, so any "at most N of X per window" backstop can use it (the connect
+ * rate limit in auth-subscription-ticket is simply its first consumer). Callers
+ * must gate on {@link authStateStoreMode} — there is no Postgres fallback here.
  */
-export async function bumpCounter(
+export async function ttlCounter(
   key: string,
   windowSeconds: number,
   now: number = Math.floor(Date.now() / 1000),
@@ -316,6 +332,119 @@ export async function bumpCounter(
     }),
   );
   return Number(result.Attributes?.count?.N ?? 0);
+}
+
+// ---------------------------------------------------------------------------
+// Idempotency receipts (THINK-644)
+// ---------------------------------------------------------------------------
+
+/**
+ * A receipt's pk always carries a digest of the key rather than the key itself.
+ *
+ * Receipt keys are caller-supplied — the webhook receipt key embeds an
+ * `X-Idempotency-Key` request header, which API Gateway will carry up to its
+ * ~10 KB header budget, five times DynamoDB's 2048-byte partition-key ceiling.
+ * Hashing conditionally (raw when short, digest when long) would create two pk
+ * encodings and, with them, a collision class between a short raw key and some
+ * long key's digest. Hashing unconditionally costs nothing, has one shape, and
+ * keeps the item debuggable by storing the raw key on `receipt_key`.
+ */
+export function receiptPk(kind: string, key: string): string {
+  return `receipt#${kind}#${createHash("sha256").update(key).digest("hex")}`;
+}
+
+/** Every receipt is a single item; the sort key is a constant placeholder. */
+const RECEIPT_SK = "r";
+
+export type ClaimReceiptResult =
+  /** This call wrote the receipt; the caller owns the work. */
+  | { outcome: "claimed" }
+  /** A live receipt already existed — a duplicate delivery. */
+  | { outcome: "duplicate"; value: Record<string, string> | undefined };
+
+function readReceiptValue(
+  item: Record<string, AttributeValue> | undefined,
+): Record<string, string> | undefined {
+  const value = item?.value?.M;
+  if (!value) return undefined;
+  return Object.fromEntries(
+    Object.entries(value).map(([k, v]) => [k, v.S ?? ""]),
+  );
+}
+
+/**
+ * Read a live receipt. Returns null when absent or logically expired.
+ *
+ * The explicit `expires_at` comparison is not belt-and-braces: DynamoDB's TTL
+ * deletion is best-effort and can lag the stated expiry by up to 48h, so an
+ * item's presence is not proof it is still in force. Time is the contract; the
+ * sweeper is only the janitor.
+ */
+export async function getReceipt(
+  kind: string,
+  key: string,
+  now: number = Math.floor(Date.now() / 1000),
+): Promise<{ value: Record<string, string> | undefined } | null> {
+  const result = await authStateClient().send(
+    new GetItemCommand({
+      TableName: authStateTableName(),
+      Key: { pk: S(receiptPk(kind, key)), sk: S(RECEIPT_SK) },
+      ConsistentRead: true,
+    }),
+  );
+  const item = result.Item;
+  if (!item) return null;
+  if (Number(item.expires_at?.N ?? 0) <= now) return null;
+  return { value: readReceiptValue(item) };
+}
+
+/**
+ * Write a receipt if no live one exists, atomically.
+ *
+ * The condition admits a logically-expired-but-unswept item (see
+ * {@link getReceipt}) so a key becomes reusable exactly at its stated TTL
+ * rather than whenever DynamoDB gets around to the delete.
+ *
+ * On `duplicate` the pre-existing item's `value` comes back, so a caller that
+ * stored a downstream identifier at claim time can hand the same identifier to
+ * the duplicate caller.
+ */
+export async function claimReceipt(
+  kind: string,
+  key: string,
+  ttlSeconds: number,
+  value?: Record<string, string>,
+  now: number = Math.floor(Date.now() / 1000),
+): Promise<ClaimReceiptResult> {
+  try {
+    await authStateClient().send(
+      new PutItemCommand({
+        TableName: authStateTableName(),
+        Item: compactItem({
+          pk: S(receiptPk(kind, key)),
+          sk: S(RECEIPT_SK),
+          receipt_kind: S(kind),
+          receipt_key: S(key),
+          created_at: N(now),
+          expires_at: N(now + ttlSeconds),
+          value: value
+            ? {
+                M: Object.fromEntries(
+                  Object.entries(value).map(([k, v]) => [k, S(v)]),
+                ),
+              }
+            : undefined,
+        }),
+        ConditionExpression: "attribute_not_exists(pk) OR expires_at <= :now",
+        ExpressionAttributeValues: { ":now": N(now) },
+        ReturnValuesOnConditionCheckFailure: "ALL_OLD",
+      }),
+    );
+    return { outcome: "claimed" };
+  } catch (cause) {
+    if (!(cause instanceof ConditionalCheckFailedException)) throw cause;
+    return { outcome: "duplicate", value: readReceiptValue(cause.Item) };
+  }
 }
 
 // ---------------------------------------------------------------------------

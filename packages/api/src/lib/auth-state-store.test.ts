@@ -1,11 +1,15 @@
 /**
- * THINK-643 — DynamoDB auth-state store semantics.
+ * THINK-643/644 — DynamoDB state store semantics.
  *
  * The conditional-write behavior is the whole point of the migration: it is
  * what replaces the Postgres `status = 'issued'` predicate that made a ticket
  * single-use. These tests pin it at the command level (mocked DynamoDB client),
  * including the three-way consume outcome that lets the authorizer tell a
  * replay apart from a nonce it has simply never seen.
+ *
+ * THINK-644 adds the receipt primitive on the same table: first-claim-wins,
+ * duplicate detection, TTL arithmetic, and the key-shape rules that keep an
+ * attacker-influenced idempotency key inside DynamoDB's partition-key ceiling.
  */
 
 import {
@@ -19,11 +23,16 @@ import {
 import { mockClient } from "aws-sdk-client-mock";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { createHash } from "node:crypto";
+
 import {
   TICKET_TTL_GRACE_SECONDS,
   __resetAuthStateClientForTests,
   authStateStoreMode,
-  bumpCounter,
+  claimReceipt,
+  getReceipt,
+  receiptPk,
+  ttlCounter,
   consumeOAuthState,
   consumeTicket,
   getTicket,
@@ -266,11 +275,11 @@ describe("getTicket", () => {
   });
 });
 
-describe("bumpCounter", () => {
+describe("ttlCounter", () => {
   it("increments atomically inside an aligned window and returns the new count", async () => {
     ddb.on(UpdateItemCommand).resolves({ Attributes: { count: { N: "3" } } });
 
-    await expect(bumpCounter("connect#issuer#sub", 60, NOW + 17)).resolves.toBe(
+    await expect(ttlCounter("connect#issuer#sub", 60, NOW + 17)).resolves.toBe(
       3,
     );
 
@@ -294,10 +303,173 @@ describe("bumpCounter", () => {
   it("starts a fresh item in the next window", async () => {
     ddb.on(UpdateItemCommand).resolves({ Attributes: { count: { N: "1" } } });
 
-    await expect(bumpCounter("k", 60, NOW + 61)).resolves.toBe(1);
+    await expect(ttlCounter("k", 60, NOW + 61)).resolves.toBe(1);
     expect(
       ddb.commandCalls(UpdateItemCommand)[0].args[0].input.Key?.sk,
     ).toEqual({ S: `w#${NOW + 60}` });
+  });
+});
+
+describe("idempotency receipts", () => {
+  const digest = (key: string) =>
+    createHash("sha256").update(key).digest("hex");
+
+  it("hashes every key into the pk and keeps the raw key on the item", async () => {
+    ddb.on(PutItemCommand).resolves({});
+
+    await claimReceipt("webhook", "hook-1:key-1", 3600, undefined, NOW);
+
+    const input = ddb.commandCalls(PutItemCommand)[0].args[0].input;
+    expect(input.Item?.pk).toEqual({
+      S: `receipt#webhook#${digest("hook-1:key-1")}`,
+    });
+    expect(input.Item?.sk).toEqual({ S: "r" });
+    expect(input.Item?.receipt_kind).toEqual({ S: "webhook" });
+    expect(input.Item?.receipt_key).toEqual({ S: "hook-1:key-1" });
+  });
+
+  it("sets the TTL to now + ttlSeconds", async () => {
+    ddb.on(PutItemCommand).resolves({});
+
+    await claimReceipt("webhook", "k", 7 * 24 * 60 * 60, undefined, NOW);
+
+    expect(
+      ddb.commandCalls(PutItemCommand)[0].args[0].input.Item?.expires_at,
+    ).toEqual({ N: String(NOW + 7 * 24 * 60 * 60) });
+  });
+
+  it("claims when no live receipt exists, admitting a lapsed-but-unswept one", async () => {
+    ddb.on(PutItemCommand).resolves({});
+
+    await expect(
+      claimReceipt("webhook", "k", 60, { turnId: "turn-1" }, NOW),
+    ).resolves.toEqual({ outcome: "claimed" });
+
+    const input = ddb.commandCalls(PutItemCommand)[0].args[0].input;
+    // TTL deletion lags by up to 48h, so presence alone must not block a
+    // re-claim past the stated expiry.
+    expect(input.ConditionExpression).toBe(
+      "attribute_not_exists(pk) OR expires_at <= :now",
+    );
+    expect(input.ExpressionAttributeValues?.[":now"]).toEqual({
+      N: String(NOW),
+    });
+    expect(input.Item?.value).toEqual({ M: { turnId: { S: "turn-1" } } });
+  });
+
+  it("omits the value attribute entirely when no value is supplied", async () => {
+    ddb.on(PutItemCommand).resolves({});
+
+    await claimReceipt("webhook", "k", 60, undefined, NOW);
+
+    expect(
+      ddb.commandCalls(PutItemCommand)[0].args[0].input.Item,
+    ).not.toHaveProperty("value");
+  });
+
+  it("reports a duplicate and hands back the first claim's value", async () => {
+    ddb.on(PutItemCommand).rejects(
+      conditionFailure({
+        pk: { S: `receipt#webhook#${digest("k")}` },
+        value: { M: { turnId: { S: "turn-1" } } } as never,
+      }),
+    );
+
+    await expect(
+      claimReceipt("webhook", "k", 60, { turnId: "turn-2" }, NOW),
+    ).resolves.toEqual({ outcome: "duplicate", value: { turnId: "turn-1" } });
+  });
+
+  it("reports a duplicate with no value when the prior receipt carried none", async () => {
+    ddb
+      .on(PutItemCommand)
+      .rejects(conditionFailure({ pk: { S: "receipt#x" } }));
+
+    await expect(
+      claimReceipt("webhook", "k", 60, undefined, NOW),
+    ).resolves.toEqual({ outcome: "duplicate", value: undefined });
+  });
+
+  it("rethrows a non-conditional failure rather than reporting a duplicate", async () => {
+    ddb.on(PutItemCommand).rejects(new Error("throughput exceeded"));
+
+    await expect(claimReceipt("webhook", "k", 60)).rejects.toThrow(
+      "throughput exceeded",
+    );
+  });
+
+  it("reads a live receipt consistently", async () => {
+    ddb.on(GetItemCommand).resolves({
+      Item: {
+        pk: { S: `receipt#webhook#${digest("k")}` },
+        expires_at: { N: String(NOW + 60) },
+        value: { M: { turnId: { S: "turn-1" } } },
+      },
+    });
+
+    await expect(getReceipt("webhook", "k", NOW)).resolves.toEqual({
+      value: { turnId: "turn-1" },
+    });
+    const input = ddb.commandCalls(GetItemCommand)[0].args[0].input;
+    expect(input.Key).toEqual({
+      pk: { S: `receipt#webhook#${digest("k")}` },
+      sk: { S: "r" },
+    });
+    expect(input.ConsistentRead).toBe(true);
+  });
+
+  it("returns null for an absent receipt", async () => {
+    ddb.on(GetItemCommand).resolves({});
+
+    await expect(getReceipt("webhook", "k", NOW)).resolves.toBeNull();
+  });
+
+  it("treats a lapsed-but-unswept receipt as absent", async () => {
+    ddb.on(GetItemCommand).resolves({
+      Item: { pk: { S: "receipt#webhook#x" }, expires_at: { N: String(NOW) } },
+    });
+
+    await expect(getReceipt("webhook", "k", NOW)).resolves.toBeNull();
+  });
+
+  it("distinguishes a valueless live receipt from no receipt", async () => {
+    ddb.on(GetItemCommand).resolves({
+      Item: {
+        pk: { S: "receipt#webhook#x" },
+        expires_at: { N: String(NOW + 60) },
+      },
+    });
+
+    await expect(getReceipt("webhook", "k", NOW)).resolves.toEqual({
+      value: undefined,
+    });
+  });
+
+  describe("key shapes", () => {
+    it("keeps an 8 KB key inside DynamoDB's 2048-byte pk ceiling", () => {
+      const pk = receiptPk("webhook", "x".repeat(8 * 1024));
+      expect(Buffer.byteLength(pk, "utf8")).toBeLessThan(2048);
+      expect(pk).toBe(`receipt#webhook#${digest("x".repeat(8 * 1024))}`);
+    });
+
+    it("is stable and collision-free across delimiter-shifted keys", () => {
+      // "a:b#c" vs "a:b" + "#c" — a raw-key pk would risk aliasing these.
+      expect(receiptPk("webhook", "a:b#c")).not.toBe(
+        receiptPk("webhook", "a:b"),
+      );
+      expect(receiptPk("webhook", "k")).toBe(receiptPk("webhook", "k"));
+    });
+
+    it("namespaces by kind so two kinds never share a receipt", () => {
+      expect(receiptPk("webhook", "k")).not.toBe(receiptPk("other", "k"));
+    });
+
+    it("handles empty and multibyte keys without throwing", () => {
+      expect(receiptPk("webhook", "")).toBe(`receipt#webhook#${digest("")}`);
+      expect(receiptPk("webhook", "clé-🔑")).toBe(
+        `receipt#webhook#${digest("clé-🔑")}`,
+      );
+    });
   });
 });
 

@@ -183,7 +183,7 @@ describe("dynamo path", () => {
         cognitoSub: "cognito-sub",
         since: new Date(NOW * 1000),
       }),
-      // bumpCounter returns the post-increment value; the handler compares
+      // ttlCounter returns the post-increment value; the handler compares
       // PRIOR attempts against the max, so 5 bumped ⇒ 4 prior.
     ).resolves.toBe(4);
     expect(selectWhere).not.toHaveBeenCalled();
