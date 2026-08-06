@@ -2085,6 +2085,35 @@ describe("handleInvocation — MCP URL validator", () => {
     expect(capturedRecordLinkHints).toBeUndefined();
   });
 
+  it("passes the MCP config's longRunning opt-in through to connect (THINK-623)", async () => {
+    const captured: Array<boolean | undefined> = [];
+    await handleInvocation({
+      payload: VALID_PAYLOAD({
+        mcp_configs: [
+          {
+            name: "brain",
+            url: "https://brain.example.com/mcp",
+            auth: { token: "test-bearer" },
+            longRunning: true,
+          },
+          {
+            name: "slack",
+            url: "https://mcp.example.com/",
+            auth: { token: "test-bearer" },
+          },
+        ],
+      }),
+      deps: makeDeps({
+        connectMcpServerFactory: async (args) => {
+          captured.push(args.longRunning);
+          return [];
+        },
+      }),
+    });
+
+    expect(captured).toEqual([true, undefined]);
+  });
+
   it("skips configs with non-https schemes BEFORE handle minting", async () => {
     const connectCalls: Array<{ serverName: string }> = [];
     const connectFactory: ConnectMcpServerFn = async (args) => {

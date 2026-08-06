@@ -11,7 +11,7 @@ interface FakeListing {
 }
 
 interface FakeClient {
-  connect: (transport: Transport) => Promise<void>;
+  connect: (transport: Transport, opts?: { timeout?: number }) => Promise<void>;
   listTools: (
     args: undefined,
     opts?: { timeout?: number },
@@ -629,5 +629,61 @@ describe("McpConnectionRetention rebind ping tolerance (THINK-586 U7)", () => {
         authorizationForServer: () => null,
       }),
     ).rejects.toThrow(/fetch failed/);
+  });
+});
+
+describe("createConnectMcpServer — RPC option shapes (THINK-623)", () => {
+  it("caps `connect` with an explicit timeout so a cold server fails fast", async () => {
+    const fake = makeFakeClient([]);
+    const factory = createConnectMcpServer({
+      cleanup: [],
+      transportFactory: () => makeFakeTransport(),
+      clientFactory: () => fake.client as never,
+    });
+    await factory({
+      url: "https://mcp.example.com/",
+      headers: {},
+      serverName: "demo",
+    });
+    expect(fake.connect.mock.calls[0]![1]).toEqual({ timeout: 10_000 });
+  });
+
+  it("keeps the fixed 60s wall and sends no progress token by default", async () => {
+    const fake = makeFakeClient([{ name: "search" }]);
+    const factory = createConnectMcpServer({
+      cleanup: [],
+      transportFactory: () => makeFakeTransport(),
+      clientFactory: () => fake.client as never,
+    });
+    const tools = await factory({
+      url: "https://mcp.example.com/",
+      headers: {},
+      serverName: "demo",
+    });
+    await tools[0]!.execute("call-1", {});
+    expect(fake.callTool.mock.calls[0]![2]).toEqual({ timeout: 60_000 });
+  });
+
+  it("gives `longRunning` servers a progress-resetting wall plus a total ceiling", async () => {
+    const fake = makeFakeClient([{ name: "search" }]);
+    const factory = createConnectMcpServer({
+      cleanup: [],
+      transportFactory: () => makeFakeTransport(),
+      clientFactory: () => fake.client as never,
+    });
+    const tools = await factory({
+      url: "https://mcp.example.com/",
+      headers: {},
+      serverName: "demo",
+      longRunning: true,
+    });
+    await tools[0]!.execute("call-1", {});
+    const opts = fake.callTool.mock.calls[0]![2] as Record<string, unknown>;
+    expect(opts.timeout).toBe(60_000);
+    expect(opts.resetTimeoutOnProgress).toBe(true);
+    expect(opts.maxTotalTimeout).toBe(480_000);
+    // Presence of `onprogress` is what makes the SDK attach the
+    // `_meta.progressToken` the server needs to reset the wall.
+    expect(typeof opts.onprogress).toBe("function");
   });
 });

@@ -29,6 +29,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { RequestOptions } from "@modelcontextprotocol/sdk/shared/protocol.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { createHash } from "node:crypto";
@@ -42,6 +43,37 @@ const DEFAULT_LIST_TOOLS_TIMEOUT_MS = 30_000;
 const DEFAULT_CALL_TOOL_TIMEOUT_MS = 60_000;
 const DEFAULT_READ_RESOURCE_TIMEOUT_MS = 30_000;
 const DEFAULT_WARM_PING_TIMEOUT_MS = 3_000;
+
+/**
+ * THINK-623 — explicit `connect` (MCP `initialize`) wall. The SDK would
+ * otherwise apply its 60s default here, so a cold or unreachable MCP
+ * server stalls the whole tool build for a minute before the failure
+ * reaches `onConnectError` (`mcp_connect_failed`). Fail fast instead.
+ */
+const DEFAULT_CONNECT_TIMEOUT_MS = 10_000;
+
+/**
+ * THINK-623 — absolute ceiling for a single `callTool` on a server that
+ * opted into the long-call profile. The per-attempt wall
+ * (`callToolTimeoutMs`) still applies between progress notifications;
+ * `maxTotalTimeout` bounds the total wall so a server that keeps
+ * emitting progress forever can't pin the turn open indefinitely.
+ */
+const DEFAULT_LONG_CALL_MAX_TOTAL_TIMEOUT_MS = 480_000;
+
+/**
+ * THINK-623 — progress sink for long-call servers. The MCP SDK only
+ * attaches `_meta.progressToken` to a request when an `onprogress`
+ * callback is supplied, and only that token makes the server's progress
+ * notifications routable back to this request — which is what
+ * `resetTimeoutOnProgress` needs to push the per-attempt wall out. The
+ * callback itself is intentionally inert: progress payloads are
+ * server-controlled and this path runs inside the agent loop, so
+ * anything noisier belongs behind the trusted handler's logger.
+ */
+function noteMcpProgress(): void {
+  // Intentionally empty — see doc comment.
+}
 
 /** JSON-RPC "Method not found" — the server answered, so the transport is
  * alive even though it doesn't implement the optional MCP ping. */
@@ -198,6 +230,14 @@ export interface CreateConnectMcpServerOptions {
   callToolTimeoutMs?: number;
   /** Override MCP App resource-read timeout (default 30s). */
   readResourceTimeoutMs?: number;
+  /** Override `connect` (MCP `initialize`) timeout (default 10s). */
+  connectTimeoutMs?: number;
+  /**
+   * THINK-623 — override the total wall for `callTool` on servers that
+   * set `longRunning` (default 8 minutes). Ignored for every other
+   * server.
+   */
+  longCallMaxTotalTimeoutMs?: number;
   /**
    * U16 — fetch interceptor used at MCP egress. Trusted-handler builds
    * one bound to the per-invocation `HandleStore` and bearer-scrubber
@@ -485,6 +525,10 @@ export function createConnectMcpServer(
     options.callToolTimeoutMs ?? DEFAULT_CALL_TOOL_TIMEOUT_MS;
   const readResourceTimeoutMs =
     options.readResourceTimeoutMs ?? DEFAULT_READ_RESOURCE_TIMEOUT_MS;
+  const connectTimeoutMs =
+    options.connectTimeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS;
+  const longCallMaxTotalTimeoutMs =
+    options.longCallMaxTotalTimeoutMs ?? DEFAULT_LONG_CALL_MAX_TOTAL_TIMEOUT_MS;
   const transportFactory = options.transportFactory ?? defaultTransportFactory;
   const clientFactory = options.clientFactory ?? defaultClientFactory;
   const customFetch = options.fetch;
@@ -505,7 +549,21 @@ export function createConnectMcpServer(
       fetch: fetchState ? makeIndirectFetch(fetchState) : customFetch,
     });
     const client = clientFactory();
-    await client.connect(transport);
+    await client.connect(transport, { timeout: connectTimeoutMs });
+
+    // THINK-623 — servers that stream MCP progress notifications during a
+    // long tool call opt into a per-attempt wall that RESETS on every
+    // notification, bounded by an absolute `maxTotalTimeout`. Every other
+    // server keeps the single fixed `timeout` (and no `onprogress`, so the
+    // SDK sends no `progressToken`) — byte-identical to the legacy path.
+    const callToolOptions: RequestOptions = args.longRunning
+      ? {
+          timeout: callToolTimeoutMs,
+          resetTimeoutOnProgress: true,
+          maxTotalTimeout: longCallMaxTotalTimeoutMs,
+          onprogress: noteMcpProgress,
+        }
+      : { timeout: callToolTimeoutMs };
 
     const closeTransport = async () => {
       try {
@@ -574,7 +632,7 @@ export function createConnectMcpServer(
                 arguments: paramsRecord(params),
               },
               undefined,
-              { timeout: callToolTimeoutMs },
+              callToolOptions,
             );
             const content =
               "content" in response ? response.content : response.toolResult;

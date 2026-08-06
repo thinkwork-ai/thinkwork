@@ -557,6 +557,50 @@ describe("buildMcpConfigs — plugin dispatch identity", () => {
     ]);
   });
 
+  it("emits longRunning for servers whose runtime_metadata declares it (THINK-623)", async () => {
+    mockJoinRows.mockReturnValue([
+      pluginRow("brain", {
+        slug: "brain--brain",
+        name: "ThinkWork Brain",
+        url: "http://internal-graph.example.local/mcp-server/http",
+        auth_type: "none",
+        auth_config: null,
+        runtime_metadata: { longRunning: true },
+      }),
+    ]);
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: null },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(configs).toHaveLength(1);
+    expect(configs[0]!.longRunning).toBe(true);
+  });
+
+  it("omits longRunning for servers that did not declare it (THINK-623)", async () => {
+    mockJoinRows.mockReturnValue([
+      pluginRow("brain", {
+        slug: "brain--brain",
+        url: "http://internal-graph.example.local/mcp-server/http",
+        auth_type: "none",
+        auth_config: null,
+      }),
+    ]);
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: null },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(configs).toHaveLength(1);
+    expect(configs[0]).not.toHaveProperty("longRunning");
+  });
+
   it("service_credential plugin servers resolve tenant auth without requester activation", async () => {
     const authConfig = {
       credentialKind: "n8n-mcp-access-token",

@@ -148,6 +148,10 @@ export interface ConnectMcpServerArgs {
   /** Provider-neutral, manifest-declared result normalization rules. */
   resultTransforms?: McpResultTransform[];
   /**
+   * THINK-623 — opt-in long-call profile (see `McpServerConfig.longRunning`).
+   */
+  longRunning?: boolean;
+  /**
    * Plan §006 U2/U4 — per-invocation registry the connect path populates
    * with each whitelist-filtered tool's metadata. The MCP proxy AgentTool
    * (U3) reads from this registry for its list/search modes; the proxy's
@@ -252,6 +256,19 @@ export interface McpServerConfig {
   recordLinkHints?: McpRuntimeRecordLinkHints;
   /** Provider-neutral, manifest-declared result normalization rules. */
   resultTransforms?: McpResultTransform[];
+  /**
+   * THINK-623 — opt-in long-call profile. Servers that stream MCP progress
+   * notifications during a long tool call (the Brain connector's deep
+   * retrieval, for one) set this so `callTool` gets a progress-resetting
+   * per-attempt wall plus an absolute `maxTotalTimeout`, instead of the
+   * single fixed 60s wall. Off by default: every other server keeps the
+   * legacy behavior exactly, including sending no `progressToken`.
+   *
+   * Sourced from the runtime MCP config JSON (`longRunning: true`), which
+   * `packages/api` emits from the server row's
+   * `runtime_metadata.longRunning`.
+   */
+  longRunning?: boolean;
   /**
    * Server-built trust marker for plugin-owned tenant-internal MCP endpoints.
    * Allows no-auth connects; URL validation remains owned by the trusted
@@ -607,6 +624,7 @@ export async function buildMcpTools(
         transport: config.transport,
         recordLinkHints: config.recordLinkHints,
         resultTransforms: config.resultTransforms,
+        longRunning: config.longRunning,
         registry,
       });
       tools.push(

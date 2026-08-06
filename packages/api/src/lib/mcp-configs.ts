@@ -97,6 +97,15 @@ export interface McpServerConfig {
   recordLinkHints?: McpRuntimeRecordLinkHints;
   resultTransforms?: McpResultTransform[];
   /**
+   * THINK-623 — opt-in long-call profile for MCP servers that stream
+   * progress notifications during a long tool call (the Brain connector's
+   * deep retrieval, for one). Read from the server row's
+   * `runtime_metadata.longRunning`; the Pi runtime turns it into a
+   * progress-resetting `callTool` wall plus an absolute total ceiling.
+   * Absent for every other server, which keeps the fixed 60s wall.
+   */
+  longRunning?: boolean;
+  /**
    * Probe-mode only (capability-mapping plan U3, KTD-1): the stored token's
    * status for this server, read from user_mcp_tokens / auth_config metadata
    * WITHOUT touching Secrets Manager or the token endpoint. Never present on
@@ -1432,6 +1441,11 @@ function toMcpServerConfig(
   }
   if (recordLinkHints) config.recordLinkHints = recordLinkHints;
   if (resultTransforms) config.resultTransforms = resultTransforms;
+  // THINK-623 — ungated (unlike the plugin-only hints above): the Brain
+  // connector is an operator-configured server row, not a plugin install.
+  if (recordOrNull(mcp.runtime_metadata)?.longRunning === true) {
+    config.longRunning = true;
+  }
   return config;
 }
 
