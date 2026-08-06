@@ -143,6 +143,14 @@ TF_VAR_ARGS=(
   # populates CAPABILITY_PRIVATE_* so agentcore-admin provisions
   # capability-private interpreters. One-line revert disables it.
   -var "enable_capability_broker=true"
+  # THINK-643 — dev-only cutover of short-lived auth-flow state (AppSync
+  # subscription tickets + the per-principal connect rate-limit counter) from
+  # Aurora to DynamoDB. deploy.yml is dev-only; prod/customer stages deploy via
+  # deploy-harness.yml / release.yml where this var is absent (→ "postgres",
+  # table not provisioned, zero plan diff). Env-overridable so a repo variable
+  # can revert dev to Postgres without a code change. The authorizer keeps a
+  # permanent Postgres fallback for tickets minted just before a flip.
+  -var "auth_state_store=${AUTH_STATE_STORE:-dynamo}"
   # THINK-583 U3 — warm chat path: provisioned concurrency of 1 on the
   # `live` alias of chat-agent-invoke and workspace-renderer (KTD5: never
   # the Pi Lambda). Module defaults stay 0, so this dev-only workflow is

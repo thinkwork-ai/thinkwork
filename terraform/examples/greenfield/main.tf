@@ -111,6 +111,18 @@ variable "enable_capability_broker" {
   default     = false
 }
 
+variable "auth_state_store" {
+  description = "THINK-643: backing store for short-lived auth-flow state (AppSync subscription tickets + connect rate-limit counters). \"postgres\" (default) keeps the Aurora auth_subscription_tickets path; \"dynamo\" provisions thinkwork-<stage>-auth-state and points the auth handlers at it. Ship-inert: dev opts in via the deploy workflow, customer stages on their own cadence."
+  type        = string
+  default     = "postgres"
+
+  validation {
+    condition     = contains(["postgres", "dynamo"], var.auth_state_store)
+    error_message = "auth_state_store must be \"postgres\" or \"dynamo\"."
+  }
+}
+
+
 variable "enable_agentcore_multiplayer_proof" {
   description = "Opt in to the non-production THINK-316 AgentCore Identity/Gateway proof substrate."
   type        = bool
@@ -894,6 +906,7 @@ module "thinkwork" {
   enable_hindsight                            = var.enable_hindsight
   external_kb_source_arns                     = var.external_kb_source_arns
   enable_capability_broker                    = var.enable_capability_broker
+  auth_state_store                            = var.auth_state_store
   enable_agentcore_multiplayer_proof          = var.enable_agentcore_multiplayer_proof
   agentcore_multiplayer_proof_tenant_slug     = var.agentcore_multiplayer_proof_tenant_slug
   agentcore_multiplayer_proof_owner_allowlist = var.agentcore_multiplayer_proof_owner_allowlist
