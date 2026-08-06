@@ -1818,3 +1818,82 @@ export const SettingsUnlinkSlackIdentityMutation = graphql(`
     }
   }
 `);
+
+// ─── Brain access (THINK-625) ───────────────────────────────────────────
+//
+// Claims reach the Company Brain only through the per-tenant manifest, so
+// every mutation returns the publish outcome next to the row — the UI has to
+// be able to say "saved, but not live yet".
+
+export const SettingsUserBrainClaimsQuery = graphql(`
+  query SettingsUserBrainClaims($tenantId: ID!, $userId: ID!) {
+    userBrainClaims(tenantId: $tenantId, userId: $userId) {
+      id
+      tenantId
+      userId
+      securityGroups
+      kbCollections
+      kbBundles
+      defaultKbBundle
+      toolAllowlist
+      isOperator
+      kbTrace
+      enabled
+      notes
+      updatedAt
+    }
+  }
+`);
+
+export const SettingsSetUserBrainClaimsMutation = graphql(`
+  mutation SettingsSetUserBrainClaims(
+    $tenantId: ID!
+    $userId: ID!
+    $input: UserBrainClaimsInput!
+  ) {
+    setUserBrainClaims(tenantId: $tenantId, userId: $userId, input: $input) {
+      claims {
+        id
+        tenantId
+        userId
+        securityGroups
+        kbCollections
+        kbBundles
+        defaultKbBundle
+        toolAllowlist
+        isOperator
+        kbTrace
+        enabled
+        notes
+        updatedAt
+      }
+      manifest {
+        published
+        key
+        reason
+      }
+    }
+  }
+`);
+
+export const SettingsClearUserBrainClaimsMutation = graphql(`
+  mutation SettingsClearUserBrainClaims($tenantId: ID!, $userId: ID!) {
+    clearUserBrainClaims(tenantId: $tenantId, userId: $userId) {
+      manifest {
+        published
+        key
+        reason
+      }
+    }
+  }
+`);
+
+export const SettingsRepublishUserClaimsManifestMutation = graphql(`
+  mutation SettingsRepublishUserClaimsManifest($tenantId: ID!) {
+    republishUserClaimsManifest(tenantId: $tenantId) {
+      published
+      key
+      reason
+    }
+  }
+`);
