@@ -42,7 +42,7 @@ jobs:
     # per feedback_gha_env_context_job_if, `if: env.X` at job-level silently
     # fails the entire workflow.
     if: github.event_name == 'workflow_dispatch' && inputs.run_smokes == true
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +72,7 @@ jobs:
   spaces-thread-streaming-smoke:
     name: Computer Thread Streaming Smoke
     if: github.event_name == 'workflow_dispatch' && inputs.run_smokes == true
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
@@ -110,7 +110,7 @@ jobs:
   compliance-anchor-smoke:
     name: Compliance Anchor Smoke
     if: github.event_name == 'workflow_dispatch' && inputs.run_smokes == true
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -142,7 +142,7 @@ jobs:
   compliance-export-runner-smoke:
     name: Compliance Export Runner Smoke
     if: github.event_name == 'workflow_dispatch' && inputs.run_smokes == true
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
@@ -174,7 +174,7 @@ jobs:
   drift-check:
     name: Terraform Drift Check
     if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4

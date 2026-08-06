@@ -22,7 +22,7 @@ concurrency:
 jobs:
   build-submit:
     name: EAS build + submit (iOS → TestFlight)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 20
     steps:
       - name: Preflight EXPO_TOKEN
