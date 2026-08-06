@@ -588,21 +588,27 @@ function DataViewArtifactContent({
   // refresh are header icons composed above. The legacy promote-copy snapshot
   // render path was retired when the living canvas became the single GenUI
   // artifact system.
+  // The shell's content <main> is overflow-hidden, so this route must own
+  // its scrolling. The side panel (ThreadArtifactPanel) provides its own
+  // overflow-y-auto wrapper, which is why CanvasArtifactView itself stays
+  // scroll-agnostic.
   if (isCanvas) {
     return (
-      <CanvasArtifactView
-        artifact={{
-          id: artifact.id,
-          title: artifact.title,
-          status: artifact.status,
-          spaceId: artifact.spaceId ?? null,
-          headVersion: artifact.headVersion ?? 0,
-          content: artifact.content ?? null,
-          summary: artifact.summary ?? null,
-          bindings: artifact.bindings ?? [],
-          versions: artifact.versions ?? [],
-        }}
-      />
+      <div className="h-full min-h-0 overflow-y-auto">
+        <CanvasArtifactView
+          artifact={{
+            id: artifact.id,
+            title: artifact.title,
+            status: artifact.status,
+            spaceId: artifact.spaceId ?? null,
+            headVersion: artifact.headVersion ?? 0,
+            content: artifact.content ?? null,
+            summary: artifact.summary ?? null,
+            bindings: artifact.bindings ?? [],
+            versions: artifact.versions ?? [],
+          }}
+        />
+      </div>
     );
   }
 
