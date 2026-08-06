@@ -56,6 +56,7 @@ function dependencies() {
       resourceId: "thread-1",
     })),
     persist,
+    countRecentConnectTickets: vi.fn(async () => 0),
     now: () => 1_800_000_000,
     stage: () => "dev",
     audience: () => "appsync-api-1",
@@ -142,6 +143,57 @@ describe("auth subscription ticket handler", () => {
         )
       ).statusCode,
     ).toBe(400);
+  });
+
+  it("mints under the connect rate limit and counts only the last minute", async () => {
+    const deps = dependencies();
+    deps.countRecentConnectTickets.mockResolvedValueOnce(9);
+    const response = await createAuthSubscriptionTicketHandler(deps)(
+      event({ kind: "connect", tenantId: "tenant-1" }),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(deps.countRecentConnectTickets).toHaveBeenCalledWith({
+      cognitoIssuer: "https://cognito-idp.us-east-1.amazonaws.com/pool",
+      cognitoSub: "cognito-sub",
+      since: new Date(1_799_999_940_000),
+    });
+  });
+
+  it("refuses connect tickets with 429 above 10 per minute", async () => {
+    const deps = dependencies();
+    deps.countRecentConnectTickets.mockResolvedValueOnce(10);
+    const response = await createAuthSubscriptionTicketHandler(deps)(
+      event({ kind: "connect", tenantId: "tenant-1" }),
+    );
+    expect(response.statusCode).toBe(429);
+    expect(deps.admit).not.toHaveBeenCalled();
+    expect(deps.persist).not.toHaveBeenCalled();
+  });
+
+  it("does not rate-limit operation-bound registration tickets", async () => {
+    const deps = dependencies();
+    deps.countRecentConnectTickets.mockResolvedValue(5_000);
+    const response = await createAuthSubscriptionTicketHandler(deps)(
+      event({
+        kind: "registration",
+        tenantId: "tenant-1",
+        operationName: "OnNewMessage",
+        query:
+          "subscription OnNewMessage { onNewMessage(threadId: 1) { messageId } }",
+        variables: { threadId: "thread-1" },
+      }),
+    );
+    expect(response.statusCode).toBe(200);
+    expect(deps.countRecentConnectTickets).not.toHaveBeenCalled();
+  });
+
+  it("fails open when the rate-limit count query errors", async () => {
+    const deps = dependencies();
+    deps.countRecentConnectTickets.mockRejectedValueOnce(new Error("db down"));
+    const response = await createAuthSubscriptionTicketHandler(deps)(
+      event({ kind: "connect", tenantId: "tenant-1" }),
+    );
+    expect(response.statusCode).toBe(200);
   });
 
   it("returns a uniform forbidden response for admission failures", async () => {
