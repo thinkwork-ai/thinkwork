@@ -2599,6 +2599,48 @@ resource "aws_s3_bucket_lifecycle_configuration" "brain_artifacts" {
       noncurrent_days = 365
     }
   }
+
+  # THINK-630: async brain_ask task records are a polling buffer, not an
+  # archive — they hold answer content and principal metadata, so they must
+  # not accumulate. Seven days far exceeds any task's useful life. The
+  # brain-mcp module (company-brain repo) deliberately does NOT manage this
+  # bucket's lifecycle (it would silently drop the rules above); this stack
+  # is the bucket's single lifecycle author.
+  rule {
+    id     = "expire-brain-ask-tasks"
+    status = "Enabled"
+
+    filter {
+      prefix = "brain-ask-tasks/"
+    }
+
+    expiration {
+      days = 7
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 7
+    }
+  }
+
+  # THINK-629 C2: ask exchange records (follow-up continuity) age out the
+  # same way — the durable record is the thread itself.
+  rule {
+    id     = "expire-brain-ask-exchanges"
+    status = "Enabled"
+
+    filter {
+      prefix = "brain-ask-exchanges/"
+    }
+
+    expiration {
+      days = 7
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 7
+    }
+  }
 }
 
 data "aws_iam_policy_document" "brain_artifacts_bucket" {
