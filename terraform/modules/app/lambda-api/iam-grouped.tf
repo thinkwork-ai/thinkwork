@@ -406,6 +406,23 @@ locals {
         Resource = var.capability_broker_session_table_arn
       },
     ] : [],
+    # THINK-643 — auth-subscription-ticket mints tickets and bumps the connect
+    # counter; appsync-subscription-authorizer reads and conditionally consumes
+    # them. Both run on this shared role. Empty (→ no grant) while
+    # auth_state_store is "postgres", so the grant appears with the table.
+    local.auth_state_enabled ? [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+        ]
+        Resource = aws_dynamodb_table.auth_state[0].arn
+      },
+    ] : [],
   )
 
   # ---------------------------------------------------------------------------

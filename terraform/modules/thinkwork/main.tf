@@ -1251,6 +1251,8 @@ module "api" {
   capability_broker_audience          = module.capability_broker.broker_audience
   capability_broker_api_id            = module.capability_broker.private_api_id
   capability_broker_vpce_dns          = module.capability_broker.execute_api_vpce_dns_name
+  # THINK-643 — "postgres" (default) leaves the auth-state table unprovisioned.
+  auth_state_store = var.auth_state_store
 
   depends_on = [module.cognito]
 }

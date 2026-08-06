@@ -7,6 +7,11 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { getConfig } from "@thinkwork/runtime-config";
 
 import { admitCognitoTenant } from "../lib/auth-admission.js";
+import {
+  authStateStoreMode,
+  bumpCounter,
+  putTicket,
+} from "../lib/auth-state-store.js";
 import { authenticate, type AuthResult } from "../lib/cognito-auth.js";
 import { db } from "../lib/db.js";
 import {
@@ -82,50 +87,141 @@ export interface AuthSubscriptionTicketDependencies {
   audience(): string;
 }
 
-const defaultDependencies: AuthSubscriptionTicketDependencies = {
+/** Exported for THINK-643 store-routing tests; the handler default. */
+export const defaultDependencies: AuthSubscriptionTicketDependencies = {
   authenticate,
   signer: resolveSubscriptionTicketSigner,
   admit: admitCognitoTenant,
   admitOperation: admitSubscriptionOperation,
-  async persist({ nonceDigest, claims }) {
-    await db.insert(authSubscriptionTickets).values({
-      nonce_digest: nonceDigest,
-      kind: claims.kind,
-      status: "issued",
-      stage: claims.stage,
-      appsync_api_id: claims.audience,
-      key_id: claims.keyId,
-      cognito_issuer: claims.cognitoIssuer,
-      cognito_sub: claims.cognitoSub,
-      user_id: claims.userId,
-      tenant_id: claims.tenantId,
-      auth_route_client_id: claims.routeClientId,
-      operation_name: claims.operationName ?? null,
-      operation_hash: claims.operationHash ?? null,
-      resource_kind: claims.resourceKind ?? null,
-      resource_id: claims.resourceId ?? null,
-      expires_at: new Date(claims.expiresAt * 1000),
-    });
+  async persist(input) {
+    if (authStateStoreMode() === "dynamo") {
+      await persistTicketDynamo(input);
+      return;
+    }
+    await persistTicketPostgres(input);
   },
-  // Counts against the leading columns of idx_auth_subscription_tickets_principal.
-  async countRecentConnectTickets({ cognitoIssuer, cognitoSub, since }) {
-    const [row] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(authSubscriptionTickets)
-      .where(
-        and(
-          eq(authSubscriptionTickets.cognito_issuer, cognitoIssuer),
-          eq(authSubscriptionTickets.cognito_sub, cognitoSub),
-          eq(authSubscriptionTickets.kind, "connect"),
-          gte(authSubscriptionTickets.created_at, since),
-        ),
-      );
-    return row?.count ?? 0;
+  async countRecentConnectTickets(input) {
+    return authStateStoreMode() === "dynamo"
+      ? countRecentConnectTicketsDynamo(input)
+      : countRecentConnectTicketsPostgres(input);
   },
   now: () => Math.floor(Date.now() / 1000),
   stage: () => getConfig("STAGE", ""),
   audience: () => getConfig("APPSYNC_API_ID", ""),
 };
+
+/** THINK-643: unchanged Aurora path. Active while AUTH_STATE_STORE=postgres. */
+export async function persistTicketPostgres({
+  nonceDigest,
+  claims,
+}: {
+  nonceDigest: string;
+  claims: SubscriptionTicketClaims;
+}): Promise<void> {
+  await db.insert(authSubscriptionTickets).values({
+    nonce_digest: nonceDigest,
+    kind: claims.kind,
+    status: "issued",
+    stage: claims.stage,
+    appsync_api_id: claims.audience,
+    key_id: claims.keyId,
+    cognito_issuer: claims.cognitoIssuer,
+    cognito_sub: claims.cognitoSub,
+    user_id: claims.userId,
+    tenant_id: claims.tenantId,
+    auth_route_client_id: claims.routeClientId,
+    operation_name: claims.operationName ?? null,
+    operation_hash: claims.operationHash ?? null,
+    resource_kind: claims.resourceKind ?? null,
+    resource_id: claims.resourceId ?? null,
+    expires_at: new Date(claims.expiresAt * 1000),
+  });
+}
+
+/** THINK-643: DynamoDB path. Same claim set, TTL'd item instead of a row. */
+export async function persistTicketDynamo({
+  nonceDigest,
+  claims,
+}: {
+  nonceDigest: string;
+  claims: SubscriptionTicketClaims;
+}): Promise<void> {
+  await putTicket({
+    nonceDigest,
+    kind: claims.kind,
+    stage: claims.stage,
+    audience: claims.audience,
+    keyId: claims.keyId,
+    cognitoIssuer: claims.cognitoIssuer,
+    cognitoSub: claims.cognitoSub,
+    userId: claims.userId,
+    tenantId: claims.tenantId,
+    routeClientId: claims.routeClientId,
+    operationName: claims.operationName,
+    operationHash: claims.operationHash,
+    resourceKind: claims.resourceKind,
+    resourceId: claims.resourceId,
+    issuedAt: claims.issuedAt,
+    expiresAt: claims.expiresAt,
+  });
+}
+
+/**
+ * Unchanged Aurora path — counts against the leading columns of
+ * idx_auth_subscription_tickets_principal.
+ */
+export async function countRecentConnectTicketsPostgres({
+  cognitoIssuer,
+  cognitoSub,
+  since,
+}: {
+  cognitoIssuer: string;
+  cognitoSub: string;
+  since: Date;
+}): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(authSubscriptionTickets)
+    .where(
+      and(
+        eq(authSubscriptionTickets.cognito_issuer, cognitoIssuer),
+        eq(authSubscriptionTickets.cognito_sub, cognitoSub),
+        eq(authSubscriptionTickets.kind, "connect"),
+        gte(authSubscriptionTickets.created_at, since),
+      ),
+    );
+  return row?.count ?? 0;
+}
+
+/**
+ * THINK-643: the same backstop as an atomic TTL-windowed DynamoDB counter.
+ *
+ * Two deliberate semantic differences from the Postgres COUNT, both of which
+ * make the backstop slightly *stricter* — acceptable for a runaway-tab guard
+ * with 10x headroom, and neither is an authorization control:
+ *
+ *  - Fixed windows, not sliding. A principal gets MAX per aligned 60s bucket
+ *    rather than per trailing 60s, so a burst straddling a boundary can briefly
+ *    see up to 2x MAX. The Postgres query had the opposite skew.
+ *  - It counts *attempts*, not successful mints — the counter is bumped before
+ *    admission, so tickets that are later denied still consume budget.
+ *
+ * Returns the count of PRIOR attempts in the window (bump returns the
+ * post-increment value) so the caller's `>= MAX` comparison is unchanged.
+ */
+export async function countRecentConnectTicketsDynamo({
+  cognitoIssuer,
+  cognitoSub,
+}: {
+  cognitoIssuer: string;
+  cognitoSub: string;
+}): Promise<number> {
+  const count = await bumpCounter(
+    `connect#${cognitoIssuer}#${cognitoSub}`,
+    CONNECT_TICKET_RATE_WINDOW_SECONDS,
+  );
+  return Math.max(0, count - 1);
+}
 
 export function createAuthSubscriptionTicketHandler(
   dependencies: AuthSubscriptionTicketDependencies = defaultDependencies,

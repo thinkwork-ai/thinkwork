@@ -975,3 +975,14 @@ variable "agentcore_runtime_dispatch_enabled" {
   type        = bool
   default     = false
 }
+
+variable "auth_state_store" {
+  description = "THINK-643: backing store for short-lived auth-flow state (AppSync subscription tickets + the per-principal connect rate-limit counter). \"postgres\" (default) keeps the Aurora `auth_subscription_tickets` path. \"dynamo\" provisions thinkwork-<stage>-auth-state and points the auth handlers at it; the authorizer still falls back to a Postgres read for tickets minted just before the flip."
+  type        = string
+  default     = "postgres"
+
+  validation {
+    condition     = contains(["postgres", "dynamo"], var.auth_state_store)
+    error_message = "auth_state_store must be \"postgres\" or \"dynamo\"."
+  }
+}

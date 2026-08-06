@@ -109,6 +109,11 @@ locals {
     COGNITO_AUTH_BASE_URL       = local.mcp_oauth_cognito_base_url
     MCP_OAUTH_CALLBACK_URL      = "${local.mcp_oauth_api_base_url}/mcp/oauth/callback"
     MCP_OAUTH_REVOCATIONS_TABLE = aws_dynamodb_table.mcp_oauth_revocations.name
+    # THINK-643: backing store for short-lived auth-flow state. While this is
+    # "postgres" the auth handlers never touch DynamoDB and AUTH_STATE_TABLE is
+    # empty (no table exists). Read via getConfig() — never process.env.
+    AUTH_STATE_STORE = var.auth_state_store
+    AUTH_STATE_TABLE = local.auth_state_enabled ? aws_dynamodb_table.auth_state[0].name : ""
     # R16: comma-separated app-client allowlist. The optional console client id
     # (U13) joins only when enabled; compact() drops the empty placeholder so
     # the value is byte-identical to before while the console is off.

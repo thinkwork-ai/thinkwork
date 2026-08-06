@@ -451,6 +451,18 @@ variable "enable_capability_broker" {
   default     = false
 }
 
+variable "auth_state_store" {
+  description = "THINK-643: backing store for short-lived auth-flow state (AppSync subscription tickets + connect rate-limit counters). \"postgres\" (default) keeps the Aurora auth_subscription_tickets path; \"dynamo\" provisions thinkwork-<stage>-auth-state and points the auth handlers at it. Ship-inert: dev opts in via the deploy workflow, customer stages on their own cadence."
+  type        = string
+  default     = "postgres"
+
+  validation {
+    condition     = contains(["postgres", "dynamo"], var.auth_state_store)
+    error_message = "auth_state_store must be \"postgres\" or \"dynamo\"."
+  }
+}
+
+
 variable "memory_engine" {
   description = "DEPRECATED (THINK-407): AgentCore managed memory is the only engine; this input is inert and ignored. Declaration retained so existing customer-stage -var passthroughs and tfvars keep working. Legacy values ('hindsight', 'managed') are accepted and discarded."
   type        = string
