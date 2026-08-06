@@ -25,6 +25,13 @@ import { bootstrapUser } from "./bootstrapUser.mutation.js";
 import { deploymentStatus } from "./deploymentStatus.query.js";
 import { managedApplicationHealthCheck } from "./managedApplicationHealthCheck.query.js";
 import { adminRoleCheck } from "./adminRoleCheck.query.js";
+import {
+  clearUserBrainClaims,
+  republishUserClaimsManifest,
+  setUserBrainClaims,
+  tenantUserBrainClaims,
+  userBrainClaims_ as userBrainClaims,
+} from "./userBrainClaims.js";
 
 export const coreQueries = {
   tenant,
@@ -35,6 +42,8 @@ export const coreQueries = {
   deploymentStatus,
   managedApplicationHealthCheck,
   adminRoleCheck,
+  userBrainClaims,
+  tenantUserBrainClaims,
 };
 export const coreMutations = {
   bootstrapUser,
@@ -56,4 +65,7 @@ export const coreMutations = {
   updateUserProfile,
   registerPushToken,
   unregisterPushToken,
+  setUserBrainClaims,
+  clearUserBrainClaims,
+  republishUserClaimsManifest,
 };

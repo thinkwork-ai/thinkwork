@@ -59,6 +59,13 @@ type TenantSettings {
   goalDefaultTokenBudget: Int
   autoCloseThreadMinutes: Int
   maxAgents: Int
+  """
+  Safety interlock for the Company Brain per-user claims manifest
+  (THINK-625). While false, UserBrainClaims rows are editable but nothing
+  is published and any existing manifest object is deleted — the Brain
+  keeps its legacy group-mapping behavior. Default false.
+  """
+  brainUserClaimsEnabled: Boolean!
   features: AWSJSON
   createdAt: AWSDateTime!
   updatedAt: AWSDateTime!
@@ -236,6 +243,11 @@ input UpdateTenantSettingsInput {
   goalDefaultTokenBudget: Int
   autoCloseThreadMinutes: Int
   maxAgents: Int
+  """
+  Flipping this on publishes the tenant's full user-claims manifest;
+  flipping it off deletes the object. See TenantSettings.
+  """
+  brainUserClaimsEnabled: Boolean
   features: AWSJSON
 }
 

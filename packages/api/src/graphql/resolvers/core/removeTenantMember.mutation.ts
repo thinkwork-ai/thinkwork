@@ -4,6 +4,7 @@ import type { GraphQLContext } from "../../context.js";
 import { db, eq, and, tenantMembers } from "../../utils.js";
 import { resolveCaller } from "./resolve-auth-user.js";
 import { requireTenantAdmin } from "./authz.js";
+import { republishUserClaimsQuietly } from "./userBrainClaims.js";
 
 /**
  * Hard-delete a tenant member.
@@ -25,7 +26,12 @@ export const removeTenantMember = async (
 ) => {
   const { userId: callerUserId } = await resolveCaller(ctx);
 
-  return db.transaction(async (tx) => {
+  // Republished after the transaction commits — a removed member whose
+  // claims row still ships in the manifest is a revocation that did not
+  // happen. See updateTenantMember for the disable-side counterpart.
+  let claimsRepublishTenantId: string | null = null;
+
+  const removed = await db.transaction(async (tx) => {
     const [target] = await tx
       .select()
       .from(tenantMembers)
@@ -70,7 +76,13 @@ export const removeTenantMember = async (
         resource_kind: "membership",
         reason: "membership_removed",
       });
+      claimsRepublishTenantId = target.tenant_id;
     }
     return !!row;
   });
+
+  if (claimsRepublishTenantId) {
+    await republishUserClaimsQuietly(claimsRepublishTenantId);
+  }
+  return removed;
 };
