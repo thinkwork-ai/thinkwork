@@ -106,6 +106,17 @@ export interface McpServerConfig {
    */
   longRunning?: boolean;
   /**
+   * THINK-626 — opt-in on-behalf-of assertion. Read from the server row's
+   * `runtime_metadata.onBehalfOf`; when set AND the dispatch payload
+   * carries the acting end-user's identity, the Pi runtime attaches
+   * `_meta["thinkwork.io/on_behalf_of"] = { sub?, email? }` to every
+   * tools/call so the server scopes the call to that person rather than to
+   * the shared connector credential. Opt-in per server on purpose: telling
+   * a server who is asking is a disclosure, and only servers that expect
+   * the assertion (the Brain) should receive it.
+   */
+  onBehalfOf?: boolean;
+  /**
    * Probe-mode only (capability-mapping plan U3, KTD-1): the stored token's
    * status for this server, read from user_mcp_tokens / auth_config metadata
    * WITHOUT touching Secrets Manager or the token endpoint. Never present on
@@ -1445,6 +1456,12 @@ function toMcpServerConfig(
   // connector is an operator-configured server row, not a plugin install.
   if (recordOrNull(mcp.runtime_metadata)?.longRunning === true) {
     config.longRunning = true;
+  }
+  // THINK-626 — same ungated read, same reason. Literal-true only: any
+  // other value leaves the assertion off, which is the fail-closed
+  // direction (the call runs under the connector key's own grants).
+  if (recordOrNull(mcp.runtime_metadata)?.onBehalfOf === true) {
+    config.onBehalfOf = true;
   }
   return config;
 }

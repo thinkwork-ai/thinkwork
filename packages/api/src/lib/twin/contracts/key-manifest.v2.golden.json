@@ -1,0 +1,94 @@
+{
+  "formatVersion": "twin-mcp-keys/v2",
+  "tenantId": "00000000-0000-4000-8000-00000000c0de",
+  "generatedAt": "2026-07-30T00:00:00Z",
+  "keys": [
+    {
+      "keyHash": "661fb4c5476d6ace00cc8ca6172a710bca2b83d4471cf2072d5fe390cd76c85f",
+      "keyId": "key_wildcard",
+      "name": "case: wildcard — all groups and all collections; subsumes the named entries beside it",
+      "createdAt": "2026-07-30T00:00:00Z",
+      "expiresAt": null,
+      "securityGroups": ["*", "FINANCE"],
+      "kbCollections": ["*", "handbook"]
+    },
+    {
+      "keyHash": "d293a6d8df4fec9512673c3ec09f1f262e906d6424bd867da0bc0320eefc15bb",
+      "keyId": "key_scoped",
+      "name": "case: named grants only — PUBLIC is implicit and never appears on the wire",
+      "createdAt": "2026-07-30T00:00:00Z",
+      "securityGroups": ["FINANCE", "OPS"],
+      "kbCollections": ["handbook"]
+    },
+    {
+      "keyHash": "d05d5d1e3fc8817fd9d7ea6ad7f90501b4ecfc5940eb7f1f7596921698ea4d46",
+      "keyId": "key_v1_shaped",
+      "name": "case: v1-shaped entry inside a v2 manifest — no grant fields at all; resolves to PUBLIC graph and no KB",
+      "createdAt": "2026-07-30T00:00:00Z"
+    },
+    {
+      "keyHash": "68ef14a9fa9f6a9042c8fd67bbd4e90917381fccccddcf940036e931da881404",
+      "keyId": "key_empty_arrays",
+      "name": "case: explicitly empty grants — identical to omitting them",
+      "securityGroups": [],
+      "kbCollections": [],
+      "kbBundles": {},
+      "defaultKbBundle": null
+    },
+    {
+      "keyHash": "89acfdfbf973622424ddd3cd6817a36535e8ffd2aeeb00dec4a589e76f5f638a",
+      "keyId": "key_bundles",
+      "name": "case: bundles + a default that names one of them; the empty-name and empty-member bundles are dropped, the entry is not",
+      "securityGroups": ["OPS"],
+      "kbCollections": ["handbook", "cx-sops", "runbooks"],
+      "kbBundles": {
+        "onboarding": ["handbook", "cx-sops"],
+        "support": ["runbooks", "runbooks", " handbook "],
+        "ungranted-is-inert": ["not-granted-to-this-key"],
+        "   ": ["handbook"],
+        "empty-members": ["", "  "]
+      },
+      "defaultKbBundle": "onboarding"
+    },
+    {
+      "keyHash": "ade4c4cf2d6e988ac8f896f786d679015d3e97aa1d5e13b5e77b608cf49119a2",
+      "keyId": "key_dangling_default",
+      "name": "case: defaultKbBundle naming a bundle this key does not define — resolves to no default, never to an empty scope",
+      "kbCollections": ["handbook"],
+      "kbBundles": { "onboarding": ["handbook"] },
+      "defaultKbBundle": "typo-bundle"
+    },
+    {
+      "keyHash": "d3a997dd0c8ba32aa3f9058076c4f63e0ffcf8882c9b9474685002e0f12e50ce",
+      "keyId": "key_expiring",
+      "name": "case: a real expiry — parsed to epoch ms and evaluated at auth time, not cache-build time",
+      "expiresAt": "2026-08-29T00:00:00.000Z",
+      "securityGroups": ["FINANCE"]
+    },
+    {
+      "keyHash": "4836469d637d43039e9094fe60486623aed69e3a0c94ae765cb3c87b72d0fa6f",
+      "keyId": "key_messy_grants",
+      "name": "case: whitespace, blanks and duplicates — trimmed, blanks skipped, de-duplicated, order preserved",
+      "securityGroups": ["  FINANCE  ", "FINANCE", "", "   ", "OPS"],
+      "kbCollections": [" handbook", "handbook ", "cx-sops"]
+    },
+    {
+      "keyHash": "0b8f3e4a5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f607",
+      "keyId": "key_trusted_subsystem",
+      "name": "case: trusted subsystem — may assert on_behalf_of; the flag is not a grant and the grants beside it are the KEY's own, used only when it asserts nothing",
+      "securityGroups": ["*"],
+      "kbCollections": ["*"],
+      "trustedSubsystem": true
+    },
+    {
+      "keyHash": "41993d746c765249757c40fad40d3336470b3a65b3294aeacdf1d733d07e9f9a",
+      "keyId": "key_extra_fields",
+      "name": "case: forward compatibility — descriptive fields the consumer has never heard of are ignored, not fatal",
+      "securityGroups": ["OPS"],
+      "lastUsedAt": "2026-07-30T12:00:00Z",
+      "createdBy": { "userId": "u_123", "email": "someone@example.com" },
+      "labels": ["chatgpt", "prod"],
+      "rotationGeneration": 3
+    }
+  ]
+}

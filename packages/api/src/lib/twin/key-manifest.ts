@@ -27,6 +27,15 @@
  * grant fields as "PUBLIC graph only, no KB" — so this bump is safe in
  * either deploy order. The wire shape is a cross-repo contract: change it
  * in lockstep with that reader or not at all.
+ *
+ * ── trustedSubsystem (THINK-626) ────────────────────────────────────────
+ *
+ * `trustedSubsystem: true` rides v2's `additionalProperties: true` with no
+ * formatVersion bump, in the safe direction: an older reader ignores it,
+ * honours no assertion, and every call keeps running under the key itself.
+ * The canonical shape is vendored byte-identical from company-brain at
+ * `contracts/key-manifest.v2.{schema,golden}.json` and asserted by
+ * key-manifest.test.ts — the producer half of that one shared artifact.
  */
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { and, eq, isNull } from "drizzle-orm";
@@ -72,6 +81,15 @@ export interface TwinKeyManifestEntry {
    * `["*"]` = every collection.
    */
   kbCollections?: string[];
+  /**
+   * Trusted-subsystem marker (THINK-626): the key may assert
+   * `on_behalf_of` per tools/call, so the call runs under the named
+   * signed-in human's user-claims entry instead of this key's own grants.
+   * Read literal-true-only by the platform (absent/false/non-boolean =
+   * cannot assert), so this is emitted ONLY when the row is flagged —
+   * every ordinary key's entry stays byte-identical to before.
+   */
+  trustedSubsystem?: true;
 }
 
 export interface TwinKeyManifestDoc {
@@ -143,6 +161,7 @@ export async function publishTwinKeyManifest(
         expires_at: tenantMcpTwinKeys.expires_at,
         security_groups: tenantMcpTwinKeys.security_groups,
         kb_collections: tenantMcpTwinKeys.kb_collections,
+        trusted_subsystem: tenantMcpTwinKeys.trusted_subsystem,
       })
       .from(tenantMcpTwinKeys)
       .where(
@@ -165,6 +184,11 @@ export async function publishTwinKeyManifest(
         expiresAt: row.expires_at ? row.expires_at.toISOString() : null,
         securityGroups: row.security_groups ?? [],
         kbCollections: row.kb_collections ?? [],
+        // Emitted only when true: `trustedSubsystem: false` and an absent
+        // field mean the same thing to the reader, and omitting keeps
+        // every ordinary key's entry byte-identical to twin-mcp-keys/v2
+        // as it shipped.
+        ...(row.trusted_subsystem ? { trustedSubsystem: true as const } : {}),
       });
     }
 

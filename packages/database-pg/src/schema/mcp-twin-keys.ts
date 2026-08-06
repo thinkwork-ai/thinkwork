@@ -8,7 +8,8 @@
  * token). Raw keys are never stored. Mirrors tenant_mcp_admin_keys.
  *
  * See drizzle/0274_tenant_mcp_twin_keys.sql for the canonical DDL (plus
- * 0281 for suffix/expiry and 0282 for the grant columns) — this Drizzle
+ * 0281 for suffix/expiry, 0282 for the grant columns and 0285 for the
+ * trusted-subsystem marker) — this Drizzle
  * schema mirrors that hand-rolled DDL (not registered in
  * meta/_journal.json); apply via psql.
  */
@@ -17,6 +18,7 @@ import {
   pgTable,
   uuid,
   text,
+  boolean,
   timestamp,
   uniqueIndex,
   index,
@@ -66,6 +68,16 @@ export const tenantMcpTwinKeys = pgTable(
       .array()
       .notNull()
       .default(sql`ARRAY[]::text[]`),
+    /**
+     * Trusted-subsystem marker (THINK-626): true lets this key assert
+     * `on_behalf_of` per tools/call, so the call runs under the named
+     * signed-in human's user-claims entry instead of the key's own grants.
+     * NOT a grant — it swaps the acting principal — so it belongs only on
+     * platform-held keys (the provisioned "default" connector key), never
+     * on one handed to a customer's client. Enforced platform-side from
+     * the published manifest (twin-mcp-keys/v2), not by this database.
+     */
+    trusted_subsystem: boolean("trusted_subsystem").notNull().default(false),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

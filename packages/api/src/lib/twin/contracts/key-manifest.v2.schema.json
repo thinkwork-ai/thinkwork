@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://company-brain/contracts/key-manifest.v2.schema.json",
+  "title": "twin-mcp-keys/v2 key manifest",
+  "description": "THE CROSS-REPO WIRE CONTRACT for the per-tenant key manifest published to s3://<brain-artifacts>/twin-mcp-keys/<tenantId>/latest.json. The PRODUCER is the product repo (thinkwork), which mints `tkt_` keys and writes this object. The only CONSUMER is brain-mcp `src/auth.ts` (`parseKeyManifestEntry`). Both sides test against this schema and against contracts/key-manifest.v2.golden.json — deliberately ONE shared artifact, not two parallel mocks, because parallel mocks let each side pass against its own idea of the wire while disagreeing with the other (THINK-467/R15). Schema version is pinned by `formatVersion`; any change to the accepted shape requires a new formatVersion (`twin-mcp-keys/v3`), because brain-mcp fails LOUD on an unknown formatVersion rather than silently 401ing a tenant.",
+  "type": "object",
+  "required": ["formatVersion", "tenantId", "keys"],
+  "additionalProperties": true,
+  "properties": {
+    "formatVersion": {
+      "const": "twin-mcp-keys/v2",
+      "description": "Format gate. brain-mcp also reads `twin-mcp-keys/v1` (a strict subset: entries carry no grant fields), but v1 is frozen and has its own lane — this schema describes v2 only."
+    },
+    "tenantId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Product tenant UUID. MUST equal the <tenantId> path segment of the S3 key; brain-mcp resolves the tenant from the PATH, so a mismatch here is invisible to auth and therefore a producer bug the schema cannot catch."
+    },
+    "generatedAt": {
+      "type": "string",
+      "description": "Informational publish timestamp (ISO-8601). Not read by brain-mcp."
+    },
+    "keys": {
+      "type": "array",
+      "description": "Every key that is currently VALID for this tenant. Revocation IS removal from this array — there is no `revoked` flag, by design: a revoked key and a never-issued string must be indistinguishable to the consumer (no record left, no keyId to attribute a denied call to). Rotation publishes old + new together before dropping the old one, so the consumer's <=60s manifest cache never locks out a freshly rotated key. An empty array is legal and means 'this tenant has no working keys'.",
+      "items": { "$ref": "#/definitions/keyEntry" }
+    }
+  },
+  "definitions": {
+    "keyEntry": {
+      "type": "object",
+      "required": ["keyHash"],
+      "additionalProperties": true,
+      "description": "One key. `additionalProperties: true` is LOAD-BEARING in both directions: the consumer ignores fields it does not know, so the producer may add descriptive fields without a formatVersion bump — but a field that would CHANGE what a key may see can never be added this way, because an old consumer would silently ignore it and over-grant. New grant semantics require a new formatVersion.",
+      "properties": {
+        "keyHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "Lowercase SHA-256 hex of the raw `tkt_` key string (the whole bearer, prefix included). The consumer is laxer than this pattern — it accepts any non-empty string — but the producer contract is lowercase hex, because a hash in any other encoding simply never matches and reads as a silently dead key."
+        },
+        "keyId": {
+          "type": "string",
+          "description": "Stable id of the product-side key record; carried onto the principal for audit attribution. Descriptive, not security-bearing: the consumer ignores a non-string value rather than dropping an otherwise valid key."
+        },
+        "name": {
+          "type": "string",
+          "description": "Human label as shown in the console. Descriptive; never read for access decisions."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO-8601 mint time. Informational."
+        },
+        "expiresAt": {
+          "type": ["string", "null"],
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt ]\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?([Zz]|[+-]\\d{2}:?\\d{2})?$",
+          "description": "ISO-8601 expiry, or null/absent for a key that never expires. MUST be Date.parse-able: an unparseable timestamp DROPS the entry (fail closed — a malformed expiry must not be read as immortality). Evaluated at auth time, not cache-build time, so a key expiring mid-cache-window is refused immediately."
+        },
+        "securityGroups": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Graph security groups this key may see, ON TOP OF the always-visible PUBLIC group. Absent or empty = PUBLIC only. `\"*\"` is the wildcard (all groups) and subsumes any named entries in the same array; it is how a tenant's own internal key stays unaffected by restrictions. Values are trimmed and de-duplicated by the consumer; blank strings are ignored. A non-array, or an array holding a non-string, DROPS the entry."
+        },
+        "kbCollections": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Knowledge-base collection slugs this key may retrieve. KB is GRANT-ONLY: absent or empty = no collections at all (the opposite default from securityGroups). `\"*\"` = all collections. Same trim/de-dupe/drop rules as securityGroups."
+        },
+        "kbBundles": {
+          "type": "object",
+          "description": "Named subsets of the granted collections — SELECTION, NOT GRANT. A bundle only ever selects within what kbCollections already allows, so naming an ungranted collection contributes nothing and a bundle can never widen a key. A bundle whose name or member list is empty after trimming is dropped (an empty bundle would scope every search to nothing — an accident, not an intent). `\"*\"` inside a bundle is NOT honoured: 'everything' is what omitting the bundle already means. A non-object, an array, or a member list that is not an array of strings DROPS the entry.",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "kbTrace": {
+          "type": "boolean",
+          "description": "OPERATOR DIAGNOSTIC (THINK-472), not a grant. true exposes the `brain_knowledge_trace` tool on the /kb surface, which returns the retrieval pipeline's internals (per-retriever candidate lists, RRF pool, rerank order, degraded stages) for a search this key was already allowed to run — it can never reach a collection kbCollections does not already allow. Absent, false, or any non-boolean value = off; unlike the grant fields a malformed value does NOT drop the entry, because off is already the fail-closed direction and turning a typo in a diagnostic flag into a 401 is the worse failure. Added under `additionalProperties: true` without a formatVersion bump, which is safe in exactly this direction: an older consumer ignores it and shows no trace tool."
+        },
+        "trustedSubsystem": {
+          "type": "boolean",
+          "description": "TRUSTED-SUBSYSTEM MARKER (THINK-626). true lets this key assert `on_behalf_of` — carry, per tools/call, the identity of a signed-in human (via params._meta[\"thinkwork.io/on_behalf_of\"], or the X-On-Behalf-Of header when _meta is absent) so the call runs under THAT PERSON's entry in the user-claims manifest instead of under this key's own grants. Read literal-true-only, exactly like kbTrace and operatorKey: absent, false, or any non-boolean value = this key cannot assert, which is the fail-closed direction and is every ordinary key. This is NOT a grant and NOT tool visibility — it is the right to SWAP the acting principal — so it belongs only on keys the platform itself holds (the ThinkWork Pi runtime's key), never on one distributed to a customer's client. It cannot widen anyone: the asserted user's grants come from the user-claims manifest, and an account that publishes none refuses the assertion (on_behalf_of_unavailable) rather than falling back to this key's grants. Rides additionalProperties:true without a formatVersion bump in the safe direction — an older consumer ignores it, honours no assertion, and every call keeps running under the key itself."
+        },
+        "defaultKbBundle": {
+          "type": ["string", "null"],
+          "description": "One of this key's own kbBundles names, applied when the caller passes no `bundle` argument. A name this key does not define resolves to NO default (searches stay unscoped) rather than to an empty scope — one manifest typo must not silently make every search return nothing. A non-string, non-null value DROPS the entry."
+        }
+      }
+    }
+  }
+}

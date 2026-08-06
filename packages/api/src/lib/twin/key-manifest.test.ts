@@ -1,7 +1,19 @@
 /**
  * Twin MCP key manifest publisher tests (repo-consolidation U14 / U12 KTD
  * amendment). Chain-mock Drizzle db — same approach as provision-connector.
+ *
+ * The contract block below is the PRODUCER half of the one shared
+ * cross-repo artifact: `contracts/key-manifest.v2.{schema,golden}.json` are
+ * vendored byte-identical from company-brain, and the generated document is
+ * validated against the schema here so a shape the Brain reader would
+ * reject cannot ship unnoticed. Parallel mocks are deliberately avoided —
+ * they let each side pass against its own idea of the wire (THINK-467/R15).
  */
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import Ajv from "ajv";
+import addFormats from "ajv-formats";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockDb, selectQueue, whereConditions } = vi.hoisted(() => {
@@ -33,6 +45,15 @@ import {
 const TENANT_ID = "22222222-2222-4222-8222-222222222222";
 const BUCKET = "thinkwork-test-brain-artifacts";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const contract = (name: string) =>
+  JSON.parse(readFileSync(resolve(__dirname, `./contracts/${name}`), "utf8"));
+const CONTRACT = contract("key-manifest.v2.schema.json");
+const GOLDEN = contract("key-manifest.v2.golden.json");
+const ajv = new Ajv({ allErrors: true, strict: false });
+addFormats(ajv);
+const validateManifest = ajv.compile(CONTRACT);
+
 interface CapturedPut {
   Bucket?: string;
   Key?: string;
@@ -58,6 +79,7 @@ function manifestBody(index = 0): {
     createdAt: string | null;
     securityGroups?: string[];
     kbCollections?: string[];
+    trustedSubsystem?: true;
   }>;
 } {
   return JSON.parse(puts[index]!.Body!);
@@ -160,6 +182,35 @@ describe("publishTwinKeyManifest", () => {
     ]);
   });
 
+  it("emits trustedSubsystem: true ONLY for flagged rows (THINK-626)", async () => {
+    selectQueue.push([
+      {
+        id: "key-platform",
+        key_hash: "d".repeat(64),
+        name: "default",
+        created_at: null,
+        security_groups: ["*"],
+        kb_collections: ["*"],
+        trusted_subsystem: true,
+      },
+      {
+        id: "key-customer",
+        key_hash: "e".repeat(64),
+        name: "ChatGPT app",
+        created_at: null,
+        security_groups: [],
+        kb_collections: [],
+        trusted_subsystem: false,
+      },
+    ]);
+    await publishTwinKeyManifest(TENANT_ID, { s3, bucket: BUCKET });
+    const [platform, customer] = manifestBody().keys;
+    expect(platform!.trustedSubsystem).toBe(true);
+    // Absent, not `false`: the reader is literal-true-only, and omitting
+    // keeps every ordinary key's entry byte-identical to pre-THINK-626.
+    expect(customer).not.toHaveProperty("trustedSubsystem");
+  });
+
   it("a key with no grants publishes empty lists — PUBLIC graph only, no KB", async () => {
     selectQueue.push([
       {
@@ -226,5 +277,60 @@ describe("publishTwinKeyManifest", () => {
     });
     expect(result).toEqual({ published: false, reason: "s3 exploded" });
     expect(console.error).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Cross-repo wire contract (twin-mcp-keys/v2). The schema and golden are
+ * vendored byte-identical from company-brain
+ * `mcp/brain/contracts/` — when the Brain changes the accepted shape,
+ * re-copy both files and let these tests decide whether the producer must
+ * change with them.
+ */
+describe("key-manifest.v2 contract", () => {
+  it("the vendored golden validates against the vendored schema", () => {
+    expect(validateManifest(GOLDEN)).toBe(true);
+  });
+
+  it("the golden covers the trustedSubsystem case (proves the copies are current)", () => {
+    const entry = (GOLDEN.keys as Array<Record<string, unknown>>).find(
+      (key) => key.keyId === "key_trusted_subsystem",
+    );
+    expect(entry?.trustedSubsystem).toBe(true);
+  });
+
+  it("a published manifest validates against the schema", async () => {
+    selectQueue.push([
+      {
+        id: "key-platform",
+        key_hash: "f".repeat(64),
+        name: "default",
+        created_at: new Date("2026-07-01T00:00:00.000Z"),
+        expires_at: new Date("2026-12-01T00:00:00.000Z"),
+        security_groups: ["*"],
+        kb_collections: ["*"],
+        trusted_subsystem: true,
+      },
+      {
+        id: "key-customer",
+        key_hash: "0".repeat(64),
+        name: "ChatGPT app",
+        // Non-null on purpose: `tenant_mcp_twin_keys.created_at` is NOT
+        // NULL DEFAULT now(), so this is the only shape a real row can
+        // take. The publisher's `created_at ? … : null` branch is
+        // defensive-only and would emit `createdAt: null`, which the
+        // schema (`createdAt: {type: "string"}`) does not accept — a
+        // divergence that is unreachable from the database and that the
+        // consumer ignores anyway (createdAt is informational).
+        created_at: new Date("2026-07-02T00:00:00.000Z"),
+        security_groups: ["FINANCE"],
+        kb_collections: [],
+        trusted_subsystem: false,
+      },
+    ]);
+    await publishTwinKeyManifest(TENANT_ID, { s3, bucket: BUCKET });
+    const valid = validateManifest(manifestBody());
+    if (!valid) console.log(validateManifest.errors);
+    expect(valid).toBe(true);
   });
 });

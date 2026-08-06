@@ -151,6 +151,22 @@ describe("twin connector row values", () => {
     expect(values.approved_at).toBeInstanceOf(Date);
   });
 
+  it("opts the Brain connector into longRunning + onBehalfOf (THINK-623/626)", () => {
+    const values = twinConnectorRowValues({
+      tenantId: INPUT.tenantId,
+      twinMcpUrl: INPUT.twinMcpUrl,
+      secretRef: SECRET_REF,
+    });
+    // `runtime_metadata` is what buildMcpConfigs reads to emit the two
+    // per-server flags; re-provisioning rewrites this key, so a reinstall
+    // carries both opt-ins rather than silently reverting to the fixed
+    // 60s wall and no on-behalf-of assertion.
+    expect(values.runtime_metadata).toEqual({
+      longRunning: true,
+      onBehalfOf: true,
+    });
+  });
+
   it("auth_config holds only the secret reference — never a key value", () => {
     const authConfig = twinConnectorAuthConfig(SECRET_REF);
     expect(JSON.stringify(authConfig)).not.toContain("tkt_");
@@ -199,6 +215,9 @@ describe("provisionTwinConnector", () => {
     // The connector key backs the console proxy: wildcard grants, always.
     expect(insertCalls[0]!.security_groups).toEqual(["*"]);
     expect(insertCalls[0]!.kb_collections).toEqual(["*"]);
+    // THINK-626: the platform's own key — and only it — may assert
+    // on_behalf_of. User-minted keys are born false.
+    expect(insertCalls[0]!.trusted_subsystem).toBe(true);
     // Secret written once with the raw key.
     expect(smSends.length).toBe(1);
     const secretString = (smSends[0] as { input: { SecretString: string } })

@@ -18,24 +18,38 @@
  * live on the row and reach the platform ONLY via the manifest, so every
  * grant change republishes.
  *
+ * Trusted subsystem (THINK-626): `trustedSubsystem` lets a key assert
+ * `on_behalf_of` — swap the acting principal to a named signed-in human
+ * for one tools/call. It is not a grant, it is the right to speak for
+ * someone else, so it is **platform-operator only**: a tenant owner/admin
+ * on the Cognito path is refused with 403, while the shared-secret
+ * (apikey/service) path — CI, the CLI, the provisioning ceremony — may set
+ * it. The provisioned "default" connector key gets it automatically in
+ * provision-connector.ts; this surface exists for the rare second
+ * platform-held key and for turning one back off.
+ *
  * Routes (tenantId accepted as UUID or slug):
  *   POST   /api/tenants/:tenantId/brain-api-keys
  *     body: { name: string, expiresInDays?: number,
- *             securityGroups?: string[], kbCollections?: string[] }
+ *             securityGroups?: string[], kbCollections?: string[],
+ *             trustedSubsystem?: boolean (operator-only) }
  *     → 201 { id, name, token, key_suffix, created_at, expires_at,
- *             security_groups, kb_collections, keyManifest }
+ *             security_groups, kb_collections, trusted_subsystem,
+ *             keyManifest }
  *       `token` is the ONLY time the raw value is returned. The stored
  *       key_suffix (last 8 chars) is the display handle afterwards.
  *
  *   GET    /api/tenants/:tenantId/brain-api-keys
  *     → 200 { keys: [{ id, name, key_suffix, created_at, expires_at,
- *             security_groups, kb_collections, created_by_user_id,
- *             last_used_at, revoked_at }] }
+ *             security_groups, kb_collections, trusted_subsystem,
+ *             created_by_user_id, last_used_at, revoked_at }] }
  *
  *   PATCH  /api/tenants/:tenantId/brain-api-keys/:id
- *     body: { securityGroups?: string[], kbCollections?: string[] }
+ *     body: { securityGroups?: string[], kbCollections?: string[],
+ *             trustedSubsystem?: boolean (operator-only) }
  *       (at least one; omitted field is left untouched)
- *     → 200 { id, name, security_groups, kb_collections, keyManifest }
+ *     → 200 { id, name, security_groups, kb_collections,
+ *             trusted_subsystem, keyManifest }
  *       404 when the key is unknown to this tenant.
  *
  *   DELETE /api/tenants/:tenantId/brain-api-keys/:id
@@ -110,7 +124,13 @@ export async function handler(
       const db = getDb();
       if (method === "GET") return listKeys(db, verdict.tenantId);
       if (method === "POST")
-        return createKey(db, verdict.tenantId, event, verdict.userId);
+        return createKey(
+          db,
+          verdict.tenantId,
+          event,
+          verdict.userId,
+          isPlatformOperator(verdict),
+        );
       return error("Method not allowed", 405);
     }
 
@@ -126,7 +146,13 @@ export async function handler(
       const db = getDb();
       if (method === "DELETE") return revokeKey(db, verdict.tenantId, keyId);
       if (method === "PATCH")
-        return updateKeyGrants(db, verdict.tenantId, keyId, event);
+        return updateKeyGrants(
+          db,
+          verdict.tenantId,
+          keyId,
+          event,
+          isPlatformOperator(verdict),
+        );
       return error("Method not allowed", 405);
     }
 
@@ -137,17 +163,55 @@ export async function handler(
   }
 }
 
+/**
+ * True only for the shared-secret path (CI, the CLI, the provisioning
+ * ceremony), which `requireTenantMembership` admits with no per-tenant
+ * role. A tenant owner/admin on the Cognito path is NOT an operator here:
+ * `trustedSubsystem` is the right to speak for another human, so it stays
+ * behind the platform trust boundary, not the tenant one.
+ */
+function isPlatformOperator(verdict: {
+  auth?: { authType?: string } | null;
+}): boolean {
+  const authType = verdict.auth?.authType;
+  return authType === "apikey" || authType === "service";
+}
+
+/**
+ * Parse the operator-only `trustedSubsystem` field. Absent ⇒ `undefined`
+ * (leave alone / default false). Present from a non-operator ⇒ 403 rather
+ * than a silent drop: a caller who thinks they minted a trusted key must
+ * never walk away believing they did.
+ */
+function parseTrustedSubsystem(
+  value: unknown,
+  isOperator: boolean,
+): { value?: boolean } | { error: string; status: 400 | 403 } {
+  if (value === undefined || value === null) return {};
+  if (typeof value !== "boolean")
+    return { error: "trustedSubsystem: boolean required", status: 400 };
+  if (!isOperator)
+    return {
+      error:
+        "trustedSubsystem: platform-operator credential required (tenant admins cannot grant on_behalf_of assertion)",
+      status: 403,
+    };
+  return { value };
+}
+
 async function createKey(
   db: ReturnType<typeof getDb>,
   tenantId: string,
   event: APIGatewayProxyEventV2,
   callerUserId: string | null,
+  isOperator: boolean,
 ): Promise<APIGatewayProxyStructuredResultV2> {
   let body: {
     name?: string;
     expiresInDays?: number;
     securityGroups?: unknown;
     kbCollections?: unknown;
+    trustedSubsystem?: unknown;
     created_by_user_id?: string;
   };
   try {
@@ -193,6 +257,10 @@ async function createKey(
     kbCollections = parsed.values;
   }
 
+  const trusted = parseTrustedSubsystem(body.trustedSubsystem, isOperator);
+  if ("error" in trusted) return error(trusted.error, trusted.status);
+  const trustedSubsystem = trusted.value ?? false;
+
   const createdByUserId =
     callerUserId ??
     (body.created_by_user_id && UUID_RE.test(body.created_by_user_id)
@@ -209,6 +277,7 @@ async function createKey(
     expires_at: Date | null;
     security_groups: string[] | null;
     kb_collections: string[] | null;
+    trusted_subsystem: boolean | null;
   };
   try {
     const [row] = await db
@@ -221,6 +290,7 @@ async function createKey(
         expires_at: expiresAt,
         security_groups: securityGroups,
         kb_collections: kbCollections,
+        trusted_subsystem: trustedSubsystem,
         created_by_user_id: createdByUserId,
       })
       .returning({
@@ -230,6 +300,7 @@ async function createKey(
         expires_at: tenantMcpTwinKeys.expires_at,
         security_groups: tenantMcpTwinKeys.security_groups,
         kb_collections: tenantMcpTwinKeys.kb_collections,
+        trusted_subsystem: tenantMcpTwinKeys.trusted_subsystem,
       });
     inserted = row!;
   } catch (err: unknown) {
@@ -255,6 +326,7 @@ async function createKey(
       expires_at: inserted.expires_at,
       security_groups: inserted.security_groups ?? securityGroups,
       kb_collections: inserted.kb_collections ?? kbCollections,
+      trusted_subsystem: inserted.trusted_subsystem ?? trustedSubsystem,
       keyManifest,
     },
     201,
@@ -274,6 +346,7 @@ async function listKeys(
       expires_at: tenantMcpTwinKeys.expires_at,
       security_groups: tenantMcpTwinKeys.security_groups,
       kb_collections: tenantMcpTwinKeys.kb_collections,
+      trusted_subsystem: tenantMcpTwinKeys.trusted_subsystem,
       created_by_user_id: tenantMcpTwinKeys.created_by_user_id,
       last_used_at: tenantMcpTwinKeys.last_used_at,
       revoked_at: tenantMcpTwinKeys.revoked_at,
@@ -296,15 +369,24 @@ async function updateKeyGrants(
   tenantId: string,
   keyId: string,
   event: APIGatewayProxyEventV2,
+  isOperator: boolean,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  let body: { securityGroups?: unknown; kbCollections?: unknown };
+  let body: {
+    securityGroups?: unknown;
+    kbCollections?: unknown;
+    trustedSubsystem?: unknown;
+  };
   try {
     body = JSON.parse(event.body || "{}");
   } catch {
     return error("Invalid JSON body", 400);
   }
 
-  const patch: { security_groups?: string[]; kb_collections?: string[] } = {};
+  const patch: {
+    security_groups?: string[];
+    kb_collections?: string[];
+    trusted_subsystem?: boolean;
+  } = {};
   if (body.securityGroups !== undefined && body.securityGroups !== null) {
     const parsed = parseGrantList(body.securityGroups, "securityGroups");
     if ("error" in parsed) return error(parsed.error, 400);
@@ -315,8 +397,14 @@ async function updateKeyGrants(
     if ("error" in parsed) return error(parsed.error, 400);
     patch.kb_collections = parsed.values;
   }
+  const trusted = parseTrustedSubsystem(body.trustedSubsystem, isOperator);
+  if ("error" in trusted) return error(trusted.error, trusted.status);
+  if (trusted.value !== undefined) patch.trusted_subsystem = trusted.value;
   if (Object.keys(patch).length === 0)
-    return error("securityGroups or kbCollections: at least one required", 400);
+    return error(
+      "securityGroups, kbCollections or trustedSubsystem: at least one required",
+      400,
+    );
 
   const [updated] = await db
     .update(tenantMcpTwinKeys)
@@ -332,6 +420,7 @@ async function updateKeyGrants(
       name: tenantMcpTwinKeys.name,
       security_groups: tenantMcpTwinKeys.security_groups,
       kb_collections: tenantMcpTwinKeys.kb_collections,
+      trusted_subsystem: tenantMcpTwinKeys.trusted_subsystem,
     });
   if (!updated) return notFound("Key not found");
 
@@ -341,6 +430,7 @@ async function updateKeyGrants(
     name: updated.name,
     security_groups: updated.security_groups ?? [],
     kb_collections: updated.kb_collections ?? [],
+    trusted_subsystem: updated.trusted_subsystem ?? false,
     keyManifest,
   });
 }
