@@ -90,7 +90,13 @@ export const WebViewSheet = forwardRef<WebViewSheetRef>((_, ref) => {
           {url && (
             <WebView
               source={{ uri: url }}
-              style={{ flex: 1, backgroundColor: isDark ? "#000" : "#fff" }}
+              // Always a white canvas, even in dark mode: web pages paint
+              // their own background (white is the browser default), but
+              // QuickLook document previews (docx/xlsx/pdf) render with
+              // transparent regions — on a dark canvas a spreadsheet
+              // becomes white gridlines on black. Documents are authored
+              // for paper-white.
+              style={{ flex: 1, backgroundColor: "#fff" }}
               onLoadEnd={() => setLoading(false)}
               onNavigationStateChange={(navState) => {
                 if (navState.title) setCurrentTitle(navState.title);
