@@ -190,6 +190,8 @@ describe("provisionTwinConnector", () => {
     returningQueue.push([{ id: "key-1" }]); // key insert
     selectQueue.push([]); // no existing server row
     returningQueue.push([{ id: "server-1" }]); // server insert
+    selectQueue.push([]); // no existing kb row
+    returningQueue.push([{ id: "server-kb-1" }]); // kb server insert
     selectQueue.push([
       {
         id: "server-1",
@@ -200,8 +202,20 @@ describe("provisionTwinConnector", () => {
         tools: null,
         status: "approved",
       },
-    ]); // materialize re-read
-    selectQueue.push(agents); // agent list
+    ]); // twin materialize re-read
+    selectQueue.push(agents); // twin agent list
+    selectQueue.push([
+      {
+        id: "server-kb-1",
+        slug: "brain-kb",
+        name: "Company Brain KB",
+        url: "https://mcp.brain.example/kb",
+        transport: "streamable-http",
+        tools: null,
+        status: "approved",
+      },
+    ]); // kb materialize re-read
+    selectQueue.push(agents); // kb agent list
   }
 
   it("fresh tenant: revokes-then-inserts the key, writes the secret, creates the approved row, materializes every workspace + dual-write", async () => {
@@ -230,7 +244,8 @@ describe("provisionTwinConnector", () => {
     expect(insertCalls[1]!.status).toBe("approved");
     // Both agents materialized + dual-write once for the batch.
     expect(result.workspaces.agents).toBe(2);
-    expect(folderCalls.length).toBe(2);
+    // Two agents × two connectors (digital-twin + brain-kb).
+    expect(folderCalls.length).toBe(4);
     // The operations list must name the server's REAL tools — it becomes
     // the runtime toolWhitelist; a wrong list silently drops every tool.
     const sidecar = folderCalls[0]!.sidecar as {
@@ -245,19 +260,38 @@ describe("provisionTwinConnector", () => {
         tenantId: INPUT.tenantId,
         registryServerId: "server-1",
       },
+      {
+        agentIds: ["agent-1", "agent-2"],
+        tenantId: INPUT.tenantId,
+        registryServerId: "server-kb-1",
+      },
     ]);
   });
 
   it("re-run rotates: existing server row updated in place (same id), old key revoked first", async () => {
     selectQueue.push([]); // outgoing active keys (manifest grace scan)
     returningQueue.push([{ id: "key-2" }]);
-    selectQueue.push([{ id: "server-1" }]); // existing server
+    selectQueue.push([{ id: "server-1", auth_config: null }]); // existing server
+    selectQueue.push([]); // no existing kb row
+    returningQueue.push([{ id: "server-kb-1" }]);
     selectQueue.push([
       {
         id: "server-1",
         slug: "digital-twin",
         name: "Company Brain",
         url: INPUT.twinMcpUrl,
+        transport: "streamable-http",
+        tools: null,
+        status: "approved",
+      },
+    ]);
+    selectQueue.push([{ id: "agent-1" }]);
+    selectQueue.push([
+      {
+        id: "server-kb-1",
+        slug: "brain-kb",
+        name: "Company Brain KB",
+        url: "https://mcp.brain.example/kb",
         transport: "streamable-http",
         tools: null,
         status: "approved",
@@ -272,11 +306,75 @@ describe("provisionTwinConnector", () => {
     expect(updateCalls[1]!.status).toBe("approved");
   });
 
+  it("machine-lane preservation: a row repointed at the m2m lane secret KEEPS it across reprovision (THINK-628)", async () => {
+    selectQueue.push([]); // outgoing keys scan
+    returningQueue.push([{ id: "key-2" }]);
+    selectQueue.push([
+      {
+        id: "server-1",
+        auth_config: {
+          secretRef: "etl-platform/brain-mcp/m2m/platform-agent",
+          headers: [
+            {
+              name: "Authorization",
+              secretJsonKey: "token",
+              valuePrefix: "Bearer ",
+            },
+          ],
+        },
+      },
+    ]); // existing twin row — already flipped onto the lane
+    selectQueue.push([]); // no existing kb row
+    returningQueue.push([{ id: "server-kb-1" }]);
+    selectQueue.push([
+      {
+        id: "server-1",
+        slug: "digital-twin",
+        name: "Company Brain",
+        url: INPUT.twinMcpUrl,
+        transport: "streamable-http",
+        tools: null,
+        status: "approved",
+      },
+    ]);
+    selectQueue.push([]); // no agents (twin)
+    selectQueue.push([
+      {
+        id: "server-kb-1",
+        slug: "brain-kb",
+        name: "Company Brain KB",
+        url: "https://mcp.brain.example/kb",
+        transport: "streamable-http",
+        tools: null,
+        status: "approved",
+      },
+    ]);
+    selectQueue.push([]); // no agents (kb)
+
+    await provisionTwinConnector(INPUT, { sm });
+
+    // update #1 = key revoke; #2 = twin row rewrite. The lane secretRef
+    // survives — clobbering it back to the tkt_ secret was the trap that
+    // silently un-flipped the lane (and killed KB citations) on rotation.
+    const twinUpdate = updateCalls[1] as {
+      auth_config: { secretRef: string };
+      url_hash: string;
+    };
+    expect(twinUpdate.auth_config.secretRef).toBe(
+      "etl-platform/brain-mcp/m2m/platform-agent",
+    );
+    // And the hash is re-pinned against the PRESERVED config, so the
+    // url_hash approval fence keeps passing.
+    expect(twinUpdate.url_hash).toBeTruthy();
+  });
+
   it("an agent without a workspace prefix is skipped, others proceed", async () => {
     queueFreshTenant([{ id: "agent-no-workspace" }, { id: "agent-2" }]);
     const result = await provisionTwinConnector(INPUT, { sm });
     expect(result.workspaces.agents).toBe(1);
+    // The workspace-less agent is skipped by BOTH connector materializations.
     expect(result.workspaces.skipped).toEqual([
+      { agentId: "agent-no-workspace", reason: "no_workspace_prefix" },
       { agentId: "agent-no-workspace", reason: "no_workspace_prefix" },
     ]);
   });
@@ -313,6 +411,8 @@ describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", (
     returningQueue.push([{ id: "key-1" }]);
     selectQueue.push([]); // no existing server
     returningQueue.push([{ id: "server-1" }]);
+    selectQueue.push([]); // no existing kb row
+    returningQueue.push([{ id: "server-kb-1" }]);
     selectQueue.push([
       {
         id: "server-1",
@@ -324,7 +424,19 @@ describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", (
         status: "approved",
       },
     ]);
-    selectQueue.push([]); // no agents
+    selectQueue.push([]); // no agents (twin)
+    selectQueue.push([
+      {
+        id: "server-kb-1",
+        slug: "brain-kb",
+        name: "Company Brain KB",
+        url: "https://mcp.brain.example/kb",
+        transport: "streamable-http",
+        tools: null,
+        status: "approved",
+      },
+    ]);
+    selectQueue.push([]); // no agents (kb)
     selectQueue.push([
       {
         id: "key-1",
@@ -373,7 +485,9 @@ describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", (
     selectQueue.push([
       { key_hash: "new-hash", created_at: new Date("2026-07-24T00:00:00Z") },
     ]); // grace publish active scan (old row already revoked)
-    selectQueue.push([{ id: "server-1" }]); // existing server
+    selectQueue.push([{ id: "server-1", auth_config: null }]); // existing server
+    selectQueue.push([]); // no existing kb row
+    returningQueue.push([{ id: "server-kb-1" }]);
     selectQueue.push([
       {
         id: "server-1",
@@ -385,7 +499,19 @@ describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", (
         status: "approved",
       },
     ]);
-    selectQueue.push([]); // no agents
+    selectQueue.push([]); // no agents (twin)
+    selectQueue.push([
+      {
+        id: "server-kb-1",
+        slug: "brain-kb",
+        name: "Company Brain KB",
+        url: "https://mcp.brain.example/kb",
+        transport: "streamable-http",
+        tools: null,
+        status: "approved",
+      },
+    ]);
+    selectQueue.push([]); // no agents (kb)
     selectQueue.push([
       { key_hash: "new-hash", created_at: new Date("2026-07-24T00:00:00Z") },
     ]); // final publish active scan
@@ -426,7 +552,9 @@ describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", (
       selectQueue.push([{ key_hash: "old-hash", created_at: null }]); // outgoing
       returningQueue.push([{ id: "key-2" }]);
       selectQueue.push([{ key_hash: "new-hash", created_at: null }]); // grace scan
-      selectQueue.push([{ id: "server-1" }]);
+      selectQueue.push([{ id: "server-1", auth_config: null }]);
+      selectQueue.push([]); // no existing kb row
+      returningQueue.push([{ id: "server-kb-1" }]);
       selectQueue.push([
         {
           id: "server-1",
@@ -438,7 +566,19 @@ describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", (
           status: "approved",
         },
       ]);
-      selectQueue.push([]); // no agents
+      selectQueue.push([]); // no agents (twin)
+      selectQueue.push([
+        {
+          id: "server-kb-1",
+          slug: "brain-kb",
+          name: "Company Brain KB",
+          url: "https://mcp.brain.example/kb",
+          transport: "streamable-http",
+          tools: null,
+          status: "approved",
+        },
+      ]);
+      selectQueue.push([]); // no agents (kb)
       selectQueue.push([{ key_hash: "new-hash", created_at: null }]); // final scan
 
       const result = await provisionTwinConnector(INPUT, {
@@ -500,7 +640,7 @@ describe("Brain tool surface + routing guidance (THINK-629)", () => {
     // returns reranked, cited excerpts with no Brain-side model call.
     // Reflowed to one line — the source is hard-wrapped prose.
     const guidance = TWIN_CONNECTION_GUIDANCE.replace(/\s+/g, " ");
-    expect(guidance).toContain("call `brain_search` directly");
+    expect(guidance).toContain("brain_knowledge_search");
     expect(guidance).toContain(
       "Never route a pure document question through `brain_ask`",
     );
@@ -515,6 +655,8 @@ describe("Brain tool surface + routing guidance (THINK-629)", () => {
     returningQueue.push([{ id: "key-1" }]);
     selectQueue.push([]); // no existing server row
     returningQueue.push([{ id: "server-1" }]);
+    selectQueue.push([]); // no existing kb row
+    returningQueue.push([{ id: "server-kb-1" }]);
     selectQueue.push([
       {
         id: "server-1",
@@ -527,14 +669,36 @@ describe("Brain tool surface + routing guidance (THINK-629)", () => {
       },
     ]);
     selectQueue.push([{ id: "agent-1" }, { id: "agent-2" }]);
+    selectQueue.push([
+      {
+        id: "server-kb-1",
+        slug: "brain-kb",
+        name: "Company Brain KB",
+        url: "https://mcp.brain.example/kb",
+        transport: "streamable-http",
+        tools: null,
+        status: "approved",
+      },
+    ]);
+    selectQueue.push([{ id: "agent-1" }, { id: "agent-2" }]);
 
     await provisionTwinConnector(INPUT, { sm });
 
-    expect(folderCalls.length).toBe(2);
-    for (const call of folderCalls) {
+    // 2 agents × 2 connectors; the first two calls are the twin folders.
+    expect(folderCalls.length).toBe(4);
+    const kbDefinition = String(folderCalls[2]!.definition);
+    expect(kbDefinition).toContain("## Searching company knowledge");
+    expect(kbDefinition).toContain("brain_knowledge_search");
+    const kbSidecar = folderCalls[2]!.sidecar as {
+      permissions: { operations: string[] };
+    };
+    expect(kbSidecar.permissions.operations).toEqual([
+      "brain_knowledge_search",
+    ]);
+    for (const call of folderCalls.slice(0, 2)) {
       const definition = String(call.definition);
       expect(definition).toContain("## Querying the company brain");
-      expect(definition).toContain("brain_search");
+      expect(definition).toContain("brain_knowledge_search");
       expect(definition).toContain("brain_ask");
     }
   });
