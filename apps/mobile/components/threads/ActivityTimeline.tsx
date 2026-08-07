@@ -1079,7 +1079,10 @@ function DataJsonRenderFallbackContent({
   fallback: MobileJsonRenderFallback;
   colors: (typeof COLORS)["dark"];
 }) {
-  const [expanded, setExpanded] = useState(true);
+  // Collapsed by default: the agent's markdown reply (now always expanded)
+  // is the primary content, and this structured block usually restates it.
+  // Title + summary stay visible; tap to expand the detail lines.
+  const [expanded, setExpanded] = useState(false);
   const isUnsupported =
     fallback.status === "unsupported" || fallback.status === "invalid";
   const hasDetails = fallback.lines.length > 0 || isUnsupported;
