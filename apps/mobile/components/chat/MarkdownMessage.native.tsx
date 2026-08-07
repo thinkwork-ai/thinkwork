@@ -1,12 +1,24 @@
-import React from "react";
-import { Linking } from "react-native";
+import React, { useMemo } from "react";
+import { Linking, Text } from "react-native";
 import { useColorScheme } from "nativewind";
 import Markdown from "react-native-markdown-display";
+import {
+  CITATION_HREF_PREFIX,
+  citationLabel,
+  citationsFromHref,
+  linkCitationMarkers,
+  type KnowledgeCitation,
+} from "@/lib/knowledge-citations";
 
 type MarkdownMessageProps = {
   content: string;
   isUser: boolean;
   onLinkPress?: (url: string) => void;
+  /** Numbered KB citations for this message; turns bare [n] markers into
+   * tappable source chips (see lib/knowledge-citations.ts). */
+  citations?: Map<number, KnowledgeCitation>;
+  /** Called with the resolved citations when a chip is tapped. */
+  onCitationPress?: (citations: KnowledgeCitation[]) => void;
 };
 
 const baseTextColor = "#171717";
@@ -16,9 +28,79 @@ export function MarkdownMessage({
   content,
   isUser,
   onLinkPress: onLinkPressProp,
+  citations,
+  onCitationPress,
 }: MarkdownMessageProps) {
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
+
+  // Rewrite bare [n] markers into fragment links the link rule below turns
+  // into tappable chips. Unresolvable markers are escaped, not linked.
+  const body = useMemo(() => {
+    if (!citations || citations.size === 0) return content;
+    return linkCitationMarkers(content, citations);
+  }, [content, citations]);
+
+  const citationChipColor = isDark ? "#7dd3fc" : "#0369a1";
+  const citationChipBg = isDark
+    ? "rgba(125,211,252,0.14)"
+    : "rgba(3,105,161,0.10)";
+
+  // Custom link rule: citation fragment hrefs render as a source chip that
+  // names the document ("CX-0215 · p.1", not a bare footnote number — a
+  // number is a lookup task). Everything else falls through to the default.
+  const rules = useMemo(() => {
+    if (!citations || citations.size === 0) return undefined;
+    return {
+      link: (node: any, children: any, _parent: any, styles: any) => {
+        const href: string | undefined = node.attributes?.href;
+        if (href?.startsWith(CITATION_HREF_PREFIX)) {
+          const resolved = citationsFromHref(href, citations);
+          if (resolved.length > 0) {
+            const primary = resolved[0];
+            const extra = resolved.length - 1;
+            let label = citationLabel(primary);
+            if (label.length > 24) label = `${label.slice(0, 23)}…`;
+            return (
+              <Text
+                key={node.key}
+                onPress={() => onCitationPress?.(resolved)}
+                accessibilityRole="button"
+                accessibilityLabel={`Open source ${citationLabel(primary)}`}
+                style={{
+                  color: citationChipColor,
+                  backgroundColor: citationChipBg,
+                  fontSize: 12,
+                  fontWeight: "500",
+                }}
+              >
+                {` ${label}${extra > 0 ? ` +${extra}` : ""} `}
+              </Text>
+            );
+          }
+        }
+        return (
+          <Text
+            key={node.key}
+            style={styles.link}
+            onPress={() => {
+              if (!href) return;
+              if (onLinkPressProp) onLinkPressProp(href);
+              else Linking.openURL(href).catch(() => null);
+            }}
+          >
+            {children}
+          </Text>
+        );
+      },
+    };
+  }, [
+    citations,
+    onCitationPress,
+    onLinkPressProp,
+    citationChipColor,
+    citationChipBg,
+  ]);
   const textColor = isUser
     ? isDark
       ? "#171717"
@@ -57,6 +139,7 @@ export function MarkdownMessage({
 
   return (
     <Markdown
+      rules={rules}
       onLinkPress={(url) => {
         if (onLinkPressProp) {
           onLinkPressProp(url);
@@ -209,7 +292,7 @@ export function MarkdownMessage({
         },
       }}
     >
-      {content}
+      {body}
     </Markdown>
   );
 }

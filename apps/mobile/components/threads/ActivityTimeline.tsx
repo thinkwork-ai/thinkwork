@@ -48,6 +48,17 @@ import {
   shouldShowMobileTurnActivityEvent,
   shouldShowTurnInTimeline,
 } from "./activity-timeline-logic";
+import {
+  knowledgeCitationsFromInvocations,
+  knowledgeSourcesFromInvocations,
+  knowledgeDocumentViewUrl,
+  type KnowledgeCitation,
+  type KnowledgeSource,
+} from "@/lib/knowledge-citations";
+import {
+  CitationDetailSheet,
+  KnowledgeSourcesCard,
+} from "@/components/threads/KnowledgeSourcesCard";
 
 const RESPONSE_COLOR = "#06b6d4";
 
@@ -510,12 +521,21 @@ function AgentMessageContent({
   colors,
   defaultExpanded,
   onLinkPress,
+  knowledge,
+  onCitationPress,
+  onOpenSource,
 }: {
   item: Message;
   agentName: string;
   colors: (typeof COLORS)["dark"];
   defaultExpanded?: boolean;
   onLinkPress?: (url: string) => void;
+  knowledge?: {
+    citations: Map<number, KnowledgeCitation>;
+    sources: KnowledgeSource[];
+  };
+  onCitationPress?: (citations: KnowledgeCitation[]) => void;
+  onOpenSource?: (source: KnowledgeSource) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   useEffect(() => {
@@ -559,6 +579,8 @@ function AgentMessageContent({
                 content={item.content}
                 isUser={false}
                 onLinkPress={onLinkPress}
+                citations={knowledge?.citations}
+                onCitationPress={onCitationPress}
               />
             </View>
             <Pressable
@@ -572,6 +594,12 @@ function AgentMessageContent({
               )}
             </Pressable>
           </View>
+          {knowledge && knowledge.sources.length > 0 && onOpenSource ? (
+            <KnowledgeSourcesCard
+              sources={knowledge.sources}
+              onOpenSource={onOpenSource}
+            />
+          ) : null}
           {artifact && (
             <Pressable
               onPress={() => router.push(`/artifacts/${artifact.id}`)}
@@ -1117,6 +1145,80 @@ export function ActivityTimeline({
   const colors = isDark ? COLORS.dark : COLORS.light;
 
   const flatListRef = useRef<FlatList>(null);
+
+  // ------ Knowledge citations (web parity: TaskThreadView.tsx:741) ------
+  // Citations come from the turn's usageJson but must anchor to the AGENT
+  // reply message — that's where the [n] markers live. Mobile's turn query
+  // has no triggeringMessageId, so anchor by time: the first non-user
+  // message created at/after the turn started. Keyed by turn id too, for
+  // fallback-response rows (turns whose assistant message never landed).
+  const knowledgeByAnchorId = useMemo(() => {
+    const map = new Map<
+      string,
+      { citations: Map<number, KnowledgeCitation>; sources: KnowledgeSource[] }
+    >();
+    const at = (value: unknown) => {
+      const t = typeof value === "string" ? new Date(value).getTime() : NaN;
+      return Number.isFinite(t) ? t : 0;
+    };
+    const replies = (messages as Message[])
+      .filter(
+        (m) =>
+          (m.role || "").toLowerCase() !== "user" &&
+          (m.senderType || "").toLowerCase() !== "user",
+      )
+      .sort((a, b) => at(a.createdAt) - at(b.createdAt));
+    const claimed = new Set<string>();
+    const sorted = [...(turns as Turn[])].sort(
+      (a, b) => at(a.startedAt ?? a.createdAt) - at(b.startedAt ?? b.createdAt),
+    );
+    for (const turn of sorted) {
+      let usage: unknown = turn.usageJson;
+      if (typeof usage === "string") {
+        try {
+          usage = JSON.parse(usage);
+        } catch {
+          continue;
+        }
+      }
+      const invocations = (usage as Record<string, unknown> | null | undefined)
+        ?.tool_invocations;
+      if (!Array.isArray(invocations) || invocations.length === 0) continue;
+      const citations = knowledgeCitationsFromInvocations(invocations);
+      const sources = knowledgeSourcesFromInvocations(invocations);
+      if (citations.size === 0 && sources.length === 0) continue;
+      const entry = { citations, sources };
+      map.set(turn.id, entry);
+      const started = at(turn.startedAt ?? turn.createdAt);
+      const reply = replies.find(
+        (m) => !claimed.has(m.id) && at(m.createdAt) >= started,
+      );
+      if (reply) {
+        claimed.add(reply.id);
+        map.set(reply.id, entry);
+      }
+    }
+    return map;
+  }, [messages, turns]);
+
+  const [activeCitations, setActiveCitations] = useState<
+    KnowledgeCitation[] | null
+  >(null);
+
+  const openKnowledgeDocument = useCallback(
+    (source: { key: string; page?: number; documentUrl?: string }) => {
+      const url = knowledgeDocumentViewUrl(source);
+      if (!url) return;
+      setActiveCitations(null);
+      if (onLinkPress) onLinkPress(url);
+      else
+        import("react-native").then(({ Linking }) =>
+          Linking.openURL(url).catch(() => null),
+        );
+    },
+    [onLinkPress],
+  );
+
   const rawTimeline = mergeTimeline(messages, turns, agentName);
   // Keep most terminal turn rows admin-only, but active managed work is
   // user-facing progress evidence before the assistant response arrives.
@@ -1296,6 +1398,9 @@ export function ActivityTimeline({
               colors={colors}
               defaultExpanded={isLastAgent && !hasGenUI}
               onLinkPress={onLinkPress}
+              knowledge={knowledgeByAnchorId.get(item.data.id)}
+              onCitationPress={setActiveCitations}
+              onOpenSource={openKnowledgeDocument}
             />
           );
         }
@@ -1314,6 +1419,9 @@ export function ActivityTimeline({
             colors={colors}
             defaultExpanded={isLastAgent}
             onLinkPress={onLinkPress}
+            knowledge={knowledgeByAnchorId.get(item.data.turnId)}
+            onCitationPress={setActiveCitations}
+            onOpenSource={openKnowledgeDocument}
           />
         );
       } else {
@@ -1374,7 +1482,13 @@ export function ActivityTimeline({
   // space when the header is short, while still allowing the list to
   // scroll when the header is tall.
   return (
-    <FlatList
+    <>
+      <CitationDetailSheet
+        citations={activeCitations}
+        onClose={() => setActiveCitations(null)}
+        onOpenDocument={openKnowledgeDocument}
+      />
+      <FlatList
       ref={flatListRef}
       data={timeline}
       renderItem={renderItem}
@@ -1415,6 +1529,7 @@ export function ActivityTimeline({
           } catch {}
         }, 100);
       }}
-    />
+      />
+    </>
   );
 }
