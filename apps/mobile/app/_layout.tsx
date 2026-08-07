@@ -25,7 +25,14 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ThemeProvider } from "@react-navigation/native";
-import { useColorScheme } from "nativewind";
+import { colorScheme as nativewindColorScheme, useColorScheme } from "nativewind";
+
+// The app is dark by default, full stop — the device's light/dark system
+// setting is never consulted (Info.plist pins UIUserInterfaceStyle=Dark for
+// native surfaces too). Set at module scope so the very first render is
+// dark; a user choosing light mode would be an explicit in-app preference
+// that calls colorScheme.set("light") later, not a system inheritance.
+nativewindColorScheme.set("dark");
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { GraphQLProvider } from "@/lib/graphql/provider";
 import { NAV_THEME } from "@/lib/theme";
@@ -346,13 +353,26 @@ function RootLayoutNav() {
   //      refresh_token is still in SecureStore. Show the lock screen so
   //      biometric unlock can re-run bootstrap and refresh tokens — this is
   //      the "never bounce to /sign-in after a reload" guarantee.
-  const needsBiometricUnlock =
+  const shouldEngageBiometricLock =
     ((isAuthenticated && hasTenant) ||
       (!isAuthenticated && hasStoredSession)) &&
     !isUnlocked &&
     biometricEnabled &&
     !biometricLoading &&
     Platform.OS !== "web";
+
+  // Sticky lock: auth flags flap during cold-start bootstrap (stored-session →
+  // authenticated-without-tenant → tenant resolved). Deriving the lock screen's
+  // mount directly from them unmounted/remounted it on every transition, and
+  // each remount auto-fired another Face ID prompt (the "5 prompts then it
+  // logs in" bug). Engage once, stay mounted until a real unlock.
+  const [needsBiometricUnlock, setNeedsBiometricUnlock] = useState(false);
+  useEffect(() => {
+    if (shouldEngageBiometricLock) setNeedsBiometricUnlock(true);
+  }, [shouldEngageBiometricLock]);
+  useEffect(() => {
+    if (isUnlocked) setNeedsBiometricUnlock(false);
+  }, [isUnlocked]);
 
   if (!navigationReady) {
     return null;
@@ -374,7 +394,6 @@ function RootLayoutNav() {
                 <Stack.Screen name="verify" />
                 <Stack.Screen name="onboarding/verify-email" />
                 <Stack.Screen name="onboarding/verify-code" />
-                <Stack.Screen name="onboarding/payment" />
                 <Stack.Screen name="onboarding/complete" />
                 <Stack.Screen
                   name="auth/callback"
@@ -410,10 +429,6 @@ function RootLayoutNav() {
                 <Stack.Screen name="settings/environments" />
                 <Stack.Screen name="settings/integration-detail" />
                 <Stack.Screen name="settings/usage" />
-                <Stack.Screen
-                  name="settings/billing"
-                  options={{ headerShown: false }}
-                />
                 <Stack.Screen name="invite/[token]" />
                 <Stack.Screen name="agents/[id]/files" />
                 <Stack.Screen name="agents/[id]/file-view" />
@@ -465,12 +480,12 @@ function RootLayoutNav() {
 export default function RootLayout() {
   const { colorScheme, setColorScheme } = useColorScheme();
 
-  // Default to dark mode on first load
+  // The app is always dark mode — re-assert whenever anything flips it.
   useEffect(() => {
     if (colorScheme !== "dark") {
       setColorScheme("dark");
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [colorScheme, setColorScheme]);
 
   return (
     <SafeAreaProvider>

@@ -27,6 +27,17 @@ export function BiometricLockScreen({
   const [showHint, setShowHint] = useState(false);
 
   const appState = useRef(AppState.currentState);
+  // Once Face ID succeeds we hand off to onUnlock(), which may run async
+  // bootstrap/token work for several seconds before this screen unmounts.
+  // Without this latch, the iOS Face ID sheet's own inactive→active AppState
+  // flap (and any foreground event during that window) re-fired the prompt —
+  // the "Face ID cycles 5+ times before logging in" bug.
+  const succeededRef = useRef(false);
+  // Timestamp of the last completed auth attempt. The Face ID sheet drives
+  // AppState inactive→active *after* authenticate() resolves, so a plain
+  // `!authenticating` guard is not enough — suppress auto-refires that land
+  // within a short window of an attempt finishing.
+  const lastAuthEndRef = useRef(0);
 
   // Auto-trigger authentication on mount
   useEffect(() => {
@@ -43,7 +54,9 @@ export function BiometricLockScreen({
         if (
           appState.current.match(/inactive|background/) &&
           nextAppState === "active" &&
-          !authenticating
+          !authenticating &&
+          !succeededRef.current &&
+          Date.now() - lastAuthEndRef.current > 1500
         ) {
           handleAuthenticate();
         }
@@ -57,7 +70,7 @@ export function BiometricLockScreen({
   }, [authenticating]);
 
   const handleAuthenticate = async () => {
-    if (authenticating) return;
+    if (authenticating || succeededRef.current) return;
 
     setAuthenticating(true);
     setShowHint(false);
@@ -66,8 +79,10 @@ export function BiometricLockScreen({
     const success = await authenticate();
 
     onEndAuth?.();
+    lastAuthEndRef.current = Date.now();
 
     if (success) {
+      succeededRef.current = true;
       onUnlock();
     } else {
       setShowHint(true);

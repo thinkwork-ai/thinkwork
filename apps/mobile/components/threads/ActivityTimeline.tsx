@@ -48,6 +48,19 @@ import {
   shouldShowMobileTurnActivityEvent,
   shouldShowTurnInTimeline,
 } from "./activity-timeline-logic";
+import {
+  knowledgeCitationsFromInvocations,
+  knowledgeSourcesFromInvocations,
+  knowledgeDocumentViewUrl,
+  isSignedDocLink,
+  opensInDocumentViewer,
+  type KnowledgeCitation,
+  type KnowledgeSource,
+} from "@/lib/knowledge-citations";
+import {
+  CitationDetailSheet,
+  KnowledgeSourcesCard,
+} from "@/components/threads/KnowledgeSourcesCard";
 
 const RESPONSE_COLOR = "#06b6d4";
 
@@ -286,18 +299,25 @@ function mergeTimeline(
       }
     }
     if (m.genuiFallbacks) {
-      for (let fi = 0; fi < m.genuiFallbacks.length; fi++) {
-        const fallback = m.genuiFallbacks[fi];
-        items.push({
-          kind: "data-json-render-fallback",
-          data: {
-            id: `${m.id}-data-json-render-${fallback.id}`,
-            fallback,
-            message: m,
-            createdAt: m.createdAt,
-          },
-          sortKey: new Date(m.createdAt).getTime() + 2 + fi,
-        });
+      // Skip fallback cards when the message already carries a text answer —
+      // the structured block restates it and the pair read as a duplicated
+      // response. The card renders only when it is the message's ONLY
+      // content, so nothing the agent produced is ever dropped.
+      const hasTextAnswer = Boolean(m.content && m.content.trim());
+      if (!hasTextAnswer) {
+        for (let fi = 0; fi < m.genuiFallbacks.length; fi++) {
+          const fallback = m.genuiFallbacks[fi];
+          items.push({
+            kind: "data-json-render-fallback",
+            data: {
+              id: `${m.id}-data-json-render-${fallback.id}`,
+              fallback,
+              message: m,
+              createdAt: m.createdAt,
+            },
+            sortKey: new Date(m.createdAt).getTime() + 2 + fi,
+          });
+        }
       }
     }
   }
@@ -510,12 +530,21 @@ function AgentMessageContent({
   colors,
   defaultExpanded,
   onLinkPress,
+  knowledge,
+  onCitationPress,
+  onOpenSource,
 }: {
   item: Message;
   agentName: string;
   colors: (typeof COLORS)["dark"];
   defaultExpanded?: boolean;
   onLinkPress?: (url: string) => void;
+  knowledge?: {
+    citations: Map<number, KnowledgeCitation>;
+    sources: KnowledgeSource[];
+  };
+  onCitationPress?: (citations: KnowledgeCitation[]) => void;
+  onOpenSource?: (source: KnowledgeSource) => void;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded ?? false);
   useEffect(() => {
@@ -559,6 +588,8 @@ function AgentMessageContent({
                 content={item.content}
                 isUser={false}
                 onLinkPress={onLinkPress}
+                citations={knowledge?.citations}
+                onCitationPress={onCitationPress}
               />
             </View>
             <Pressable
@@ -572,6 +603,12 @@ function AgentMessageContent({
               )}
             </Pressable>
           </View>
+          {knowledge && knowledge.sources.length > 0 && onOpenSource ? (
+            <KnowledgeSourcesCard
+              sources={knowledge.sources}
+              onOpenSource={onOpenSource}
+            />
+          ) : null}
           {artifact && (
             <Pressable
               onPress={() => router.push(`/artifacts/${artifact.id}`)}
@@ -1049,7 +1086,10 @@ function DataJsonRenderFallbackContent({
   fallback: MobileJsonRenderFallback;
   colors: (typeof COLORS)["dark"];
 }) {
-  const [expanded, setExpanded] = useState(true);
+  // Collapsed by default: the agent's markdown reply (now always expanded)
+  // is the primary content, and this structured block usually restates it.
+  // Title + summary stay visible; tap to expand the detail lines.
+  const [expanded, setExpanded] = useState(false);
   const isUnsupported =
     fallback.status === "unsupported" || fallback.status === "invalid";
   const hasDetails = fallback.lines.length > 0 || isUnsupported;
@@ -1117,6 +1157,102 @@ export function ActivityTimeline({
   const colors = isDark ? COLORS.dark : COLORS.light;
 
   const flatListRef = useRef<FlatList>(null);
+
+  // ------ Knowledge citations (web parity: TaskThreadView.tsx:741) ------
+  // Citations come from the turn's usageJson but must anchor to the AGENT
+  // reply message — that's where the [n] markers live. Mobile's turn query
+  // has no triggeringMessageId, so anchor by time: the first non-user
+  // message created at/after the turn started. Keyed by turn id too, for
+  // fallback-response rows (turns whose assistant message never landed).
+  const knowledgeByAnchorId = useMemo(() => {
+    const map = new Map<
+      string,
+      { citations: Map<number, KnowledgeCitation>; sources: KnowledgeSource[] }
+    >();
+    const at = (value: unknown) => {
+      const t = typeof value === "string" ? new Date(value).getTime() : NaN;
+      return Number.isFinite(t) ? t : 0;
+    };
+    const replies = (messages as Message[])
+      .filter(
+        (m) =>
+          (m.role || "").toLowerCase() !== "user" &&
+          (m.senderType || "").toLowerCase() !== "user",
+      )
+      .sort((a, b) => at(a.createdAt) - at(b.createdAt));
+    const claimed = new Set<string>();
+    const sorted = [...(turns as Turn[])].sort(
+      (a, b) => at(a.startedAt ?? a.createdAt) - at(b.startedAt ?? b.createdAt),
+    );
+    for (const turn of sorted) {
+      let usage: unknown = turn.usageJson;
+      if (typeof usage === "string") {
+        try {
+          usage = JSON.parse(usage);
+        } catch {
+          continue;
+        }
+      }
+      const invocations = (usage as Record<string, unknown> | null | undefined)
+        ?.tool_invocations;
+      if (!Array.isArray(invocations) || invocations.length === 0) continue;
+      const citations = knowledgeCitationsFromInvocations(invocations);
+      const sources = knowledgeSourcesFromInvocations(invocations);
+      if (citations.size === 0 && sources.length === 0) continue;
+      const entry = { citations, sources };
+      map.set(turn.id, entry);
+      const started = at(turn.startedAt ?? turn.createdAt);
+      const reply = replies.find(
+        (m) => !claimed.has(m.id) && at(m.createdAt) >= started,
+      );
+      if (reply) {
+        claimed.add(reply.id);
+        map.set(reply.id, entry);
+      }
+    }
+    return map;
+  }, [messages, turns]);
+
+  const [activeCitations, setActiveCitations] = useState<
+    KnowledgeCitation[] | null
+  >(null);
+
+  const openKnowledgeDocument = useCallback(
+    async (source: { key: string; page?: number; documentUrl?: string }) => {
+      let url = knowledgeDocumentViewUrl(source);
+      if (!url) return;
+      setActiveCitations(null);
+      // Office formats can't be rendered from the signed /kb/doc redirect —
+      // WKWebView shows a blank page (same reason web routes them through
+      // its document viewer). Do the viewer's first step here: ask the
+      // signed link for JSON (`{url}` = click-time S3 presign) and load the
+      // bytes URL directly, which WKWebView previews via QuickLook.
+      if (
+        source.documentUrl &&
+        opensInDocumentViewer(source.key) &&
+        isSignedDocLink(source.documentUrl)
+      ) {
+        try {
+          const response = await fetch(source.documentUrl, {
+            headers: { accept: "application/json" },
+          });
+          if (response.ok) {
+            const body = (await response.json()) as { url?: string };
+            if (typeof body.url === "string" && body.url) url = body.url;
+          }
+        } catch {
+          // Fall through to the signed link itself.
+        }
+      }
+      if (onLinkPress) onLinkPress(url);
+      else
+        import("react-native").then(({ Linking }) =>
+          Linking.openURL(url).catch(() => null),
+        );
+    },
+    [onLinkPress],
+  );
+
   const rawTimeline = mergeTimeline(messages, turns, agentName);
   // Keep most terminal turn rows admin-only, but active managed work is
   // user-facing progress evidence before the assistant response arrives.
@@ -1281,21 +1417,20 @@ export function ActivityTimeline({
             />
           );
         else {
-          // Collapse agent message by default when it has GenUI tool results (the GenUI block below shows the key content)
-          const hasGenUI =
-            (item.data.toolResults || []).some(
-              (tr: Record<string, unknown>) =>
-                tr &&
-                typeof tr._type === "string" &&
-                getGenUIComponent(tr._type),
-            ) || (item.data.genuiFallbacks?.length ?? 0) > 0;
+          // The last agent reply stays expanded even when a GenUI block
+          // follows. Auto-collapsing it made the actual answer invisible —
+          // the user saw only the GenUI card and had to scroll up and
+          // expand to read the response it summarizes.
           content = (
             <AgentMessageContent
               item={item.data}
               agentName={agentName}
               colors={colors}
-              defaultExpanded={isLastAgent && !hasGenUI}
+              defaultExpanded={isLastAgent}
               onLinkPress={onLinkPress}
+              knowledge={knowledgeByAnchorId.get(item.data.id)}
+              onCitationPress={setActiveCitations}
+              onOpenSource={openKnowledgeDocument}
             />
           );
         }
@@ -1314,6 +1449,9 @@ export function ActivityTimeline({
             colors={colors}
             defaultExpanded={isLastAgent}
             onLinkPress={onLinkPress}
+            knowledge={knowledgeByAnchorId.get(item.data.turnId)}
+            onCitationPress={setActiveCitations}
+            onOpenSource={openKnowledgeDocument}
           />
         );
       } else {
@@ -1357,6 +1495,11 @@ export function ActivityTimeline({
       onSaveRecipe,
       currentUserId,
       tenantId,
+      // Stale-closure trap: without these, a cold launch renders the list
+      // with the initial EMPTY citations map and [n] markers stay plain
+      // text until something else forces a remount.
+      knowledgeByAnchorId,
+      openKnowledgeDocument,
     ],
   );
 
@@ -1374,7 +1517,13 @@ export function ActivityTimeline({
   // space when the header is short, while still allowing the list to
   // scroll when the header is tall.
   return (
-    <FlatList
+    <>
+      <CitationDetailSheet
+        citations={activeCitations}
+        onClose={() => setActiveCitations(null)}
+        onOpenDocument={openKnowledgeDocument}
+      />
+      <FlatList
       ref={flatListRef}
       data={timeline}
       renderItem={renderItem}
@@ -1415,6 +1564,7 @@ export function ActivityTimeline({
           } catch {}
         }, 100);
       }}
-    />
+      />
+    </>
   );
 }

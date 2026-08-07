@@ -71,7 +71,7 @@ export default function VerifyScreen() {
   }, [token]);
 
   const handleContinue = () => {
-    router.replace("/onboarding/payment");
+    router.replace("/onboarding/complete");
   };
 
   const handleResend = () => {

@@ -17,7 +17,6 @@ import {
   Alert,
   AppState,
 } from "react-native";
-import Constants from "expo-constants";
 import * as Updates from "expo-updates";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useAuth } from "@/lib/auth-context";
@@ -40,6 +39,7 @@ import {
   SpacesQuery,
   NewThreadMentionTargetsQuery,
   SendMessageMutation,
+  WorkItemsQuery,
 } from "@/lib/graphql-queries";
 import {
   activeAssignedComputers,
@@ -81,15 +81,14 @@ import { useMediaQuery } from "@/lib/hooks/use-media-query";
 import { COLORS } from "@/lib/theme";
 import {
   ListTodo,
-  Bot,
   Settings,
   LogOut,
   RefreshCw,
   Filter,
   Zap,
   Lock,
-  CreditCard,
   DatabaseZap,
+  UserRound,
 } from "lucide-react-native";
 import { IconLetterCase } from "@tabler/icons-react-native";
 import { ThreadChannel } from "@/lib/gql/graphql";
@@ -140,17 +139,6 @@ import {
   threadTabBadgeState,
 } from "@/lib/thread-hitl-state";
 
-function resolveApiUrl(): string {
-  const fromExtra =
-    (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ??
-    "";
-  const fromEnv = process.env.EXPO_PUBLIC_API_URL ?? "";
-  return (fromExtra || fromEnv || "https://api.thinkwork.ai").replace(
-    /\/$/,
-    "",
-  );
-}
-
 function hasDefaultAgentMentionAlias(content: string) {
   return /(?:^|\s)@(agent|think)\b/iu.test(content);
 }
@@ -167,34 +155,9 @@ type HomeComputer = {
 export default function ThreadsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ segment?: string }>();
-  const { user, refreshCounter, signOut, getToken, isAuthenticated } =
-    useAuth();
+  const { user, refreshCounter, signOut, isAuthenticated } = useAuth();
   const authTenantId = user?.tenantId ?? null;
 
-  // Role gate for owner-only menu items (Billing). One-shot fetch on mount —
-  // role doesn't change while a session is alive.
-  const [callerRole, setCallerRole] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken?.();
-        if (!token) return;
-        const res = await fetch(`${resolveApiUrl()}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as { role?: string | null };
-        if (!cancelled) setCallerRole(data.role ?? null);
-      } catch {
-        /* silent; Billing menu item just stays hidden */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken]);
-  const isOwner = callerRole === "owner";
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -446,6 +409,38 @@ export default function ThreadsScreen() {
     [reviewsData?.agentWorkspaceReviews],
   );
 
+  // The Work Items segment only earns its place when the user actually has
+  // open (non-final-status) work items. Same variables as WorkItemList so
+  // urql serves both from one cache entry.
+  const [{ data: workItemsProbe }, reexecuteWorkItemsProbe] = useQuery({
+    query: WorkItemsQuery,
+    variables: {
+      input: {
+        tenantId,
+        ownerUserId: callerUserId,
+        includeArchived: false,
+      },
+    },
+    pause: !tenantId || !callerUserId,
+    requestPolicy: "cache-and-network",
+  });
+  const hasOpenWorkItems = useMemo(
+    () =>
+      ((workItemsProbe?.workItems ?? []) as any[]).some(
+        (item) => !item?.status?.isFinal,
+      ),
+    [workItemsProbe?.workItems],
+  );
+  const homeSegments = hasOpenWorkItems
+    ? HOME_SEGMENTS
+    : HOME_SEGMENTS.filter((segment) => segment.key === "threads");
+
+  useEffect(() => {
+    if (!hasOpenWorkItems && activeSegment === "work-items") {
+      setActiveSegment("threads");
+    }
+  }, [hasOpenWorkItems, activeSegment]);
+
   // Polling fallback — refetch every 15s, but only while app is in foreground
   const appStateRef = useRef(AppState.currentState);
   useEffect(() => {
@@ -456,21 +451,23 @@ export default function ThreadsScreen() {
       if (appStateRef.current === "active") {
         reexecute({ requestPolicy: "network-only" });
         reexecuteReviews({ requestPolicy: "network-only" });
+        reexecuteWorkItemsProbe({ requestPolicy: "network-only" });
       }
     }, 15000);
     return () => {
       sub.remove();
       clearInterval(interval);
     };
-  }, [reexecute, reexecuteReviews]);
+  }, [reexecute, reexecuteReviews, reexecuteWorkItemsProbe]);
 
   // Re-fetch when app returns to foreground after token refresh
   useEffect(() => {
     if (refreshCounter > 0) {
       reexecute({ requestPolicy: "network-only" });
       reexecuteReviews({ requestPolicy: "network-only" });
+      reexecuteWorkItemsProbe({ requestPolicy: "network-only" });
     }
-  }, [refreshCounter, reexecute, reexecuteReviews]);
+  }, [refreshCounter, reexecute, reexecuteReviews, reexecuteWorkItemsProbe]);
 
   useEffect(() => {
     return registerThreadListRefetch(threadIds, () => {
@@ -1025,9 +1022,9 @@ export default function ThreadsScreen() {
               <HeaderContextMenu
                 items={[
                   {
-                    label: "Agent Config",
-                    icon: Bot,
-                    onPress: () => router.push("/settings/agent-config"),
+                    label: "Profile",
+                    icon: UserRound,
+                    onPress: () => router.push("/settings/profile"),
                   },
                   {
                     label: "Automations",
@@ -1040,19 +1037,10 @@ export default function ThreadsScreen() {
                     onPress: () => router.push("/settings/credentials"),
                   },
                   {
-                    label: "User Settings",
+                    label: "Settings",
                     icon: Settings,
                     onPress: () => router.push("/settings/user-settings"),
                   },
-                  ...(isOwner
-                    ? [
-                        {
-                          label: "Billing",
-                          icon: CreditCard,
-                          onPress: () => router.push("/settings/billing"),
-                        },
-                      ]
-                    : []),
                   ...(Platform.OS !== "web"
                     ? [
                         {
@@ -1144,15 +1132,17 @@ export default function ThreadsScreen() {
         </View>
       ) : null}
 
-      <SegmentedControl
-        segments={HOME_SEGMENTS}
-        activeKey={activeSegment}
-        onChange={(key) => setActiveSegment(key as HomeSegmentKey)}
-      />
+      {homeSegments.length > 1 && (
+        <SegmentedControl
+          segments={homeSegments}
+          activeKey={activeSegment}
+          onChange={(key) => setActiveSegment(key as HomeSegmentKey)}
+        />
+      )}
 
       <View className="flex-1" style={{ backgroundColor: colors.background }}>
         <PersistentSegmentPanels
-          segments={HOME_SEGMENTS}
+          segments={homeSegments}
           activeKey={activeSegment}
           renderSegment={(segment) => {
             if (segment.key === "work-items") {

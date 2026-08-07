@@ -922,6 +922,14 @@ export const MeQuery = graphql(`
       phone
       createdAt
       updatedAt
+      profile {
+        id
+        title
+        timezone
+        pronouns
+        callBy
+        notes
+      }
     }
   }
 `);
@@ -960,8 +968,104 @@ export const UpdateUserProfileMutation = graphql(`
       displayName
       theme
       notificationPreferences
+      title
+      timezone
+      pronouns
+      callBy
+      notes
       updatedAt
     }
+  }
+`);
+
+export const AccountUsageQuery = graphql(`
+  query AccountUsage($tenantId: ID!, $userId: ID!, $days: Int) {
+    accountUsage(tenantId: $tenantId, userId: $userId, days: $days) {
+      periodStart
+      periodEnd
+      summary {
+        totalUsd
+        enforcedUsd
+        mismatchUsd
+        unreconciledUsd
+        cacheUsd
+        conversationUsd
+        systemUsd
+        inputTokens
+        outputTokens
+        cachedReadTokens
+        cachedWriteTokens
+        eventCount
+      }
+      daily {
+        day
+        totalUsd
+        conversationUsd
+        systemUsd
+        inputTokens
+        outputTokens
+        cacheUsd
+        eventCount
+      }
+      models {
+        model
+        displayName
+        totalUsd
+        enforcedUsd
+        inputTokens
+        outputTokens
+        cachedReadTokens
+        cachedWriteTokens
+        cacheUsd
+        usageShare
+      }
+    }
+  }
+`);
+
+export const UserBudgetStatusQuery = graphql(`
+  query UserBudgetStatus($tenantId: ID!, $userId: ID!) {
+    userBudgetStatus(tenantId: $tenantId, userId: $userId) {
+      policy {
+        id
+        tenantId
+        userId
+        scope
+        period
+        limitUsd
+        actionOnExceed
+        enabled
+      }
+      spentUsd
+      remainingUsd
+      percentUsed
+      status
+    }
+  }
+`);
+
+export const UpsertBudgetPolicyMutation = graphql(`
+  mutation UpsertBudgetPolicy(
+    $tenantId: ID!
+    $input: UpsertBudgetPolicyInput!
+  ) {
+    upsertBudgetPolicy(tenantId: $tenantId, input: $input) {
+      id
+      tenantId
+      userId
+      scope
+      period
+      limitUsd
+      actionOnExceed
+      enabled
+      updatedAt
+    }
+  }
+`);
+
+export const DeleteBudgetPolicyMutation = graphql(`
+  mutation DeleteBudgetPolicy($id: ID!) {
+    deleteBudgetPolicy(id: $id)
   }
 `);
 

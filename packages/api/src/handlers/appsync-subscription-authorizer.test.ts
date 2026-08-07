@@ -53,6 +53,22 @@ describe("AppSync subscription Lambda authorizer", () => {
     expect(deps.consume).toHaveBeenCalledOnce();
   });
 
+  it("consumes a connect ticket for AppSync's real connect event (no operationName)", async () => {
+    // Live AppSync connect-phase invocations carry neither operationName nor
+    // queryString — this is the shape that was silently denied before the
+    // queryString-based discriminator.
+    const deps = dependencies();
+    const result = await createAppSyncSubscriptionAuthorizer(deps)({
+      authorizationToken: "twsub1_token",
+      requestContext: { apiId: "api-1" },
+    });
+    expect(result).toMatchObject({
+      isAuthorized: true,
+      resolverContext: { ticketKind: "connect", tenantId: "tenant-1" },
+    });
+    expect(deps.consume).toHaveBeenCalledOnce();
+  });
+
   it("will not use a connect ticket for registration", async () => {
     const deps = dependencies();
     const result = await createAppSyncSubscriptionAuthorizer(deps)({
