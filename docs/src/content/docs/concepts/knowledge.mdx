@@ -93,6 +93,19 @@ Memory treats source trust as a product concern, not a prompt afterthought.
 - **Compiled pages** summarize many source facts and keep page-section provenance.
 - **External MCP hits** are transient unless a separate workflow promotes them.
 - **Operational facets** can be live and fresh, but should not be silently converted into durable narrative facts.
+- **Company Brain knowledge collections** (SOPs, manuals, policy documents,
+  reached through the Brain's knowledge connector) return passages with
+  their source documents. Agent answers built from them carry **inline
+  citation pills** and a **"Used N sources"** panel; clicking a source
+  opens the actual document — Office formats in the in-app viewer, at the
+  cited page when the passage carries one.
+
+<Aside type="note">
+  Conversation-transcript collections (the hourly thread sweep) are
+  excluded from broad knowledge searches so document answers never cite a
+  past conversation as a "source". Transcripts stay fully searchable when
+  the agent — or a scoped bundle — names that collection explicitly.
+</Aside>
 
 <Aside type="note">
   The internal Context Engine service and `query_context` tool are still the
