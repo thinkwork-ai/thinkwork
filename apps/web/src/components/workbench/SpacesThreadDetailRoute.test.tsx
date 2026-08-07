@@ -27,6 +27,7 @@ import {
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
 import { APPROVED_MODEL_STORAGE_KEY } from "@/lib/approved-model-selection";
+import { SettingsTenantAgentQuery } from "@/lib/settings-queries";
 import { useComputerThreadChunks } from "@/lib/use-computer-thread-chunks";
 import {
   SpacesThreadDetailRoute,
@@ -183,6 +184,7 @@ let workItemsData: unknown;
 let progressMarkdownData: unknown;
 let goalFilesData: unknown;
 let approvedModelsData: unknown;
+let tenantAgentData: unknown = { agent: { model: null } };
 let threadTurnsData: unknown;
 let streamingChunks: Array<{ seq: number; text: string }> = [];
 
@@ -249,6 +251,7 @@ beforeEach(() => {
   progressMarkdownData = { threadProgressMarkdown: null };
   goalFilesData = { threadGoalFiles: null };
   approvedModelsData = undefined;
+  tenantAgentData = { agent: { model: null } };
   threadTurnsData = { threadTurns: [] };
 
   sendMessage.mockResolvedValue({});
@@ -322,6 +325,9 @@ beforeEach(() => {
     }
     if (options.query === MyApprovedModelCatalogQuery) {
       return [queryState(approvedModelsData), vi.fn()];
+    }
+    if (options.query === SettingsTenantAgentQuery) {
+      return [queryState(tenantAgentData), vi.fn()];
     }
     if (options.query === SettingsActivityThreadTurnsQuery) {
       return [queryState(threadTurnsData), reexecuteThreadTurnsQuery];
@@ -1665,11 +1671,15 @@ describe("SpacesThreadDetailRoute", () => {
     );
   });
 
-  it("falls back to the stored model when the thread has no last-used model", async () => {
+  it("falls back to the TENANT DEFAULT (never the stored pick) when the thread has no last-used model", async () => {
+    // A model picked once in some OTHER thread must not leak in here — that
+    // leak is how a brand-new thread's composer silently diverged from the
+    // model its first turn was actually running on.
     window.localStorage.setItem(
       APPROVED_MODEL_STORAGE_KEY,
       "anthropic.claude-haiku",
     );
+    tenantAgentData = { agent: { model: "anthropic.claude-sonnet" } };
     approvedModelsData = {
       myApprovedModelCatalog: [
         {
@@ -1705,7 +1715,76 @@ describe("SpacesThreadDetailRoute", () => {
 
     await waitFor(() => {
       expect(screen.getByLabelText("Select model").textContent).toContain(
+        "Claude Sonnet",
+      );
+    });
+    expect(screen.getByLabelText("Select model").textContent).not.toContain(
+      "Claude Haiku",
+    );
+  });
+
+  it("seeds from the thread's last-used model even when it arrives AFTER first render", async () => {
+    // A brand-new thread has no lastModel until its first turn completes.
+    // The seed must stay unconsumed until the value ARRIVES — burning it on
+    // the null read left the composer on the fallback, and the next
+    // follow-up silently switched the thread's model.
+    approvedModelsData = {
+      myApprovedModelCatalog: [
+        {
+          id: "model-haiku",
+          modelId: "anthropic.claude-haiku",
+          displayName: "Claude Haiku",
+          provider: "amazon_bedrock",
+          inputCostPerMillion: 0.15,
+          outputCostPerMillion: 0.6,
+        },
+        {
+          id: "model-sonnet",
+          modelId: "anthropic.claude-sonnet",
+          displayName: "Claude Sonnet",
+          provider: "amazon_bedrock",
+          inputCostPerMillion: 3,
+          outputCostPerMillion: 15,
+        },
+      ],
+    };
+    tenantAgentData = { agent: { model: "anthropic.claude-haiku" } };
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Route streaming thread",
+        lifecycleStatus: "RUNNING",
+        lastModel: null,
+        messages: { edges: [] },
+      },
+    };
+
+    const { rerender } = render(
+      <SpacesThreadDetailRoute threadId="thread-1" />,
+    );
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select model").textContent).toContain(
         "Claude Haiku",
+      );
+    });
+
+    // First turn completes: the thread now knows what it ran on.
+    threadData = {
+      thread: {
+        id: "thread-1",
+        computerId: "computer-1",
+        title: "Route streaming thread",
+        lifecycleStatus: "COMPLETED",
+        lastModel: "anthropic.claude-sonnet",
+        messages: { edges: [] },
+      },
+    };
+    rerender(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select model").textContent).toContain(
+        "Claude Sonnet",
       );
     });
   });
