@@ -67,6 +67,25 @@ So: 2 messages, 1 turn. The turn is the execution record; the messages are the c
 
 If the user asks a follow-up, that's another message plus another turn, same thread.
 
+## Which model a thread uses
+
+The composer's model picker follows three rules, in order:
+
+1. **A new thread starts on the tenant Agent's configured default** —
+   the model set in Settings → Agents. The picker shows it before you
+   send, and the first turn runs on it.
+2. **Follow-ups default to the model the thread last ran on.** The
+   composer reads the thread's own history, not a global preference — a
+   model chosen in one thread never leaks into another, and a
+   conversation never switches models unless someone asks it to.
+3. **An explicit pick sticks.** Choose a different model in the
+   composer and that thread's next turn (and its history from then on)
+   uses it. Other threads and new threads are unaffected.
+
+Operators control which models appear in the picker through the
+approved-model catalog, and the per-turn record shows which model each
+turn actually ran on.
+
 ## The channel model
 
 Every thread has a channel set at creation time. Channel determines the prefix and which system produced the work:

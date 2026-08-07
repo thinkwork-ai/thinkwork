@@ -36,7 +36,16 @@ neptune`) using its `accounts/<slug>.{backend.hcl,tfvars}` machinery.
    the THINK-333 provisioning route (`POST
 /api/tenants/{tenantId}/mcp-twin-provision`). Provisioning always
    rotates the `tkt_` key, which is why an existing registration is
-   adopted rather than re-provisioned.
+   adopted rather than re-provisioned. Provisioning registers **two**
+   connectors: `digital-twin` (the Brain's `/mcp` query surface) and
+   `brain-kb` (the `/kb` knowledge surface — the source of document
+   citations in agent answers; see
+   [Knowledge](/concepts/knowledge/)). Both are re-materialized into
+   every agent workspace on each run, and a connector an operator has
+   repointed at a Cognito machine-lane secret
+   (`etl-platform/brain-mcp/m2m/*`) keeps that secretRef across
+   re-provisioning — rotation refreshes the `tkt_` fallback without
+   un-flipping the lane.
 
 ## Variable channels per deployment model
 
