@@ -139,7 +139,9 @@ async function revalidateClaims(
     return false;
   }
   if (claims.kind === "connect") {
-    return context.operationName === "DeepDish:Connect";
+    // Connect-phase events carry no GraphQL operation (see expectedKind
+    // above) — a connect ticket must never authorize a registration.
+    return !context.queryString;
   }
   if (
     !context.queryString ||
@@ -179,10 +181,13 @@ export function createAppSyncSubscriptionAuthorizer(
     if (!token || !apiId || !context) return denied();
     try {
       const claims = dependencies.verify(token, apiId);
-      const expectedKind =
-        context.operationName === "DeepDish:Connect"
-          ? "connect"
-          : "registration";
+      // AppSync's connect-phase invocation carries no GraphQL operation —
+      // registration (`start`) events always include the subscription's
+      // queryString. The previous `operationName === "DeepDish:Connect"`
+      // check never matched real connect events (AppSync sends no
+      // operationName at connect), so every realtime connection was
+      // silently denied.
+      const expectedKind = context.queryString ? "registration" : "connect";
       if (claims.kind !== expectedKind) return denied();
       // Compare all request-bound state before atomically burning the nonce.
       if (claims.kind === "registration") {

@@ -40,11 +40,21 @@ import {
   type PublicOAuthOption,
 } from "@/lib/auth-options";
 import * as SecureStore from "expo-secure-store";
+import { clearCognitoStorageForClientId } from "@/lib/cognito-storage";
+import { getEnvironmentEntries } from "@/lib/environments/store";
 
 // Keys for biometric credential storage, scoped per environment clientId so a
 // sign-in on one environment can't overwrite (or be replayed against) another.
 const CRED_EMAIL_KEY = "biometric_stored_email";
 const CRED_PASSWORD_KEY = "biometric_stored_password";
+
+// Set on explicit sign-out, consumed by the next OAuth sign-in. The OAuth flow
+// normally reuses the persistent ASWebAuthenticationSession cookie jar (so
+// Google/Microsoft silently re-auth the previous account without ever showing
+// an account picker). After the user explicitly signs out that behavior is a
+// bug — "I can't switch accounts" — so the next authorize request runs in an
+// ephemeral session with no cookies, forcing the provider's account chooser.
+const FORCE_FRESH_OAUTH_KEY = "thinkwork_force_fresh_oauth_login";
 
 function credEmailKey(): string {
   const clientId = getPlatformConfig().cognitoClientId;
@@ -384,6 +394,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ]).catch((e) =>
         console.warn("[AuthProvider] credential store error:", e),
       );
+      SecureStore.deleteItemAsync(FORCE_FRESH_OAUTH_KEY).catch(() => {});
     }
   }, []);
 
@@ -469,9 +480,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // literal redirect URI fix below (stopping at `&` AND `#`) is the
         // durable fix for that parser bug — ephemeral sessions are no
         // longer needed.
+        //
+        // Exception: right after an explicit sign-out the persistent jar is
+        // the bug — the provider's SSO cookie silently re-auths the account
+        // the user just signed out of, with no account picker. Consume the
+        // sign-out flag and run that one authorize request ephemerally.
+        let preferEphemeralSession = false;
+        try {
+          preferEphemeralSession =
+            (await SecureStore.getItemAsync(FORCE_FRESH_OAUTH_KEY)) === "1";
+        } catch {}
         const result = await WebBrowser.openAuthSessionAsync(
           request.authorizeUrl,
           redirectUri,
+          preferEphemeralSession ? { preferEphemeralSession: true } : undefined,
         );
         console.log("[AuthProvider] Cognito OAuth result type:", result.type);
 
@@ -525,6 +547,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(oauthUser);
         setHasStoredSession(true);
         setDidActiveLogin(true);
+        // Sign-in succeeded — future sign-ins can use the persistent jar
+        // again. A cancelled/failed attempt keeps the flag so the account
+        // chooser still appears on the next try.
+        SecureStore.deleteItemAsync(FORCE_FRESH_OAUTH_KEY).catch(() => {});
       } finally {
         oauthInFlightRef.current = false;
       }
@@ -559,6 +585,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ------ Sign out ------
   const handleSignOut = useCallback(async () => {
     await auth.signOut();
+
+    // Explicit sign-out is GLOBAL, not per-environment. auth.signOut() only
+    // clears the active environment's stored session; every other saved
+    // environment kept its refresh token, so "sign out → switch environment"
+    // silently restored an old login — a session the user believed they had
+    // ended. Drop stored session material (and cached tenantIds) for every
+    // known environment. Environment *switching* while signed in still keeps
+    // sessions per environment — this only runs on the explicit Sign Out.
+    const activeClientId = getPlatformConfig().cognitoClientId;
+    const otherClientIds = new Set(
+      getEnvironmentEntries()
+        .map((entry) => entry.config.cognitoClientId)
+        .filter((id): id is string => Boolean(id) && id !== activeClientId),
+    );
+    await Promise.all(
+      [...otherClientIds].map((clientId) =>
+        clearCognitoStorageForClientId(clientId).catch((e) =>
+          console.warn("[AuthProvider] global sign-out clear failed:", e),
+        ),
+      ),
+    );
+
     setAuthToken(null);
     setUser(null);
     setHasStoredSession(false);
@@ -568,6 +616,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // different user) doesn't pick up the previous tenant. Fire-and-forget.
     if (Platform.OS !== "web") {
       SecureStore.deleteItemAsync(storedTenantIdKey()).catch(() => {});
+      for (const clientId of otherClientIds) {
+        SecureStore.deleteItemAsync(
+          `${STORED_TENANT_ID_KEY}.${clientId}`,
+        ).catch(() => {});
+      }
+      // Force the account chooser on the next OAuth sign-in (see key doc).
+      SecureStore.setItemAsync(FORCE_FRESH_OAUTH_KEY, "1").catch(() => {});
     }
   }, []);
 

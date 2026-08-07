@@ -339,6 +339,10 @@ function createAppSyncSubscription(request: {
                 data: JSON.stringify({
                   query: request.query,
                   variables: request.variables || {},
+                  // The Lambda authorizer binds registration tickets to the
+                  // operation name; AppSync only forwards it to the authorizer
+                  // when the start payload carries it explicitly.
+                  operationName: subscriptionOperationName(request.query),
                 }),
                 extensions: {
                   authorization: authHeader,

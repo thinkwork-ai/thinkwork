@@ -479,7 +479,14 @@ export class AppSyncSubscriptionClient {
         id,
         type: "start",
         payload: {
-          data: JSON.stringify({ query, variables }),
+          data: JSON.stringify({
+            query,
+            variables,
+            // The Lambda authorizer binds registration tickets to the
+            // operation name; AppSync only forwards it to the authorizer when
+            // the start payload carries it explicitly.
+            operationName: subscriptionOperationName(query),
+          }),
           extensions: {
             authorization: {
               host,

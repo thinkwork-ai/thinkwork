@@ -12,10 +12,9 @@ import { useColorScheme } from "nativewind";
 import { useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Updates from "expo-updates";
+import Constants from "expo-constants";
 import { useAuth } from "@/lib/auth-context";
 import {
-  Moon,
-  Sun,
   RefreshCw,
   Check,
   AlertCircle,
@@ -30,65 +29,6 @@ import { useBiometricAuth, getBiometricName } from "@/hooks/useBiometricAuth";
 import { useAppMode } from "@/lib/hooks/use-app-mode";
 import { DetailLayout } from "@/components/layout/detail-layout";
 import { WebContent } from "@/components/layout/web-content";
-
-type ThemeOption = "light" | "dark";
-const THEME_KEY = "@thinkwork/theme-preference";
-
-function ThemeButton({
-  option,
-  current,
-  onPress,
-  colors,
-  compact,
-}: {
-  option: ThemeOption;
-  current: ThemeOption;
-  onPress: () => void;
-  colors: typeof COLORS.light;
-  compact?: boolean;
-}) {
-  const isActive = current === option;
-  const Icon = option === "light" ? Sun : Moon;
-  const label = option === "light" ? "Light" : "Dark";
-
-  if (compact) {
-    return (
-      <Pressable
-        onPress={onPress}
-        className={`flex-row items-center gap-2 px-3 py-1.5 rounded-md border ${
-          isActive
-            ? "bg-sky-500 border-sky-500"
-            : "bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
-        }`}
-      >
-        <Icon size={16} color={isActive ? "#ffffff" : colors.foreground} />
-        <Text
-          className={`text-sm ${isActive ? "text-white" : "text-neutral-900 dark:text-neutral-100"}`}
-        >
-          {label}
-        </Text>
-      </Pressable>
-    );
-  }
-
-  return (
-    <Pressable
-      onPress={onPress}
-      className={`flex-1 items-center justify-center py-2.5 rounded-lg border ${
-        isActive
-          ? "bg-sky-500 border-sky-500"
-          : "bg-white dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700"
-      }`}
-    >
-      <Icon size={20} color={isActive ? "#ffffff" : colors.foreground} />
-      <Text
-        className={`mt-1 text-sm font-medium ${isActive ? "text-white" : "text-neutral-900 dark:text-neutral-100"}`}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
 
 function SettingsNavRow({
   label,
@@ -310,7 +250,6 @@ export default function SettingsScreen() {
     return all.find((a: any) => a.role === "team") ?? all[0] ?? null;
   }, [agents]);
 
-  const [themePreference, setThemePreference] = useState<ThemeOption>("dark");
   const [signingOut, setSigningOut] = useState(false);
   const [togglingBiometric, setTogglingBiometric] = useState(false);
 
@@ -329,28 +268,20 @@ export default function SettingsScreen() {
     }
   };
 
-  useEffect(() => {
-    AsyncStorage.getItem(THEME_KEY).then((value) => {
-      const normalizedTheme: ThemeOption = value === "light" ? "light" : "dark";
-      setThemePreference(normalizedTheme);
-      setColorScheme(normalizedTheme);
-    });
-  }, [setColorScheme]);
-
-  const handleThemeChange = async (option: ThemeOption) => {
-    setThemePreference(option);
-    setColorScheme(option);
-    await AsyncStorage.setItem(THEME_KEY, option);
-  };
-
   return (
-    <DetailLayout title="User Settings" showSidebar={isWide}>
+    <DetailLayout title="Settings" showSidebar={isWide}>
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ paddingBottom: 24 }}
       >
         <WebContent bordered>
           <View className="px-4">
+            <SettingsNavRow
+              label="Profile"
+              value={currentUser?.name ?? undefined}
+              onPress={() => router.push("/settings/profile")}
+              colors={colors}
+            />
             <SettingsNavRow
               label="Account"
               value={currentUser?.email}
@@ -391,24 +322,14 @@ export default function SettingsScreen() {
             />
             <View className="flex-row items-center justify-between py-3">
               <Text className="text-base text-neutral-500 dark:text-neutral-400">
-                Theme
+                Version
               </Text>
-              <View className="flex-row gap-2">
-                <ThemeButton
-                  option="light"
-                  current={themePreference}
-                  onPress={() => handleThemeChange("light")}
-                  colors={colors}
-                  compact
-                />
-                <ThemeButton
-                  option="dark"
-                  current={themePreference}
-                  onPress={() => handleThemeChange("dark")}
-                  colors={colors}
-                  compact
-                />
-              </View>
+              <Text className="text-base text-neutral-500 dark:text-neutral-400">
+                {Constants.expoConfig?.version ?? "—"}
+                {Constants.nativeBuildVersion
+                  ? ` (${Constants.nativeBuildVersion})`
+                  : ""}
+              </Text>
             </View>
           </View>
         </WebContent>

@@ -9,7 +9,6 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Scan } from "lucide-react-native";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Text, H2 } from "@/components/ui/typography";
@@ -214,8 +213,8 @@ export default function SignInScreen() {
         }}
         keyboardShouldPersistTaps="handled"
       >
-        <Card className="w-[90%] max-w-md">
-          <CardHeader className="items-center">
+        <View className="w-[90%] max-w-md">
+          <View className="mb-6 items-center">
             <View className="mb-3">
               <Image
                 source={require("@/assets/logo.png")}
@@ -226,9 +225,28 @@ export default function SignInScreen() {
             <H2 className="text-center" numberOfLines={1} adjustsFontSizeToFit>
               Log in to ThinkWork
             </H2>
-          </CardHeader>
+          </View>
 
-          <CardContent className="gap-4">
+          {!activeEnvironment && (
+            <View className="gap-4">
+              <Text
+                size="sm"
+                variant="muted"
+                className="text-center leading-relaxed"
+              >
+                Connect to your organization's ThinkWork environment to sign
+                in. Choose one to see its sign-in options.
+              </Text>
+              <Button
+                onPress={() => environmentSheetRef.current?.present()}
+              >
+                Select environment
+              </Button>
+            </View>
+          )}
+
+          {activeEnvironment && (
+          <View className="gap-4">
             <AuthOptions
               state={authOptions.state}
               onRetry={authOptions.retry}
@@ -330,8 +348,9 @@ export default function SignInScreen() {
                   : `Configuration incomplete for ${deploymentConfig.stage}`}
               </Text>
             </Pressable>
-          </CardContent>
-        </Card>
+          </View>
+          )}
+        </View>
       </ScrollView>
       <EnvironmentPickerSheet ref={environmentSheetRef} />
     </KeyboardAvoidingView>
