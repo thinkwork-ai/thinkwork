@@ -102,12 +102,12 @@ import {
 } from "@/lib/desktop-chrome";
 import {
   chooseApprovedModelId,
-  readStoredModelId,
   writeStoredModelId,
   type ApprovedModelOption,
 } from "@/lib/approved-model-selection";
 import {
   SettingsAgentProfilesQuery,
+  SettingsTenantAgentQuery,
   SettingsTenantMembersQuery,
 } from "@/lib/settings-queries";
 import {
@@ -447,9 +447,14 @@ export function SpacesThreadDetailRoute({
   // via TenantContext.isOperator; the mutation re-checks server-side.
   const [flagEvalTurnId, setFlagEvalTurnId] = useState<string | null>(null);
   const [flagEvalOpen, setFlagEvalOpen] = useState(false);
-  const [selectedModelId, setSelectedModelId] = useState<string | null>(() =>
-    readStoredModelId(),
-  );
+  // Start null — NEVER the global stored pick. The composer must reflect
+  // what THIS thread runs on: its own last-used model, or the tenant
+  // Agent's configured default while the first turn is still in flight.
+  // Seeding from localStorage here is how a model picked once in some other
+  // thread silently switched this one on the next follow-up.
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  // Explicit user picks always win over any later seeding.
+  const userPickedModelRef = useRef(false);
   const [threadInfoOpen, setThreadInfoOpen] = useState(false);
   // THINK-168: the docked artifact panel replaced the legacy GeneratedArtifact
   // side panel. The header PanelRight button opens the thread's NEWEST durable
@@ -568,15 +573,39 @@ export function SpacesThreadDetailRoute({
       requestPolicy: "cache-and-network",
     });
   const approvedModels = approvedModelData?.myApprovedModelCatalog;
+  // Tenant Agent's configured default (same source the new-thread composer
+  // uses) — the fallback while a brand-new thread's first turn is still
+  // running and `lastModel` has not been written yet.
+  const [{ data: tenantAgentData, fetching: tenantAgentFetching }] = useQuery({
+    query: SettingsTenantAgentQuery,
+    variables: { tenantId: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const tenantDefaultModelId =
+    (tenantAgentData as { agent?: { model?: string | null } } | undefined)
+      ?.agent?.model ?? null;
 
   useEffect(() => {
     if (!approvedModels) return;
-    const nextModelId = chooseApprovedModelId(approvedModels, selectedModelId);
+    // Wait for both the thread and the tenant default before auto-picking,
+    // so neither can lock in ahead of the other. Preference order: the
+    // user's/current selection, this thread's own last-used model, then the
+    // tenant default. Never persisted — storage records only explicit picks.
+    if (tenantAgentFetching) return;
+    const nextModelId = chooseApprovedModelId(
+      approvedModels,
+      selectedModelId || routeThread?.lastModel || tenantDefaultModelId,
+    );
     if (nextModelId !== selectedModelId) {
       setSelectedModelId(nextModelId);
-      writeStoredModelId(nextModelId);
     }
-  }, [approvedModels, selectedModelId]);
+  }, [
+    approvedModels,
+    selectedModelId,
+    routeThread,
+    tenantDefaultModelId,
+    tenantAgentFetching,
+  ]);
 
   // Seed the composer with the model this thread last used, so a follow-up
   // defaults to the thread's own history rather than the global stored pick
@@ -588,9 +617,17 @@ export function SpacesThreadDetailRoute({
   useEffect(() => {
     if (!approvedModels || !routeThread) return;
     if (seededModelThreadRef.current === routeThread.id) return;
-    seededModelThreadRef.current = routeThread.id;
     const lastModel = routeThread.lastModel ?? null;
+    // A brand-new thread has no lastModel until its first turn completes —
+    // leave the seed UNCONSUMED so it fires when the value arrives. Marking
+    // the ref before this check burned the seed and left the composer on
+    // whatever it happened to show, silently switching the thread's model
+    // on the next follow-up.
     if (!lastModel) return;
+    seededModelThreadRef.current = routeThread.id;
+    // An explicit pick the user already made in this composer outranks the
+    // thread's history.
+    if (userPickedModelRef.current) return;
     const resolved = chooseApprovedModelId(approvedModels, lastModel);
     if (resolved === lastModel && resolved !== selectedModelId) {
       setSelectedModelId(resolved);
@@ -613,6 +650,7 @@ export function SpacesThreadDetailRoute({
     // picker has no empty-valued item, so an empty value is never a real user
     // pick — ignore it, otherwise it clobbers the selection back to the default.
     if (!modelId) return;
+    userPickedModelRef.current = true;
     setSelectedModelId(modelId);
     writeStoredModelId(modelId);
   }
