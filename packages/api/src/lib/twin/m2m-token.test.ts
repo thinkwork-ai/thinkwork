@@ -141,3 +141,37 @@ describe("cachedM2mToken", () => {
     expect(doFetch).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("rotation and malformed-endpoint behaviour", () => {
+  it("a changed client_id evicts the cached token immediately, not at staleAt", async () => {
+    let jwt = "jwt-old";
+    const doFetch = vi.fn(async () => okResponse({ access_token: jwt }));
+    const deps = { fetch: doFetch as unknown as typeof fetch, now: () => 0 };
+
+    expect(await cachedM2mToken("ref-1", CREDS, deps)).toBe("jwt-old");
+    jwt = "jwt-new";
+    // Same secretRef, rotated app client — the old token is dead server-side
+    // even though its timer has barely started.
+    const rotated = { ...CREDS, clientId: "client-rotated" };
+    expect(await cachedM2mToken("ref-1", rotated, deps)).toBe("jwt-new");
+    expect(doFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("a non-JSON token response rejects (fail-closed at the caller)", async () => {
+    const doFetch = vi.fn(
+      async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => {
+            throw new SyntaxError("Unexpected token < in JSON");
+          },
+        }) as unknown as Response,
+    );
+    await expect(
+      cachedM2mToken("ref-html", CREDS, {
+        fetch: doFetch as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow();
+  });
+});

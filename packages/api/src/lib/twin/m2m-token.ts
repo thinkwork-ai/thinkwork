@@ -22,8 +22,8 @@
  *  - send the scope even though Cognito would default it — it keeps the
  *    token self-describing in logs.
  *
- * The cache is module-scoped (per Lambda container), matching how the twin
- * connector's config-build path already amortises Secrets Manager reads.
+ * The cache is module-scoped (per Lambda container). Config build re-reads
+ * the SECRET on every build; only the minted token is cached here.
  */
 
 /** The wire shape terraform writes for an m2m lane secret. */
@@ -67,6 +67,14 @@ interface CachedToken {
   token: string;
   /** Epoch ms after which the cached token must not be reused. */
   staleAt: number;
+  /**
+   * The client the token was minted FOR. The secret is re-read on every
+   * config build, so a rotated lane (new app client, new client_id) shows up
+   * here immediately — and a cached token minted for the OLD client must
+   * read as stale on the spot, not after its timer. Without this check a
+   * rotation serves a dead token for up to 55 minutes with no eviction path.
+   */
+  clientId: string;
 }
 
 const tokenCache = new Map<string, CachedToken>();
@@ -95,7 +103,9 @@ export async function cachedM2mToken(
 ): Promise<string> {
   const now = deps.now ?? Date.now;
   const cached = tokenCache.get(cacheKey);
-  if (cached && cached.staleAt > now()) return cached.token;
+  if (cached && cached.staleAt > now() && cached.clientId === creds.clientId) {
+    return cached.token;
+  }
 
   const minted = await mintM2mToken(creds, deps);
   tokenCache.set(cacheKey, minted);
@@ -151,5 +161,6 @@ export async function mintM2mToken(
   return {
     token,
     staleAt: now() + expiresInSec * 1000 - REFRESH_MARGIN_MS,
+    clientId: creds.clientId,
   };
 }
