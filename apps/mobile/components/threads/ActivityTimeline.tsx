@@ -52,6 +52,8 @@ import {
   knowledgeCitationsFromInvocations,
   knowledgeSourcesFromInvocations,
   knowledgeDocumentViewUrl,
+  isSignedDocLink,
+  opensInDocumentViewer,
   type KnowledgeCitation,
   type KnowledgeSource,
 } from "@/lib/knowledge-citations";
@@ -1206,10 +1208,32 @@ export function ActivityTimeline({
   >(null);
 
   const openKnowledgeDocument = useCallback(
-    (source: { key: string; page?: number; documentUrl?: string }) => {
-      const url = knowledgeDocumentViewUrl(source);
+    async (source: { key: string; page?: number; documentUrl?: string }) => {
+      let url = knowledgeDocumentViewUrl(source);
       if (!url) return;
       setActiveCitations(null);
+      // Office formats can't be rendered from the signed /kb/doc redirect —
+      // WKWebView shows a blank page (same reason web routes them through
+      // its document viewer). Do the viewer's first step here: ask the
+      // signed link for JSON (`{url}` = click-time S3 presign) and load the
+      // bytes URL directly, which WKWebView previews via QuickLook.
+      if (
+        source.documentUrl &&
+        opensInDocumentViewer(source.key) &&
+        isSignedDocLink(source.documentUrl)
+      ) {
+        try {
+          const response = await fetch(source.documentUrl, {
+            headers: { accept: "application/json" },
+          });
+          if (response.ok) {
+            const body = (await response.json()) as { url?: string };
+            if (typeof body.url === "string" && body.url) url = body.url;
+          }
+        } catch {
+          // Fall through to the signed link itself.
+        }
+      }
       if (onLinkPress) onLinkPress(url);
       else
         import("react-native").then(({ Linking }) =>
@@ -1383,20 +1407,16 @@ export function ActivityTimeline({
             />
           );
         else {
-          // Collapse agent message by default when it has GenUI tool results (the GenUI block below shows the key content)
-          const hasGenUI =
-            (item.data.toolResults || []).some(
-              (tr: Record<string, unknown>) =>
-                tr &&
-                typeof tr._type === "string" &&
-                getGenUIComponent(tr._type),
-            ) || (item.data.genuiFallbacks?.length ?? 0) > 0;
+          // The last agent reply stays expanded even when a GenUI block
+          // follows. Auto-collapsing it made the actual answer invisible —
+          // the user saw only the GenUI card and had to scroll up and
+          // expand to read the response it summarizes.
           content = (
             <AgentMessageContent
               item={item.data}
               agentName={agentName}
               colors={colors}
-              defaultExpanded={isLastAgent && !hasGenUI}
+              defaultExpanded={isLastAgent}
               onLinkPress={onLinkPress}
               knowledge={knowledgeByAnchorId.get(item.data.id)}
               onCitationPress={setActiveCitations}

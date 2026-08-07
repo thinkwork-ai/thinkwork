@@ -386,6 +386,23 @@ export interface OpenableKnowledgeDocument {
   documentUrl?: string;
 }
 
+/** Extensions the browser/WebView cannot render from the raw signed link.
+ * Mirrors web's DOCUMENT_VIEWER_EXTENSIONS (knowledge-doc-viewer.ts). */
+const DOCUMENT_VIEWER_EXTENSIONS = new Set([
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "csv",
+]);
+
+export function opensInDocumentViewer(documentKey: string): boolean {
+  const extension = documentKey.split(".").pop()?.toLowerCase() ?? "";
+  return DOCUMENT_VIEWER_EXTENSIONS.has(extension);
+}
+
 /**
  * The URL the in-app viewer sheet should load for a cited document, or null
  * when the citation carries no retrieval-supplied URL (the only resolvable
