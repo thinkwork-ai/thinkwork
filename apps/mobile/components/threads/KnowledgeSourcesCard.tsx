@@ -105,67 +105,78 @@ export function CitationDetailSheet({
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === "dark" ? COLORS.dark : COLORS.light;
 
+  // A floating dialog, not a bottom sheet: the citation is anchored to a
+  // sentence mid-screen, so a centered card reads as "about that sentence"
+  // while a slide-up sheet reads as a new surface. Fade, no slide.
   return (
     <Modal
       visible={!!citations && citations.length > 0}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={onClose}
     >
-      <Pressable className="flex-1 bg-black/60" onPress={onClose} />
-      <View className="bg-white dark:bg-neutral-900 rounded-t-2xl px-5 pt-4 pb-10 max-h-[70%]">
-        <View className="flex-row items-center justify-between mb-3">
-          <Text className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
-            {citations && citations.length === 1 ? "Source" : "Sources"}
-          </Text>
-          <Pressable
-            onPress={onClose}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            hitSlop={8}
-            className="active:opacity-70"
-          >
-            <X size={20} color={colors.mutedForeground} />
-          </Pressable>
-        </View>
-        <ScrollView>
-          <View className="gap-5">
-            {(citations ?? []).map((citation) => (
-              <View key={citation.n} className="gap-1.5">
-                <View className="flex-row items-start gap-1.5">
-                  <FileText size={14} color={colors.mutedForeground} />
-                  <Text className="text-sm font-medium text-neutral-900 dark:text-neutral-100 shrink">
-                    {citationLabel(citation)}
-                  </Text>
-                </View>
-                {citation.quote ? (
-                  <View className="border-l-2 border-neutral-300 dark:border-neutral-700 pl-2.5">
-                    <Text className="text-sm text-neutral-600 dark:text-neutral-400">
-                      {citation.quote}
+      <Pressable
+        className="flex-1 items-center justify-center bg-black/60 px-6"
+        onPress={onClose}
+      >
+        <Pressable
+          onPress={() => {}}
+          className="w-full max-w-md rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-5 py-4"
+          style={{ maxHeight: "70%" }}
+        >
+          <View className="flex-row items-center justify-between mb-3">
+            <Text className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
+              {citations && citations.length === 1 ? "Source" : "Sources"}
+            </Text>
+            <Pressable
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+              hitSlop={8}
+              className="active:opacity-70"
+            >
+              <X size={20} color={colors.mutedForeground} />
+            </Pressable>
+          </View>
+          <ScrollView>
+            <View className="gap-5">
+              {(citations ?? []).map((citation) => (
+                <View key={citation.n} className="gap-1.5">
+                  <View className="flex-row items-start gap-1.5">
+                    <FileText size={14} color={colors.mutedForeground} />
+                    <Text className="text-sm font-medium text-neutral-900 dark:text-neutral-100 shrink">
+                      {citationLabel(citation)}
                     </Text>
                   </View>
-                ) : null}
-                {citation.documentUrl ? (
-                  <Pressable
-                    onPress={() => onOpenDocument(citation)}
-                    accessibilityRole="button"
-                    className="active:opacity-70"
-                  >
-                    <Text className="text-sm font-medium text-sky-600 dark:text-sky-400">
-                      Open document
-                      {citation.page ? ` at page ${citation.page}` : ""}
+                  {citation.quote ? (
+                    <View className="border-l-2 border-neutral-300 dark:border-neutral-700 pl-2.5">
+                      <Text className="text-sm text-neutral-600 dark:text-neutral-400">
+                        {citation.quote}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {citation.documentUrl ? (
+                    <Pressable
+                      onPress={() => onOpenDocument(citation)}
+                      accessibilityRole="button"
+                      className="active:opacity-70"
+                    >
+                      <Text className="text-sm font-medium text-sky-600 dark:text-sky-400">
+                        Open document
+                        {citation.page ? ` at page ${citation.page}` : ""}
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <Text className="text-xs text-neutral-500 dark:text-neutral-500">
+                      Document not viewable from this citation
                     </Text>
-                  </Pressable>
-                ) : (
-                  <Text className="text-xs text-neutral-500 dark:text-neutral-500">
-                    Document not viewable from this citation
-                  </Text>
-                )}
-              </View>
-            ))}
-          </View>
-        </ScrollView>
-      </View>
+                  )}
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }

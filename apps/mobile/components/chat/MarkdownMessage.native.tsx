@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Linking, Text } from "react-native";
+import { Linking, Text, View } from "react-native";
 import { useColorScheme } from "nativewind";
 import Markdown from "react-native-markdown-display";
 import {
@@ -61,20 +61,39 @@ export function MarkdownMessage({
             const extra = resolved.length - 1;
             let label = citationLabel(primary);
             if (label.length > 24) label = `${label.slice(0, 23)}…`;
+            // A real badge needs a View — nested Text ignores borderRadius
+            // and vertical padding, which made the highlight ride high on
+            // the line. The inline View sits on the text baseline, so a
+            // small translateY optically centers it against the sentence.
             return (
               <Text
                 key={node.key}
                 onPress={() => onCitationPress?.(resolved)}
                 accessibilityRole="button"
                 accessibilityLabel={`Open source ${citationLabel(primary)}`}
-                style={{
-                  color: citationChipColor,
-                  backgroundColor: citationChipBg,
-                  fontSize: 12,
-                  fontWeight: "500",
-                }}
               >
-                {` ${label}${extra > 0 ? ` +${extra}` : ""} `}
+                {" "}
+                <View
+                  style={{
+                    backgroundColor: citationChipBg,
+                    borderRadius: 5,
+                    paddingHorizontal: 5,
+                    paddingVertical: 1.5,
+                    transform: [{ translateY: 2.5 }],
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: citationChipColor,
+                      fontSize: 11,
+                      lineHeight: 13,
+                      fontWeight: "500",
+                    }}
+                  >
+                    {label}
+                    {extra > 0 ? `  +${extra}` : ""}
+                  </Text>
+                </View>
               </Text>
             );
           }

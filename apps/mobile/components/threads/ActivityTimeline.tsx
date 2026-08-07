@@ -1465,6 +1465,11 @@ export function ActivityTimeline({
       onSaveRecipe,
       currentUserId,
       tenantId,
+      // Stale-closure trap: without these, a cold launch renders the list
+      // with the initial EMPTY citations map and [n] markers stay plain
+      // text until something else forces a remount.
+      knowledgeByAnchorId,
+      openKnowledgeDocument,
     ],
   );
 

@@ -25,7 +25,14 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ThemeProvider } from "@react-navigation/native";
-import { useColorScheme } from "nativewind";
+import { colorScheme as nativewindColorScheme, useColorScheme } from "nativewind";
+
+// The app is dark by default, full stop — the device's light/dark system
+// setting is never consulted (Info.plist pins UIUserInterfaceStyle=Dark for
+// native surfaces too). Set at module scope so the very first render is
+// dark; a user choosing light mode would be an explicit in-app preference
+// that calls colorScheme.set("light") later, not a system inheritance.
+nativewindColorScheme.set("dark");
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { GraphQLProvider } from "@/lib/graphql/provider";
 import { NAV_THEME } from "@/lib/theme";
