@@ -90,6 +90,37 @@ export const TWIN_CONNECTOR_OPERATIONS = [
 ] as const;
 
 /**
+ * The knowledge-surface sibling (THINK-628 kb-lane): one row per tenant
+ * against the Brain's `/kb` endpoint. This connector is where SOURCE
+ * CITATIONS come from — its `brain_knowledge_search` returns reranked
+ * passages with per-document view URLs, which the web thread view renders
+ * as the "Used N sources" panel and inline citation pills. Provisioned
+ * alongside the twin row so a reprovision can never silently drop the
+ * citation lane again (2026-08-07: tei lost exactly this row, and every KB
+ * answer degraded to uncited brain_ask prose).
+ */
+export const KB_CONNECTOR_SLUG = "brain-kb";
+export const KB_CONNECTOR_NAME = "Company Brain KB";
+export const KB_CONNECTOR_OPERATIONS = ["brain_knowledge_search"] as const;
+
+/** `/kb` endpoint for a twin `/mcp` (or legacy `/mcp/twin`) URL. */
+export function twinKbUrlFrom(twinMcpUrl: string): string {
+  return twinMcpUrl.replace(/\/mcp(\/twin)?\/?$/, "/kb");
+}
+
+export const KB_CONNECTOR_TOOLS = [
+  {
+    name: "brain_knowledge_search",
+    description:
+      "Search this company's knowledge collections (SOPs, manuals, policy " +
+      "documents held in the company brain's evidence store). Returns the " +
+      "most relevant passages with their source document names — cite the " +
+      "source document when you use a passage. Optionally scope to one " +
+      "collection.",
+  },
+] as const;
+
+/**
  * Deliberately absent from the list above (THINK-629):
  *
  *  - `brain_cypher` / `brain_describe_ontology` — the raw query surface and
@@ -181,6 +212,33 @@ export function twinConnectorRowValues(input: {
   };
 }
 
+/** Registry row for the KB (citations) connector — born approved. */
+export function kbConnectorRowValues(input: {
+  tenantId: string;
+  kbUrl: string;
+  secretRef: string;
+}) {
+  const auth_config = twinConnectorAuthConfig(input.secretRef);
+  return {
+    // `onBehalfOf` so KB searches attribute the signed-in human, exactly
+    // like the twin row. No `longRunning`: retrieval is sub-second.
+    runtime_metadata: { onBehalfOf: true },
+    tenant_id: input.tenantId,
+    name: KB_CONNECTOR_NAME,
+    slug: KB_CONNECTOR_SLUG,
+    url: input.kbUrl,
+    transport: "streamable-http",
+    auth_type: "service_credential",
+    auth_config,
+    tools: KB_CONNECTOR_TOOLS.map((tool) => ({ ...tool })),
+    enabled: true,
+    management_source: "manual",
+    status: "approved",
+    url_hash: computeMcpUrlHash(input.kbUrl, auth_config),
+    approved_at: new Date(),
+  };
+}
+
 /** Twin-specific prose appended to the generated CONNECTION.md. */
 export const TWIN_CONNECTION_GUIDANCE = `
 ## Querying the company brain
@@ -188,11 +246,14 @@ export const TWIN_CONNECTION_GUIDANCE = `
 Two lanes. Route on the question, not on habit.
 
 **Knowledge, document, and policy questions** — "what does our handbook
-say", "how do we handle X", "find the contract clause about Y": call
-\`brain_search\` directly and answer from the excerpts it returns. It is
-reranked and cited server-side with no agent loop in the way, so it is
-both the fastest and the highest-fidelity lane for documents. Never route
-a pure document question through \`brain_ask\`.
+say", "how do we handle X", "find the contract clause about Y": use the
+Company Brain KB connector's \`brain_knowledge_search\` and answer from
+the passages it returns, citing each source document by name (the [n]
+markers it supplies render as clickable citations). It is reranked and
+cited server-side with no agent loop in the way — both the fastest and
+the highest-fidelity lane for documents. Never route a pure document
+question through \`brain_ask\`, which composes prose without per-document
+citations.
 
 **Graph and data questions** — counts, lookups, rankings, relationships
 between records across source systems: call \`brain_ask\` with the question
@@ -210,6 +271,18 @@ populations alone; \`brain_describe_entity\` explains ONE entity type's
 properties with source, authority, and freshness.
 
 Cite source systems when the results carry them; never guess entity ids.
+`;
+
+/** Prose for the KB (citations) connector's CONNECTION.md. */
+export const KB_CONNECTION_GUIDANCE = `
+## Searching company knowledge
+
+\`brain_knowledge_search\` is the citations lane: every passage comes back
+with its source document, and the [n] markers you are given render as
+clickable citations in the answer. ALWAYS carry those markers into your
+reply and name the documents you drew from — an uncited knowledge answer
+reads as a guess. Scope with \`collection\` when the user names a domain;
+otherwise search broadly and let reranking decide.
 `;
 
 export interface TwinProvisionResult {
@@ -345,47 +418,98 @@ export async function provisionTwinConnector(
   // binds: {token, tenantId}).
   await putTwinSecret(secretRef, raw, input.tenantId, deps.sm);
 
-  // 3. Approved registry row with the hash pinned.
-  const values = twinConnectorRowValues({
-    tenantId: input.tenantId,
-    twinMcpUrl: input.twinMcpUrl,
-    secretRef,
-  });
-  const [existing] = await db
-    .select({ id: tenantMcpServers.id })
-    .from(tenantMcpServers)
-    .where(
-      and(
-        eq(tenantMcpServers.tenant_id, input.tenantId),
-        eq(tenantMcpServers.slug, TWIN_CONNECTOR_SLUG),
-      ),
-    )
-    .limit(1);
-  let tenantMcpServerId: string;
-  let provisioned: "created" | "rotated";
-  if (existing) {
-    await db
-      .update(tenantMcpServers)
-      .set({ ...values, updated_at: now() })
-      .where(eq(tenantMcpServers.id, existing.id));
-    tenantMcpServerId = existing.id;
-    provisioned = "rotated";
-  } else {
+  // 3. Approved registry rows with the hash pinned — the twin row AND its
+  // /kb citations sibling. Machine-lane preservation (THINK-628): a row an
+  // operator has repointed at the Cognito lane secret keeps that secretRef
+  // across reprovision — clobbering it back to the tkt_ secret was the trap
+  // that silently un-flipped the lane on every rotation. The tkt_ secret is
+  // still rotated and published above, so the fallback stays valid either
+  // way.
+  type ConnectorRowValues =
+    | ReturnType<typeof twinConnectorRowValues>
+    | ReturnType<typeof kbConnectorRowValues>;
+  const upsertConnectorRow = async (
+    slug: string,
+    values: ConnectorRowValues,
+  ): Promise<{ id: string; provisioned: "created" | "rotated" }> => {
+    const [existingRow] = await db
+      .select({
+        id: tenantMcpServers.id,
+        auth_config: tenantMcpServers.auth_config,
+      })
+      .from(tenantMcpServers)
+      .where(
+        and(
+          eq(tenantMcpServers.tenant_id, input.tenantId),
+          eq(tenantMcpServers.slug, slug),
+        ),
+      )
+      .limit(1);
+    if (existingRow) {
+      const existingRef = (
+        existingRow.auth_config as { secretRef?: string } | null
+      )?.secretRef;
+      let next: ConnectorRowValues = values;
+      if (
+        existingRef &&
+        existingRef.startsWith("etl-platform/brain-mcp/m2m/")
+      ) {
+        const auth_config = twinConnectorAuthConfig(existingRef);
+        next = {
+          ...values,
+          auth_config,
+          url_hash: computeMcpUrlHash(values.url, auth_config),
+        };
+      }
+      await db
+        .update(tenantMcpServers)
+        .set({ ...next, updated_at: now() })
+        .where(eq(tenantMcpServers.id, existingRow.id));
+      return { id: existingRow.id, provisioned: "rotated" };
+    }
     const [inserted] = await db
       .insert(tenantMcpServers)
       .values(values)
       .returning({ id: tenantMcpServers.id });
     if (!inserted)
-      throw new Error("twin provision: server insert returned no row");
-    tenantMcpServerId = inserted.id;
-    provisioned = "created";
-  }
+      throw new Error(`twin provision: ${slug} insert returned no row`);
+    return { id: inserted.id, provisioned: "created" };
+  };
 
-  // 4. Default-on workspace materialization (R13).
+  const twinRow = await upsertConnectorRow(
+    TWIN_CONNECTOR_SLUG,
+    twinConnectorRowValues({
+      tenantId: input.tenantId,
+      twinMcpUrl: input.twinMcpUrl,
+      secretRef,
+    }),
+  );
+  const tenantMcpServerId = twinRow.id;
+  const provisioned = twinRow.provisioned;
+  const kbRow = await upsertConnectorRow(
+    KB_CONNECTOR_SLUG,
+    kbConnectorRowValues({
+      tenantId: input.tenantId,
+      kbUrl: twinKbUrlFrom(input.twinMcpUrl),
+      secretRef,
+    }),
+  );
+
+  // 4. Default-on workspace materialization (R13) — both connectors.
   const workspaces = await materializeTwinConnectorFolder(
     { tenantId: input.tenantId, tenantMcpServerId },
     deps,
   );
+  const kbWorkspaces = await materializeTwinConnectorFolder(
+    {
+      tenantId: input.tenantId,
+      tenantMcpServerId: kbRow.id,
+      guidance: KB_CONNECTION_GUIDANCE,
+      operations: [...KB_CONNECTOR_OPERATIONS],
+    },
+    deps,
+  );
+  workspaces.skipped.push(...kbWorkspaces.skipped);
 
   // 5. Final manifest publish: ACTIVE keys only — drops the rotated-out
   // hash; the platform's ≤60s cache is the revocation overlap window.
@@ -448,7 +572,14 @@ async function putTwinSecret(
  * the folder write re-signs the same definition bytes.
  */
 export async function materializeTwinConnectorFolder(
-  input: { tenantId: string; tenantMcpServerId: string },
+  input: {
+    tenantId: string;
+    tenantMcpServerId: string;
+    /** Connector-specific prose appended to CONNECTION.md; twin's default. */
+    guidance?: string;
+    /** Sidecar operations allowlist; twin's default. */
+    operations?: string[];
+  },
   deps: TwinProvisionDeps = {},
 ): Promise<TwinProvisionResult["workspaces"]> {
   const db = deps.db ?? defaultDb;
@@ -485,7 +616,8 @@ export async function materializeTwinConnectorFolder(
   }
 
   const generated = connectionDefinitionFromRegistryRow(row);
-  const definition = `${generated.definition}${TWIN_CONNECTION_GUIDANCE}`;
+  const guidance = input.guidance ?? TWIN_CONNECTION_GUIDANCE;
+  const definition = `${generated.definition}${guidance}`;
   const slug = generated.slug;
 
   const agentRows = await db
@@ -526,7 +658,9 @@ export async function materializeTwinConnectorFolder(
       definition,
       sidecar: {
         enabled: true,
-        permissions: { operations: [...TWIN_CONNECTOR_OPERATIONS] },
+        permissions: {
+          operations: input.operations ?? [...TWIN_CONNECTOR_OPERATIONS],
+        },
         config: { registryServerId: row.id },
       },
       signedBy,
