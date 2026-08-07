@@ -299,18 +299,25 @@ function mergeTimeline(
       }
     }
     if (m.genuiFallbacks) {
-      for (let fi = 0; fi < m.genuiFallbacks.length; fi++) {
-        const fallback = m.genuiFallbacks[fi];
-        items.push({
-          kind: "data-json-render-fallback",
-          data: {
-            id: `${m.id}-data-json-render-${fallback.id}`,
-            fallback,
-            message: m,
-            createdAt: m.createdAt,
-          },
-          sortKey: new Date(m.createdAt).getTime() + 2 + fi,
-        });
+      // Skip fallback cards when the message already carries a text answer —
+      // the structured block restates it and the pair read as a duplicated
+      // response. The card renders only when it is the message's ONLY
+      // content, so nothing the agent produced is ever dropped.
+      const hasTextAnswer = Boolean(m.content && m.content.trim());
+      if (!hasTextAnswer) {
+        for (let fi = 0; fi < m.genuiFallbacks.length; fi++) {
+          const fallback = m.genuiFallbacks[fi];
+          items.push({
+            kind: "data-json-render-fallback",
+            data: {
+              id: `${m.id}-data-json-render-${fallback.id}`,
+              fallback,
+              message: m,
+              createdAt: m.createdAt,
+            },
+            sortKey: new Date(m.createdAt).getTime() + 2 + fi,
+          });
+        }
       }
     }
   }
