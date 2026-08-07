@@ -80,6 +80,7 @@ vi.mock("@aws-sdk/client-secrets-manager", async (importOriginal) => {
 
 // eslint-disable-next-line import/first
 import { buildMcpConfigs } from "../mcp-configs.js";
+import { clearM2mTokenCache } from "../twin/m2m-token.js";
 // eslint-disable-next-line import/first
 import {
   createPluginDispatchAuthResolver,
@@ -931,5 +932,101 @@ describe("buildMcpConfigs — direct service_credential servers (THINK-228)", ()
 
     expect(configs).toHaveLength(0);
     warn.mockRestore();
+  });
+});
+
+describe("buildMcpConfigs — machine-lane service credentials (THINK-628)", () => {
+  const laneRow = () =>
+    directRow({
+      mcp_server_id: "srv-twin",
+      name: "Company Brain",
+      slug: "digital-twin",
+      url: "https://mcp.brain.example.invalid/mcp",
+      auth_type: "service_credential",
+      auth_config: {
+        secretRef: "etl-platform/brain-mcp/m2m/platform-agent",
+        headers: [
+          {
+            name: "Authorization",
+            secretJsonKey: "token",
+            valuePrefix: "Bearer ",
+          },
+        ],
+      },
+      management_source: "manual",
+      plugin_install_id: null,
+    });
+
+  const laneSecret = JSON.stringify({
+    client_id: "client-1",
+    client_secret: "secret-1",
+    token_url: "https://pool.auth.example.invalid/oauth2/token",
+    scope: "brain-m2m/lane:platform-agent",
+  });
+
+  beforeEach(() => {
+    clearM2mTokenCache();
+    vi.unstubAllGlobals();
+  });
+
+  it("mints a client-credentials bearer when the secret is lane-shaped (no stored token)", async () => {
+    mockJoinRows.mockReturnValue([laneRow()]);
+    mockSecretString.mockReturnValue(laneSecret);
+    const doFetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ access_token: "minted-jwt", expires_in: 3600 }),
+    }));
+    vi.stubGlobal("fetch", doFetch);
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(configs.map((config) => config.name)).toEqual(["digital-twin"]);
+    expect(bearerToken(configs[0])).toBe("minted-jwt");
+    expect(doFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed (drops the server) when the token endpoint refuses", async () => {
+    mockJoinRows.mockReturnValue([laneRow()]);
+    mockSecretString.mockReturnValue(laneSecret);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 401 })),
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(configs).toHaveLength(0);
+    warn.mockRestore();
+  });
+
+  it("a stored tkt_ secret keeps resolving exactly as before (no minting attempted)", async () => {
+    mockJoinRows.mockReturnValue([laneRow()]);
+    mockSecretString.mockReturnValue(
+      JSON.stringify({ token: "tkt_stored", tenantId: "tenant-1" }),
+    );
+    const doFetch = vi.fn();
+    vi.stubGlobal("fetch", doFetch);
+
+    const configs = await buildMcpConfigs(
+      AGENT,
+      { humanPairId: HUMAN_PAIR, requesterUserId: REQUESTER },
+      "[test]",
+      { pluginAuth: resolver() },
+    );
+
+    expect(bearerToken(configs[0])).toBe("tkt_stored");
+    expect(doFetch).not.toHaveBeenCalled();
   });
 });

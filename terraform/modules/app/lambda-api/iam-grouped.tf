@@ -299,6 +299,17 @@ locals {
         Resource = var.plugin_catalog_github_token_secret_arn
       },
     ] : [],
+    # Company Brain machine lane (THINK-628): MCP config build mints Cognito
+    # client-credentials bearers from this one secret instead of reading a
+    # stored tkt_ token. Read-only, one exact ARN, count-gated: an account
+    # that never sets the var plans to zero changes.
+    var.brain_m2m_platform_agent_secret_arn != "" ? [
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = var.brain_m2m_platform_agent_secret_arn
+      },
+    ] : [],
     # (was standalone managed policy "lambda_deployment_evidence_read")
     # Access to the deployment evidence bucket: graphql-http's deployments
     # resolvers read deployment/status/current.json (deployed-release pointer

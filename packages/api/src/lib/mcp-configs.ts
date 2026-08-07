@@ -50,6 +50,7 @@ import {
   UpdateSecretCommand,
 } from "@aws-sdk/client-secrets-manager";
 import { mcpHashMatches } from "./mcp-server-hash.js";
+import { cachedM2mToken, m2mCredentialsFromSecret } from "./twin/m2m-token.js";
 import {
   ADMIN_OPS_ACTING_USER_HEADER,
   ADMIN_OPS_AGENT_ID_HEADER,
@@ -1818,10 +1819,29 @@ async function resolveServiceCredentialAuth(
   let token: string | undefined;
   const headers: Record<string, string> = {};
   for (const binding of bindings) {
-    const raw = serviceCredentialSecretField(
-      secretValue,
-      binding.secretJsonKey,
-    );
+    let raw = serviceCredentialSecretField(secretValue, binding.secretJsonKey);
+    if (
+      !raw &&
+      binding.name.toLowerCase() === "authorization" &&
+      binding.secretJsonKey === "token"
+    ) {
+      // Machine-lane secret (THINK-628): the secret holds Cognito
+      // client-credentials instead of a stored bearer, so the "token" is
+      // minted, not read. Flipping a connector onto the lane is therefore
+      // just repointing its secretRef — the auth_config shape is unchanged.
+      const m2m = m2mCredentialsFromSecret(secretValue);
+      if (m2m) {
+        try {
+          raw = await cachedM2mToken(secretRef, m2m);
+        } catch (err) {
+          console.warn(
+            `${logPrefix} m2m token mint failed for ${slug}:`,
+            err instanceof Error ? err.message : err,
+          );
+          return undefined;
+        }
+      }
+    }
     if (!raw) {
       console.warn(
         `${logPrefix} service credential secret for ${slug} is missing key ${binding.secretJsonKey}`,
