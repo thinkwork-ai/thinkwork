@@ -15,6 +15,12 @@
       "types": "./src/desktop-session.ts",
       "import": "./dist/src/desktop-session.js"
     },
+    "./provenance": {
+      "types": "./src/provenance.ts",
+      "development": "./src/provenance.ts",
+      "import": "./dist/src/provenance.js",
+      "default": "./dist/src/provenance.js"
+    },
     "./workspace-diff": {
       "types": "./src/workspace-diff.ts",
       "import": "./dist/src/workspace-diff.js"

@@ -4,6 +4,12 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: {
+      // Subpath aliases MUST precede the package-root alias — vite alias keys
+      // are prefix matches applied in order.
+      "@thinkwork/pi-runtime-core/provenance": path.resolve(
+        __dirname,
+        "../pi-runtime-core/src/provenance.ts",
+      ),
       "@thinkwork/pi-runtime-core": path.resolve(
         __dirname,
         "../pi-runtime-core/src/index.ts",

@@ -23,6 +23,7 @@ import {
 import {
   EMIT_ANALYTICS_CHART_TOOL_NAME,
   extractEmitAnalyticsChartToolPart,
+  wrapEmitChartWithProvenance,
 } from "./chart-runtime.js";
 import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
@@ -860,15 +861,27 @@ export async function runAgentLoop(
   // context-free by the Pi server; this loop is the only holder of the live
   // per-turn invocation registry, so wire the getter here so the emit's result
   // content can confirm a recorded binding or hand back the candidate ids.
-  const customTools = args.tools.map((tool) =>
-    tool.name === EMIT_JSON_RENDER_UI_TOOL_NAME
-      ? toToolDefinition(
-          wrapEmitToolWithBindingFeedback(tool, () => toolInvocations, {
-            log: (entry) => deps.log?.({ ...entry, threadId: args.threadId }),
-          }),
-        )
-      : toToolDefinition(tool),
-  );
+  const customTools = args.tools.map((tool) => {
+    if (tool.name === EMIT_JSON_RENDER_UI_TOOL_NAME) {
+      return toToolDefinition(
+        wrapEmitToolWithBindingFeedback(tool, () => toolInvocations, {
+          log: (entry) => deps.log?.({ ...entry, threadId: args.threadId }),
+        }),
+      );
+    }
+    // Provenance gate (THINK-681): same reasoning as the binding wrapper — the
+    // chart tool is built context-free by the host, and only this loop holds
+    // the turn's invocation ledger the charted numbers must trace to.
+    if (tool.name === EMIT_ANALYTICS_CHART_TOOL_NAME) {
+      return toToolDefinition(
+        wrapEmitChartWithProvenance(tool, () => toolInvocations, {
+          getUserText: () => args.message,
+          log: (entry) => deps.log?.({ ...entry, threadId: args.threadId }),
+        }),
+      );
+    }
+    return toToolDefinition(tool);
+  });
   const toolAllowlist = buildToolAllowlist(
     customTools,
     args.extensionToolNames,
