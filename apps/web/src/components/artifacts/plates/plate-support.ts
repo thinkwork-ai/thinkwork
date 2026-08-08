@@ -37,15 +37,18 @@ export const PLATE_PALETTE_TOKENS = [
 
 export type PlatePaletteToken = (typeof PLATE_PALETTE_TOKENS)[number];
 
-/** Directive kinds a plate may make available to documents. */
-export const PLATE_DIRECTIVE_KINDS = [
-  "stats",
-  "verdict-grid",
-  "chart",
-  "timeline",
-] as const;
-
-export type PlateDirectiveKind = (typeof PLATE_DIRECTIVE_KINDS)[number];
+/**
+ * Directive kinds a plate may make available to documents.
+ *
+ * Generated from the API's `DEFAULT_REGISTRY` (THINK-685) — apps/web cannot
+ * import packages/api, so the list is rendered into
+ * `directive-kinds.generated.ts` by
+ * `pnpm --filter @thinkwork/api generate:directive-kinds` and re-exported here
+ * to keep this module's import surface unchanged. A packages/api parity test
+ * fails when the checked-in generated file goes stale.
+ */
+export { PLATE_DIRECTIVE_KINDS } from "./directive-kinds.generated";
+export type { PlateDirectiveKind } from "./directive-kinds.generated";
 
 // ─── Parsed plate model ───────────────────────────────────────────────────
 

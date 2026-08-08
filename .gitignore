@@ -236,6 +236,11 @@ lambda-build/
 # The analyst semantic model is generated but committed (staleness-gated by
 # packages/database-pg/__tests__/analyst-semantic-model.test.ts).
 !packages/database-pg/generated/
+# The web plate directive-kind mirror is generated from the API's
+# DEFAULT_REGISTRY but committed (apps/web cannot import packages/api);
+# freshness-gated by
+# packages/api/src/lib/artifacts/directive-kinds-parity.test.ts.
+!apps/web/src/components/artifacts/plates/directive-kinds.generated.ts
 
 # Local environment overrides
 .env.local

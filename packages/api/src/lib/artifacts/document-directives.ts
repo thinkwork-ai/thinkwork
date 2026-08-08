@@ -49,6 +49,15 @@ interface DirectiveSpec {
   schema: string;
   /** Corrected minimal example (KTD7 self-repair posture). */
   example: string;
+  /**
+   * Showcase snippet body for the plate exemplar (THINK-685). Optional: the
+   * diagnostics `example` above is terse on purpose (repair, not display),
+   * while the exemplar is a curated "see it in action" block. When absent the
+   * exemplar falls back to `example`, so a new kind is still showcased with
+   * no extra wiring — but adding the kind here is the ONLY place the exemplar
+   * gallery needs to learn about it.
+   */
+  exemplar?: string;
   render: (input: { data: unknown; genre: string }) => DirectiveRender;
 }
 
@@ -104,6 +113,10 @@ const statsSpec: DirectiveSpec = {
   example: `items:
   - { value: 42, label: opportunities }
   - { value: "+18%", label: change vs prior }`,
+  exemplar: `items:
+  - { value: 12, label: initiatives on track }
+  - { value: "94%", label: renewal rate }
+  - { value: "+18%", label: quarter over quarter }`,
   render: ({ data }) => {
     const root = asRecord(data);
     const items = root?.items;
@@ -150,6 +163,9 @@ const verdictGridSpec: DirectiveSpec = {
   example: `cards:
   - { question: Ship it?, answer: Yes, note: All gates green, tone: acc }
   - { question: Risk, answer: Low, tone: info }`,
+  exemplar: `cards:
+  - { question: Overall health, answer: Strong, note: All commitments met this period, tone: acc }
+  - { question: Attention needed, answer: One item, note: Renewal paperwork pending signature, tone: warn }`,
   render: ({ data }) => {
     const root = asRecord(data);
     const cards = root?.cards;
@@ -199,6 +215,10 @@ const timelineSpec: DirectiveSpec = {
   - { label: Kickoff, caption: Contract signed, date: Jan 2026 }
   - { label: Build, caption: Core implementation, current: true }
   - { label: Launch, date: Q4 }`,
+  exemplar: `items:
+  - { label: Kickoff, caption: Goals and owners locked, date: Week 1 }
+  - { label: Rollout, caption: Phased team onboarding, current: true }
+  - { label: Full adoption, date: Q4 }`,
   render: ({ data }) => {
     const root = asRecord(data);
     const items = root?.items;
@@ -300,6 +320,14 @@ series:
   - { label: Leads, value: 120 }
   - { label: Qualified, value: 64 }
 caption: Qualification is the biggest drop-off.`,
+  exemplar: `type: bar
+title: Quarterly momentum
+qualifier: closed items per month
+series:
+  - { label: Month 1, value: 14 }
+  - { label: Month 2, value: 18 }
+  - { label: Month 3, value: 23 }
+caption: Delivery pace accelerated through the quarter.`,
 };
 
 export const makeChartSpec = (
@@ -759,6 +787,26 @@ const DEFAULT_REGISTRY: readonly DirectiveSpec[] = [
 export const DIRECTIVE_KINDS: readonly string[] = DEFAULT_REGISTRY.map(
   (s) => s.kind,
 );
+
+/**
+ * Fenced showcase snippet per directive kind, derived from the registry
+ * (THINK-685). `buildPlateExemplar` composes these into the canned document
+ * used for plate validation and preview — deriving them here means a new kind
+ * joins the exemplar gallery from its registry entry alone, with no separate
+ * hand-maintained map to drift.
+ *
+ * Insertion order is registry order, which is what `buildPlateExemplar` uses
+ * for plates whose `allowedDirectives` is "all".
+ */
+export const DIRECTIVE_EXEMPLAR_SNIPPETS: Readonly<Record<string, string>> =
+  Object.freeze(
+    Object.fromEntries(
+      DEFAULT_REGISTRY.map((spec) => [
+        spec.kind,
+        `\`\`\`tw:${spec.kind}\n${spec.exemplar ?? spec.example}\n\`\`\``,
+      ]),
+    ),
+  );
 
 export function buildDirectiveEngine(
   registry: readonly DirectiveSpec[] = DEFAULT_REGISTRY,
