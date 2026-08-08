@@ -356,25 +356,73 @@ function renderDonut(data: ChartDirectiveData, ctx: Ctx): string {
 
 /** Below this frame width more than four tiles wrap to a second row. */
 const STAT_WRAP_MAX_WIDTH = 520;
-const STAT_ROW_HEIGHT = 58;
+
+/**
+ * Greedy two-line word wrap on a deterministic character budget (SVG has no
+ * text measurement; ~5.6 units/char at font-size 10 is the house estimate).
+ * Overflow past two lines ellipsizes; a single over-budget word hard-slices.
+ */
+function wrapLabel(label: string, budget: number): string[] {
+  if (label.length <= budget) return [label];
+  const words = label.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current === "" ? word : `${current} ${word}`;
+    if (candidate.length <= budget || current === "") {
+      current = candidate;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+    if (lines.length === 2) break;
+  }
+  if (lines.length < 2 && current !== "") lines.push(current);
+  const clipped = lines.slice(0, 2);
+  const last = clipped[clipped.length - 1];
+  const overflowed = clipped.join(" ").length < label.length;
+  if (last.length > budget || overflowed) {
+    clipped[clipped.length - 1] =
+      `${last.slice(0, Math.max(1, budget - 1)).trimEnd()}…`;
+  }
+  return clipped;
+}
 
 function renderStatStrip(data: ChartDirectiveData, ctx: Ctx): string {
   const width = ctx.width;
   const series = data.series;
   const gap = 10;
-  const dy = ctx.hdr ? 0 : 32;
+  const base = ctx.hdr ? 40 : 8;
   const wrapped = series.length > 4 && width < STAT_WRAP_MAX_WIDTH;
   const perRow = wrapped ? Math.ceil(series.length / 2) : series.length;
-  const height = (wrapped ? 96 + STAT_ROW_HEIGHT : 96) - dy;
   const tileWidth = r2((width - 24 - gap * (perRow - 1)) / perRow);
+
+  // Wrap long metric labels to a second line instead of overflowing the tile
+  // (per design review); every tile in the strip shares one height.
+  const budget = Math.max(
+    4,
+    Math.floor((tileWidth - 28) / (5.6 * (ctx.fs(10) / 10))),
+  );
+  const labelLines = series.map((p) => wrapLabel(p.label, budget));
+  const anyWrapped = labelLines.some((lines) => lines.length > 1);
+  const tileHeight = anyWrapped ? 62 : 48;
+  const rowCount = wrapped ? 2 : 1;
+  const rowHeight = tileHeight + 10;
+  const height = base + rowCount * rowHeight - 10 + 8;
 
   let tiles = "";
   for (const [i, p] of series.entries()) {
     const col = i % perRow;
     const row = Math.floor(i / perRow);
     const x = r2(12 + col * (tileWidth + gap));
-    const y = 40 - dy + row * STAT_ROW_HEIGHT;
-    tiles += `<rect x="${x}" y="${y}" width="${tileWidth}" height="48" rx="10" fill="${ctx.c.card}" stroke="${ctx.c.line}"/><text x="${r2(x + 14)}" y="${y + 24}" font-size="${ctx.fs(17)}" font-weight="700" fill="${ctx.c.ink}">${fmt(p.value)}</text><text x="${r2(x + 14)}" y="${y + 40}" font-size="${ctx.fs(10)}" fill="${ctx.c.muted}">${esc(p.label)}</text>`;
+    const y = base + row * rowHeight;
+    const label = labelLines[i]
+      .map(
+        (line, li) =>
+          `<text x="${r2(x + 14)}" y="${y + 40 + li * 12}" font-size="${ctx.fs(10)}" fill="${ctx.c.muted}">${esc(line)}</text>`,
+      )
+      .join("");
+    tiles += `<rect x="${x}" y="${y}" width="${tileWidth}" height="${tileHeight}" rx="10" fill="${ctx.c.card}" stroke="${ctx.c.line}"/><text x="${r2(x + 14)}" y="${y + 24}" font-size="${ctx.fs(17)}" font-weight="700" fill="${ctx.c.ink}">${fmt(p.value)}</text>${label}`;
   }
 
   return [
