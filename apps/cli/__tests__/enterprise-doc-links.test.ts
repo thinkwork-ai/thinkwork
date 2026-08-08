@@ -25,35 +25,28 @@ function tempRepo(): string {
 }
 
 describe("enterprise deployment docs and generated runbook", () => {
-  it("links the enterprise deploy docs from the deploy docs set", () => {
-    const sidebar = read("docs/astro.config.mjs");
-
+  it("keeps the enterprise deploy reference docs in the deploy docs set", () => {
+    // THINK-702: the Starlight site (and its astro.config.mjs sidebar) is
+    // retired; these pages survive as unpublished reference under
+    // docs/reference/, so the check is now presence-only.
     expect(
       existsSync(
-        join(
-          repoRoot,
-          "docs/src/content/docs/deploy/enterprise-deployment-repo.mdx",
-        ),
+        join(repoRoot, "docs/reference/deploy/enterprise-deployment-repo.mdx"),
       ),
     ).toBe(true);
     expect(
       existsSync(
-        join(
-          repoRoot,
-          "docs/src/content/docs/deploy/customer-overlay-contract.mdx",
-        ),
+        join(repoRoot, "docs/reference/deploy/customer-overlay-contract.mdx"),
       ),
     ).toBe(true);
-    expect(sidebar).toContain('slug: "deploy/enterprise-deployment-repo"');
-    expect(sidebar).toContain('slug: "deploy/customer-overlay-contract"');
   });
 
   it("documents secrets outside the repo and break-glass source forks", () => {
     const enterpriseDoc = read(
-      "docs/src/content/docs/deploy/enterprise-deployment-repo.mdx",
+      "docs/reference/deploy/enterprise-deployment-repo.mdx",
     );
     const overlayDoc = read(
-      "docs/src/content/docs/deploy/customer-overlay-contract.mdx",
+      "docs/reference/deploy/customer-overlay-contract.mdx",
     );
 
     expect(enterpriseDoc).toMatch(

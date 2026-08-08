@@ -17,9 +17,9 @@ Thinkwork is an AWS-native agent harness: a TypeScript monorepo plus a Pi AgentC
 - Agent workspace anatomy (subagent-folders program 2026-07): one recursive shape — `INSTRUCTIONS.md` + `skills/` + `connectors/` + `agents/` at every level. Sub-agents are `agents/<slug>/` folders (strict frontmatter, required `description`) compiled into the capabilities manifest; grants are folder presence with signed narrowing sidecars, never frontmatter lists. Root instructions live in `INSTRUCTIONS.md` (AGENTS.md dual-read window); `connections/` renamed `connectors/` (DB table NOT renamed). See CONCEPTS.md → Agent Folder / Grants-by-Presence / Eve Deviations.
 - `packages/workspace-defaults` — canonical workspace defaults (CAPABILITIES/GUARDRAILS/PLATFORM/MEMORY_GUIDE)
 - `terraform/modules/{foundation,data,app,thinkwork}` — three-tier Terraform Registry modules (`thinkwork-ai/thinkwork/aws`)
-- `docs/` — Astro Starlight docs site; also holds `plans/`, `brainstorms/`, `solutions/` — prior-session institutional knowledge worth grepping before starting non-trivial work.
+- `docs/` — planning + institutional knowledge: `plans/`, `brainstorms/`, `solutions/` (worth grepping before starting non-trivial work) plus `reference/`, the unpublished remains of the retired docs.thinkwork.ai Starlight site. User-facing documentation now lives in-app under `apps/web/src/docs`.
 - `CONCEPTS.md` — shared domain vocabulary (entities, named processes, status concepts); relevant when orienting to the codebase or discussing domain terms
-- Compliance module reference: `docs/src/content/docs/compliance/` (rendered at `/compliance/` in the Starlight site)
+- Compliance module reference: `docs/reference/compliance/` (unpublished reference; the docs.thinkwork.ai Starlight site was retired in THINK-702 — user-facing documentation now lives in-app under `apps/web/src/docs` at the `/docs` routes)
 
 ## Tooling ground rules
 

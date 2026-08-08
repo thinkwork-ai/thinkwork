@@ -1173,22 +1173,6 @@ variable "cognito_denied_app_client_ids" {
 }
 
 # ---------------------------------------------------------------------------
-# Docs site (custom domain — optional)
-# ---------------------------------------------------------------------------
-
-variable "docs_domain" {
-  description = "Custom domain for the docs site (e.g. docs.thinkwork.ai). Leave empty for CloudFront default."
-  type        = string
-  default     = ""
-}
-
-variable "docs_certificate_arn" {
-  description = "ACM certificate ARN for the docs domain (us-east-1, required for CloudFront custom domains)"
-  type        = string
-  default     = ""
-}
-
-# ---------------------------------------------------------------------------
 # Public website (custom domain — optional)
 # ---------------------------------------------------------------------------
 

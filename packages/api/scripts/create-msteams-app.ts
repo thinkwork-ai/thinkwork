@@ -17,7 +17,7 @@
  * Flags fall back to env vars: STAGE, MSTEAMS_BOT_APP_ID, API_BASE_DOMAIN.
  * Optional: --out-dir <dir> (default: <cwd>/dist/msteams).
  *
- * Runbook: docs/src/content/docs/operations/msteams-install-runbook.md
+ * Runbook: docs/reference/operations/msteams-install-runbook.md
  */
 
 import { readFileSync, mkdirSync, writeFileSync } from "node:fs";

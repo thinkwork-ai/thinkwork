@@ -13,7 +13,6 @@ interface DiscoveredStage {
   apiEndpoint?: string;
   appsyncUrl?: string;
   adminUrl?: string;
-  docsUrl?: string;
   appsyncApiUrl?: string;
   dbEndpoint?: string;
   ecrUrl?: string;
@@ -111,7 +110,7 @@ function discoverAwsStages(
     );
     if (ecrRaw && ecrRaw !== "None") info.ecrUrl = ecrRaw;
 
-    // CloudFront distributions (admin + docs in one call)
+    // CloudFront distributions (admin)
     const cfJson = runAws(
       `cloudfront list-distributions --query "DistributionList.Items[?contains(Origins.Items[0].DomainName, 'thinkwork-${stage}-')].{Origin:Origins.Items[0].DomainName,Domain:DomainName}" --output json`,
     );
@@ -124,8 +123,6 @@ function discoverAwsStages(
         for (const d of dists) {
           if (d.Origin.includes(`thinkwork-${stage}-admin`))
             info.adminUrl = `https://${d.Domain}`;
-          if (d.Origin.includes(`thinkwork-${stage}-docs`))
-            info.docsUrl = `https://${d.Domain}`;
         }
       } catch {
         /* ignore parse errors */
@@ -158,7 +155,6 @@ function printStageDetail(info: DiscoveredStage): void {
   console.log("");
   console.log(chalk.bold("  URLs:"));
   if (info.adminUrl) console.log(`    Admin:     ${link(info.adminUrl)}`);
-  if (info.docsUrl) console.log(`    Docs:      ${link(info.docsUrl)}`);
   if (info.apiEndpoint) console.log(`    API:       ${link(info.apiEndpoint)}`);
   if (info.appsyncApiUrl)
     console.log(`    AppSync:   ${link(info.appsyncApiUrl)}`);

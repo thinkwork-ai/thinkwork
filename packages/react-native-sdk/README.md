@@ -2,7 +2,7 @@
 
 Hooks-only client for embedding ThinkWork threads, messages, and streaming agent turns into any React Native / Expo host app. No UI ships; host apps build their own chat surface from the hooks.
 
-For conceptual docs, walkthroughs, and recipes, see [the ThinkWork docs site](https://docs.thinkwork.ai/sdks/react-native/). This README is the engineering reference — full signatures, return shapes, and behavior details.
+For conceptual docs, walkthroughs, and recipes, see the React Native SDK reference under [`docs/reference/sdks/react-native/`](../../docs/reference/sdks/react-native/). This README is the engineering reference — full signatures, return shapes, and behavior details.
 
 ## Install
 
@@ -203,7 +203,7 @@ See [`examples/chat-ui/ThinkworkChat.tsx`](./examples/chat-ui/ThinkworkChat.tsx)
 
 ## Migration from 0.1.x
 
-See the [Upgrading guide](https://docs.thinkwork.ai/sdks/react-native/migration) on the docs site.
+See the [Upgrading guide](../../docs/reference/sdks/react-native/migration.mdx).
 
 ## Publishing notes
 

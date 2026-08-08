@@ -1,6 +1,6 @@
 # Capability matrix conformance (capability-mapping plan U6).
 #
-# The matrix doc (docs/src/content/docs/concepts/capability-matrix.mdx) is the
+# The matrix doc (docs/reference/concepts/capability-matrix.mdx) is the
 # reviewed contract for capability class × assignment layer × injection
 # destination. PRs that touch capability-wiring code must either update the
 # matrix in the same PR or carry an explicit body marker naming the cells
@@ -17,7 +17,7 @@ on:
     paths:
       - ".github/workflows/capability-matrix.yml"
       - "scripts/check-capability-matrix.mjs"
-      - "docs/src/content/docs/concepts/capability-matrix.mdx"
+      - "docs/reference/concepts/capability-matrix.mdx"
       - "packages/api/src/lib/resolve-agent-runtime-config.ts"
       - "packages/api/src/lib/capability-diagnostics.ts"
       - "packages/api/src/lib/mcp-configs.ts"
@@ -61,7 +61,7 @@ jobs:
             exit 0
           fi
 
-          if echo "$CHANGED_FILES" | grep -qx 'docs/src/content/docs/concepts/capability-matrix.mdx'; then
+          if echo "$CHANGED_FILES" | grep -qx 'docs/reference/concepts/capability-matrix.mdx'; then
             echo "Matrix doc updated alongside wiring changes — OK."
             exit 0
           fi
@@ -75,7 +75,7 @@ jobs:
             exit 0
           fi
 
-          echo "::error::This PR changes capability-wiring code but neither updates docs/src/content/docs/concepts/capability-matrix.mdx nor carries a 'matrix-no-change: <cells reviewed>' marker in the PR body."
+          echo "::error::This PR changes capability-wiring code but neither updates docs/reference/concepts/capability-matrix.mdx nor carries a 'matrix-no-change: <cells reviewed>' marker in the PR body."
           echo "Wiring files changed:"
           echo "$CHANGED_FILES" | grep -E "$WIRING_PATTERN" | sed 's/^/  - /'
           exit 1

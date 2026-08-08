@@ -90,9 +90,9 @@ that `skill/SKILL.md` has valid YAML frontmatter.
 
 This example is intentionally small. For current product guidance, read:
 
-- `docs/src/content/docs/concepts/connectors.mdx`
-- `docs/src/content/docs/concepts/connectors/lifecycle.mdx`
-- `docs/src/content/docs/guides/connectors.mdx`
+- `docs/reference/concepts/connectors.mdx`
+- `docs/reference/concepts/connectors/lifecycle.mdx`
+- `docs/reference/guides/connectors.mdx`
 
 Do not copy older default-agent patterns into new connector work. Use a stable
 external reference, idempotent claim behavior, tenant credentials, Computer

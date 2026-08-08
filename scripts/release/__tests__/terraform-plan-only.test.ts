@@ -124,7 +124,6 @@ test("no downstream job deploys under plan_only", () => {
     "compliance-bootstrap",
     "migration-drift-check",
     "build-web",
-    "build-docs",
     "bootstrap",
     "workspace-layout-migration",
   ];

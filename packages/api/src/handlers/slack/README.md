@@ -131,4 +131,4 @@ Slack ingress emits CloudWatch EMF metrics through
 `slack.dispatch.failure`.
 
 Metric semantics and operational procedures live in
-`docs/src/content/docs/operations/slack-dispatch-runbook.md`.
+`docs/reference/operations/slack-dispatch-runbook.md`.

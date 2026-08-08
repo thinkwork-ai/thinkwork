@@ -173,7 +173,6 @@ locals {
     # deploymentStatus reads ADMIN_URL directly — so the single canonical
     # ADMIN_URL is sufficient. Re-add aliases only after env vars move to SSM.
     ADMIN_URL            = var.admin_url
-    DOCS_URL             = var.docs_url
     APPSYNC_REALTIME_URL = var.appsync_realtime_url
     ECR_REPOSITORY_URL   = var.ecr_repository_url
     # Per-user OAuth wiring (Google Workspace today; Microsoft 365 follow-up).

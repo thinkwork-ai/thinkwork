@@ -9,7 +9,6 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/thinkwork-cli"><img src="https://img.shields.io/npm/v/thinkwork-cli.svg?color=0ea5e9&label=thinkwork-cli" alt="npm version" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="license" /></a>
-  <a href="https://docs.thinkwork.ai"><img src="https://img.shields.io/badge/docs-thinkwork.ai-0ea5e9" alt="docs" /></a>
 </p>
 
 ---
@@ -34,7 +33,7 @@ The harness remains yours regardless of tier. See [thinkwork.ai](https://www.thi
 
 ## Status
 
-🚧 **Pre-release.** See the [thinkwork-cli npm releases](https://www.npmjs.com/package/thinkwork-cli) for the current version and the [roadmap](https://docs.thinkwork.ai/roadmap/) for what's landed vs. planned.
+🚧 **Pre-release.** See the [thinkwork-cli npm releases](https://www.npmjs.com/package/thinkwork-cli) for the current version and the roadmap in the in-app docs (`/docs` in the deployed web app) for what's landed vs. planned.
 
 ## OpenEngine one-task runner
 
@@ -71,7 +70,7 @@ record durable actions, and the status ledger records the current agent state.
   <img src="./assets/screenshots/admin/dashboard.png" alt="ThinkWork admin dashboard — agents online, open threads, recent activity, recent threads" width="860" />
 </p>
 
-The unified web surface. A React SPA at `apps/web`, authenticated through Cognito and tenant-scoped on every request. Users work in Spaces and threads; operators also configure agents and templates, wire up connectors and MCP servers, manage the credential vault, register webhooks, upload knowledge, inspect memory, and watch activity, cost, and guardrail health — all against the tenant running in their own AWS account. See the [web/operator docs](https://docs.thinkwork.ai/applications/admin/) for the per-route breakdown.
+The unified web surface. A React SPA at `apps/web`, authenticated through Cognito and tenant-scoped on every request. Users work in Spaces and threads; operators also configure agents and templates, wire up connectors and MCP servers, manage the credential vault, register webhooks, upload knowledge, inspect memory, and watch activity, cost, and guardrail health — all against the tenant running in their own AWS account. See the in-app docs at `/docs` in the deployed web app for the per-route breakdown.
 
 ## Mobile app
 
@@ -80,11 +79,11 @@ The unified web surface. A React SPA at `apps/web`, authenticated through Cognit
   <img src="./assets/screenshots/mobile/wiki-graph.png" alt="Wiki tab — Compounding Memory pages rendered as a graph in the ThinkWork mobile app" width="280" />
 </p>
 
-The end-user surface. An Expo + React Native client at `apps/mobile`, currently shipping on iOS via TestFlight. Users get a unified inbox across chat threads, scheduled automations, and emails — with narrow-policy push notifications and realtime activity on every turn. The companion **Wiki** tab surfaces Compounding Memory pages (Entity, Topic, Decision) that the agent builds as it learns — browseable on device, linked to each other, and scoped per agent. The mobile app owns per-user OAuth and MCP tokens; tenant configuration stays on the admin side. See the [mobile docs](https://docs.thinkwork.ai/applications/mobile/) for the full surface.
+The end-user surface. An Expo + React Native client at `apps/mobile`, currently shipping on iOS via TestFlight. Users get a unified inbox across chat threads, scheduled automations, and emails — with narrow-policy push notifications and realtime activity on every turn. The companion **Wiki** tab surfaces Compounding Memory pages (Entity, Topic, Decision) that the agent builds as it learns — browseable on device, linked to each other, and scoped per agent. The mobile app owns per-user OAuth and MCP tokens; tenant configuration stays on the admin side. See the Mobile app page in the in-app docs (`/docs` in the deployed web app) for the full surface.
 
 ## Roadmap
 
-We ship things only after they're load-bearing in production. Everything below is scoped but intentionally not in v1. See the [full docs roadmap](https://docs.thinkwork.ai/roadmap/) for the authoritative breakdown.
+We ship things only after they're load-bearing in production. Everything below is scoped but intentionally not in v1. See the roadmap in the in-app docs (`/docs` in the deployed web app) for the authoritative breakdown.
 
 | Item                | Status  | Notes                                                                                      |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------ |
@@ -106,7 +105,7 @@ thinkwork login --stage dev        # 7. Sign in to the Cognito pool (OAuth)
 thinkwork me                       # 8. Confirm identity + tenant
 ```
 
-Eight commands, one AWS account, and you own a production-grade Agent Harness — open and yours, not rented from a black box. The harness stays yours. Full walkthrough in the [Getting Started guide](https://docs.thinkwork.ai/getting-started/) and per-command reference in [`apps/cli/README.md`](./apps/cli/README.md).
+Eight commands, one AWS account, and you own a production-grade Agent Harness — open and yours, not rented from a black box. The harness stays yours. Full walkthrough in the Getting Started page of the in-app docs (`/docs` in the deployed web app) and per-command reference in [`apps/cli/README.md`](./apps/cli/README.md).
 
 ## Upgrading an external environment
 
@@ -140,7 +139,7 @@ AWS_PROFILE=<customer-aws-profile> AWS_REGION=us-east-1 \
 bundle, writes the runtime config, invalidates CloudFront, and records evidence.
 It intentionally skips Terraform apply, Lambda promotion, database work,
 runtime image copy, AgentCore updates, and overlays. See
-[GitHub-Free Customer Deployments](https://docs.thinkwork.ai/deploy/github-free-customer-deployments/)
+[GitHub-Free Customer Deployments](./docs/reference/deploy/github-free-customer-deployments.mdx)
 for the full external-environment runbook.
 
 ## Repo layout
@@ -151,7 +150,7 @@ thinkwork/
   packages/    # shared libraries
   terraform/   # IaC modules (registry-shaped) and reference examples
   examples/    # runnable reference packs: skill-pack, eval-pack, connector-recipe
-  docs/        # Astro Starlight docs site source
+  docs/        # plans, brainstorms, solutions + unpublished reference docs
   scripts/     # build, release, migration scripts
   .github/     # workflows and templates
 ```

@@ -6,7 +6,6 @@
 #
 # Expected build outputs:
 #   apps/web/dist -> web.tar.gz
-#   docs/dist     -> docs.tar.gz
 
 set -Eeuo pipefail
 
@@ -52,4 +51,3 @@ package_site() {
 
 echo "Packaging static release assets -> ${OUT_DIR}"
 package_site "web" "$REPO_ROOT/apps/web/dist"
-package_site "docs" "$REPO_ROOT/docs/dist"

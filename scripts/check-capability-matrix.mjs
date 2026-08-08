@@ -2,7 +2,7 @@
 /**
  * Capability matrix vocabulary check (capability-mapping plan U6).
  *
- * Parses the matrix table in docs/src/content/docs/concepts/capability-matrix.mdx
+ * Parses the matrix table in docs/reference/concepts/capability-matrix.mdx
  * and asserts every layer cell begins with a canonical verb. Run by the
  * capability-matrix workflow; runnable locally:
  *
@@ -14,7 +14,7 @@
 import { readFileSync } from "node:fs";
 
 const DOC_PATH =
-  process.argv[2] ?? "docs/src/content/docs/concepts/capability-matrix.mdx";
+  process.argv[2] ?? "docs/reference/concepts/capability-matrix.mdx";
 
 const CANONICAL_VERBS = [
   "Grant",

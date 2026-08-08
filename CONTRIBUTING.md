@@ -37,7 +37,7 @@ apps/        # runnable products (admin, mobile, cli)
 packages/    # shared libraries
 terraform/   # IaC modules + reference examples
 examples/    # runnable reference packs
-docs/        # Astro Starlight docs site source
+docs/        # plans, brainstorms, solutions + unpublished reference docs
 scripts/     # build, release, migration scripts
 .github/     # workflows and issue/PR templates
 ```

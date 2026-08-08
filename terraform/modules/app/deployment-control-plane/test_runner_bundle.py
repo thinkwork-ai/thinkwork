@@ -1095,13 +1095,13 @@ def test_sync_release_artifacts_can_materialize_only_web_static_bundle(
     bundle_path = tmp_path / "platform-artifacts.tar.gz"
     lambda_bytes = b"lambda-zip"
     web_bytes = b"web-tarball"
-    docs_bytes = b"docs-tarball"
+    extra_bytes = b"extra-tarball"
     write_tar(
         bundle_path,
         {
             "lambdas/graphql-http.zip": lambda_bytes,
             "static/web.tar.gz": web_bytes,
-            "static/docs.tar.gz": docs_bytes,
+            "static/extra.tar.gz": extra_bytes,
         },
     )
     artifacts = [
@@ -1124,13 +1124,13 @@ def test_sync_release_artifacts_can_materialize_only_web_static_bundle(
             "sizeBytes": len(web_bytes),
         },
         {
-            "name": "docs",
+            "name": "extra",
             "type": "static-site",
-            "fileName": "docs.tar.gz",
-            "relativePath": "static/docs.tar.gz",
+            "fileName": "extra.tar.gz",
+            "relativePath": "static/extra.tar.gz",
             "url": None,
-            "sha256": digest(docs_bytes),
-            "sizeBytes": len(docs_bytes),
+            "sha256": digest(extra_bytes),
+            "sizeBytes": len(extra_bytes),
         },
     ]
     manifest_sha = write_manifest(

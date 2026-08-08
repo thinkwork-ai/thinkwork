@@ -3,12 +3,11 @@
 #
 # Responsibilities:
 #   1. ACM certificate in us-east-1 covering apex + www
-#      (+ optional docs + optional admin + optional app + optional computer).
+#      (+ optional admin + optional app + optional computer).
 #   2. Cloudflare DNS records for ACM DNS validation.
 #   3. Apex CNAME in Cloudflare → primary CloudFront distribution (DNS-only).
 #   4. Second CloudFront distribution fronting an S3 website-redirect bucket
 #      that 301s www.<domain> → https://<domain>, plus its Cloudflare CNAME.
-#   5. Optional docs.<domain> CNAME → docs CloudFront distribution.
 #   6. Optional admin.<domain> CNAME → admin CloudFront distribution.
 #   7. Optional app.<domain> CNAME → end-user app CloudFront distribution.
 #   8. Optional computer.<domain> → app.<domain> 301 compatibility redirect.
@@ -37,7 +36,6 @@ terraform {
 locals {
   apex     = var.domain
   www      = "www.${var.domain}"
-  docs     = "docs.${var.domain}"
   admin    = "admin.${var.domain}"
   app      = "app.${var.domain}"
   computer = "computer.${var.domain}"
@@ -47,7 +45,7 @@ locals {
   n8n      = "n8n.${var.domain}"
   name_id  = replace(var.domain, ".", "-")
 
-  # ACM SANs: always include www, conditionally include docs, admin, computer,
+  # ACM SANs: always include www, conditionally include admin, computer,
   # and api. The Computer iframe sandbox and CRM ALB use their own certificates
   # so adding or rotating those hosts never forces a replacement of this shared
   # production certificate.
@@ -56,7 +54,6 @@ locals {
   # depend on the cert, so the cert mustn't depend on those outputs.
   cert_sans = concat(
     [local.www],
-    var.include_docs ? [local.docs] : [],
     var.include_admin ? [local.admin] : [],
     var.include_app ? [local.app] : [],
     var.include_computer ? [local.computer] : [],
@@ -68,7 +65,6 @@ locals {
   # such as app/computer compatibility/sandbox/crm CNAMEs must gate only on
   # explicit booleans so Terraform can plan the resource count before the new
   # load balancer exists.
-  create_docs_record     = var.include_docs && var.docs_cloudfront_domain_name != ""
   create_admin_record    = var.include_admin && var.admin_cloudfront_domain_name != ""
   create_app_record      = var.include_app
   create_computer_record = var.include_computer
@@ -78,7 +74,7 @@ locals {
 }
 
 ################################################################################
-# ACM certificate (us-east-1, covers apex + www [+ docs])
+# ACM certificate (us-east-1, covers apex + www [+ optional subdomains])
 ################################################################################
 
 resource "aws_acm_certificate" "www" {
@@ -242,26 +238,6 @@ resource "cloudflare_record" "www_redirect" {
   ttl     = 300
   proxied = false
   comment = "thinkwork-${var.stage} www → redirect distribution"
-}
-
-################################################################################
-# docs.<domain> → docs CloudFront distribution (optional)
-#
-# Created only when the greenfield stack wires docs_cloudfront_domain_name.
-# The docs CloudFront alias picks up the same ACM cert via certificate_arn
-# on the thinkwork module's docs_site.
-################################################################################
-
-resource "cloudflare_record" "docs" {
-  count = local.create_docs_record ? 1 : 0
-
-  zone_id = var.cloudflare_zone_id
-  name    = local.docs
-  content = var.docs_cloudfront_domain_name
-  type    = "CNAME"
-  ttl     = 300
-  proxied = false
-  comment = "thinkwork-${var.stage} docs → CloudFront"
 }
 
 ################################################################################

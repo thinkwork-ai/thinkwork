@@ -739,7 +739,6 @@ variable "additional_admin_logout_urls" {
 
 locals {
   www_dns_enabled = var.www_domain != "" && var.cloudflare_zone_id != ""
-  docs_domain     = var.www_domain != "" ? "docs.${var.www_domain}" : ""
   app_domain      = var.www_domain != "" ? "app.${var.www_domain}" : ""
   computer_domain = var.www_domain != "" ? "computer.${var.www_domain}" : ""
   sandbox_domain  = var.www_domain != "" ? "sandbox.${var.www_domain}" : ""
@@ -975,12 +974,6 @@ module "thinkwork" {
   www_domain          = var.www_domain
   www_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
 
-  # Docs site custom domain (derived from www_domain — docs.<apex>). The
-  # same ACM cert covers apex + www + docs + app/computer so every distribution
-  # shares it.
-  docs_domain          = local.www_dns_enabled ? local.docs_domain : ""
-  docs_certificate_arn = local.www_dns_enabled ? module.www_dns[0].certificate_arn : ""
-
   # End-user app custom domain (derived from www_domain — app.<apex>).
   # Same ACM cert covers it via the include_app SAN gate on www_dns.
   app_domain          = local.www_dns_enabled ? local.app_domain : ""
@@ -994,7 +987,7 @@ module "thinkwork" {
 
   # Computer iframe sandbox (derived from www_domain — sandbox.<apex>).
   # Uses its own ACM certificate so sandbox bootstrap/rotation cannot replace
-  # the shared apex/www/docs/app/computer/api certificate.
+  # the shared apex/www/app/computer/api certificate.
   computer_sandbox_domain                 = local.www_dns_enabled ? local.sandbox_domain : ""
   computer_sandbox_certificate_arn        = local.www_dns_enabled ? aws_acm_certificate_validation.computer_sandbox[0].certificate_arn : ""
   computer_sandbox_allowed_parent_origins = local.www_dns_enabled ? "https://${local.app_domain}" : ""
@@ -1047,7 +1040,7 @@ module "thinkwork" {
 }
 
 ################################################################################
-# Public Website DNS (Cloudflare zone, ACM cert, www→apex redirect, docs)
+# Public Website DNS (Cloudflare zone, ACM cert, www→apex redirect)
 ################################################################################
 
 module "www_dns" {
@@ -1058,13 +1051,6 @@ module "www_dns" {
   domain                 = var.www_domain
   cloudflare_zone_id     = var.cloudflare_zone_id
   cloudfront_domain_name = module.thinkwork.www_distribution_domain
-
-  # Docs: include_docs is a plain bool (no output reference) so the
-  # ACM cert SAN list doesn't depend on the docs distribution output,
-  # which itself depends on the cert. docs_cloudfront_domain_name is
-  # read only after the cert is created, for the CNAME record.
-  include_docs                = true
-  docs_cloudfront_domain_name = module.thinkwork.docs_distribution_domain
 
   # End-user app: canonical app.<apex> host. The compatibility output names
   # still use computer_* while the source path is apps/web.
@@ -1415,21 +1401,6 @@ output "computer_sandbox_url" {
 output "computer_sandbox_allowed_parent_origins" {
   description = "Trusted parent origins for the Computer iframe sandbox"
   value       = module.thinkwork.computer_sandbox_allowed_parent_origins
-}
-
-output "docs_url" {
-  description = "Docs site URL"
-  value       = local.www_dns_enabled ? "https://${local.docs_domain}" : "https://${module.thinkwork.docs_distribution_domain}"
-}
-
-output "docs_distribution_id" {
-  description = "CloudFront distribution ID for docs (for cache invalidation)"
-  value       = module.thinkwork.docs_distribution_id
-}
-
-output "docs_bucket_name" {
-  description = "S3 bucket for docs site assets"
-  value       = module.thinkwork.docs_bucket_name
 }
 
 output "www_url" {

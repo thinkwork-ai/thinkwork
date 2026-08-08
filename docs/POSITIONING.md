@@ -91,7 +91,7 @@ CI-enforced and review-enforced. Edits that introduce these fail the build or fa
 **Acronym + metaphor traps:**
 
 - **"REST anchors"** in customer-facing surfaces (HTTP REST homonym). Use "operating guarantees" or spell the four out. Docs may use "R/E/S/T" as internal shorthand, never as the customer-facing brand.
-- **"horse / reins / wild horse"** outside `docs/src/content/docs/architecture.mdx` — single-use rule, CI-enforced via `.github/workflows/lint.yml`. The metaphor lives in one Aside callout and one body intro paragraph; nowhere else.
+- **"horse / reins / wild horse"** outside `docs/reference/architecture.mdx` — single-use rule, CI-enforced via `.github/workflows/lint.yml`. The metaphor lives in one Aside callout and one body intro paragraph; nowhere else.
 
 **SaaS-ambiguity traps:**
 

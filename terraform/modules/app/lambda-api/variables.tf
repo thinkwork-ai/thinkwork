@@ -476,12 +476,6 @@ variable "admin_url" {
   default     = ""
 }
 
-variable "docs_url" {
-  description = "Docs site URL (e.g. https://d2grg1uavrp7lx.cloudfront.net)"
-  type        = string
-  default     = ""
-}
-
 variable "www_url" {
   description = "Marketing site URL (e.g. https://thinkwork.ai). Used for Stripe Checkout cancel_url and CORS origin."
   type        = string

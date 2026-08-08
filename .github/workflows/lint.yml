@@ -31,13 +31,13 @@ jobs:
       # Agent Harness for Business positioning per docs/STYLE.md and
       # plan docs/plans/2026-04-24-009. Two checks:
       #
-      #   1. Horse/reins file-scope rule. The horse/reins metaphor is
-      #      acceptable only in docs/src/content/docs/architecture.mdx
-      #      (one section's body intro + a single sidebar Aside, both
-      #      mentioning the metaphor). Any hit outside that file —
-      #      including marketing pages, README, other concept docs —
-      #      fails the build. Word-boundary regex avoids tripping on
-      #      substrings like "reinstalling" / "horse_power_id".
+      #   1. Horse/reins ban on published surfaces. The metaphor is
+      #      not allowed on any published surface — in-app docs under
+      #      apps/, README, or CONTRIBUTING. Word-boundary regex avoids
+      #      tripping on substrings like "reinstalling" / "horse_power_id".
+      #      (THINK-702: the docs.thinkwork.ai Starlight site is retired;
+      #      its former content is unpublished reference under
+      #      docs/reference/ and is out of scope.)
       #
       #   2. Banned-word grep on .mdx / .md content files. Per
       #      docs/STYLE.md the strict banned set is "journey",
@@ -46,9 +46,8 @@ jobs:
       #      check — both have legitimate technical uses ("data
       #      transform", "biometric unlock") that human review catches
       #      contextually but a grep cannot. Scoped to content files
-      #      (docs/src/content/docs/**/*.mdx + README.md +
-      #      CONTRIBUTING.md) so identifiers and code samples don't
-      #      trip the check.
+      #      (README.md + CONTRIBUTING.md) so identifiers and code
+      #      samples don't trip the check.
       #
       # docs/STYLE.md is excluded — it's the rule-reference doc itself
       # and contains the banned words inside its own ban-list.
@@ -60,24 +59,22 @@ jobs:
           # alternation matches singular + plural; the boundaries prevent
           # "reinstalling", "horsepower_id", or similar substring hits.
           #
-          # Scope: published surfaces only. docs/plans/, docs/brainstorms/,
-          # and docs/solutions/ are pipeline artifacts (decision records,
-          # brainstorm transcripts, post-mortems) where the metaphor
-          # legitimately appears in rationale prose; only published Starlight
-          # content (docs/src/content/docs/), marketing/admin/mobile/cli
-          # source under apps/, and the OSS-face files (README, CONTRIBUTING)
-          # are subject to the single-use rule.
+          # Scope: published surfaces only. docs/ is entirely pipeline
+          # artifacts and unpublished reference now (plans, brainstorms,
+          # solutions, and the retired Starlight content under
+          # docs/reference/) where the metaphor legitimately appears in
+          # rationale prose; only in-app docs / marketing / admin / mobile /
+          # cli source under apps/ and the OSS-face files (README,
+          # CONTRIBUTING) are subject to the rule.
           PATTERN='\b(horse|horses|rein|reins)\b'
-          ALLOWED_FILE='docs/src/content/docs/architecture.mdx'
           OUTSIDE=$(grep -rEi --include='*.mdx' --include='*.md' --include='*.astro' --include='*.ts' --include='*.tsx' \
             --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.astro \
-            "$PATTERN" apps/ docs/src/content/ README.md CONTRIBUTING.md 2>/dev/null \
-            | grep -v "^${ALLOWED_FILE}:" || true)
+            "$PATTERN" apps/ README.md CONTRIBUTING.md 2>/dev/null || true)
           if [ -z "$OUTSIDE" ]; then
-            echo "✓ horse/reins: 0 hits outside ${ALLOWED_FILE} on published surfaces"
+            echo "✓ horse/reins: 0 hits on published surfaces"
             exit 0
           fi
-          echo "✗ horse/reins: hits outside ${ALLOWED_FILE} (only architecture.mdx may use the metaphor on published surfaces):"
+          echo "✗ horse/reins: hits on published surfaces (the metaphor is retired):"
           printf '%s\n' "$OUTSIDE"
           exit 1
 
@@ -90,7 +87,7 @@ jobs:
           PATTERN='\b(journey|seamlessly|empower)\b|\bleverage\s+[a-z]'
           HITS=$(grep -rEin --include='*.mdx' --include='*.md' \
             --exclude='STYLE.md' --exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.astro \
-            "$PATTERN" docs/src/content/ README.md CONTRIBUTING.md 2>/dev/null || true)
+            "$PATTERN" README.md CONTRIBUTING.md 2>/dev/null || true)
           if [ -z "$HITS" ]; then
             echo "✓ banned words: 0 hits in .mdx / .md content"
             exit 0

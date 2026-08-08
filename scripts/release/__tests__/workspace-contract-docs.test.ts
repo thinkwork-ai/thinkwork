@@ -9,12 +9,12 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const contractDocs = [
   "docs/runbooks/workspace-architecture-verification.md",
   "docs/runbooks/spaces-runtime-renderer-rollout.md",
-  "docs/src/content/docs/concepts/agents/workspace-architecture/index.mdx",
-  "docs/src/content/docs/concepts/agents/workspace-architecture/workspace-tree.mdx",
-  "docs/src/content/docs/concepts/agents/workspace-architecture/ownership-model.mdx",
-  "docs/src/content/docs/concepts/agents/workspace-architecture/turn-lifecycle.mdx",
-  "docs/src/content/docs/concepts/spaces/workspace-context.mdx",
-  "docs/src/content/docs/guides/spaces/goals-and-files.mdx",
+  "docs/reference/concepts/agents/workspace-architecture/index.mdx",
+  "docs/reference/concepts/agents/workspace-architecture/workspace-tree.mdx",
+  "docs/reference/concepts/agents/workspace-architecture/ownership-model.mdx",
+  "docs/reference/concepts/agents/workspace-architecture/turn-lifecycle.mdx",
+  "docs/reference/concepts/spaces/workspace-context.mdx",
+  "docs/reference/guides/spaces/goals-and-files.mdx",
 ];
 
 function readDoc(path: string) {
@@ -48,13 +48,13 @@ test("workspace contract docs describe the v1 runtime shape", () => {
 
   assert.match(
     docs[
-      "docs/src/content/docs/concepts/agents/workspace-architecture/index.mdx"
+      "docs/reference/concepts/agents/workspace-architecture/index.mdx"
     ],
     /Spaces\/<active-space>/,
   );
   assert.match(
     docs[
-      "docs/src/content/docs/concepts/agents/workspace-architecture/index.mdx"
+      "docs/reference/concepts/agents/workspace-architecture/index.mdx"
     ],
     /Workspace Routing[\s\S]+User\/[\s\S]+USER\.md[\s\S]+Thread\/[\s\S]+PROGRESS\.md/,
   );

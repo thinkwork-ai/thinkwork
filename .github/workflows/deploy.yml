@@ -115,7 +115,6 @@ jobs:
       terraform: ${{ steps.filter.outputs.terraform }}
       workspace_defaults: ${{ steps.filter.outputs.workspace_defaults }}
       web: ${{ steps.filter.outputs.web }}
-      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -166,8 +165,6 @@ jobs:
               - 'packages/api/src/lib/skill-trust/**'
             web:
               - 'apps/web/**'
-            docs:
-              - 'docs/**'
 
       - name: Latest AgentCore container source commit
         id: container-source
@@ -1335,7 +1332,7 @@ jobs:
           # WWW_DOMAIN is also configured, which enables the module. NB:
           # despite the name, www_dns no longer manages the marketing-site
           # apex/www DNS (extracted to thinkwork-ai/thinkworkwebsite); it
-          # still owns the shared ACM cert + docs/web/api CNAMEs.
+          # still owns the shared ACM cert + web/api CNAMEs.
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || 'placeholder-not-configured' }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           API_AUTH_SECRET: ${{ secrets.API_AUTH_SECRET }}
@@ -1897,7 +1894,8 @@ jobs:
     needs: [build-container, build-container-arm64, terraform-apply]
     # Belt-and-suspenders for the build-container/terraform-apply gate
     # coupling: when `runtime_container_stale=true` forces a container
-    # rebuild on a docs-only push, terraform-apply's gate fires too (the
+    # rebuild on an otherwise container-irrelevant push, terraform-apply's
+    # gate fires too (the
     # OR list above includes runtime_container_stale), so the strict
     # success-only check works today. Accepting `skipped` keeps this
     # job firing even if a future edit narrows terraform-apply's gate
@@ -2117,41 +2115,6 @@ jobs:
           export VITE_RELEASE_VERSION="dev-${GITHUB_SHA::9}"
           bash scripts/build-web.sh ${{ env.STAGE }}
 
-  # ── Build & deploy docs site ────────────────────────────────────
-  build-docs:
-    name: Build & Deploy Docs
-    needs: [terraform-apply]
-    if: always() && (needs.terraform-apply.result == 'success' || needs.terraform-apply.result == 'skipped') && !(github.event_name == 'workflow_dispatch' && inputs.plan_only == true)
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Terraform init
-        working-directory: terraform/examples/greenfield
-        run: |
-          terraform init
-          terraform workspace select ${{ env.STAGE }} || terraform workspace new ${{ env.STAGE }}
-
-      - name: Build & deploy
-        run: bash scripts/build-docs.sh ${{ env.STAGE }}
-
   # ── Bootstrap workspace defaults ─────────────────────────────────
   # Originally gated on migration-drift-check so workspace default seeding
   # never ran against an unmigrated schema. With the drift gate temporarily
@@ -2310,7 +2273,6 @@ jobs:
         terraform-apply,
         update-agentcore-runtimes,
         migration-drift-check,
-        build-docs,
         bootstrap,
         workspace-layout-migration,
       ]
@@ -2490,7 +2452,6 @@ jobs:
           echo "║ Stage: ${{ env.STAGE }}"
           echo "║"
           echo "║ Web App:    $(tf_output_raw app_url || echo 'N/A')"
-          echo "║ Docs Site:  $(tf_output_raw docs_url || echo 'N/A')"
           echo "║ API:        $(tf_output_raw api_endpoint || echo 'N/A')"
           echo "║ AppSync:    $(tf_output_raw appsync_api_url || echo 'N/A')"
           echo "║ S3 Bucket:  $(tf_output_raw bucket_name || echo 'N/A')"
@@ -2502,6 +2463,5 @@ jobs:
           echo "║   Terraform Apply:        ${{ needs.terraform-apply.result }}"
           echo "║   AgentCore Runtime:      ${{ needs.update-agentcore-runtimes.result }}"
           echo "║   Migration Drift Check:  ${{ needs.migration-drift-check.result }}"
-          echo "║   Build Docs:             ${{ needs.build-docs.result }}"
           echo "║   Bootstrap:              ${{ needs.bootstrap.result }}"
           echo "╚══════════════════════════════════════════════════════════════╝"

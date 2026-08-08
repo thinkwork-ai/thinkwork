@@ -5542,9 +5542,6 @@ output "admin_client_id" {{ value = module.thinkwork.admin_client_id }}
 output "web_local_client_id" {{ value = module.thinkwork.web_local_client_id }}
 output "auth_route_clients" {{ value = module.thinkwork.auth_route_clients }}
 output "auth_retirement_phase" {{ value = module.thinkwork.auth_retirement_phase }}
-  output "docs_bucket_name" {{ value = module.thinkwork.docs_bucket_name }}
-  output "docs_distribution_id" {{ value = module.thinkwork.docs_distribution_id }}
-  output "docs_distribution_domain" {{ value = module.thinkwork.docs_distribution_domain }}
 output "twenty_provisioned" {{ value = module.thinkwork.twenty_provisioned }}
 output "twenty_runtime_enabled" {{ value = module.thinkwork.twenty_runtime_enabled }}
 output "twenty_url" {{ value = module.thinkwork.twenty_url }}
@@ -6726,7 +6723,6 @@ def sync_static(outputs_path, static_files, vars_json, artifact_names=None):
     artifact_names = set(artifact_names or [])
     syncs = [
         ("web", "app_bucket_name", "app_distribution_id"),
-        ("docs", "docs_bucket_name", "docs_distribution_id"),
     ]
     for artifact_name, bucket_output, distribution_output in syncs:
         if artifact_names and artifact_name not in artifact_names:
