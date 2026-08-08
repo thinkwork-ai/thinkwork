@@ -18,7 +18,10 @@ const funnel = {
 
 describe("validateChartDirectiveData", () => {
   it("accepts a well-formed funnel and trims the title", () => {
-    const result = validateChartDirectiveData({ ...funnel, title: "  Pipeline by stage " });
+    const result = validateChartDirectiveData({
+      ...funnel,
+      title: "  Pipeline by stage ",
+    });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.data.title).toBe("Pipeline by stage");
@@ -34,16 +37,24 @@ describe("validateChartDirectiveData", () => {
   });
 
   it("rejects empty, oversized, and malformed series", () => {
-    expect(validateChartDirectiveData({ ...funnel, series: [] }).ok).toBe(false);
+    expect(validateChartDirectiveData({ ...funnel, series: [] }).ok).toBe(
+      false,
+    );
     expect(
       validateChartDirectiveData({
         ...funnel,
-        series: Array.from({ length: 25 }, (_, i) => ({ label: `p${i}`, value: i })),
+        series: Array.from({ length: 25 }, (_, i) => ({
+          label: `p${i}`,
+          value: i,
+        })),
       }).ok,
     ).toBe(false);
     const bad = validateChartDirectiveData({
       ...funnel,
-      series: [{ label: "ok", value: 1 }, { label: "nope", value: Infinity }],
+      series: [
+        { label: "ok", value: 1 },
+        { label: "nope", value: Infinity },
+      ],
     });
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.error).toContain("series[1]");
@@ -59,7 +70,11 @@ describe("validateChartDirectiveData", () => {
 
 describe("validateChartMessagePart", () => {
   it("accepts a well-formed part", () => {
-    const part = validateChartMessagePart({ type: "data-chart", id: "chart-1", data: funnel });
+    const part = validateChartMessagePart({
+      type: "data-chart",
+      id: "chart-1",
+      data: funnel,
+    });
     expect(part).not.toBeNull();
     expect(part?.id).toBe("chart-1");
     expect(part?.data.type).toBe("funnel");
@@ -67,11 +82,21 @@ describe("validateChartMessagePart", () => {
 
   it("rejects wrong type tag, blank id, and invalid data", () => {
     expect(
-      validateChartMessagePart({ type: "data-json-render", id: "x", data: funnel }),
+      validateChartMessagePart({
+        type: "data-json-render",
+        id: "x",
+        data: funnel,
+      }),
     ).toBeNull();
-    expect(validateChartMessagePart({ type: "data-chart", id: "  ", data: funnel })).toBeNull();
     expect(
-      validateChartMessagePart({ type: "data-chart", id: "x", data: { ...funnel, series: [] } }),
+      validateChartMessagePart({ type: "data-chart", id: "  ", data: funnel }),
+    ).toBeNull();
+    expect(
+      validateChartMessagePart({
+        type: "data-chart",
+        id: "x",
+        data: { ...funnel, series: [] },
+      }),
     ).toBeNull();
     expect(validateChartMessagePart(null)).toBeNull();
   });
