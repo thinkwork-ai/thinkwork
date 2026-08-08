@@ -2,7 +2,11 @@
 title: "Analytics display payloads need one portable cross-surface contract"
 date: 2026-06-20
 category: architecture-patterns
-module: "@thinkwork/analytics-display / analytics.display v1"
+status: superseded
+superseded_date: 2026-08-07
+superseded_by: "docs/solutions/architecture-patterns/house-chart-catalog-single-analytics-vocabulary-2026-08-07.md"
+superseded_reason: "The @thinkwork/analytics-display package described here was never shipped (verified 2026-08-07: no packages/analytics-display in the repo). THINK-671 crowned the document compositor's house chart catalog as the single analytics chart vocabulary instead."
+module: "@thinkwork/analytics-display / analytics.display v1 (never shipped)"
 problem_type: architecture_pattern
 component: tooling
 severity: high
@@ -30,6 +34,33 @@ tags:
 ---
 
 # Analytics display payloads need one portable cross-surface contract
+
+> **Correction — 2026-08-07. This document describes work that never shipped.**
+>
+> The text below states that PR #2748 "shipped" `@thinkwork/analytics-display`
+> and `docs/specs/analytics-display-contract-v1.md`. That is **not true of the
+> current repo**. Verified 2026-08-07: there is **no `packages/analytics-display`**
+> directory, no `@thinkwork/analytics-display` package, and nothing imports it.
+> THNK-57 / PR #2748 was planned but never landed. Every code example below —
+> `validateAnalyticsDisplayPayload`, `createAnalyticsDisplayRenderModel`, the
+> `analytics-display/v1` envelope — is **aspirational, not callable**.
+>
+> **Superseded direction.** The single analytics chart vocabulary is now the
+> document compositor's **house chart catalog**
+> (`bar | line | donut | stat-strip | sparkline | meter | funnel`, in
+> `packages/api/src/lib/artifacts/document-directives.ts`), rendered by the house
+> SVG renderer in `packages/api/src/lib/artifacts/document-charts.ts`. See
+> [The house chart catalog is the single analytics chart vocabulary](./house-chart-catalog-single-analytics-vocabulary-2026-08-07.md)
+> (THINK-671). Note in particular that the `bar | line | area | pie` chart enum
+> described below is **not** the sanctioned catalog — it lacks `funnel`, among
+> others.
+>
+> **What still holds.** The underlying reasoning is retained deliberately: one
+> vocabulary rather than per-surface catalogs; by-value, portable payloads with no
+> route/dashboard/dataset/renderer references; validate before rendering; hosts own
+> density and concrete components. The house-catalog decision honors all of that
+> via spec-as-data transport. Read what follows as design rationale, not as an API
+> reference.
 
 ## Context
 
