@@ -100,3 +100,29 @@ describe("SECURITY: model-authored strings are escaped at the boundary", () => {
     expect(svg.endsWith("</svg>")).toBe(true);
   });
 });
+
+describe("axis ticks compress at dollar scale", () => {
+  it("renders M/K tick labels instead of clipped full-precision numbers", () => {
+    const svg = renderChart({
+      type: "bar",
+      title: "Top branches",
+      series: [
+        { label: "A", value: 28_706_613 },
+        { label: "B", value: 12_040_000 },
+      ],
+    });
+    expect(svg).toMatch(/>\d+(\.\d+)?M</);
+    expect(svg).not.toContain(">28,000,000<");
+    // the extreme value label above the bar keeps full precision
+    expect(svg).toContain("28,706,613");
+  });
+
+  it("keeps small-scale ticks in full precision", () => {
+    const svg = renderChart({
+      type: "bar",
+      title: "Counts",
+      series: [{ label: "A", value: 6155 }],
+    });
+    expect(svg).not.toMatch(/>\d+(\.\d+)?[MK]</);
+  });
+});
