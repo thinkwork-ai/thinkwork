@@ -286,21 +286,26 @@ function Readout({
   hint: string;
 }) {
   return (
-    <View className="px-5 pb-2 flex-row items-baseline justify-between min-h-[24px]">
-      {label ? (
-        <>
-          <Text size="sm" variant="muted" className="flex-1 pr-3">
-            {label}
+    // Fixed-height slot: the hint and the label/value readout swap inside the
+    // same 28pt row (items-center, tallest line-height is 26) so the chart
+    // below never shifts when scrubbing starts or ends.
+    <View className="px-5 pb-2">
+      <View className="h-7 flex-row items-center justify-between">
+        {label ? (
+          <>
+            <Text size="sm" variant="muted" className="flex-1 pr-3">
+              {label}
+            </Text>
+            <Text className="text-base font-semibold text-neutral-900 dark:text-neutral-100 tabular-nums">
+              {value}
+            </Text>
+          </>
+        ) : (
+          <Text size="xs" variant="muted">
+            {hint}
           </Text>
-          <Text className="text-base font-semibold text-neutral-900 dark:text-neutral-100 tabular-nums">
-            {value}
-          </Text>
-        </>
-      ) : (
-        <Text size="xs" variant="muted">
-          {hint}
-        </Text>
-      )}
+        )}
+      </View>
     </View>
   );
 }
