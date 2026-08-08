@@ -37,7 +37,11 @@
  * `contracts/key-manifest.v2.{schema,golden}.json` and asserted by
  * key-manifest.test.ts — the producer half of that one shared artifact.
  */
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { and, eq, isNull } from "drizzle-orm";
 import { getConfig } from "@thinkwork/runtime-config";
 import { tenantMcpTwinKeys } from "@thinkwork/database-pg/schema";
@@ -90,6 +94,19 @@ export interface TwinKeyManifestEntry {
    * every ordinary key's entry stays byte-identical to before.
    */
   trustedSubsystem?: true;
+  /**
+   * Analytics-channel visibility (THINK-656 D4): the key's brain_ask loop
+   * may consult the mart_analytics briefing tools. Tool visibility only,
+   * never a data grant. Read literal-true-only by the platform, so it is
+   * emitted only when the row's default-true column is set.
+   */
+  analyticsKey?: true;
+  /**
+   * Operator-side fields set by hand directly in the published manifest
+   * (kbTrace, operatorKey, …) ride `additionalProperties: true` and are
+   * PRESERVED across republish — see mergePreserved below.
+   */
+  [extra: string]: unknown;
 }
 
 export interface TwinKeyManifestDoc {
@@ -97,7 +114,39 @@ export interface TwinKeyManifestDoc {
   tenantId: string;
   generatedAt: string;
   keys: TwinKeyManifestEntry[];
+  /**
+   * Operator-published top-level fields (most importantly `machineClients`,
+   * the THINK-628 m2m lanes) are carried forward verbatim from the
+   * previously published manifest — the product has no model of them and
+   * must not wipe them on republish.
+   */
+  [extra: string]: unknown;
 }
+
+/**
+ * Entry fields the PRODUCT owns: recomputed from the database on every
+ * publish. Everything else found on a previously published entry with the
+ * same keyHash (hand-set kbTrace, operatorKey, …) is carried forward.
+ */
+const PRODUCT_OWNED_ENTRY_FIELDS = new Set([
+  "keyHash",
+  "keyId",
+  "name",
+  "createdAt",
+  "expiresAt",
+  "securityGroups",
+  "kbCollections",
+  "trustedSubsystem",
+  "analyticsKey",
+]);
+
+/** Top-level fields the PRODUCT owns; the rest is carried forward. */
+const PRODUCT_OWNED_TOP_FIELDS = new Set([
+  "formatVersion",
+  "tenantId",
+  "generatedAt",
+  "keys",
+]);
 
 export interface PublishTwinKeyManifestResult {
   published: boolean;
@@ -128,6 +177,73 @@ function resolveBucket(override?: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Error raised when the currently published manifest cannot be read. */
+class ExistingManifestUnreadable extends Error {}
+
+function isMissingObjectError(err: unknown): boolean {
+  const name = err instanceof Error ? err.name : "";
+  const status =
+    typeof err === "object" && err !== null
+      ? (err as { $metadata?: { httpStatusCode?: number } }).$metadata
+          ?.httpStatusCode
+      : undefined;
+  return name === "NoSuchKey" || name === "NotFound" || status === 404;
+}
+
+/**
+ * Fetch the currently published manifest, or null when none exists yet.
+ *
+ * The 2026-08-07 analytics go-live proved operators legitimately publish
+ * things the product database does not model — the `machineClients` m2m
+ * lanes (THINK-628), hand-added key entries (no keyId), and hand-set flags
+ * like kbTrace/operatorKey on product-owned entries. A wholesale rewrite
+ * from the DB silently destroys all of it, so a publish that cannot READ
+ * the existing object (other than a clean 404) must FAIL rather than
+ * clobber — throwing ExistingManifestUnreadable, surfaced as
+ * `{ published: false }`.
+ */
+async function readExistingManifest(
+  s3: ManifestS3Client,
+  bucket: string,
+  key: string,
+): Promise<Record<string, unknown> | null> {
+  let body: string;
+  try {
+    const response = (await s3.send(
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+    )) as { Body?: { transformToString: () => Promise<string> } };
+    if (!response.Body) return null;
+    body = await response.Body.transformToString();
+  } catch (err: unknown) {
+    if (isMissingObjectError(err)) return null;
+    const message = err instanceof Error ? err.message : String(err);
+    throw new ExistingManifestUnreadable(
+      `existing manifest unreadable (refusing to clobber): ${message}`,
+    );
+  }
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Unparseable JSON: nothing recoverable to preserve — publish fresh.
+  }
+  return null;
+}
+
+/** The previous entry's operator-set fields (everything the product does not own). */
+function preservedEntryExtras(
+  prev: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!prev) return {};
+  const extras: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(prev)) {
+    if (!PRODUCT_OWNED_ENTRY_FIELDS.has(field)) extras[field] = value;
+  }
+  return extras;
 }
 
 /**
@@ -162,6 +278,7 @@ export async function publishTwinKeyManifest(
         security_groups: tenantMcpTwinKeys.security_groups,
         kb_collections: tenantMcpTwinKeys.kb_collections,
         trusted_subsystem: tenantMcpTwinKeys.trusted_subsystem,
+        analytics_key: tenantMcpTwinKeys.analytics_key,
       })
       .from(tenantMcpTwinKeys)
       .where(
@@ -171,12 +288,40 @@ export async function publishTwinKeyManifest(
         ),
       );
 
+    const s3 = opts.s3 ?? new S3Client({});
+    const key = buildTwinKeyManifestKey(tenantId);
+
+    // Preservation read — see readExistingManifest. A read failure (other
+    // than a clean 404) aborts the publish instead of clobbering.
+    const previous = await readExistingManifest(s3, bucket, key);
+    const previousKeys: Record<string, unknown>[] = Array.isArray(
+      previous?.keys,
+    )
+      ? (previous.keys as unknown[]).filter(
+          (entry): entry is Record<string, unknown> =>
+            !!entry && typeof entry === "object" && !Array.isArray(entry),
+        )
+      : [];
+    const previousByHash = new Map<string, Record<string, unknown>>();
+    for (const entry of previousKeys) {
+      if (typeof entry.keyHash === "string" && entry.keyHash.length > 0) {
+        previousByHash.set(entry.keyHash, entry);
+      }
+    }
+
     const byHash = new Map<string, TwinKeyManifestEntry>();
     for (const extra of opts.extraKeys ?? []) {
-      byHash.set(extra.keyHash, extra);
+      byHash.set(extra.keyHash, {
+        ...preservedEntryExtras(previousByHash.get(extra.keyHash)),
+        ...extra,
+      });
     }
     for (const row of rows) {
       byHash.set(row.key_hash, {
+        // Operator-set fields (kbTrace, operatorKey, …) hand-edited onto
+        // this entry in S3 survive the republish; product-owned fields
+        // below are always recomputed from the database.
+        ...preservedEntryExtras(previousByHash.get(row.key_hash)),
         keyHash: row.key_hash,
         keyId: row.id,
         name: row.name,
@@ -189,18 +334,41 @@ export async function publishTwinKeyManifest(
         // every ordinary key's entry byte-identical to twin-mcp-keys/v2
         // as it shipped.
         ...(row.trusted_subsystem ? { trustedSubsystem: true as const } : {}),
+        // Same literal-true-only shape (THINK-656 D4); the DB column
+        // defaults true, so every product-minted key carries analytics
+        // unless an operator opts the row out.
+        ...(row.analytics_key ? { analyticsKey: true as const } : {}),
       });
+    }
+
+    // Hand-added entries: a previously published key entry with NO keyId
+    // was never minted by the product (product entries always carry one),
+    // so the database cannot re-derive it — carry it forward verbatim.
+    // Entries WITH a keyId that are gone from the DB are dropped on
+    // purpose: revocation IS removal from the manifest.
+    const preservedHandAdded: TwinKeyManifestEntry[] = [];
+    for (const entry of previousKeys) {
+      const hash = typeof entry.keyHash === "string" ? entry.keyHash : null;
+      const isMachineRow = entry.kind === "m2m";
+      if (isMachineRow || (hash && entry.keyId == null && !byHash.has(hash))) {
+        preservedHandAdded.push(entry as unknown as TwinKeyManifestEntry);
+      }
+    }
+
+    // Top-level operator fields (machineClients above all) survive too.
+    const preservedTop: Record<string, unknown> = {};
+    for (const [field, value] of Object.entries(previous ?? {})) {
+      if (!PRODUCT_OWNED_TOP_FIELDS.has(field)) preservedTop[field] = value;
     }
 
     const doc: TwinKeyManifestDoc = {
       formatVersion: TWIN_KEY_MANIFEST_FORMAT,
       tenantId,
       generatedAt: (opts.now ?? (() => new Date()))().toISOString(),
-      keys: [...byHash.values()],
+      keys: [...byHash.values(), ...preservedHandAdded],
+      ...preservedTop,
     };
 
-    const s3 = opts.s3 ?? new S3Client({});
-    const key = buildTwinKeyManifestKey(tenantId);
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket,

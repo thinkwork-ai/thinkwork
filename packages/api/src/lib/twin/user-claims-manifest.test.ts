@@ -97,6 +97,7 @@ function claimsRow(overrides: Record<string, unknown> = {}) {
     tool_allowlist: ["brain_ask", "brain_search_knowledge"],
     is_operator: false,
     kb_trace: false,
+    analytics_key: true,
     enabled: true,
     cognito_sub: "cognito-sub-1",
     email: "Person@Customer.com",
@@ -155,8 +156,23 @@ describe("publishUserClaimsManifest", () => {
         defaultKbBundle: "onboarding",
         toolAllowlist: ["brain_ask", "brain_search_knowledge"],
         kbTrace: false,
+        analyticsKey: true,
       },
     ]);
+  });
+
+  it("analyticsKey follows the per-row column — true by default, false when opted out (THINK-656 D4)", async () => {
+    seed(true, [
+      claimsRow(),
+      claimsRow({
+        user_id: "66666666-6666-4666-8666-666666666666",
+        analytics_key: false,
+      }),
+    ]);
+    await publishUserClaimsManifest(TENANT_ID, { s3, bucket: BUCKET });
+    const [byDefault, optedOut] = manifestBody().users;
+    expect(byDefault.analyticsKey).toBe(true);
+    expect(optedOut.analyticsKey).toBe(false);
   });
 
   it("validates the generated document against the vendored user-claims/v1 schema", async () => {

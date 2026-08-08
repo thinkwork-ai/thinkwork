@@ -4334,6 +4334,7 @@ Join hints:
 | tool_allowlist | text[] |  |
 | is_operator | boolean | not null |
 | kb_trace | boolean | not null |
+| analytics_key | boolean | not null |
 | enabled | boolean | not null |
 | notes | text |  |
 | created_at | timestamp with time zone | not null |

@@ -73,7 +73,11 @@
           "description": "Null = the Brain surface default applies (no narrowing). Empty array = no tools at all. The distinction is load-bearing.",
           "oneOf": [{ "$ref": "#/definitions/grantList" }, { "type": "null" }]
         },
-        "kbTrace": { "type": "boolean" }
+        "kbTrace": { "type": "boolean" },
+        "analyticsKey": {
+          "description": "Analytics channel visibility (THINK-656 D4): the user's brain_ask loop may consult the mart_analytics briefing tools. Tool visibility only, never a data grant. Optional for compatibility; literal true is the only enabling value.",
+          "type": "boolean"
+        }
       }
     }
   }

@@ -23,10 +23,87 @@
     "keys": {
       "type": "array",
       "description": "Every key that is currently VALID for this tenant. Revocation IS removal from this array — there is no `revoked` flag, by design: a revoked key and a never-issued string must be indistinguishable to the consumer (no record left, no keyId to attribute a denied call to). Rotation publishes old + new together before dropping the old one, so the consumer's <=60s manifest cache never locks out a freshly rotated key. An empty array is legal and means 'this tenant has no working keys'.",
-      "items": { "$ref": "#/definitions/keyEntry" }
+      "items": {
+        "oneOf": [
+          { "$ref": "#/definitions/keyEntry" },
+          { "$ref": "#/definitions/machineEntry" }
+        ]
+      }
+    },
+    "machineClients": {
+      "type": "array",
+      "description": "OPTIONAL machine lanes (THINK-628): Cognito client-credentials app clients that authenticate as a SYSTEM rather than as a `tkt_` key or a person. Absent on every manifest published before THINK-628, and absence is the inert state — no machine caller authenticates at all. RIDES `additionalProperties: true` AT THE MANIFEST LEVEL WITHOUT A formatVersion BUMP, and that is safe in exactly this direction: a consumer that predates this field ignores the whole array, honours no machine lane, and every existing key keeps working unchanged. THIS IS THE RECOMMENDED PLACEMENT. The same entry may legally appear inside `keys` instead (it is self-describing via `kind`, and a current consumer routes on that before the keyHash check), but an OLDER consumer iterating `keys` would DROP it as keyHash-less and fire the BrainMcpKeyManifestEntryDropped alarm — so publish machine lanes here unless every reader is known to be current.",
+      "items": { "$ref": "#/definitions/machineEntry" }
     }
   },
   "definitions": {
+    "machineEntry": {
+      "type": "object",
+      "required": ["kind", "clientId", "lane"],
+      "additionalProperties": true,
+      "not": { "required": ["keyHash"] },
+      "description": "ONE MACHINE LANE (THINK-628). A caller holding this lane's Cognito app-client credentials mints a client_credentials access token against the pool's hosted domain and presents it as the bearer. The consumer validates the JWT (RS256, issuer, exp/nbf, token_use=access, NO username claim) and then matches its `client_id` to this entry — a signature-valid token whose client_id no entry names authenticates NOTHING. That split is the whole design: the TOKEN says which system is calling, this ENTRY says what it may see. Every grant field below means exactly what it means on a keyEntry and is run through the same parser, so there is no second definition of a grant anywhere. Mutually exclusive with keyEntry by construction: a machine entry carries no keyHash (it is never matched by hash) and a key entry carries no `kind`.",
+      "properties": {
+        "kind": {
+          "const": "m2m",
+          "description": "Discriminator. Only the literal \"m2m\" makes a row a machine lane; anything else is read as a key entry and will be dropped for want of a keyHash."
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The Cognito app-client id, exactly as the pool issues it — the ONLY value a validated access token is matched on. Trimmed by the consumer; empty or non-string DROPS the entry (fail closed: the lane simply does not authenticate)."
+        },
+        "lane": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable lane name — one per calling system (e.g. platform-agent, evals-worker, console-proxy). The consumer FORCES the principal's audit identity to `m2m:<lane>`, beside the `user:<email>` the identity lanes mint, so a log line or a brain_api_call row names the system without a second field. An entry may NOT name its own keyId: one that could would be able to borrow a tkt_ key's attribution. Empty or non-string DROPS the entry."
+        },
+        "keyspace": {
+          "type": "string",
+          "description": "Informational echo of the manifest prefix this entry is published under. NOT READ: the keyspace a machine principal gets is the S3 path its entry was found at, exactly as it is for a tkt_ key, so a mismatch here is invisible to auth — the same stance the manifest's top-level tenantId already takes."
+        },
+        "name": {
+          "type": "string",
+          "description": "Human label for the console and the runbook. Descriptive; never read for access decisions."
+        },
+        "createdAt": { "type": "string", "description": "ISO-8601. Informational." },
+        "expiresAt": {
+          "type": ["string", "null"],
+          "description": "Same semantics as keyEntry.expiresAt: ISO-8601 or null/absent for a lane that never expires, Date.parse-able or the entry is DROPPED, evaluated at auth time. An expired lane refuses with `expired_client` and its keyId survives into the audit row."
+        },
+        "securityGroups": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Identical semantics and parser to keyEntry.securityGroups, wildcard included."
+        },
+        "kbCollections": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Identical semantics and parser to keyEntry.kbCollections — grant-only, wildcard included."
+        },
+        "kbBundles": {
+          "type": "object",
+          "description": "Identical semantics to keyEntry.kbBundles — selection within the grant, never a widening.",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } }
+        },
+        "defaultKbBundle": {
+          "type": ["string", "null"],
+          "description": "Identical semantics to keyEntry.defaultKbBundle."
+        },
+        "kbTrace": {
+          "type": "boolean",
+          "description": "Identical semantics to keyEntry.kbTrace — operator diagnostic, literal-true-only."
+        },
+        "operatorKey": {
+          "type": "boolean",
+          "description": "OPERATOR MARKER, literal-true-only, identical to the keyEntry flag. This is how the console proxy lane keeps its operator tool visibility when it moves off its tkt_ key: operator-ness comes from THIS MAPPING, never from a token claim. Nothing in the token can turn it on."
+        },
+        "trustedSubsystem": {
+          "type": "boolean",
+          "description": "TRUSTED-SUBSYSTEM MARKER (THINK-626), literal-true-only, honoured IDENTICALLY to the keyEntry flag: this lane may assert `on_behalf_of` and run a call under a named user's entry in the user-claims manifest. It is what lets the ThinkWork platform-agent lane keep asserting when it moves off its tkt_ key. Belongs only on lanes the platform itself operates."
+        }
+      }
+    },
     "keyEntry": {
       "type": "object",
       "required": ["keyHash"],

@@ -72,6 +72,13 @@ export interface UserClaimsManifestEntry {
   /** Null = Brain surface default; `[]` = no tools. */
   toolAllowlist: string[] | null;
   kbTrace: boolean;
+  /**
+   * Analytics-channel visibility (THINK-656 D4): true lets the user's
+   * brain_ask loop consult the mart_analytics briefing tools. The reader
+   * parses literal true only. Default-true DB column — all users get
+   * analytics unless an operator opts them out per row.
+   */
+  analyticsKey: boolean;
 }
 
 export interface UserClaimsManifestDoc {
@@ -176,6 +183,7 @@ export async function publishUserClaimsManifest(
         tool_allowlist: userBrainClaims.tool_allowlist,
         is_operator: userBrainClaims.is_operator,
         kb_trace: userBrainClaims.kb_trace,
+        analytics_key: userBrainClaims.analytics_key,
         enabled: userBrainClaims.enabled,
         cognito_sub: users.cognito_sub,
         email: users.email,
@@ -211,6 +219,9 @@ export async function publishUserClaimsManifest(
         defaultKbBundle: row.default_kb_bundle ?? null,
         toolAllowlist: row.tool_allowlist ?? null,
         kbTrace: row.kb_trace === true,
+        // Literal-true-only on the reader; the column defaults true so
+        // every (new or existing) user carries analytics unless opted out.
+        analyticsKey: row.analytics_key === true,
       })),
     };
 

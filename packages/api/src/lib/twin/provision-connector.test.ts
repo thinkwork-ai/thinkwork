@@ -389,8 +389,17 @@ describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", (
     ContentType?: string;
   }
   const puts: CapturedPut[] = [];
+  const noSuchKey = () => {
+    const missing = new Error("The specified key does not exist.");
+    missing.name = "NoSuchKey";
+    return missing;
+  };
   const manifestS3 = {
     send: async (command: unknown) => {
+      // Preservation read (no previously published manifest in these tests).
+      if ((command as object).constructor.name === "GetObjectCommand") {
+        throw noSuchKey();
+      }
       puts.push((command as { input: CapturedPut }).input);
       return {};
     },
@@ -584,7 +593,10 @@ describe("provisionTwinConnector key-manifest publishing (U12 KTD amendment)", (
       const result = await provisionTwinConnector(INPUT, {
         sm,
         manifestS3: {
-          send: async () => {
+          send: async (command: unknown) => {
+            if ((command as object).constructor.name === "GetObjectCommand") {
+              throw noSuchKey();
+            }
             throw new Error("s3 exploded");
           },
         },
