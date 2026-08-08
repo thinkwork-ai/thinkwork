@@ -4,6 +4,8 @@ import { useColorScheme } from "nativewind";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 import { SvgXml } from "react-native-svg";
 import {
+  chartFitsWidth,
+  chartNarration,
   HOUSE_DARK,
   HOUSE_LIGHT,
   renderChart,
@@ -37,13 +39,18 @@ export function ChartCard({ part }: ChartCardProps) {
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
   const [width, setWidth] = useState(0);
-  const [dataExpanded, setDataExpanded] = useState(false);
+  const [dataExpandedState, setDataExpanded] = useState<boolean | null>(null);
 
   const data = part.data;
   const fontScale = clampedFontScale();
 
+  // Takeaway-first degradation (THINK-678): a kind that can't survive this
+  // width renders as caption + auto-expanded data table, not a squeezed mark.
+  const fits = width <= 0 || chartFitsWidth(data, width);
+  const dataExpanded = dataExpandedState ?? !fits;
+
   const svg = useMemo(() => {
-    if (width <= 0) return null;
+    if (width <= 0 || !chartFitsWidth(data, width)) return null;
     return renderChart(data, {
       width,
       fontScale,
@@ -54,6 +61,7 @@ export function ChartCard({ part }: ChartCardProps) {
 
   const size = useMemo(() => (svg ? svgViewBoxSize(svg) : null), [svg]);
   const rows = useMemo(() => chartTableRows(data), [data]);
+  const narration = useMemo(() => chartNarration(data), [data]);
 
   return (
     <View className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden">
@@ -75,7 +83,7 @@ export function ChartCard({ part }: ChartCardProps) {
           if (next > 0 && next !== width) setWidth(next);
         }}
         accessibilityRole="image"
-        accessibilityLabel={`${data.title}. ${data.caption ?? ""}`.trim()}
+        accessibilityLabel={narration}
       >
         {svg && size ? (
           <SvgXml xml={svg} width={size.width} height={size.height} />
