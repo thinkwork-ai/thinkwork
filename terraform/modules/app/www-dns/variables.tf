@@ -18,6 +18,12 @@ variable "cloudfront_domain_name" {
   type        = string
 }
 
+variable "retain_docs_san" {
+  description = "When true, keep the retired docs.<domain> SAN on the shared ACM certificate. Set on stacks deployed before THINK-702 so removing the docs site does not force a certificate replacement (which cycles against the thinkwork module). New stacks leave this false."
+  type        = bool
+  default     = false
+}
+
 variable "include_admin" {
   description = "When true, add admin.<domain> to the ACM cert SANs and create a Cloudflare CNAME for it. Gated on a plain bool (not a CloudFront output) to keep the dependency graph acyclic."
   type        = bool
