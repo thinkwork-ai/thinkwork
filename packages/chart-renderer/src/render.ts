@@ -84,6 +84,12 @@ export interface ChartRenderOptions {
   fontScale?: number;
   /** Resolved colors. Default CSS_VAR_PALETTE. */
   palette?: ChartPalette;
+  /**
+   * Draw the in-SVG title/qualifier header. Default true (the document/plate
+   * anatomy). Card surfaces that render their own header pass false — the
+   * frame compacts upward so the mark doesn't float under empty space.
+   */
+  header?: boolean;
 }
 
 /** Default frame width — the document/plate content column. */
@@ -98,6 +104,8 @@ interface Ctx {
   p: ChartPalette;
   /** Escaped palette accessor — palette values are attribute-interpolated. */
   c: ChartPalette;
+  /** In-SVG header on/off; headerless frames compact upward. */
+  hdr: boolean;
 }
 
 function resolveCtx(options?: ChartRenderOptions): Ctx {
@@ -120,6 +128,7 @@ function resolveCtx(options?: ChartRenderOptions): Ctx {
     off: (base) => r2(base * fontScale),
     p,
     c,
+    hdr: options?.header !== false,
   };
 }
 
@@ -138,18 +147,20 @@ interface Frame {
 
 /** bar/line share one frame: gutter scales with width, plot height is fixed. */
 function axisFrame(ctx: Ctx): Frame {
+  const dy = ctx.hdr ? 0 : 40;
   return {
     width: ctx.width,
-    height: 250,
+    height: 250 - dy,
     plotLeft: Math.max(40, r2((48 * ctx.width) / DEFAULT_WIDTH)),
     plotRight: r2(ctx.width - 12),
-    plotTop: 56,
-    plotBottom: 220,
+    plotTop: 56 - dy,
+    plotBottom: 220 - dy,
   };
 }
 
 /** Chart title + one-line qualifier, inside the SVG (authoring rules). */
 function header(ctx: Ctx, title: string, qualifier?: string): string {
+  if (!ctx.hdr) return "";
   const y1 = r2(Math.min(ctx.off(18), 26));
   const y2 = r2(Math.min(ctx.off(33), 44));
   const q = qualifier
@@ -299,19 +310,20 @@ const DONUT_SIDE_LEGEND_MIN_WIDTH = 520;
 
 function renderDonut(data: ChartDirectiveData, ctx: Ctx): string {
   const width = ctx.width;
+  const dy = ctx.hdr ? 0 : 40;
   const wide = width >= DONUT_SIDE_LEGEND_MIN_WIDTH;
   const cx = wide ? 130 : r2(width / 2);
-  const cy = 132;
+  const cy = 132 - dy;
   const radius = 64;
   const circumference = r2(2 * Math.PI * radius);
   const series = data.series;
-  const height = wide ? 230 : r2(210 + series.length * 26 + 12);
+  const height = wide ? 230 - dy : r2(210 - dy + series.length * 26 + 12);
   const total = series.reduce((s, p) => s + Math.max(0, p.value), 0);
   const safeTotal = total > 0 ? total : 1;
   const legendX = wide ? 290 : 16;
   const legendTextX = r2(legendX + 20);
   const legendValueX = r2(width - (wide ? 20 : 16));
-  const legendTop = wide ? 70 : 210;
+  const legendTop = (wide ? 70 : 210) - dy;
   const palette = hues(ctx);
 
   let offset = 0;
@@ -350,9 +362,10 @@ function renderStatStrip(data: ChartDirectiveData, ctx: Ctx): string {
   const width = ctx.width;
   const series = data.series;
   const gap = 10;
+  const dy = ctx.hdr ? 0 : 32;
   const wrapped = series.length > 4 && width < STAT_WRAP_MAX_WIDTH;
   const perRow = wrapped ? Math.ceil(series.length / 2) : series.length;
-  const height = wrapped ? 96 + STAT_ROW_HEIGHT : 96;
+  const height = (wrapped ? 96 + STAT_ROW_HEIGHT : 96) - dy;
   const tileWidth = r2((width - 24 - gap * (perRow - 1)) / perRow);
 
   let tiles = "";
@@ -360,7 +373,7 @@ function renderStatStrip(data: ChartDirectiveData, ctx: Ctx): string {
     const col = i % perRow;
     const row = Math.floor(i / perRow);
     const x = r2(12 + col * (tileWidth + gap));
-    const y = 40 + row * STAT_ROW_HEIGHT;
+    const y = 40 - dy + row * STAT_ROW_HEIGHT;
     tiles += `<rect x="${x}" y="${y}" width="${tileWidth}" height="48" rx="10" fill="${ctx.c.card}" stroke="${ctx.c.line}"/><text x="${r2(x + 14)}" y="${y + 24}" font-size="${ctx.fs(17)}" font-weight="700" fill="${ctx.c.ink}">${fmt(p.value)}</text><text x="${r2(x + 14)}" y="${y + 40}" font-size="${ctx.fs(10)}" fill="${ctx.c.muted}">${esc(p.label)}</text>`;
   }
 
@@ -380,12 +393,13 @@ function renderStatStrip(data: ChartDirectiveData, ctx: Ctx): string {
 const SPARKLINE_MAX_WIDTH = 300;
 
 function renderSparkline(data: ChartDirectiveData, ctx: Ctx): string {
+  const dy = ctx.hdr ? 0 : 32;
   const width = Math.min(ctx.width, SPARKLINE_MAX_WIDTH);
-  const height = 88;
+  const height = 88 - dy;
   const plotLeft = 12;
   const plotRight = r2(width - 64);
-  const plotTop = 44;
-  const plotBottom = 76;
+  const plotTop = 44 - dy;
+  const plotBottom = 76 - dy;
   const series = data.series;
   const max = maxOf(series);
   const top = max <= 0 ? 1 : max;

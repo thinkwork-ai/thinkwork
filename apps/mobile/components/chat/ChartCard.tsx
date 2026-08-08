@@ -55,6 +55,8 @@ export function ChartCard({ part }: ChartCardProps) {
       width,
       fontScale,
       palette: isDark ? HOUSE_DARK : HOUSE_LIGHT,
+      // The card owns the title/qualifier header; the SVG renders marks only.
+      header: false,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, width, fontScale, isDark]);
@@ -76,18 +78,21 @@ export function ChartCard({ part }: ChartCardProps) {
         ) : null}
       </View>
 
-      <View
-        className="px-3"
-        onLayout={(event) => {
-          const next = Math.round(event.nativeEvent.layout.width);
-          if (next > 0 && next !== width) setWidth(next);
-        }}
-        accessibilityRole="image"
-        accessibilityLabel={narration}
-      >
-        {svg && size ? (
-          <SvgXml xml={svg} width={size.width} height={size.height} />
-        ) : null}
+      <View className="px-3">
+        {/* Measure the unpadded inner box — handing the padded width to the
+            renderer overflows the card and clips the right edge. */}
+        <View
+          onLayout={(event) => {
+            const next = Math.floor(event.nativeEvent.layout.width);
+            if (next > 0 && next !== width) setWidth(next);
+          }}
+          accessibilityRole="image"
+          accessibilityLabel={narration}
+        >
+          {svg && size ? (
+            <SvgXml xml={svg} width={size.width} height={size.height} />
+          ) : null}
+        </View>
       </View>
 
       {data.caption ? (

@@ -135,7 +135,7 @@ export default function DevChartsScreen() {
   return (
     <ScrollView
       className="flex-1 bg-neutral-50 dark:bg-black"
-      contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
+      contentContainerStyle={{ padding: 16, paddingTop: 72, paddingBottom: 48 }}
     >
       <View className="flex-row items-center justify-between mb-4">
         <Text className="text-xl font-bold text-neutral-900 dark:text-neutral-100">
