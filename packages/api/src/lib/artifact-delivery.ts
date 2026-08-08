@@ -126,15 +126,44 @@ function scalarText(v: unknown): string | null {
 const DIRECTIVE_FALLBACK_HTML =
   '<p style="margin:12px 0;padding:10px 14px;background:#f5f5f5;border-radius:6px;font-size:13px;color:#6b7280">This section contains an interactive component — open the live report to view it.</p>';
 
+/**
+ * The directive kinds `renderDirectiveForEmail` below renders natively — the
+ * 8th seam a new `tw:` kind has to touch (THINK-685). Keep this in sync with
+ * the if-chain: `directive-kinds-parity.test.ts` asserts every registry kind
+ * is either listed here (and actually renders non-fallback email HTML) or
+ * explicitly waived in DELIVERY_FALLBACK_OK. Without the guard, a new kind
+ * silently downgrades to "open the live report" in delivered email.
+ */
+export const DELIVERY_RENDERED_KINDS = [
+  "stats",
+  "verdict-grid",
+  "timeline",
+  "chart",
+  // Not a registry kind of its own: tw:analysis blocks carry the same
+  // title/series/caption shape as tw:chart and reuse that branch.
+  "analysis",
+] as const;
+
+/**
+ * Registry kinds deliberately left to the generic email fallback. Add a kind
+ * here (WITH a comment saying why the live surface is the only place it makes
+ * sense) instead of silently letting the drift test discover it. Empty today.
+ */
+export const DELIVERY_FALLBACK_OK: readonly string[] = [];
+
+/** The generic "open the live report" text, shared with the drift test. */
+export const DIRECTIVE_FALLBACK_TEXT =
+  "[Interactive component — open the live report to view it]";
+
 /** Render one tw:* directive to email-safe HTML + a plain-text line. */
-function renderDirectiveForEmail(
+export function renderDirectiveForEmail(
   kind: string,
   body: string,
 ): { html: string; text: string } {
   const root = yamlRecord(body);
   const fallback = {
     html: DIRECTIVE_FALLBACK_HTML,
-    text: "[Interactive component — open the live report to view it]",
+    text: DIRECTIVE_FALLBACK_TEXT,
   };
   if (!root) return fallback;
 

@@ -1,5 +1,5 @@
 ---
-title: "Adding a new tw: directive kind touches seven seams across two packages"
+title: "Adding a new tw: directive kind touches eight seams across two packages"
 date: 2026-07-07
 category: architecture-patterns
 module: document-compositor-directives
@@ -22,7 +22,7 @@ tags:
 related_components: [packages/api, apps/web, packages/workspace-defaults]
 ---
 
-# Adding a new tw: directive kind touches seven seams across two packages
+# Adding a new tw: directive kind touches eight seams across two packages
 
 ## Context
 
@@ -38,7 +38,7 @@ so the next new directive kind doesn't rediscover it by trial and error.
 ## Guidance
 
 Adding a directive kind (`tw:<kind>`) means touching all of the following.
-Items 1–2 are the minimum for the directive to exist and render; 3–7 are what
+Items 1–2 are the minimum for the directive to exist and render; 3–8 are what
 makes it _discoverable_ and _reachable_ by real tenants and agents — skipping
 them ships a directive nothing ever uses.
 
@@ -60,26 +60,45 @@ them ships a directive nothing ever uses.
    screenshots (see the sibling doc on pixel-level render verification), and
    was fixed with a one-line CSS change in PR #3464.
 
-3. **Two hand-maintained mirrors — not registry-derived:**
-   - `apps/web/src/components/artifacts/plates/plate-support.ts` —
-     `PLATE_DIRECTIVE_KINDS` (drives the PlateEditDialog checkbox and the
-     Content Contract tab's suggested-directive picker). Missing this hides
-     the operator UI toggle but never breaks compilation — the server
-     registry stays authoritative — so it's a silent UX gap, not a test
-     failure, if forgotten.
+3. **The web mirror — now GENERATED, not hand-typed (THINK-685):**
+   - `apps/web/src/components/artifacts/plates/directive-kinds.generated.ts`
+     holds `PLATE_DIRECTIVE_KINDS` (drives the PlateEditDialog checkbox and
+     the Content Contract tab's suggested-directive picker);
+     `plate-support.ts` re-exports it, so every existing import site is
+     unchanged. apps/web still cannot import packages/api, so the list is
+     rendered from `DIRECTIVE_KINDS` by
+     `packages/api/scripts/generate-directive-kinds.ts`:
+
+     ```bash
+     pnpm --filter @thinkwork/api generate:directive-kinds
+     ```
+
+     `packages/api/src/lib/artifacts/directive-kinds-parity.test.ts` re-renders
+     the module in memory and compares it byte-for-byte with the checked-in
+     file, so a stale mirror now fails CI loudly instead of silently hiding
+     an operator UI toggle.
+
    - `packages/workspace-defaults/src/index.ts` — the composer-skill content
      mirror, parity-tested against `files/` by
      `packages/workspace-defaults/src/__tests__/parity.test.ts`. This test is
      the gate that catches a `files/`-only edit; run it, don't assume it.
+     Still hand-maintained by design: it is authoring prose, not a kind list.
+   - **Dissolved:** the old `chart-types` mirror is gone — chart rendering
+     moved into the `@thinkwork/chart-renderer` package, which is the single
+     source for chart types (`CHART_TYPES` is imported, not restated).
 
-4. **Exemplar snippet** — `packages/api/src/lib/artifacts/plate-registry.ts`,
-   `EXEMPLAR_DIRECTIVE_SNIPPETS`. A canned snippet here is what makes
-   `buildPlateExemplar` automatically showcase the new directive in every
-   "see it in action" preview for plates that allow or suggest it. Note the
-   asymmetry: contract-bearing plates (ones with a Section Manifest) preview
-   through `buildContractPreviewExemplar` instead, which renders the
-   declared contract and omits the directive gallery entirely — a
-   pre-existing behavior, not something a new directive can fix on its own.
+4. **Exemplar snippet — now a field on the registry spec (THINK-685).**
+   Add `exemplar` to the `<kind>Spec` in `document-directives.ts` (a curated
+   showcase body; omit it and the terser diagnostics `example` is used).
+   `DIRECTIVE_EXEMPLAR_SNIPPETS` is derived from the registry and consumed by
+   `buildPlateExemplar` in `plate-registry.ts` — the standalone
+   `EXEMPLAR_DIRECTIVE_SNIPPETS` map is gone, so there is nothing to forget.
+   For plates with `allowedDirectives: "all"`, exemplar blocks appear in
+   registry order. Note the asymmetry: contract-bearing plates (ones with a
+   Section Manifest) preview through `buildContractPreviewExemplar` instead,
+   which renders the declared contract and omits the directive gallery
+   entirely — a pre-existing behavior, not something a new directive can fix
+   on its own.
 
 5. **Plate catalog wiring** — `packages/api/src/lib/artifacts/plate-definitions.ts`.
    Per-plate `allowedDirectives` allow-lists (add the new kind to any
@@ -107,6 +126,27 @@ them ships a directive nothing ever uses.
    tool result), not the repo file — a repo-only check would pass while the
    deployed guidance is still stale.
 
+8. **Delivered email rendering** — `packages/api/src/lib/artifact-delivery.ts`.
+   `renderDirectiveForEmail` is an if-chain over kinds (email clients strip
+   SVG and most CSS, so each kind needs its own table/list rendering). This
+   seam was undocumented until THINK-685: a new kind that skipped it still
+   _delivered_, just as the generic "This section contains an interactive
+   component — open the live report to view it" block, which reads as a
+   product defect in the artifact the recipient actually sees. It is now
+   drift-guarded — add a branch plus its kind to `DELIVERY_RENDERED_KINDS`,
+   or waive it (with a written reason) in `DELIVERY_FALLBACK_OK`;
+   `directive-kinds-parity.test.ts` fails with regeneration/repair
+   instructions otherwise, and also asserts each claimed kind really renders
+   non-fallback HTML.
+
+**Still hand-maintained by design** (editorial judgement, not mechanical
+mirrors — do not try to derive them): the house CSS in `document-templates.ts`
+(#2), the per-plate `allowedDirectives` / `suggestedDirectives` catalogs in
+`plate-definitions.ts` (#5), and the authoring prose plus `DEFAULTS_VERSION`
+bump in `packages/workspace-defaults` (#6–#7). Each of these encodes a
+judgement about _where_ and _when_ a directive belongs, which no registry
+entry can answer.
+
 **Sequencing matters.** If a new directive spans multiple PRs, the registry
 unit (1–2) must merge and deploy _before_ the authoring-guidance unit (6–7)
 merges — dev is continuous CD from `main`, so a tenant workspace that reseeds
@@ -116,10 +156,12 @@ enforcement mechanism; there is no separate feature flag.
 
 ## Why This Matters
 
-Of the seven seams, only #1 fails loudly (a missing registry entry is a
-compile-time rejection everyone notices immediately). The rest fail quietly:
-a missing web mirror (#3) just hides a checkbox; a missing exemplar snippet
-(#4) just leaves plate previews incomplete; missing authoring guidance (#6)
+Of the eight seams, only #1 fails loudly on its own (a missing registry entry
+is a compile-time rejection everyone notices immediately). THINK-685 made the
+three mechanical mirrors fail loudly too — the web mirror (#3) is generated
+and parity-tested, the exemplar snippet (#4) is derived from the registry
+spec, and the email delivery renderer (#8) is drift-guarded. What remains
+fails quietly, and by design: missing authoring guidance (#6)
 means the directive technically works but no agent ever reaches for it
 unprompted, which — for a directive whose whole point is agent-driven
 authoring — is a silent failure of the actual product requirement, not a
@@ -131,7 +173,7 @@ closely rather than trusting element-presence checks.
 ## When to Apply
 
 - Planning or scoping work to add any new `tw:` directive kind.
-- Reviewing a PR that claims to add a directive — check it against all seven
+- Reviewing a PR that claims to add a directive — check it against all eight
   seams before approving, not just the registry entry and tests.
 - Writing the verification contract for a directive rollout — each seam above
   maps to a distinct browser-verifiable behavior (renders, is offered in the

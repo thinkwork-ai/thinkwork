@@ -32,6 +32,7 @@ import { ANALYSIS_OPS, getAnalysisOp } from "./document-analyses.js";
 import {
   ANALYSIS_PRESENTATION_DIRECTIVES,
   CHART_TYPES,
+  DIRECTIVE_EXEMPLAR_SNIPPETS,
   DIRECTIVE_KINDS,
 } from "./document-directives.js";
 import {
@@ -852,41 +853,16 @@ export async function documentPlatesForDispatch(
 // ---------------------------------------------------------------------------
 
 /**
- * Per-directive snippet library. The exemplar includes one block per
+ * Per-directive snippet library — now DERIVED from the directive registry
+ * (THINK-685: `DIRECTIVE_EXEMPLAR_SNIPPETS`, each spec's `exemplar` falling
+ * back to its diagnostics `example`). The exemplar includes one block per
  * directive the plate ALLOWS, so validation and preview always compile
  * exactly what the plate permits — a plate that excludes tw:chart validates
  * without a chart block instead of self-rejecting on
  * DIRECTIVE_GENRE_RESTRICTED.
  */
-const EXEMPLAR_DIRECTIVE_SNIPPETS: Record<string, string> = {
-  stats: `\`\`\`tw:stats
-items:
-  - { value: 12, label: initiatives on track }
-  - { value: "94%", label: renewal rate }
-  - { value: "+18%", label: quarter over quarter }
-\`\`\``,
-  "verdict-grid": `\`\`\`tw:verdict-grid
-cards:
-  - { question: Overall health, answer: Strong, note: All commitments met this period, tone: acc }
-  - { question: Attention needed, answer: One item, note: Renewal paperwork pending signature, tone: warn }
-\`\`\``,
-  timeline: `\`\`\`tw:timeline
-items:
-  - { label: Kickoff, caption: Goals and owners locked, date: Week 1 }
-  - { label: Rollout, caption: Phased team onboarding, current: true }
-  - { label: Full adoption, date: Q4 }
-\`\`\``,
-  chart: `\`\`\`tw:chart
-type: bar
-title: Quarterly momentum
-qualifier: closed items per month
-series:
-  - { label: Month 1, value: 14 }
-  - { label: Month 2, value: 18 }
-  - { label: Month 3, value: 23 }
-caption: Delivery pace accelerated through the quarter.
-\`\`\``,
-};
+const EXEMPLAR_DIRECTIVE_SNIPPETS: Readonly<Record<string, string>> =
+  DIRECTIVE_EXEMPLAR_SNIPPETS;
 
 export interface PlateExemplar {
   title: string;
