@@ -6,7 +6,7 @@
  * that each part type renders the expected primitive.
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ThemeProvider } from "@thinkwork/ui";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -390,6 +390,83 @@ describe("renderTypedPart", () => {
     };
     const { container } = render(<>{renderTypedPart(part, rk())}</>);
     expect(container.textContent).toContain("data-future-shape");
+  });
+
+  // THINK-686: `data-chart` parts render the shared house chart inline
+  // instead of degrading to the unsupported-generated-view strip.
+  it("renders a valid data-chart part as an inline chart card", () => {
+    const part: AccumulatedPart = {
+      type: "data-chart",
+      id: "chart:q3-revenue",
+      data: {
+        type: "bar",
+        title: "Q3 revenue by region",
+        qualifier: "USD, thousands",
+        caption: "West carried the quarter.",
+        series: [
+          { label: "West", value: 1240 },
+          { label: "East", value: 880 },
+        ],
+      },
+    };
+
+    const { container } = render(
+      <ThemeProvider>{renderTypedPart(part, rk())}</ThemeProvider>,
+    );
+
+    expect(screen.getByTestId("chart-card")).toBeTruthy();
+    expect(screen.getByText("Q3 revenue by region")).toBeTruthy();
+    expect(screen.getByText("USD, thousands")).toBeTruthy();
+    expect(screen.getByText("West carried the quarter.")).toBeTruthy();
+    expect(container.querySelector("svg")).not.toBeNull();
+    expect(screen.queryByTestId("unsupported-generated-view")).toBeNull();
+  });
+
+  it("renders the chart data table and the narration label", () => {
+    const part: AccumulatedPart = {
+      type: "data-chart",
+      id: "chart:q3-revenue",
+      data: {
+        type: "bar",
+        title: "Q3 revenue by region",
+        series: [
+          { label: "West", value: 1240 },
+          { label: "East", value: 880 },
+        ],
+      },
+    };
+
+    render(<ThemeProvider>{renderTypedPart(part, rk())}</ThemeProvider>);
+
+    const chart = screen.getByTestId("chart-card-svg");
+    expect(chart.getAttribute("role")).toBe("img");
+    expect(chart.getAttribute("aria-label")).toContain("Q3 revenue by region");
+
+    // The table is the screen-reader-friendly fallback behind the disclosure.
+    expect(screen.queryByRole("table")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /chart data/i }));
+    const rows = screen.getAllByRole("row");
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toBe("West1,240");
+    expect(rows[1].textContent).toBe("East880");
+  });
+
+  it("degrades a malformed data-chart part to the unsupported placeholder", () => {
+    const part: AccumulatedPart = {
+      type: "data-chart",
+      id: "chart:bad",
+      // `type` is not a known chart kind and `series` is empty — the shared
+      // validator rejects it, so the card must never render.
+      data: { type: "pie", title: "Bad chart", series: [] },
+    };
+
+    const { container } = render(
+      <ThemeProvider>{renderTypedPart(part, rk())}</ThemeProvider>,
+    );
+
+    expect(screen.getByTestId("unsupported-generated-view")).toBeTruthy();
+    expect(screen.queryByTestId("chart-card")).toBeNull();
+    expect(container.textContent).not.toContain("Bad chart");
   });
 
   it("renders MCP app data parts in a sandboxed iframe", () => {
