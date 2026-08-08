@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "urql";
 import {
+  BookOpen,
   CircleUserRound,
   LogOut,
   RefreshCw,
@@ -39,6 +40,7 @@ import {
 } from "@/components/shell/sidebar-health";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
+import { openInNewTab } from "@/lib/open-in-new-tab";
 import { rememberSettingsReturnTo } from "@/lib/settings-return";
 import { SidebarDeployedReleaseQuery } from "@/lib/settings-queries";
 import { useTenant } from "@/context/TenantContext";
@@ -224,6 +226,15 @@ function AccountMenu({
         <DropdownMenuItem onSelect={onOpenSettings}>
           <Settings className="mr-2 h-4 w-4" />
           Settings
+        </DropdownMenuItem>
+        {/* Docs open in their own tab: reading a guide should never cost you
+            the thread you were mid-way through. */}
+        <DropdownMenuItem
+          data-testid="sidebar-docs"
+          onSelect={() => openInNewTab("/docs")}
+        >
+          <BookOpen className="mr-2 h-4 w-4" />
+          Documentation
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => setConfirmSignOutOpen(true)}>

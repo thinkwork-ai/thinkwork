@@ -9,6 +9,7 @@ const routerMocks = vi.hoisted(() => ({
 const deploymentProfileMocks = vi.hoisted(() => ({
   releaseVersion: "v0.1.0-canary.164",
 }));
+const openInNewTabMock = vi.hoisted(() => vi.fn());
 const tenantMocks = vi.hoisted(() => ({
   isOperator: true,
   roleResolved: true,
@@ -38,6 +39,9 @@ vi.mock("urql", () => ({
       fetching: false,
     },
   ],
+}));
+vi.mock("@/lib/open-in-new-tab", () => ({
+  openInNewTab: openInNewTabMock,
 }));
 vi.mock("@/lib/composer-focus", () => ({
   requestSpacesComposerFocus: vi.fn(),
@@ -112,11 +116,12 @@ vi.mock("@thinkwork/ui", () => ({
   DropdownMenuItem: ({
     children,
     onSelect,
-  }: {
+    ...props
+  }: React.HTMLAttributes<HTMLDivElement> & {
     children: React.ReactNode;
     onSelect?: () => void;
   }) => (
-    <div role="menuitem" onClick={() => onSelect?.()}>
+    <div role="menuitem" onClick={() => onSelect?.()} {...props}>
       {children}
     </div>
   ),
@@ -201,6 +206,7 @@ afterEach(() => {
   cleanup();
   authMocks.signOut.mockReset();
   routerMocks.navigate.mockReset();
+  openInNewTabMock.mockReset();
   routerMocks.pathname = "/threads/abc123";
   deploymentProfileMocks.releaseVersion = "v0.1.0-canary.164";
   deploymentStatusMocks.releaseVersion = "v0.1.0-canary.200";
@@ -241,6 +247,17 @@ describe("SpacesSidebar", () => {
     fireEvent.click(screen.getByText("Profile"));
 
     expect(routerMocks.navigate).toHaveBeenCalledWith({ to: "/profile" });
+  });
+
+  it("opens the Agent Documentation in a new tab from the account menu", () => {
+    // A new tab, not a navigation: reading a guide must not cost the reader
+    // the thread they were mid-way through.
+    render(<SpacesSidebar />);
+
+    fireEvent.click(screen.getByTestId("sidebar-docs"));
+
+    expect(openInNewTabMock).toHaveBeenCalledWith("/docs");
+    expect(routerMocks.navigate).not.toHaveBeenCalled();
   });
 
   it("shows the server-reported deployed release in the account menu footer", () => {
