@@ -58,6 +58,12 @@ locals {
     var.include_app ? [local.app] : [],
     var.include_computer ? [local.computer] : [],
     var.include_api ? [local.api] : [],
+    # Retired docs.<domain> SAN, retained on stacks deployed before THINK-702.
+    # Shrinking the SAN list forces a create-before-destroy replacement of this
+    # shared certificate, which cannot be ordered against the thinkwork module
+    # (the two modules feed each other) and fails the plan with a cycle. A dead
+    # SAN costs nothing and its validation CNAME stays in place for renewals.
+    var.retain_docs_san ? ["docs.${var.domain}"] : [],
   )
 
   # Existing CNAME records stay gated on non-empty targets because their target

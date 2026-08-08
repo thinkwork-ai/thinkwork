@@ -1052,6 +1052,11 @@ module "www_dns" {
   cloudflare_zone_id     = var.cloudflare_zone_id
   cloudfront_domain_name = module.thinkwork.www_distribution_domain
 
+  # This stack predates THINK-702, so the shared cert still carries the
+  # retired docs.<domain> SAN. Dropping it would force a cert replacement
+  # that cycles against the thinkwork module — keep the dead SAN instead.
+  retain_docs_san = true
+
   # End-user app: canonical app.<apex> host. The compatibility output names
   # still use computer_* while the source path is apps/web.
   include_app                = true
