@@ -21,6 +21,10 @@ import {
   type SessionStore,
 } from "./durable-session-manager.js";
 import {
+  EMIT_ANALYTICS_CHART_TOOL_NAME,
+  extractEmitAnalyticsChartToolPart,
+} from "./chart-runtime.js";
+import {
   EMIT_JSON_RENDER_UI_TOOL_NAME,
   buildCanvasDataBinding,
   extractEmitJsonRenderToolPart,
@@ -1078,6 +1082,19 @@ export async function runAgentLoop(
               binding ?? undefined,
             ),
           );
+        }
+        // Chart emission (THINK-672): same seam as the json-render emit above —
+        // the tool already validated through the shared chart validator, so a
+        // result carrying a part is durable by construction. No activity event
+        // yet; charts land on the finalized message's `parts`.
+        const chartPart =
+          !event.isError && event.toolName === EMIT_ANALYTICS_CHART_TOOL_NAME
+            ? extractEmitAnalyticsChartToolPart(event.result)
+            : null;
+        if (chartPart) {
+          uiMessageParts = mergeFinalUiMessageParts(uiMessageParts, [
+            chartPart,
+          ]);
         }
         if (!event.isError) {
           const mcpAppParts = extractMcpAppPartsFromToolResult(event.result);

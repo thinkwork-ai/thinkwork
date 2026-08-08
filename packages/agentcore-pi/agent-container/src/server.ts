@@ -83,6 +83,7 @@ import {
 } from "@aws-sdk/client-s3";
 import {
   BUILTIN_TOOL_NAMES,
+  buildEmitAnalyticsChartTool,
   buildEmitJsonRenderUiTool,
   collectToolCosts,
   createActivityEmitter,
@@ -1758,6 +1759,12 @@ export async function buildInvocationResources(
   if (args.payload.thread_json_render_ui_enabled === true) {
     tools.push(buildEmitJsonRenderUiTool());
   }
+
+  // Charts are ALWAYS ON (THINK-672): unlike emit_json_render_ui there is no
+  // per-agent opt-in column and no capability gate. Drawing the numbers an
+  // agent already computed is a presentation choice, not a granted capability,
+  // so every agent gets the tool on every dispatch.
+  tools.push(buildEmitAnalyticsChartTool());
 
   if (hasPiGoalMode(args.payload)) {
     extensionFactories.push(

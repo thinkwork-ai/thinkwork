@@ -29,6 +29,7 @@
     "@earendil-works/pi-agent-core": "0.76.0",
     "@earendil-works/pi-ai": "0.76.0",
     "@earendil-works/pi-coding-agent": "0.76.0",
+    "@thinkwork/chart-renderer": "workspace:*",
     "@thinkwork/thread-json-render": "workspace:*"
   },
   "devDependencies": {

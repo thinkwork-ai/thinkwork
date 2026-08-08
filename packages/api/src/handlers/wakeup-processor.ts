@@ -156,7 +156,7 @@ import {
   toRuntimeGoalModePayload,
   type RuntimeGoalMode,
 } from "../lib/goal-mode.js";
-import { normalizeThreadJsonRenderParts } from "../lib/chat-finalize/notify.js";
+import { normalizeUiMessageParts } from "../lib/chat-finalize/notify.js";
 import { goalRunProjectionFromFinalizePayload } from "../lib/chat-finalize/process-finalize.js";
 import { goalModeFromQuestionSourceTurn } from "../lib/question-goal-resume.js";
 import { sendThreadReplySlack } from "../lib/slack/thread-reply.js";
@@ -3992,7 +3992,7 @@ async function insertAssistantMessage(
   sourceTurnId?: string | null,
 ): Promise<{ id: string } | null> {
   try {
-    const parts = normalizeThreadJsonRenderParts(uiMessageParts);
+    const parts = normalizeUiMessageParts(uiMessageParts);
     const [row] = await db
       .insert(messages)
       .values({

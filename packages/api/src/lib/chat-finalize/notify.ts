@@ -14,6 +14,7 @@
 
 import { messages } from "@thinkwork/database-pg/schema";
 import { getDb } from "@thinkwork/database-pg";
+import { validateChartMessagePart } from "@thinkwork/chart-renderer";
 import { validateMcpAppPart } from "@thinkwork/pi-runtime-core";
 import { validateThreadJsonRenderPart } from "@thinkwork/thread-json-render";
 import { publishAppSyncMutation } from "../appsync-iam-publisher.js";
@@ -90,8 +91,7 @@ export async function insertAssistantMessage(
         sender_type: "agent",
         sender_id: agentId,
         parts:
-          stripNulDeep(normalizeThreadJsonRenderParts(uiMessageParts)) ||
-          undefined,
+          stripNulDeep(normalizeUiMessageParts(uiMessageParts)) || undefined,
         metadata: stripNulDeep(metadata),
       })
       .returning({ id: messages.id });
@@ -104,7 +104,14 @@ export async function insertAssistantMessage(
   }
 }
 
-export function normalizeThreadJsonRenderParts(
+/**
+ * Server-side gate for every durable UI message part the runtime hands back:
+ * each candidate must validate against its own part contract or it is dropped,
+ * and the survivors are deduped by id (last write wins). Three part families
+ * ride this list today — `data-json-render`, `mcp-app`, and `data-chart`
+ * (THINK-672).
+ */
+export function normalizeUiMessageParts(
   parts: Array<Record<string, unknown>> | undefined,
 ): Array<Record<string, unknown>> | null {
   if (!Array.isArray(parts) || parts.length === 0) return null;
@@ -124,6 +131,11 @@ export function normalizeThreadJsonRenderParts(
         mcpAppResult.part.id,
         mcpAppResult.part as unknown as Record<string, unknown>,
       );
+      continue;
+    }
+    const chartPart = validateChartMessagePart(part);
+    if (chartPart) {
+      byId.set(chartPart.id, chartPart as unknown as Record<string, unknown>);
     }
   }
   return byId.size > 0 ? [...byId.values()] : null;
