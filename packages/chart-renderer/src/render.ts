@@ -218,6 +218,20 @@ function renderBar(data: ChartDirectiveData, ctx: Ctx): string {
   const labelBaseline = r2(frame.plotBottom + ctx.off(18));
 
   const maxValue = maxOf(series);
+
+  // Thin crowded x labels (house style: ends + a readable cadence, the data
+  // table carries the rest). A label slot needs the longest label's estimated
+  // width plus breathing room; drawing every label past that smears them into
+  // each other (live-data dogfood: nine long CRM stage names at phone width).
+  const longestLabel = series.reduce((m, p) => Math.max(m, p.label.length), 0);
+  const labelSlot = longestLabel * 5.6 * (ctx.fs(10.5) / 10.5) + 8;
+  const maxLabels = Math.max(
+    2,
+    Math.floor((frame.plotRight - frame.plotLeft) / labelSlot),
+  );
+  const labelEvery =
+    series.length <= maxLabels ? 1 : Math.ceil(series.length / maxLabels);
+
   let columns = "";
   let xLabels = "";
   let extremeLabel = "";
@@ -231,7 +245,17 @@ function renderBar(data: ChartDirectiveData, ctx: Ctx): string {
       // Square baseline, 4px rounded data-end (plate anatomy).
       columns += `<path d="M${x0},${frame.plotBottom} v-${r2(h - 4)} q0,-4 4,-4 h${r2(colWidth - 8)} q4,0 4,4 v${r2(h - 4)} z"/>`;
     }
-    xLabels += `<text x="${cx}" y="${labelBaseline}">${esc(p.label)}</text>`;
+    const last = series.length - 1;
+    const onCadence = i % labelEvery === 0;
+    // Ends are always labeled; drop the cadence label right before the last
+    // one when they'd sit in adjacent bands and collide.
+    const labeled =
+      i === last
+        ? true
+        : onCadence && !(labelEvery > 1 && last - i < labelEvery);
+    if (labeled) {
+      xLabels += `<text x="${cx}" y="${labelBaseline}">${esc(p.label)}</text>`;
+    }
     if (p.value === maxValue && extremeLabel === "") {
       extremeLabel = `<text x="${cx}" y="${r2(yOf(p.value) - 8)}" font-size="${ctx.fs(11)}" font-weight="600" fill="${ctx.c.ink}" text-anchor="middle">${fmt(p.value)}</text>`;
     }
@@ -562,9 +586,26 @@ function renderFunnel(data: ChartDirectiveData, ctx: Ctx): string {
       first > 0 && i > 0
         ? `<tspan font-size="${ctx.fs(10)}" font-weight="400" fill="${ctx.c.muted}"> · ${Math.round((Math.max(0, p.value) / first) * 100)}%</tspan>`
         : "";
+    // Long stage names wrap to two lines inside the label column instead of
+    // overflowing the left edge ("Active Engagement" → "ve Engagement").
+    const labelBudget = Math.max(
+      6,
+      Math.floor(labelRight / (5.6 * (ctx.fs(11) / 11))),
+    );
+    const labelLines = wrapLabel(p.label, labelBudget);
+    const labelCenter = yTop + segmentHeight / 2;
+    const label = labelLines
+      .map((line, li) => {
+        const y =
+          labelLines.length === 1
+            ? r2(labelCenter + 4)
+            : r2(labelCenter - 3 + li * 14);
+        return `<text x="${labelRight}" y="${y}" font-size="${ctx.fs(11)}" fill="${ctx.c.muted}" text-anchor="end">${esc(line)}</text>`;
+      })
+      .join("");
     segments +=
       `<polygon points="${points}" fill="${hue}"/>` +
-      `<text x="${labelRight}" y="${r2(yTop + segmentHeight / 2 + 4)}" font-size="${ctx.fs(11)}" fill="${ctx.c.muted}" text-anchor="end">${esc(p.label)}</text>` +
+      label +
       `<text x="${r2(center + topHalf + 12)}" y="${yTop + 14}" font-size="${ctx.fs(12)}" font-weight="600" fill="${ctx.c.ink}">${fmt(p.value)}${pct}</text>`;
   }
 

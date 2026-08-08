@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { PixelRatio, Pressable, View } from "react-native";
 import { useColorScheme } from "nativewind";
+import { useRouter } from "expo-router";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
 import { SvgXml } from "react-native-svg";
 import {
@@ -35,6 +36,7 @@ function clampedFontScale(): number {
  * CSS `var()` references the document path uses.
  */
 export function ChartCard({ part }: ChartCardProps) {
+  const router = useRouter();
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
   const colors = isDark ? COLORS.dark : COLORS.light;
@@ -78,7 +80,21 @@ export function ChartCard({ part }: ChartCardProps) {
         ) : null}
       </View>
 
-      <View className="px-3">
+      {/* Tapping the chart body opens the interactive inspector (THINK-683).
+          Only the mark area is a tap target — the "Chart data" disclosure and
+          the caption keep their own behavior. */}
+      <Pressable
+        className="px-3"
+        onPress={() =>
+          router.push({
+            pathname: "/chart-inspector",
+            params: { part: JSON.stringify(part) },
+          })
+        }
+        accessibilityRole="button"
+        accessibilityLabel={narration}
+        accessibilityHint="Opens interactive chart"
+      >
         {/* Measure the unpadded inner box — handing the padded width to the
             renderer overflows the card and clips the right edge. */}
         <View
@@ -86,14 +102,12 @@ export function ChartCard({ part }: ChartCardProps) {
             const next = Math.floor(event.nativeEvent.layout.width);
             if (next > 0 && next !== width) setWidth(next);
           }}
-          accessibilityRole="image"
-          accessibilityLabel={narration}
         >
           {svg && size ? (
             <SvgXml xml={svg} width={size.width} height={size.height} />
           ) : null}
         </View>
-      </View>
+      </Pressable>
 
       {data.caption ? (
         <Text
