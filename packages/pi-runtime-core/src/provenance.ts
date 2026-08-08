@@ -130,6 +130,26 @@ function matchesDirectly(value: number, corpusValue: number): boolean {
 }
 
 /**
+ * Unit-scaled match: the value is a corpus number re-expressed in a different
+ * power-of-ten unit — dollars charted as $M, counts as thousands, fractions as
+ * basis points. `28.7` traces to a tool result of `28712345` because rescaling
+ * the corpus number by 10^-6 and rounding to the value's precision matches.
+ * Without this, the single most common analyst move (charting large values in
+ * compact units) reads as untraceable.
+ */
+const POW10_SCALE_RANGE = 12;
+
+function matchesScaled(value: number, corpusValue: number): boolean {
+  if (value === 0 || corpusValue === 0) return false;
+  for (let k = 1; k <= POW10_SCALE_RANGE; k += 1) {
+    const factor = 10 ** k;
+    if (matchesDirectly(value, corpusValue / factor)) return true;
+    if (matchesDirectly(value, corpusValue * factor)) return true;
+  }
+  return false;
+}
+
+/**
  * Derived match: the value is a simple, single-step function of two corpus
  * numbers — the derivations an analyst actually performs before charting.
  * `a * 100 / b` covers "percent of total"; `a - b` deltas; `a + b` roll-ups;
@@ -165,6 +185,9 @@ export function tracesToCorpus(
   if (corpus.length === 0) return false;
   for (const corpusValue of corpus) {
     if (matchesDirectly(value, corpusValue)) return true;
+  }
+  for (const corpusValue of corpus) {
+    if (matchesScaled(value, corpusValue)) return true;
   }
   const scan =
     corpus.length > PROVENANCE_PAIR_SCAN_CAP
