@@ -30,7 +30,6 @@ This policy covers the `thinkwork-ai/thinkwork` repository and its published art
 - `thinkwork-cli` (npm)
 - `thinkwork-ai/thinkwork/aws` (Terraform Registry)
 - `thinkwork-ai/homebrew-tap` (Homebrew)
-- The Astro Starlight docs site at `docs.thinkwork.ai`
 
 For issues specific to AWS services themselves (Cognito, AppSync, Bedrock, Lambda, etc.), please report those directly to AWS via their [vulnerability reporting process](https://aws.amazon.com/security/vulnerability-reporting/).
 

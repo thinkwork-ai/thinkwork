@@ -2121,7 +2121,6 @@ export type DeploymentStatus = {
   deploymentControllerArn?: Maybe<Scalars['String']['output']>;
   deploymentEvidenceBucket?: Maybe<Scalars['String']['output']>;
   deploymentRunnerProjectName?: Maybe<Scalars['String']['output']>;
-  docsUrl?: Maybe<Scalars['String']['output']>;
   ecrUrl?: Maybe<Scalars['String']['output']>;
   managedApplications: Array<ManagedApplicationDeployment>;
   managedMemoryEnabled: Scalars['Boolean']['output'];
@@ -3278,6 +3277,20 @@ export type ManagedMemoryWorkflow = {
 };
 
 /**
+ * Outcome of a whole-document manifest rewrite. Publish failures never roll
+ * back or block the mutation that triggered them — they surface here.
+ * `reason` is `no_bucket` (unconfigured), `claims_disabled` (the tenant's
+ * enable flag is off, so the object was deleted instead), or the underlying
+ * S3 error message.
+ */
+export type ManifestSyncResult = {
+  __typename?: 'ManifestSyncResult';
+  key?: Maybe<Scalars['String']['output']>;
+  published: Scalars['Boolean']['output'];
+  reason?: Maybe<Scalars['String']['output']>;
+};
+
+/**
  * Batch mark a caller's threads read or unread. The tenant is resolved from the
  * authenticated caller (never the input); only the caller's own
  * thread_participants rows are written. read: false marks unread.
@@ -3847,6 +3860,8 @@ export type Mutation = {
   checkoutCanvas: Artifact;
   checkoutThread: Thread;
   claimNextOpenEngineWorkItem?: Maybe<WorkItem>;
+  /** Delete one user's claims row, then republish the manifest. */
+  clearUserBrainClaims: UserBrainClaimsPayload;
   configureEmailProvider: EmailProviderInstall;
   confirmAutomationDraft: AgentLoop;
   /**
@@ -4082,6 +4097,11 @@ export type Mutation = {
   renameTenantSlug: Tenant;
   reorderPinnedThreads: Array<PinnedThread>;
   reorderQuickActions: Array<UserQuickAction>;
+  /**
+   * Rewrite the tenant's manifest from current state. Backfill/repair entry
+   * point and the UI's "Retry sync".
+   */
+  republishUserClaimsManifest: ManifestSyncResult;
   requestRevision: InboxItem;
   resendMemberInvite: ResendMemberInviteResult;
   /**
@@ -4204,6 +4224,8 @@ export type Mutation = {
    * @mention always punches through MUTED/MENTIONS on the activity fan-out.
    */
   setThreadNotificationPreference: ThreadParticipant;
+  /** Create or update one user's Brain claims, then republish the manifest. */
+  setUserBrainClaims: UserBrainClaimsPayload;
   setUserModelApproval: Array<UserModelCatalogEntry>;
   snapshotArtifact: Artifact;
   /**
@@ -4506,6 +4528,12 @@ export type MutationCheckoutThreadArgs = {
 
 export type MutationClaimNextOpenEngineWorkItemArgs = {
   input: ClaimNextOpenEngineWorkItemInput;
+};
+
+
+export type MutationClearUserBrainClaimsArgs = {
+  tenantId: Scalars['ID']['input'];
+  userId: Scalars['ID']['input'];
 };
 
 
@@ -5293,6 +5321,11 @@ export type MutationReorderQuickActionsArgs = {
 };
 
 
+export type MutationRepublishUserClaimsManifestArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type MutationRequestRevisionArgs = {
   id: Scalars['ID']['input'];
   input: RequestRevisionInput;
@@ -5576,6 +5609,13 @@ export type MutationSetThreadNotificationPreferenceArgs = {
   preference: ThreadParticipantNotificationPreference;
   tenantId: Scalars['ID']['input'];
   threadId: Scalars['ID']['input'];
+};
+
+
+export type MutationSetUserBrainClaimsArgs = {
+  input: UserBrainClaimsInput;
+  tenantId: Scalars['ID']['input'];
+  userId: Scalars['ID']['input'];
 };
 
 
@@ -6724,6 +6764,8 @@ export type Query = {
    */
   tenantSkillCatalog: Array<SkillCatalogEntry>;
   tenantToolInventory: TenantToolInventory;
+  /** Every configured claims row in the tenant. */
+  tenantUserBrainClaims: Array<UserBrainClaims>;
   thread?: Maybe<Thread>;
   threadByNumber?: Maybe<Thread>;
   threadCanvasContext: ThreadCanvasContext;
@@ -6746,6 +6788,8 @@ export type Query = {
   turnInvocationLogs: Array<ModelInvocation>;
   unreadThreadCount: Scalars['Int']['output'];
   user?: Maybe<User>;
+  /** Claims for one user in one tenant. Null when none are configured. */
+  userBrainClaims?: Maybe<UserBrainClaims>;
   userBudgetStatus?: Maybe<BudgetStatus>;
   userModelCatalog: Array<UserModelCatalogEntry>;
   userQuickActions: Array<UserQuickAction>;
@@ -7682,6 +7726,11 @@ export type QueryTenantToolInventoryArgs = {
 };
 
 
+export type QueryTenantUserBrainClaimsArgs = {
+  tenantId: Scalars['ID']['input'];
+};
+
+
 export type QueryThreadArgs = {
   id: Scalars['ID']['input'];
 };
@@ -7828,6 +7877,12 @@ export type QueryUnreadThreadCountArgs = {
 
 export type QueryUserArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type QueryUserBrainClaimsArgs = {
+  tenantId: Scalars['ID']['input'];
+  userId: Scalars['ID']['input'];
 };
 
 
@@ -9685,6 +9740,13 @@ export type TenantServicePrincipal = {
 export type TenantSettings = {
   __typename?: 'TenantSettings';
   autoCloseThreadMinutes?: Maybe<Scalars['Int']['output']>;
+  /**
+   * Safety interlock for the Company Brain per-user claims manifest
+   * (THINK-625). While false, UserBrainClaims rows are editable but nothing
+   * is published and any existing manifest object is deleted — the Brain
+   * keeps its legacy group-mapping behavior. Default false.
+   */
+  brainUserClaimsEnabled: Scalars['Boolean']['output'];
   budgetMonthlyCents?: Maybe<Scalars['Int']['output']>;
   createdAt: Scalars['AWSDateTime']['output'];
   defaultModel?: Maybe<Scalars['String']['output']>;
@@ -10568,6 +10630,11 @@ export type UpdateTenantPolicyInput = {
 
 export type UpdateTenantSettingsInput = {
   autoCloseThreadMinutes?: InputMaybe<Scalars['Int']['input']>;
+  /**
+   * Flipping this on publishes the tenant's full user-claims manifest;
+   * flipping it off deletes the object. See TenantSettings.
+   */
+  brainUserClaimsEnabled?: InputMaybe<Scalars['Boolean']['input']>;
   budgetMonthlyCents?: InputMaybe<Scalars['Int']['input']>;
   defaultModel?: InputMaybe<Scalars['String']['input']>;
   features?: InputMaybe<Scalars['AWSJSON']['input']>;
@@ -10733,6 +10800,73 @@ export type User = {
   profile?: Maybe<UserProfile>;
   tenantId: Scalars['ID']['output'];
   updatedAt: Scalars['AWSDateTime']['output'];
+};
+
+export type UserBrainClaims = {
+  __typename?: 'UserBrainClaims';
+  createdAt: Scalars['AWSDateTime']['output'];
+  defaultKbBundle?: Maybe<Scalars['String']['output']>;
+  /**
+   * False still publishes the user as `disabled: true` so the Brain fails
+   * closed rather than falling back to legacy group grants.
+   */
+  enabled: Scalars['Boolean']['output'];
+  id: Scalars['ID']['output'];
+  /**
+   * Enables operator-only Brain tools, always subject to the account's own
+   * env gates — never widens past them.
+   */
+  isOperator: Scalars['Boolean']['output'];
+  /** Named collection bundles as `{ "<bundle>": ["<collection>", ...] }`. */
+  kbBundles: Scalars['AWSJSON']['output'];
+  /**
+   * KB collection slugs. KB is grant-only: empty = no KB access at all;
+   * ["*"] = every collection.
+   */
+  kbCollections: Array<Scalars['String']['output']>;
+  /** Diagnostic, not a grant: echo KB retrieval traces back to the user. */
+  kbTrace: Scalars['Boolean']['output'];
+  notes?: Maybe<Scalars['String']['output']>;
+  /**
+   * Graph security groups on top of the always-visible PUBLIC group. Empty =
+   * PUBLIC only; ["*"] = every group.
+   */
+  securityGroups: Array<Scalars['String']['output']>;
+  tenantId: Scalars['ID']['output'];
+  /**
+   * Allowed Brain tool names. Null = the Brain's surface default applies (no
+   * narrowing); an empty list = no tools at all. The distinction is
+   * load-bearing — do not coalesce null into [].
+   */
+  toolAllowlist?: Maybe<Array<Scalars['String']['output']>>;
+  updatedAt: Scalars['AWSDateTime']['output'];
+  updatedByUserId?: Maybe<Scalars['ID']['output']>;
+  userId: Scalars['ID']['output'];
+};
+
+/**
+ * Partial update: omitted fields are left untouched. Explicit null clears the
+ * nullable fields (`defaultKbBundle`, `toolAllowlist`, `notes`) — clearing
+ * `toolAllowlist` returns the user to the Brain's surface default, which is
+ * NOT the same as passing an empty list.
+ */
+export type UserBrainClaimsInput = {
+  defaultKbBundle?: InputMaybe<Scalars['String']['input']>;
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  isOperator?: InputMaybe<Scalars['Boolean']['input']>;
+  kbBundles?: InputMaybe<Scalars['AWSJSON']['input']>;
+  kbCollections?: InputMaybe<Array<Scalars['String']['input']>>;
+  kbTrace?: InputMaybe<Scalars['Boolean']['input']>;
+  notes?: InputMaybe<Scalars['String']['input']>;
+  securityGroups?: InputMaybe<Array<Scalars['String']['input']>>;
+  toolAllowlist?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+export type UserBrainClaimsPayload = {
+  __typename?: 'UserBrainClaimsPayload';
+  /** Null after clearUserBrainClaims. */
+  claims?: Maybe<UserBrainClaims>;
+  manifest: ManifestSyncResult;
 };
 
 export type UserCostSummary = {

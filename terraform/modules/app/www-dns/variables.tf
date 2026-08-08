@@ -18,20 +18,8 @@ variable "cloudfront_domain_name" {
   type        = string
 }
 
-variable "include_docs" {
-  description = "When true, add docs.<domain> to the ACM cert SANs and create a Cloudflare CNAME for it. Separated from docs_cloudfront_domain_name to avoid a Terraform dependency cycle (distribution depends on cert, so the cert can't depend on the distribution output)."
-  type        = bool
-  default     = false
-}
-
-variable "docs_cloudfront_domain_name" {
-  description = "CloudFront distribution domain name for the docs site. Used as the target for the docs.<domain> Cloudflare CNAME when include_docs is true."
-  type        = string
-  default     = ""
-}
-
 variable "include_admin" {
-  description = "When true, add admin.<domain> to the ACM cert SANs and create a Cloudflare CNAME for it. Same cycle-avoidance rationale as include_docs."
+  description = "When true, add admin.<domain> to the ACM cert SANs and create a Cloudflare CNAME for it. Gated on a plain bool (not a CloudFront output) to keep the dependency graph acyclic."
   type        = bool
   default     = false
 }
@@ -67,7 +55,7 @@ variable "computer_cloudfront_domain_name" {
 }
 
 variable "include_computer_sandbox" {
-  description = "When true, add sandbox.<domain> to the ACM cert SANs and create a Cloudflare CNAME for it. Same cycle-avoidance rationale as include_docs."
+  description = "When true, add sandbox.<domain> to the ACM cert SANs and create a Cloudflare CNAME for it. Gated on a plain bool (not a CloudFront output) to keep the dependency graph acyclic."
   type        = bool
   default     = false
 }

@@ -1,6 +1,6 @@
 # Documentation Audit — 2026-04-21
 
-This audit classifies every page under `docs/src/content/docs/` against the rubric in [`STYLE.md`](./STYLE.md). It is the scope document for the full-site rewrite tracked in [`docs/plans/2026-04-21-008-docs-full-rewrite-thinkwork-docs-site-plan.md`](plans/2026-04-21-008-docs-full-rewrite-thinkwork-docs-site-plan.md).
+This audit classifies every page under `docs/reference/` (formerly `docs/src/content/docs/`) against the rubric in [`STYLE.md`](./STYLE.md). It is the scope document for the full-site rewrite tracked in [`docs/plans/2026-04-21-008-docs-full-rewrite-thinkwork-docs-site-plan.md`](plans/2026-04-21-008-docs-full-rewrite-thinkwork-docs-site-plan.md).
 
 ## 2026-04-21 post-rewrite update
 

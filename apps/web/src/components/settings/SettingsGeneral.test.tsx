@@ -442,7 +442,6 @@ const deployment = {
   databaseEndpoint: "db.example.com",
   ecrUrl: "123456789012.dkr.ecr.us-east-1.amazonaws.com/thinkwork",
   adminUrl: null,
-  docsUrl: null,
   apiEndpoint: "https://api.example.com",
   appsyncUrl: "https://appsync.example.com/graphql",
   appsyncRealtimeUrl: "wss://appsync.example.com/graphql",

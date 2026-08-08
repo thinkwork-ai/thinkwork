@@ -2,7 +2,7 @@
  * Capability assignment matrix vocabulary (capability-mapping plan U7, R2).
  *
  * Runtime mirror of the ASSIGNMENT cells in the reviewed matrix contract at
- * docs/src/content/docs/concepts/capability-matrix.mdx — the class × layer
+ * docs/reference/concepts/capability-matrix.mdx — the class × layer
  * combinations a grant/detach mutation may touch. The mutation layer is the
  * R2 enforcement point (KTD-5): every write surface (web, CLI, agent
  * proposals) goes through `grantCapability`/`detachCapability`, so rejecting
@@ -66,7 +66,7 @@ export class CapabilityMatrixViolationError extends Error {
     super(
       `the capability matrix marks ${capabilityClass} unassignable at ${scope} scope ` +
         `(grants exist only at agent and agent-profile scope — ` +
-        `see docs/src/content/docs/concepts/capability-matrix.mdx)`,
+        `see docs/reference/concepts/capability-matrix.mdx)`,
     );
     this.name = "CapabilityMatrixViolationError";
   }

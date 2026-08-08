@@ -658,7 +658,6 @@ function terraformOutputs(terraformDir) {
     "app_url",
     "admin_url",
     "computer_url",
-    "docs_url",
     "ecr_repository_url",
   ];
   return Object.fromEntries(

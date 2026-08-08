@@ -52,7 +52,6 @@ export const SettingsDeploymentStatusQuery = graphql(`
       databaseEndpoint
       ecrUrl
       adminUrl
-      docsUrl
       apiEndpoint
       appsyncUrl
       appsyncRealtimeUrl

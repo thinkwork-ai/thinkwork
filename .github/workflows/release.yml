@@ -82,7 +82,6 @@ jobs:
       - name: Build static sites
         run: |
           pnpm --filter @thinkwork/web build
-          pnpm --filter @thinkwork/docs build
           bash scripts/release/package-static-assets.sh dist/release/static
 
       - name: Stage deployment runner script
@@ -242,7 +241,6 @@ jobs:
             --lambda-dir dist/release/lambdas \
             --deployment-runner-script dist/release/runner/thinkwork-runner.py \
             --artifact "name=web,type=static-site,path=dist/release/static/web.tar.gz" \
-            --artifact "name=docs,type=static-site,path=dist/release/static/docs.tar.gz" \
             --artifact "name=twenty-thinkwork-app,type=seed,path=dist/release/managed-apps/twenty-thinkwork-app.tar.gz" \
             --artifact-bundle "name=platform,path=dist/release/platform-artifacts.tar.gz" \
             --image "name=agentcore-pi-amd64,repository=${AGENTCORE_REPOSITORY},tag=${RELEASE_REF_NAME}-pi-amd64,digest=${{ steps.pi-amd64.outputs.digest }},architecture=amd64" \

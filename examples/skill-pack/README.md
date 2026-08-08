@@ -69,5 +69,5 @@ Skills are deployed by uploading the skill directory to S3 under
 and injects matching SKILL.md files into the agent context based on the
 workspace configuration.
 
-See the [Thinkwork documentation](https://docs.thinkwork.ai/skills) for full
+See the Skills page in the ThinkWork in-app docs (`/docs` in the deployed web app) for full
 deployment instructions.

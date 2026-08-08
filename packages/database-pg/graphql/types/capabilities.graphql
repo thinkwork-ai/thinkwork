@@ -194,7 +194,7 @@ extend type Query {
 # Every Phase B assignment action is a documented, matrix-conformant GraphQL
 # mutation — the Capabilities UI and the CLI are clients, never a second
 # write path. Matrix conformance (R2) is enforced HERE: class × scope cells
-# the matrix (docs/src/content/docs/concepts/capability-matrix.mdx) marks
+# the matrix (docs/reference/concepts/capability-matrix.mdx) marks
 # unassignable are rejected with a MATRIX_VIOLATION error. Grant scopes are
 # agent and agent-profile only (R11); SPACE and USER exist in the enum so
 # the rejection is expressible, not because they are grantable.

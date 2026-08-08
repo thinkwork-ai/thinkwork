@@ -1,6 +1,6 @@
 # ThinkWork Documentation Style Guide
 
-This is the editorial standard for the ThinkWork documentation site (`docs/` — the Starlight + Astro build that serves `docs.thinkwork.ai`). It is not published to the site. It exists so every page we write — and every page a future contributor writes — measures against the same rubric.
+This is the editorial standard for ThinkWork documentation — the in-app docs under `apps/web/src/docs` (served at the `/docs` routes) and the retired Starlight content kept as unpublished reference under `docs/reference/`. It is not published itself. It exists so every page we write — and every page a future contributor writes — measures against the same rubric.
 
 If you're about to write or edit a page, read this first. It will save you a round of review.
 

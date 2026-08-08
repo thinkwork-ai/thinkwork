@@ -79,7 +79,6 @@ export const deploymentStatus = async (
     databaseEndpoint: getConfig("DATABASE_HOST") || null,
     ecrUrl: getConfig("ECR_REPOSITORY_URL") || null,
     adminUrl: getConfig("ADMIN_URL") || null,
-    docsUrl: getConfig("DOCS_URL") || null,
     apiEndpoint: process.env.API_ENDPOINT || null,
     appsyncUrl: getConfig("APPSYNC_ENDPOINT") || null,
     appsyncRealtimeUrl: getConfig("APPSYNC_REALTIME_URL") || null,

@@ -58,7 +58,6 @@ export interface DiscoveredThinkworkStageUrls {
   apiEndpoint?: string;
   adminUrl?: string;
   appSyncUrl?: string;
-  docsUrl?: string;
 }
 
 export function discoverThinkworkStageUrls(
@@ -85,9 +84,6 @@ export function discoverThinkworkStageUrls(
     for (const distribution of parsed) {
       if (distribution.Origin.includes(`thinkwork-${stage}-admin`)) {
         urls.adminUrl = `https://${distribution.Domain}`;
-      }
-      if (distribution.Origin.includes(`thinkwork-${stage}-docs`)) {
-        urls.docsUrl = `https://${distribution.Domain}`;
       }
     }
   }

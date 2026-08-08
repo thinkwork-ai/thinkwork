@@ -138,7 +138,6 @@ type DeploymentStatus {
   databaseEndpoint: String
   ecrUrl: String
   adminUrl: String
-  docsUrl: String
   apiEndpoint: String
   appsyncUrl: String
   appsyncRealtimeUrl: String

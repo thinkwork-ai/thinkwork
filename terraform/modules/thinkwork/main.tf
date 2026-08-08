@@ -1189,7 +1189,6 @@ module "api" {
   twenty_server_log_group_name     = local.twenty_provisioned ? module.twenty[0].twenty_server_log_group_name : ""
   twenty_worker_log_group_name     = local.twenty_provisioned ? module.twenty[0].twenty_worker_log_group_name : ""
   admin_url                        = local.end_user_app_url
-  docs_url                         = "https://${module.docs_site.distribution_domain}"
   www_url                          = var.www_domain != "" ? "https://${var.www_domain}" : "https://${module.www_site.distribution_domain}"
   stripe_price_ids_json            = var.stripe_price_ids_json
   appsync_realtime_url             = module.appsync.graphql_realtime_url
@@ -1865,20 +1864,6 @@ module "computer_sandbox_site" {
       override           = true
     }
   }
-}
-
-################################################################################
-# Docs Static Site
-################################################################################
-
-module "docs_site" {
-  source = "../app/static-site"
-
-  stage           = var.stage
-  site_name       = "docs"
-  bucket_name     = "thinkwork-${var.stage}-${var.account_id}-docs"
-  custom_domain   = var.docs_domain
-  certificate_arn = var.docs_certificate_arn
 }
 
 ################################################################################

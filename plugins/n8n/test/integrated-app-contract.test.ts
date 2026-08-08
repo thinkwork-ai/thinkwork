@@ -211,7 +211,7 @@ describe("n8n integrated app contract", () => {
     const docsPage = await readFile(
       fileURLToPath(
         new URL(
-          "../../../docs/src/content/docs/applications/n8n.mdx",
+          "../../../docs/reference/applications/n8n.mdx",
           import.meta.url,
         ),
       ),
