@@ -144,13 +144,17 @@ export function ChartsAndArtifacts() {
         </p>
         <Callout tone="tip" title="A chart cannot be invented">
           <p>
-            Charted numbers are checked against what the turn actually fetched.
-            If a value does not trace back to a tool result from this turn, the
-            chart is rejected and the agent is told to redraw it from the data
-            it really has — so a chart is evidence that a lookup happened, not
-            just a confident-looking picture. When you want a chart, ask a
-            question that requires the data; asking the agent to &quot;chart
-            what you remember&quot; correctly gets you prose instead.
+            Charted numbers are checked against what the turn actually saw. If a
+            value does not trace back to a tool result from this turn — or to
+            numbers you gave the agent in your own message — the chart is
+            rejected and the agent is told to redraw it from the data it really
+            has. So a chart is evidence its numbers came from somewhere real: a
+            lookup that happened, or figures you supplied. Derived values pass
+            too — a percentage, delta, or the same figure re-expressed in
+            millions still counts as traced. What gets refused is memory: asking
+            the agent to &quot;chart what you remember&quot; correctly gets you
+            prose instead, while pasting six months of revenue into the thread
+            gets you a chart of exactly those numbers.
           </p>
         </Callout>
         <p>
