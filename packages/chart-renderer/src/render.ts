@@ -59,6 +59,20 @@ function fmt(n: number): string {
   return frac ? `${grouped}.${frac}` : grouped;
 }
 
+/**
+ * Compact tick labels for the y axis only. Full-precision `fmt` overflows the
+ * fixed left margin once ticks reach 7+ digits ("28,000,000" clips to
+ * "00,000" against the viewBox edge — found on live JDE dollar data), so
+ * dollar-scale ticks compress to "28M" / "750K". Extreme/value labels keep
+ * full precision — they sit inside the plot, not the margin.
+ */
+function fmtTick(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${r2(n / 1_000_000)}M`;
+  if (abs >= 100_000) return `${r2(n / 1_000)}K`;
+  return fmt(n);
+}
+
 /** Clean-number axis ticks (0/10/20/30, never 0/13/26). */
 function niceTicks(maxValue: number): number[] {
   const max = maxValue <= 0 ? 1 : maxValue;
@@ -186,7 +200,7 @@ function yAxis(
   const labels = ticks
     .map(
       (t) =>
-        `<text x="${r2(frame.plotLeft - 6)}" y="${r2(yOf(t) + 3)}">${fmt(t)}</text>`,
+        `<text x="${r2(frame.plotLeft - 6)}" y="${r2(yOf(t) + 3)}">${fmtTick(t)}</text>`,
     )
     .join("");
   const baseline = `<line x1="${frame.plotLeft}" y1="${r2(yOf(0))}" x2="${frame.plotRight}" y2="${r2(yOf(0))}" stroke="${ctx.c.muted}" stroke-width="1"/>`;
