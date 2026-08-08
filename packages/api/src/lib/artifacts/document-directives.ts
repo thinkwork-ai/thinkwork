@@ -21,7 +21,12 @@ import {
   computeAnalysis,
   getAnalysisOp,
 } from "./document-analyses.js";
-import { renderChart } from "./document-charts.js";
+import { CHART_TYPES, renderChart } from "@thinkwork/chart-renderer";
+import type {
+  ChartDirectiveData,
+  ChartSeriesPoint,
+  ChartType,
+} from "@thinkwork/chart-renderer";
 import type {
   CompositorDiagnostic,
   DirectiveEngine,
@@ -273,33 +278,14 @@ const timelineSpec: DirectiveSpec = {
 // testable and let U3 land as its own unit.
 // ---------------------------------------------------------------------------
 
-export const CHART_TYPES = [
-  "bar",
-  "line",
-  "donut",
-  "stat-strip",
-  "sparkline",
-  "meter",
-  "funnel",
-] as const;
-export type ChartType = (typeof CHART_TYPES)[number];
-
-export interface ChartSeriesPoint {
-  label: string;
-  value: number;
-}
-
-export interface ChartDirectiveData {
-  type: ChartType;
-  title: string;
-  /** One-line qualifier under the title (unit / what one mark measures). */
-  qualifier?: string;
-  series: ChartSeriesPoint[];
-  /** Figure caption: the takeaway, not a chart description. */
-  caption?: string;
-  /** meter only: the maximum the value is measured against. */
-  max?: number;
-}
+// The chart data contract now lives in @thinkwork/chart-renderer (shared with
+// native clients); re-exported here so api-internal importers are unchanged.
+export { CHART_TYPES };
+export type {
+  ChartDirectiveData,
+  ChartSeriesPoint,
+  ChartType,
+} from "@thinkwork/chart-renderer";
 
 /** Seam kept injectable for tests; production wires the house renderer. */
 export type ChartRenderer = (data: ChartDirectiveData) => string;

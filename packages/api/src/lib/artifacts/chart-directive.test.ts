@@ -5,7 +5,7 @@
  * boundary (AE2, R5, R6).
  */
 import { describe, expect, it } from "vitest";
-import { renderChart } from "./document-charts.js";
+import { renderChart } from "@thinkwork/chart-renderer";
 import { compileDocument } from "./document-compositor.js";
 import { resolvePlatformPlate } from "./plate-registry.js";
 import { CHART_TYPES, type ChartDirectiveData } from "./document-directives.js";

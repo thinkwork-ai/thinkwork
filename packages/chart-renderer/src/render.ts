@@ -3,27 +3,34 @@
  * deterministic functions from directive data to static SVG, codifying the
  * hand-authored plate chart anatomy (plate-report.html + authoring-rules.md):
  *
- * - recessive hairline gridlines in var(--line) at clean-number ticks;
- * - a solid zero baseline in var(--muted); marks grow FROM the baseline;
- * - one series = one hue (var(--accent)); text wears text tokens
- *   (var(--ink)/var(--muted)), never the series color;
+ * - recessive hairline gridlines in the `line` token at clean-number ticks;
+ * - a solid zero baseline in the `muted` token; marks grow FROM the baseline;
+ * - one series = one hue (the `accent` token); text wears text tokens
+ *   (`ink`/`muted`), never the series color;
  * - direct labels at extremes only — the axis and the paired data table
  *   carry the rest;
- * - house palette custom properties throughout, so charts follow the plate's
+ * - house palette throughout, so charts follow the surrounding surface's
  *   dark/light tokens; no script, no external references, fixed viewBox
  *   layout arithmetic, no randomness, no dates.
+ *
+ * THINK-673/674: extracted from `packages/api` into this shared package and
+ * parameterized by frame width, font scale, and a resolved palette so native
+ * clients can render the same charts. With options omitted the output is
+ * byte-identical to the pre-extraction server renderer (golden-asserted).
  *
  * SECURITY: chart data is the one channel where model-controlled text enters
  * markup the markdown sanitizer never sees (KTD4 inject-after-sanitize), so
  * EVERY model-authored string is XML-escaped through `esc` at this boundary —
- * never left to callers.
+ * never left to callers. Palette values are developer-supplied constants, but
+ * they are escaped at interpolation too (defense in depth).
  */
 
+import { CSS_VAR_PALETTE, type ChartPalette } from "./palette.js";
 import type {
   ChartDirectiveData,
   ChartSeriesPoint,
   ChartType,
-} from "./document-directives.js";
+} from "./types.js";
 
 /** XML-escape for text nodes AND attribute values (single shared helper). */
 function esc(s: string): string {
@@ -38,6 +45,10 @@ function esc(s: string): string {
 /** Fixed-precision coordinate — kills float noise, keeps output stable. */
 function r2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, n));
 }
 
 /** Human number for direct labels: grouped integers, ≤2 decimals. */
@@ -62,6 +73,60 @@ function niceTicks(maxValue: number): number[] {
   return ticks;
 }
 
+// ---------------------------------------------------------------------------
+// Options → resolved layout context
+// ---------------------------------------------------------------------------
+
+export interface ChartRenderOptions {
+  /** Frame width in SVG units. Default 720 (the document/plate frame). */
+  width?: number;
+  /** Multiplies every font-size (Dynamic Type). Default 1. */
+  fontScale?: number;
+  /** Resolved colors. Default CSS_VAR_PALETTE. */
+  palette?: ChartPalette;
+}
+
+/** Default frame width — the document/plate content column. */
+const DEFAULT_WIDTH = 720;
+
+interface Ctx {
+  width: number;
+  /** Font size after Dynamic Type scaling. */
+  fs: (base: number) => number;
+  /** Vertical offset that must track the font (x-label baselines, headers). */
+  off: (base: number) => number;
+  p: ChartPalette;
+  /** Escaped palette accessor — palette values are attribute-interpolated. */
+  c: ChartPalette;
+}
+
+function resolveCtx(options?: ChartRenderOptions): Ctx {
+  const width = Math.max(160, options?.width ?? DEFAULT_WIDTH);
+  const fontScale = options?.fontScale ?? 1;
+  const p = options?.palette ?? CSS_VAR_PALETTE;
+  const c: ChartPalette = {
+    ink: esc(p.ink),
+    muted: esc(p.muted),
+    accent: esc(p.accent),
+    line: esc(p.line),
+    card: esc(p.card),
+    info: esc(p.info),
+    warn: esc(p.warn),
+    bad: esc(p.bad),
+  };
+  return {
+    width,
+    fs: (base) => r2(base * fontScale),
+    off: (base) => r2(base * fontScale),
+    p,
+    c,
+  };
+}
+
+function hues(ctx: Ctx): readonly string[] {
+  return [ctx.c.accent, ctx.c.info, ctx.c.warn, ctx.c.bad];
+}
+
 interface Frame {
   width: number;
   height: number;
@@ -71,16 +136,31 @@ interface Frame {
   plotBottom: number;
 }
 
+/** bar/line share one frame: gutter scales with width, plot height is fixed. */
+function axisFrame(ctx: Ctx): Frame {
+  return {
+    width: ctx.width,
+    height: 250,
+    plotLeft: Math.max(40, r2((48 * ctx.width) / DEFAULT_WIDTH)),
+    plotRight: r2(ctx.width - 12),
+    plotTop: 56,
+    plotBottom: 220,
+  };
+}
+
 /** Chart title + one-line qualifier, inside the SVG (authoring rules). */
-function header(title: string, qualifier?: string): string {
+function header(ctx: Ctx, title: string, qualifier?: string): string {
+  const y1 = r2(Math.min(ctx.off(18), 26));
+  const y2 = r2(Math.min(ctx.off(33), 44));
   const q = qualifier
-    ? `<text x="12" y="33" font-size="10.5" fill="var(--muted)">${esc(qualifier)}</text>`
+    ? `<text x="12" y="${y2}" font-size="${ctx.fs(10.5)}" fill="${ctx.c.muted}">${esc(qualifier)}</text>`
     : "";
-  return `<text x="12" y="18" font-size="12" font-weight="600" fill="var(--ink)">${esc(title)}</text>${q}`;
+  return `<text x="12" y="${y1}" font-size="${ctx.fs(12)}" font-weight="600" fill="${ctx.c.ink}">${esc(title)}</text>${q}`;
 }
 
 /** Hairline gridlines + right-aligned y tick labels + zero baseline. */
 function yAxis(
+  ctx: Ctx,
   frame: Frame,
   ticks: number[],
   yOf: (v: number) => number,
@@ -95,11 +175,11 @@ function yAxis(
   const labels = ticks
     .map(
       (t) =>
-        `<text x="${frame.plotLeft - 6}" y="${r2(yOf(t) + 3)}">${fmt(t)}</text>`,
+        `<text x="${r2(frame.plotLeft - 6)}" y="${r2(yOf(t) + 3)}">${fmt(t)}</text>`,
     )
     .join("");
-  const baseline = `<line x1="${frame.plotLeft}" y1="${r2(yOf(0))}" x2="${frame.plotRight}" y2="${r2(yOf(0))}" stroke="var(--muted)" stroke-width="1"/>`;
-  return `<g stroke="var(--line)" stroke-width="1">${grid}</g><g font-size="10" fill="var(--muted)" text-anchor="end">${labels}</g>${baseline}`;
+  const baseline = `<line x1="${frame.plotLeft}" y1="${r2(yOf(0))}" x2="${frame.plotRight}" y2="${r2(yOf(0))}" stroke="${ctx.c.muted}" stroke-width="1"/>`;
+  return `<g stroke="${ctx.c.line}" stroke-width="1">${grid}</g><g font-size="${ctx.fs(10)}" fill="${ctx.c.muted}" text-anchor="end">${labels}</g>${baseline}`;
 }
 
 function svgOpen(width: number, height: number, label: string): string {
@@ -114,15 +194,8 @@ function maxOf(series: ChartSeriesPoint[]): number {
 // bar — vertical columns (the plate exemplar)
 // ---------------------------------------------------------------------------
 
-function renderBar(data: ChartDirectiveData): string {
-  const frame: Frame = {
-    width: 720,
-    height: 250,
-    plotLeft: 48,
-    plotRight: 708,
-    plotTop: 56,
-    plotBottom: 220,
-  };
+function renderBar(data: ChartDirectiveData, ctx: Ctx): string {
+  const frame = axisFrame(ctx);
   const series = data.series;
   const ticks = niceTicks(maxOf(series));
   const top = ticks[ticks.length - 1];
@@ -131,6 +204,7 @@ function renderBar(data: ChartDirectiveData): string {
     (Math.max(0, v) / top) * (frame.plotBottom - frame.plotTop);
   const band = (frame.plotRight - frame.plotLeft) / series.length;
   const colWidth = Math.min(24, r2(band * 0.6));
+  const labelBaseline = r2(frame.plotBottom + ctx.off(18));
 
   const maxValue = maxOf(series);
   let columns = "";
@@ -146,19 +220,19 @@ function renderBar(data: ChartDirectiveData): string {
       // Square baseline, 4px rounded data-end (plate anatomy).
       columns += `<path d="M${x0},${frame.plotBottom} v-${r2(h - 4)} q0,-4 4,-4 h${r2(colWidth - 8)} q4,0 4,4 v${r2(h - 4)} z"/>`;
     }
-    xLabels += `<text x="${cx}" y="${frame.plotBottom + 18}">${esc(p.label)}</text>`;
+    xLabels += `<text x="${cx}" y="${labelBaseline}">${esc(p.label)}</text>`;
     if (p.value === maxValue && extremeLabel === "") {
-      extremeLabel = `<text x="${cx}" y="${r2(yOf(p.value) - 8)}" font-size="11" font-weight="600" fill="var(--ink)" text-anchor="middle">${fmt(p.value)}</text>`;
+      extremeLabel = `<text x="${cx}" y="${r2(yOf(p.value) - 8)}" font-size="${ctx.fs(11)}" font-weight="600" fill="${ctx.c.ink}" text-anchor="middle">${fmt(p.value)}</text>`;
     }
   }
 
   return [
     svgOpen(frame.width, frame.height, `Column chart: ${data.title}`),
-    header(data.title, data.qualifier),
-    yAxis(frame, ticks, yOf),
-    `<g fill="var(--accent)">${columns}</g>`,
+    header(ctx, data.title, data.qualifier),
+    yAxis(ctx, frame, ticks, yOf),
+    `<g fill="${ctx.c.accent}">${columns}</g>`,
     extremeLabel,
-    `<g font-size="10.5" fill="var(--muted)" text-anchor="middle">${xLabels}</g>`,
+    `<g font-size="${ctx.fs(10.5)}" fill="${ctx.c.muted}" text-anchor="middle">${xLabels}</g>`,
     "</svg>",
   ].join("");
 }
@@ -167,15 +241,8 @@ function renderBar(data: ChartDirectiveData): string {
 // line — 2px single-hue line with endpoint emphasis
 // ---------------------------------------------------------------------------
 
-function renderLine(data: ChartDirectiveData): string {
-  const frame: Frame = {
-    width: 720,
-    height: 250,
-    plotLeft: 48,
-    plotRight: 708,
-    plotTop: 56,
-    plotBottom: 220,
-  };
+function renderLine(data: ChartDirectiveData, ctx: Ctx): string {
+  const frame = axisFrame(ctx);
   const series = data.series;
   const ticks = niceTicks(maxOf(series));
   const top = ticks[ticks.length - 1];
@@ -187,6 +254,7 @@ function renderLine(data: ChartDirectiveData): string {
     n === 1
       ? (frame.plotLeft + frame.plotRight) / 2
       : frame.plotLeft + ((frame.plotRight - frame.plotLeft) * i) / (n - 1);
+  const labelBaseline = r2(frame.plotBottom + ctx.off(18));
 
   const points = series
     .map((p, i) => `${r2(xOf(i))},${r2(yOf(p.value))}`)
@@ -194,54 +262,57 @@ function renderLine(data: ChartDirectiveData): string {
   const line =
     n === 1
       ? ""
-      : `<polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="2"/>`;
+      : `<polyline points="${points}" fill="none" stroke="${ctx.c.accent}" stroke-width="2"/>`;
   const last = series[n - 1];
   const endX = r2(xOf(n - 1));
   const endY = r2(yOf(last.value));
-  const endpoint = `<circle cx="${endX}" cy="${endY}" r="3.5" fill="var(--accent)"/><text x="${r2(Math.min(endX, frame.plotRight - 4))}" y="${r2(endY - 10)}" font-size="11" font-weight="600" fill="var(--ink)" text-anchor="end">${fmt(last.value)}</text>`;
+  const endpoint = `<circle cx="${endX}" cy="${endY}" r="3.5" fill="${ctx.c.accent}"/><text x="${r2(Math.min(endX, frame.plotRight - 4))}" y="${r2(endY - 10)}" font-size="${ctx.fs(11)}" font-weight="600" fill="${ctx.c.ink}" text-anchor="end">${fmt(last.value)}</text>`;
 
   // Label the ends (and thin the middle when crowded) — axis carries the rest.
   const labelEvery = n <= 8 ? 1 : Math.ceil(n / 8);
   const xLabels = series
     .map((p, i) =>
       i % labelEvery === 0 || i === n - 1
-        ? `<text x="${r2(xOf(i))}" y="${frame.plotBottom + 18}">${esc(p.label)}</text>`
+        ? `<text x="${r2(xOf(i))}" y="${labelBaseline}">${esc(p.label)}</text>`
         : "",
     )
     .join("");
 
   return [
     svgOpen(frame.width, frame.height, `Line chart: ${data.title}`),
-    header(data.title, data.qualifier),
-    yAxis(frame, ticks, yOf),
+    header(ctx, data.title, data.qualifier),
+    yAxis(ctx, frame, ticks, yOf),
     line,
     endpoint,
-    `<g font-size="10.5" fill="var(--muted)" text-anchor="middle">${xLabels}</g>`,
+    `<g font-size="${ctx.fs(10.5)}" fill="${ctx.c.muted}" text-anchor="middle">${xLabels}</g>`,
     "</svg>",
   ].join("");
 }
 
 // ---------------------------------------------------------------------------
-// donut — parts of a whole, fixed hue order, legend beside
+// donut — parts of a whole, fixed hue order, legend beside (or below when the
+// frame is too narrow for a side legend)
 // ---------------------------------------------------------------------------
 
-const SERIES_HUES = [
-  "var(--accent)",
-  "var(--info)",
-  "var(--warn)",
-  "var(--bad)",
-] as const;
+/** Below this frame width the donut legend stacks under the ring. */
+const DONUT_SIDE_LEGEND_MIN_WIDTH = 520;
 
-function renderDonut(data: ChartDirectiveData): string {
-  const width = 720;
-  const height = 230;
-  const cx = 130;
+function renderDonut(data: ChartDirectiveData, ctx: Ctx): string {
+  const width = ctx.width;
+  const wide = width >= DONUT_SIDE_LEGEND_MIN_WIDTH;
+  const cx = wide ? 130 : r2(width / 2);
   const cy = 132;
   const radius = 64;
   const circumference = r2(2 * Math.PI * radius);
   const series = data.series;
+  const height = wide ? 230 : r2(210 + series.length * 26 + 12);
   const total = series.reduce((s, p) => s + Math.max(0, p.value), 0);
   const safeTotal = total > 0 ? total : 1;
+  const legendX = wide ? 290 : 16;
+  const legendTextX = r2(legendX + 20);
+  const legendValueX = r2(width - (wide ? 20 : 16));
+  const legendTop = wide ? 70 : 210;
+  const palette = hues(ctx);
 
   let offset = 0;
   let segments = "";
@@ -249,17 +320,17 @@ function renderDonut(data: ChartDirectiveData): string {
   for (const [i, p] of series.entries()) {
     const frac = Math.max(0, p.value) / safeTotal;
     const seg = r2(frac * circumference);
-    const hue = SERIES_HUES[i % SERIES_HUES.length];
+    const hue = palette[i % palette.length];
     segments += `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="${hue}" stroke-width="26" stroke-dasharray="${seg} ${r2(circumference - seg)}" stroke-dashoffset="${r2(-offset)}" transform="rotate(-90 ${cx} ${cy})"/>`;
     offset += seg;
-    const ly = 70 + i * 26;
-    legend += `<rect x="290" y="${ly - 10}" width="12" height="12" rx="3" fill="${hue}"/><text x="310" y="${ly}" font-size="11.5" fill="var(--ink)">${esc(p.label)}</text><text x="700" y="${ly}" font-size="11.5" font-weight="600" fill="var(--ink)" text-anchor="end">${fmt(p.value)}</text>`;
+    const ly = legendTop + i * 26;
+    legend += `<rect x="${legendX}" y="${ly - 10}" width="12" height="12" rx="3" fill="${hue}"/><text x="${legendTextX}" y="${ly}" font-size="${ctx.fs(11.5)}" fill="${ctx.c.ink}">${esc(p.label)}</text><text x="${legendValueX}" y="${ly}" font-size="${ctx.fs(11.5)}" font-weight="600" fill="${ctx.c.ink}" text-anchor="end">${fmt(p.value)}</text>`;
   }
-  const center = `<text x="${cx}" y="${cy - 2}" font-size="22" font-weight="700" fill="var(--ink)" text-anchor="middle">${fmt(total)}</text><text x="${cx}" y="${cy + 16}" font-size="10" fill="var(--muted)" text-anchor="middle">total</text>`;
+  const center = `<text x="${cx}" y="${cy - 2}" font-size="${ctx.fs(22)}" font-weight="700" fill="${ctx.c.ink}" text-anchor="middle">${fmt(total)}</text><text x="${cx}" y="${cy + 16}" font-size="${ctx.fs(10)}" fill="${ctx.c.muted}" text-anchor="middle">total</text>`;
 
   return [
     svgOpen(width, height, `Donut chart: ${data.title}`),
-    header(data.title, data.qualifier),
+    header(ctx, data.title, data.qualifier),
     segments,
     center,
     legend,
@@ -271,24 +342,31 @@ function renderDonut(data: ChartDirectiveData): string {
 // stat-strip — a row of stat tiles as SVG (value + label)
 // ---------------------------------------------------------------------------
 
-function renderStatStrip(data: ChartDirectiveData): string {
-  const width = 720;
-  const height = 96;
+/** Below this frame width more than four tiles wrap to a second row. */
+const STAT_WRAP_MAX_WIDTH = 520;
+const STAT_ROW_HEIGHT = 58;
+
+function renderStatStrip(data: ChartDirectiveData, ctx: Ctx): string {
+  const width = ctx.width;
   const series = data.series;
   const gap = 10;
-  const tileWidth = r2(
-    (width - 24 - gap * (series.length - 1)) / series.length,
-  );
+  const wrapped = series.length > 4 && width < STAT_WRAP_MAX_WIDTH;
+  const perRow = wrapped ? Math.ceil(series.length / 2) : series.length;
+  const height = wrapped ? 96 + STAT_ROW_HEIGHT : 96;
+  const tileWidth = r2((width - 24 - gap * (perRow - 1)) / perRow);
 
   let tiles = "";
   for (const [i, p] of series.entries()) {
-    const x = r2(12 + i * (tileWidth + gap));
-    tiles += `<rect x="${x}" y="40" width="${tileWidth}" height="48" rx="10" fill="var(--card)" stroke="var(--line)"/><text x="${r2(x + 14)}" y="${64}" font-size="17" font-weight="700" fill="var(--ink)">${fmt(p.value)}</text><text x="${r2(x + 14)}" y="${80}" font-size="10" fill="var(--muted)">${esc(p.label)}</text>`;
+    const col = i % perRow;
+    const row = Math.floor(i / perRow);
+    const x = r2(12 + col * (tileWidth + gap));
+    const y = 40 + row * STAT_ROW_HEIGHT;
+    tiles += `<rect x="${x}" y="${y}" width="${tileWidth}" height="48" rx="10" fill="${ctx.c.card}" stroke="${ctx.c.line}"/><text x="${r2(x + 14)}" y="${y + 24}" font-size="${ctx.fs(17)}" font-weight="700" fill="${ctx.c.ink}">${fmt(p.value)}</text><text x="${r2(x + 14)}" y="${y + 40}" font-size="${ctx.fs(10)}" fill="${ctx.c.muted}">${esc(p.label)}</text>`;
   }
 
   return [
     svgOpen(width, height, `Stat strip: ${data.title}`),
-    header(data.title, data.qualifier),
+    header(ctx, data.title, data.qualifier),
     tiles,
     "</svg>",
   ].join("");
@@ -298,11 +376,14 @@ function renderStatStrip(data: ChartDirectiveData): string {
 // sparkline — compact trend, no axes, endpoint emphasis
 // ---------------------------------------------------------------------------
 
-function renderSparkline(data: ChartDirectiveData): string {
-  const width = 300;
+/** The sparkline never grows past its compact frame. */
+const SPARKLINE_MAX_WIDTH = 300;
+
+function renderSparkline(data: ChartDirectiveData, ctx: Ctx): string {
+  const width = Math.min(ctx.width, SPARKLINE_MAX_WIDTH);
   const height = 88;
   const plotLeft = 12;
-  const plotRight = 236;
+  const plotRight = r2(width - 64);
   const plotTop = 44;
   const plotBottom = 76;
   const series = data.series;
@@ -322,13 +403,13 @@ function renderSparkline(data: ChartDirectiveData): string {
   const line =
     n === 1
       ? ""
-      : `<polyline points="${points}" fill="none" stroke="var(--accent)" stroke-width="2"/>`;
+      : `<polyline points="${points}" fill="none" stroke="${ctx.c.accent}" stroke-width="2"/>`;
   const last = series[n - 1];
-  const endpoint = `<circle cx="${r2(xOf(n - 1))}" cy="${r2(yOf(last.value))}" r="3" fill="var(--accent)"/><text x="${plotRight + 10}" y="${r2(yOf(last.value) + 4)}" font-size="12" font-weight="600" fill="var(--ink)">${fmt(last.value)}</text>`;
+  const endpoint = `<circle cx="${r2(xOf(n - 1))}" cy="${r2(yOf(last.value))}" r="3" fill="${ctx.c.accent}"/><text x="${r2(plotRight + 10)}" y="${r2(yOf(last.value) + 4)}" font-size="${ctx.fs(12)}" font-weight="600" fill="${ctx.c.ink}">${fmt(last.value)}</text>`;
 
   return [
     svgOpen(width, height, `Sparkline: ${data.title}`),
-    header(data.title, data.qualifier),
+    header(ctx, data.title, data.qualifier),
     line,
     endpoint,
     "</svg>",
@@ -339,28 +420,28 @@ function renderSparkline(data: ChartDirectiveData): string {
 // meter — a single value against a maximum
 // ---------------------------------------------------------------------------
 
-function renderMeter(data: ChartDirectiveData): string {
-  const width = 720;
+function renderMeter(data: ChartDirectiveData, ctx: Ctx): string {
+  const width = ctx.width;
   const height = 104;
   const trackLeft = 12;
-  const trackRight = 620;
+  const trackRight = r2(width - 100);
   const trackY = 62;
   const point = data.series[0];
   const max = data.max !== undefined && data.max > 0 ? data.max : 100;
   const frac = Math.min(1, Math.max(0, point.value / max));
   const fillWidth = r2((trackRight - trackLeft) * frac);
 
-  const track = `<rect x="${trackLeft}" y="${trackY}" width="${trackRight - trackLeft}" height="14" rx="7" fill="var(--line)"/>`;
+  const track = `<rect x="${trackLeft}" y="${trackY}" width="${r2(trackRight - trackLeft)}" height="14" rx="7" fill="${ctx.c.line}"/>`;
   const fill =
     fillWidth > 0
-      ? `<rect x="${trackLeft}" y="${trackY}" width="${Math.max(fillWidth, 4)}" height="14" rx="7" fill="var(--accent)"/>`
+      ? `<rect x="${trackLeft}" y="${trackY}" width="${Math.max(fillWidth, 4)}" height="14" rx="7" fill="${ctx.c.accent}"/>`
       : "";
-  const valueLabel = `<text x="${trackRight + 14}" y="${trackY + 12}" font-size="13" font-weight="700" fill="var(--ink)">${fmt(point.value)}<tspan font-size="10" font-weight="400" fill="var(--muted)"> / ${fmt(max)}</tspan></text>`;
-  const nameLabel = `<text x="${trackLeft}" y="${trackY + 32}" font-size="10.5" fill="var(--muted)">${esc(point.label)}</text>`;
+  const valueLabel = `<text x="${r2(trackRight + 14)}" y="${trackY + 12}" font-size="${ctx.fs(13)}" font-weight="700" fill="${ctx.c.ink}">${fmt(point.value)}<tspan font-size="${ctx.fs(10)}" font-weight="400" fill="${ctx.c.muted}"> / ${fmt(max)}</tspan></text>`;
+  const nameLabel = `<text x="${trackLeft}" y="${trackY + 32}" font-size="${ctx.fs(10.5)}" fill="${ctx.c.muted}">${esc(point.label)}</text>`;
 
   return [
     svgOpen(width, height, `Meter: ${data.title}`),
-    header(data.title, data.qualifier),
+    header(ctx, data.title, data.qualifier),
     track,
     fill,
     valueLabel,
@@ -373,19 +454,24 @@ function renderMeter(data: ChartDirectiveData): string {
 // funnel — stages with conversion against the first stage (CRM reports)
 // ---------------------------------------------------------------------------
 
-function renderFunnel(data: ChartDirectiveData): string {
-  const width = 720;
+function renderFunnel(data: ChartDirectiveData, ctx: Ctx): string {
+  const width = ctx.width;
   const segmentHeight = 56;
   const gap = 4;
   const series = data.series;
   const height = 52 + series.length * (segmentHeight + gap) + 8;
-  const labelRight = 150;
-  const funnelLeft = 168;
-  const funnelMaxWidth = 420;
-  const center = funnelLeft + funnelMaxWidth / 2;
+  // Label gutter left, value gutter right, funnel gets the rest. The right
+  // gutter's 11/60 ratio reproduces the historical 132px gutter (and hence a
+  // 420px funnel) exactly at the 720px document frame.
+  const labelRight = clamp(r2(width * 0.21), 80, 150);
+  const funnelLeft = r2(labelRight + 18);
+  const valueGutter = clamp(r2((width * 11) / 60), 72, 132);
+  const funnelMaxWidth = Math.max(80, r2(width - funnelLeft - valueGutter));
+  const center = r2(funnelLeft + funnelMaxWidth / 2);
   const first = Math.max(0, series[0]?.value ?? 0);
   const max = maxOf(series);
   const top = max <= 0 ? 1 : max;
+  const palette = hues(ctx);
 
   // True funnel: each stage is a centered TRAPEZOID — its top edge scales
   // with this stage's value, its bottom edge with the NEXT stage's value, so
@@ -403,7 +489,7 @@ function renderFunnel(data: ChartDirectiveData): string {
     const next = series[i + 1];
     const bottomHalf =
       next !== undefined ? halfOf(next.value) : Math.max(r2(topHalf * 0.6), 12);
-    const hue = SERIES_HUES[i % SERIES_HUES.length];
+    const hue = palette[i % palette.length];
     const points = [
       `${r2(center - topHalf)},${yTop}`,
       `${r2(center + topHalf)},${yTop}`,
@@ -412,17 +498,17 @@ function renderFunnel(data: ChartDirectiveData): string {
     ].join(" ");
     const pct =
       first > 0 && i > 0
-        ? `<tspan font-size="10" font-weight="400" fill="var(--muted)"> · ${Math.round((Math.max(0, p.value) / first) * 100)}%</tspan>`
+        ? `<tspan font-size="${ctx.fs(10)}" font-weight="400" fill="${ctx.c.muted}"> · ${Math.round((Math.max(0, p.value) / first) * 100)}%</tspan>`
         : "";
     segments +=
       `<polygon points="${points}" fill="${hue}"/>` +
-      `<text x="${labelRight}" y="${r2(yTop + segmentHeight / 2 + 4)}" font-size="11" fill="var(--muted)" text-anchor="end">${esc(p.label)}</text>` +
-      `<text x="${r2(center + topHalf + 12)}" y="${yTop + 14}" font-size="12" font-weight="600" fill="var(--ink)">${fmt(p.value)}${pct}</text>`;
+      `<text x="${labelRight}" y="${r2(yTop + segmentHeight / 2 + 4)}" font-size="${ctx.fs(11)}" fill="${ctx.c.muted}" text-anchor="end">${esc(p.label)}</text>` +
+      `<text x="${r2(center + topHalf + 12)}" y="${yTop + 14}" font-size="${ctx.fs(12)}" font-weight="600" fill="${ctx.c.ink}">${fmt(p.value)}${pct}</text>`;
   }
 
   return [
     svgOpen(width, height, `Funnel chart: ${data.title}`),
-    header(data.title, data.qualifier),
+    header(ctx, data.title, data.qualifier),
     segments,
     "</svg>",
   ].join("");
@@ -432,7 +518,10 @@ function renderFunnel(data: ChartDirectiveData): string {
 // Dispatch
 // ---------------------------------------------------------------------------
 
-const RENDERERS: Record<ChartType, (data: ChartDirectiveData) => string> = {
+const RENDERERS: Record<
+  ChartType,
+  (data: ChartDirectiveData, ctx: Ctx) => string
+> = {
   bar: renderBar,
   line: renderLine,
   donut: renderDonut,
@@ -444,9 +533,15 @@ const RENDERERS: Record<ChartType, (data: ChartDirectiveData) => string> = {
 
 /**
  * Render one chart directive to a static, self-contained, scriptless SVG in
- * house palette tokens. Data shape is validated upstream by the directive
+ * house palette colors. Data shape is validated upstream by the directive
  * engine; this function only assumes a non-empty series of finite numbers.
+ *
+ * With `options` omitted the output is byte-identical to the historical
+ * server renderer (720px frame, unscaled type, CSS custom properties).
  */
-export function renderChart(data: ChartDirectiveData): string {
-  return RENDERERS[data.type](data);
+export function renderChart(
+  data: ChartDirectiveData,
+  options?: ChartRenderOptions,
+): string {
+  return RENDERERS[data.type](data, resolveCtx(options));
 }
