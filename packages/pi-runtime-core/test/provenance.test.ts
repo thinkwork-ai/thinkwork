@@ -70,6 +70,19 @@ describe("tracesToCorpus", () => {
     expect(tracesToCorpus(1.52, [120, 80])).toBe(false);
   });
 
+  it("matches a power-of-ten rescaling of a corpus number", () => {
+    // dollars charted as $M, rounded to the chart's precision
+    expect(tracesToCorpus(28.7, [28712345])).toBe(true);
+    // counts charted as thousands
+    expect(tracesToCorpus(6.2, [6155])).toBe(true);
+    // fraction charted as basis points
+    expect(tracesToCorpus(125, [0.0125])).toBe(true);
+    // scaling never invents digits: 29.4 is not a rescaling of 28,712,345
+    expect(tracesToCorpus(29.4, [28712345])).toBe(false);
+    // zero never scale-matches
+    expect(tracesToCorpus(0, [28712345])).toBe(false);
+  });
+
   it("rejects an invented number", () => {
     expect(tracesToCorpus(987654, corpus)).toBe(false);
   });
