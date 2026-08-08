@@ -11,3 +11,12 @@ export {
   type ChartPalette,
 } from "./palette.js";
 export { renderChart, type ChartRenderOptions } from "./render.js";
+export {
+  validateChartDirectiveData,
+  type ChartValidationResult,
+} from "./validate.js";
+export {
+  CHART_MESSAGE_PART_TYPE,
+  validateChartMessagePart,
+  type ChartMessagePart,
+} from "./part.js";
