@@ -25,6 +25,13 @@ export default defineConfig({
   resolve: {
     alias: {
       "@thinkwork/pi-aws": path.resolve(__dirname, "../pi-aws/src/index.ts"),
+      // Subpath aliases MUST precede the package-root alias — vite alias keys
+      // are prefix matches applied in order, so the root entry would rewrite
+      // `.../provenance` to `src/index.ts/provenance`.
+      "@thinkwork/pi-runtime-core/provenance": path.resolve(
+        __dirname,
+        "../pi-runtime-core/src/provenance.ts",
+      ),
       "@thinkwork/pi-runtime-core": path.resolve(
         __dirname,
         "../pi-runtime-core/src/index.ts",

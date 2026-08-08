@@ -5,6 +5,7 @@ import {
   normalizeDocumentPlates,
   EMIT_DOCUMENT_TOOL_NAME,
   EMIT_DOCUMENT_DIGEST_MAX_BYTES,
+  extractAnalyticsFenceNumbers,
 } from "../src/document-composer.js";
 import { parseSourcesClaims, toolNamesMatch } from "../src/document-plates.js";
 import { collectExtensionToolNames } from "../src/define-extension.js";
@@ -32,12 +33,35 @@ interface RegisteredTool {
   }>;
 }
 
-/** Fake ExtensionContext whose session branch invoked the given tools. */
-function ctxWithInvokedTools(toolNames: string[]): unknown {
+/**
+ * Fake ExtensionContext whose session branch invoked the given tools.
+ * `options.resultTexts[i]` becomes tool i's result payload and
+ * `options.userText` a trailing user message — the provenance corpus the
+ * THINK-681 analytics gate reads.
+ */
+function ctxWithInvokedTools(
+  toolNames: string[],
+  options: { resultTexts?: string[]; userText?: string } = {},
+): unknown {
+  const userEntries = options.userText
+    ? [
+        {
+          type: "message",
+          id: "u0",
+          parentId: null,
+          timestamp: "t",
+          message: {
+            role: "user",
+            content: [{ type: "text", text: options.userText }],
+          },
+        },
+      ]
+    : [];
   return {
     sessionManager: {
-      getBranch: () =>
-        toolNames.flatMap((name, i) => [
+      getBranch: () => [
+        ...userEntries,
+        ...toolNames.flatMap((name, i) => [
           {
             type: "message",
             id: `a${i}`,
@@ -60,11 +84,14 @@ function ctxWithInvokedTools(toolNames: string[]): unknown {
               role: "toolResult",
               toolCallId: `call-${i}`,
               toolName: name,
-              content: [],
+              content: options.resultTexts?.[i]
+                ? [{ type: "text", text: options.resultTexts[i] }]
+                : [],
               isError: false,
             },
           },
         ]),
+      ],
     },
   };
 }
@@ -884,5 +911,158 @@ describe("parseSourcesClaims / toolNamesMatch", () => {
     // Mid-name fragments never match — only boundary-aligned prefix/suffix.
     expect(toolNamesMatch("crm", "twenty_crm_search")).toBe(false);
     expect(toolNamesMatch("made_up_tool", "bash")).toBe(false);
+  });
+});
+
+describe("tw:chart / tw:analysis numeric provenance (THINK-681)", () => {
+  const CHART_DIGEST = `## Pipeline
+
+\`\`\`tw:chart
+type: bar
+title: Pipeline by stage
+series:
+  - { label: Leads, count: 120 }
+  - { label: Won, count: 30 }
+\`\`\`
+`;
+
+  const ROWS = '{"rows":[{"stage":"Leads","n":120},{"stage":"Won","n":30}]}';
+
+  function okBody() {
+    return {
+      ok: true,
+      artifactId: "artifact-1",
+      documentId: "doc-1",
+      status: "draft",
+      headVersion: 0,
+    };
+  }
+
+  it("extracts the data numbers out of both fence forms, skipping labels", () => {
+    const bare = `\`\`\`
+tw:analysis
+analysis: pipeline-conversion
+title: Q3 funnel 2024
+stages:
+  - { label: Leads, count: 120 }
+  - { label: Won, count: 30 }
+\`\`\``;
+    expect(extractAnalyticsFenceNumbers(CHART_DIGEST)).toEqual([120, 30]);
+    expect(extractAnalyticsFenceNumbers(bare)).toEqual([120, 30]);
+    // Fences that are not analytics directives contribute nothing.
+    expect(
+      extractAnalyticsFenceNumbers('```json\n{ "total": 999 }\n```'),
+    ).toEqual([]);
+  });
+
+  it("accepts charted numbers a tool returned this turn", async () => {
+    const fetchImpl = okFetch(okBody());
+    const { tools } = register({ documentComposerConfig: CONFIG, fetchImpl });
+    const result = await tools[0].execute(
+      "call-1",
+      { ...VALID_PARAMS, digest_markdown: CHART_DIGEST },
+      undefined,
+      undefined,
+      ctxWithInvokedTools(["mcp_lastmile-data_query"], {
+        resultTexts: [ROWS],
+      }),
+    );
+    expect(result.content[0].text).toContain("Document saved");
+    expect(
+      (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls,
+    ).toHaveLength(1);
+  });
+
+  it("accepts numbers derived from fetched data", async () => {
+    const fetchImpl = okFetch(okBody());
+    const { tools } = register({ documentComposerConfig: CONFIG, fetchImpl });
+    const derived = `## Conversion
+
+\`\`\`tw:chart
+type: bar
+title: Conversion
+series:
+  - { label: Win rate, count: 25 }
+  - { label: Lost, count: 90 }
+\`\`\`
+`;
+    const result = await tools[0].execute(
+      "call-1",
+      { ...VALID_PARAMS, digest_markdown: derived },
+      undefined,
+      undefined,
+      ctxWithInvokedTools(["mcp_lastmile-data_query"], {
+        resultTexts: [ROWS],
+      }),
+    );
+    expect(result.content[0].text).toContain("Document saved");
+  });
+
+  it("rejects invented numbers with ANALYTICS_UNVERIFIED and does not POST", async () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const { tools } = register({ documentComposerConfig: CONFIG, fetchImpl });
+    const result = await tools[0].execute(
+      "call-1",
+      { ...VALID_PARAMS, digest_markdown: CHART_DIGEST },
+      undefined,
+      undefined,
+      ctxWithInvokedTools(["mcp_lastmile-data_query"], {
+        resultTexts: ['{"rows":[{"stage":"Leads","n":7}]}'],
+      }),
+    );
+    expect(result.details?.code).toBe("REJECTED");
+    expect(result.content[0].text).toContain("ANALYTICS_UNVERIFIED");
+    expect(result.content[0].text).toContain("tw:chart");
+    expect(result.content[0].text).toContain("120");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("rejects charts when the turn fetched nothing", async () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const { tools } = register({ documentComposerConfig: CONFIG, fetchImpl });
+    const result = await tools[0].execute(
+      "call-1",
+      { ...VALID_PARAMS, digest_markdown: CHART_DIGEST },
+      undefined,
+      undefined,
+      ctxWithInvokedTools([]),
+    );
+    expect(result.content[0].text).toContain("ANALYTICS_UNVERIFIED");
+    expect(result.content[0].text).toContain("NO tool returned data this turn");
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("accepts numbers the user supplied in the branch's latest message", async () => {
+    const fetchImpl = okFetch(okBody());
+    const { tools } = register({ documentComposerConfig: CONFIG, fetchImpl });
+    const result = await tools[0].execute(
+      "call-1",
+      { ...VALID_PARAMS, digest_markdown: CHART_DIGEST },
+      undefined,
+      undefined,
+      ctxWithInvokedTools([], {
+        userText: "Chart my figures: 120 leads and 30 won.",
+      }),
+    );
+    expect(result.content[0].text).toContain("Document saved");
+  });
+
+  it("skips the check gracefully without a session manager", async () => {
+    const fetchImpl = okFetch(okBody());
+    const { tools } = register({ documentComposerConfig: CONFIG, fetchImpl });
+    const result = await tools[0].execute("call-1", {
+      ...VALID_PARAMS,
+      digest_markdown: CHART_DIGEST,
+    });
+    expect(result.content[0].text).toContain("Document saved");
+    expect(
+      (fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls,
+    ).toHaveLength(1);
+  });
+
+  it("documents the numeric verification on the tool description", () => {
+    const { tools } = register({ documentComposerConfig: CONFIG });
+    const tool = tools[0] as unknown as { description: string };
+    expect(tool.description).toContain("NUMBERS inside");
   });
 });

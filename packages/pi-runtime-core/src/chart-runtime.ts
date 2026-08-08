@@ -21,8 +21,15 @@ import {
   CHART_MESSAGE_PART_TYPE,
   CHART_TYPES,
   validateChartDirectiveData,
+  type ChartDirectiveData,
   type ChartMessagePart,
 } from "@thinkwork/chart-renderer";
+import {
+  buildProvenanceCorpus,
+  decideProvenance,
+  formatUntracedValues,
+  stringifyForProvenance,
+} from "./provenance.js";
 
 export const EMIT_ANALYTICS_CHART_TOOL_NAME = "emit_analytics_chart" as const;
 
@@ -145,6 +152,180 @@ export function buildEmitAnalyticsChartTool(): AgentTool<any> {
         ],
         details: { ok: true, chart_message_part: part },
       };
+    },
+  } as AgentTool<any>;
+}
+
+/**
+ * Minimal read-shape of a recorded tool invocation the provenance corpus needs.
+ * A structural subset of `ToolInvocationRecord`, declared here so the wrapper
+ * stays independently testable with no dependency on the loop's live state.
+ */
+export interface ChartProvenanceSourceInvocation {
+  id: string;
+  result?: unknown;
+  is_error?: boolean;
+  status?: string;
+}
+
+/** Structured observability line the provenance wrapper hands to its host. */
+export interface ChartProvenanceLogEntry {
+  level: "warn";
+  event: "chart_provenance";
+  partId: string;
+  reason: "no_data_this_turn" | "untraced" | "post_rejection";
+  untracedCount: number;
+  corpusSize: number;
+}
+
+export interface WrapEmitChartOptions {
+  /** The turn's current user message text, folded into the corpus so a chart
+   *  of numbers the USER supplied is not treated as invented. */
+  getUserText?: () => string | undefined;
+  log?: (entry: ChartProvenanceLogEntry) => void;
+}
+
+/**
+ * Every number a chart PRESENTS as data: the series point values plus a
+ * `meter`'s target. Deliberately field-directed rather than a blind object
+ * walk, so presentation-only numbers can never be mistaken for data claims.
+ */
+export function chartDataValues(data: ChartDirectiveData): number[] {
+  const values: number[] = [];
+  for (const point of data.series ?? []) {
+    if (typeof point?.value === "number" && Number.isFinite(point.value)) {
+      values.push(point.value);
+    }
+  }
+  if (typeof data.max === "number" && Number.isFinite(data.max)) {
+    values.push(data.max);
+  }
+  return values;
+}
+
+const NO_CORPUS_REJECTION =
+  "Chart rejected — no data was fetched this turn, so these numbers trace to " +
+  "nothing. Call a data tool first and chart what it returns. If the numbers " +
+  "came from the user, quote them back through a data tool (or answer in " +
+  "prose) instead of charting invented values.";
+
+function untracedRejectionText(untraced: readonly number[]): string {
+  return (
+    "Chart rejected — these charted numbers do not trace to any data this " +
+    `turn produced: ${formatUntracedValues(untraced)}. ` +
+    "Re-emit the chart using the values the tool calls actually returned (or " +
+    "values computed from them), and drop any number you cannot point at in a " +
+    "tool result. If a number is a derived figure, recompute it from the tool " +
+    "output rather than recalling it."
+  );
+}
+
+/**
+ * Wrap an already-built `emit_analytics_chart` tool with a live view of the
+ * turn's recorded tool invocations and GATE the emission on numeric provenance
+ * (THINK-681).
+ *
+ * Same enforcement seam as `wrapEmitToolWithBindingFeedback`: the wrapper's
+ * result is both what the model sees AND what the agent loop reads for its side
+ * effects, so reshaping a rejected emit into an error-shaped result HERE means
+ * `extractEmitAnalyticsChartToolPart` returns null and the chart provably
+ * persists nothing.
+ *
+ * A per-wrapper (i.e. per-turn) set of rejected chart ids provides the loop
+ * guard: at most ONE provenance rejection per stable chart id per turn.
+ */
+export function wrapEmitChartWithProvenance(
+  tool: AgentTool<any>,
+  getTurnInvocations: () => readonly ChartProvenanceSourceInvocation[],
+  options: WrapEmitChartOptions = {},
+): AgentTool<any> {
+  const rejectedPartIds = new Set<string>();
+  const log = options.log;
+  return {
+    ...tool,
+    execute: async (toolCallId, params, signal, onUpdate) => {
+      const result = await tool.execute(toolCallId, params, signal, onUpdate);
+      const part = extractEmitAnalyticsChartToolPart(result);
+      // Only an accepted emit produces a part; validator/limit rejections pass
+      // straight through untouched.
+      if (!part) return result;
+
+      const sources: string[] = [];
+      for (const invocation of getTurnInvocations()) {
+        if (invocation.is_error === true || invocation.status === "error") {
+          continue;
+        }
+        if (invocation.result === undefined) continue; // still running
+        sources.push(stringifyForProvenance(invocation.result));
+      }
+      const userText = options.getUserText?.();
+      if (typeof userText === "string" && userText.trim()) {
+        sources.push(userText);
+      }
+      const corpus = buildProvenanceCorpus(sources);
+      const values = chartDataValues(part.data);
+      const enforcement = decideProvenance({
+        values,
+        corpus,
+        alreadyRejected: rejectedPartIds.has(part.id),
+      });
+
+      if (enforcement.decision === "reject") {
+        rejectedPartIds.add(part.id);
+        const text =
+          enforcement.reason === "no_data_this_turn"
+            ? NO_CORPUS_REJECTION
+            : untracedRejectionText(enforcement.untraced);
+        log?.({
+          level: "warn",
+          event: "chart_provenance",
+          partId: part.id,
+          reason: enforcement.reason,
+          untracedCount:
+            enforcement.reason === "untraced"
+              ? enforcement.untraced.length
+              : values.length,
+          corpusSize: corpus.length,
+        });
+        return {
+          content: [{ type: "text", text }],
+          details: { ok: false, provenance: enforcement.reason },
+        } as Awaited<ReturnType<AgentTool<any>["execute"]>>;
+      }
+
+      if (enforcement.reason === "post_rejection") {
+        log?.({
+          level: "warn",
+          event: "chart_provenance",
+          partId: part.id,
+          reason: "post_rejection",
+          untracedCount: enforcement.untraced.length,
+          corpusSize: corpus.length,
+        });
+        const resultRecord = recordValue(result) ?? {};
+        const existingContent = Array.isArray(resultRecord.content)
+          ? resultRecord.content
+          : [];
+        return {
+          ...resultRecord,
+          content: [
+            ...existingContent,
+            {
+              type: "text",
+              text:
+                "Accepted despite unverified numbers (" +
+                `${formatUntracedValues(enforcement.untraced)}` +
+                "). Say plainly in your answer where these figures came from.",
+            },
+          ],
+          details: {
+            ...(recordValue(resultRecord.details) ?? {}),
+            provenance: "post_rejection",
+          },
+        } as Awaited<ReturnType<AgentTool<any>["execute"]>>;
+      }
+
+      return result;
     },
   } as AgentTool<any>;
 }

@@ -22,6 +22,17 @@ import type {
   ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+// Subpath import, not the package root: the root entry resolves to built
+// `dist` for value imports (every other pi-runtime-core import here is
+// type-only), so the pure helper carries its own `development`-conditioned
+// export that resolves to source under vitest.
+import {
+  buildProvenanceCorpus,
+  decideProvenance,
+  extractNumericTokens,
+  formatUntracedValues,
+  stringifyForProvenance,
+} from "@thinkwork/pi-runtime-core/provenance";
 import {
   defineExtension,
   type ThinkworkExtension,
@@ -180,6 +191,149 @@ function verifySourcesClaims(
   ]);
 }
 
+/**
+ * Text of every tool RESULT on the current branch, plus the latest user
+ * message — the provenance corpus a document's charted numbers must trace to
+ * (THINK-681). Same walk as {@link collectInvokedToolNames}, but keeps the
+ * result payloads that walk discards. Returns null when the session manager is
+ * unavailable so callers skip the check gracefully.
+ */
+export function collectProvenanceSourceTexts(
+  ctx: ExtensionContext | undefined,
+): string[] | null {
+  const sessionManager = ctx?.sessionManager;
+  if (!sessionManager) return null;
+  let entries: unknown[];
+  try {
+    entries =
+      typeof sessionManager.getBranch === "function"
+        ? sessionManager.getBranch()
+        : sessionManager.getEntries();
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(entries)) return null;
+  const texts: string[] = [];
+  let latestUserText = "";
+  for (const entry of entries) {
+    if (
+      entry === null ||
+      typeof entry !== "object" ||
+      (entry as { type?: unknown }).type !== "message"
+    ) {
+      continue;
+    }
+    const message = (entry as { message?: unknown }).message;
+    if (message === null || typeof message !== "object") continue;
+    const record = message as Record<string, unknown>;
+    if (record.role === "toolResult") {
+      if (record.isError === true) continue;
+      texts.push(stringifyForProvenance(record.content));
+      continue;
+    }
+    if (record.role === "user") {
+      latestUserText = stringifyForProvenance(record.content);
+    }
+  }
+  // The user's own numbers are legitimate chart inputs, so they join the
+  // corpus — but only the CURRENT ask, not every historical turn.
+  if (latestUserText) texts.push(latestUserText);
+  return texts;
+}
+
+const ANALYTICS_FENCE_RE = /^[ \t]*```([^\n`]*)\r?\n([\s\S]*?)^[ \t]*```/gm;
+const ANALYTICS_FENCE_KINDS = ["tw:chart", "tw:analysis"] as const;
+/** Label-ish YAML keys whose values are captions, not data. */
+const LABEL_KEY_RE =
+  /^(title|qualifier|caption|section|analysis|type|label|name|unit|id)\s*:/i;
+
+/**
+ * Numbers a digest PRESENTS as analytics data: the numeric tokens inside
+ * ```tw:chart``` and ```tw:analysis``` fences, minus obvious label lines.
+ * Tolerates both the canonical fenced form and the common model-authored
+ * variant where the directive name is the first line inside a bare fence.
+ */
+export function extractAnalyticsFenceNumbers(digestMarkdown: string): number[] {
+  const values: number[] = [];
+  ANALYTICS_FENCE_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = ANALYTICS_FENCE_RE.exec(digestMarkdown)) !== null) {
+    const info = match[1].trim().toLowerCase();
+    let body = match[2];
+    if (!ANALYTICS_FENCE_KINDS.some((kind) => info === kind)) {
+      if (info !== "") continue;
+      const lines = body.split(/\r?\n/);
+      const firstIndex = lines.findIndex((line) => line.trim() !== "");
+      const first =
+        firstIndex >= 0 ? lines[firstIndex].trim().toLowerCase() : "";
+      if (!ANALYTICS_FENCE_KINDS.some((kind) => first === kind)) continue;
+      body = lines.slice(firstIndex + 1).join("\n");
+    }
+    for (const rawLine of body.split(/\r?\n/)) {
+      const line = rawLine.replace(/^[\s-]*/, "");
+      if (LABEL_KEY_RE.test(line) && !/[{[]/.test(line)) continue;
+      values.push(...extractNumericTokens(line));
+    }
+  }
+  return values;
+}
+
+/**
+ * Analytics provenance gate (THINK-681): the numbers a document charts or feeds
+ * to a declared analysis must trace to data this turn actually fetched (or the
+ * user supplied). Returns the REJECTED tool result to hand back for self-repair,
+ * or null when the numbers verify (or the check cannot run).
+ */
+function verifyAnalyticsProvenance(
+  digestMarkdown: string,
+  ctx: ExtensionContext | undefined,
+): ReturnType<typeof diagnosticsResult> | null {
+  const values = extractAnalyticsFenceNumbers(digestMarkdown);
+  if (values.length === 0) return null;
+  let sources: string[] | null;
+  try {
+    sources = collectProvenanceSourceTexts(ctx);
+  } catch {
+    sources = null;
+  }
+  if (sources === null) {
+    console.log(
+      JSON.stringify({
+        event: "document_analytics_provenance_skipped",
+        reason: "session_manager_unavailable",
+        valueCount: values.length,
+      }),
+    );
+    return null;
+  }
+  const corpus = buildProvenanceCorpus(sources);
+  const enforcement = decideProvenance({
+    values,
+    corpus,
+    // No loop guard here: emit_document rejections already drive one
+    // self-repair round per call, and the model re-authors the digest rather
+    // than re-emitting a stable id.
+    alreadyRejected: false,
+  });
+  if (enforcement.decision === "accept") return null;
+  const message =
+    enforcement.reason === "no_data_this_turn"
+      ? "The document charts numbers, but NO tool returned data this turn — these figures trace to nothing. " +
+        "Call the data tools that produce these numbers and author the tw:chart / tw:analysis blocks from what they return, " +
+        "or drop the visualizations and keep the section narrative."
+      : `These numbers in tw:chart / tw:analysis blocks do not trace to any data this turn produced: ${formatUntracedValues(enforcement.untraced)}. ` +
+        "Rebuild each block from the values the tool calls actually returned (or values computed from them), drop any figure you cannot point at in a tool result, then call emit_document again.";
+  return diagnosticsResult([
+    {
+      code: "ANALYTICS_UNVERIFIED",
+      message,
+      location: digestMarkdown.includes("tw:chart")
+        ? "tw:chart"
+        : "tw:analysis",
+    },
+  ]);
+}
+
 export function createDocumentComposerExtension(
   options: DocumentComposerExtensionOptions,
 ): ThinkworkExtension {
@@ -288,7 +442,9 @@ export function createDocumentComposerExtension(
           "(the section's compiled heading id), then one `- tool: <tool-name> — <query/table/filter + row " +
           "count>` line per source. Purely narrative sections use `- none: <why no tool data backs this " +
           "section>` instead. Cited tools are VERIFIED against the tools you actually invoked this turn — " +
-          "citing a tool you did not call rejects the emission. " +
+          "citing a tool you did not call rejects the emission. The NUMBERS inside ```tw:chart and " +
+          "```tw:analysis blocks are verified the same way — they must be values a tool returned this " +
+          "turn (or values computed from them, or numbers the user gave you), never recalled or invented. " +
           (anyContract
             ? "Some genres declare a content contract: author every required section as a ## heading with " +
               "its exact listed title, satisfy declared analyses with ```tw:analysis blocks (analysis: <key> " +
@@ -373,6 +529,16 @@ export function createDocumentComposerExtension(
           // session manager.
           const unverified = verifySourcesClaims(digestMarkdown, ctx);
           if (unverified) return unverified;
+
+          // Numeric provenance gate (THINK-681): charted/analysed numbers that
+          // trace to nothing this turn fetched are fabricated data — reject
+          // locally (no POST) so the model rebuilds them from the real tool
+          // output. Skips gracefully without a session manager.
+          const unverifiedNumbers = verifyAnalyticsProvenance(
+            digestMarkdown,
+            ctx,
+          );
+          if (unverifiedNumbers) return unverifiedNumbers;
 
           const response = await fetchImpl(
             `${apiUrl}/api/threads/${threadId}/activity`,
