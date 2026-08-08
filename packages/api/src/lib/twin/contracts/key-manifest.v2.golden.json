@@ -90,5 +90,47 @@
       "labels": ["chatgpt", "prod"],
       "rotationGeneration": 3
     }
+  ],
+  "machineClients": [
+    {
+      "kind": "m2m",
+      "clientId": "1example0client0id0platform",
+      "lane": "platform-agent",
+      "keyspace": "00000000-0000-4000-8000-00000000c0de",
+      "name": "case: trusted machine lane — the ThinkWork platform agent; asserts on_behalf_of exactly as its tkt_ key did",
+      "expiresAt": null,
+      "securityGroups": ["*"],
+      "kbCollections": ["*"],
+      "trustedSubsystem": true
+    },
+    {
+      "kind": "m2m",
+      "clientId": "2example0client0id0evals",
+      "lane": "evals-worker",
+      "name": "case: scoped machine lane — grants are the ENTRY's, never the token's; messy values are trimmed and de-duplicated like a key's",
+      "securityGroups": ["  OPS  ", "OPS", "", "FINANCE"],
+      "kbCollections": ["handbook", " handbook "],
+      "kbBundles": { "onboarding": ["handbook"] },
+      "defaultKbBundle": "onboarding"
+    },
+    {
+      "kind": "m2m",
+      "clientId": "3example0client0id0console",
+      "lane": "console-proxy",
+      "name": "case: operator machine lane — operator-ness comes from THIS MAPPING, never from a token claim",
+      "securityGroups": ["*"],
+      "kbCollections": ["*"],
+      "operatorKey": true,
+      "kbTrace": true
+    },
+    {
+      "kind": "m2m",
+      "clientId": "4example0client0id0minimal",
+      "lane": "dogfood",
+      "name": "case: minimal lane with an expiry and no grant fields at all — PUBLIC graph, no KB, and forward-compatible descriptive fields are ignored rather than fatal",
+      "expiresAt": "2026-08-29T00:00:00.000Z",
+      "mintedBy": "runbook: brain-mcp-m2m-migration",
+      "rotationGeneration": 1
+    }
   ]
 }

@@ -61,8 +61,24 @@ interface CapturedPut {
   ContentType?: string;
 }
 const puts: CapturedPut[] = [];
+/** The previously published manifest GetObject returns; undefined = 404. */
+let existingManifest: unknown;
+let getObjectError: Error | null = null;
 const s3 = {
   send: async (command: unknown) => {
+    if ((command as object).constructor.name === "GetObjectCommand") {
+      if (getObjectError) throw getObjectError;
+      if (existingManifest === undefined) {
+        const missing = new Error("The specified key does not exist.");
+        missing.name = "NoSuchKey";
+        throw missing;
+      }
+      return {
+        Body: {
+          transformToString: async () => JSON.stringify(existingManifest),
+        },
+      };
+    }
     puts.push((command as { input: CapturedPut }).input);
     return {};
   },
@@ -80,6 +96,7 @@ function manifestBody(index = 0): {
     securityGroups?: string[];
     kbCollections?: string[];
     trustedSubsystem?: true;
+    analyticsKey?: true;
   }>;
 } {
   return JSON.parse(puts[index]!.Body!);
@@ -107,6 +124,8 @@ beforeEach(() => {
   selectQueue.length = 0;
   whereConditions.length = 0;
   puts.length = 0;
+  existingManifest = undefined;
+  getObjectError = null;
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -269,7 +288,12 @@ describe("publishTwinKeyManifest", () => {
     selectQueue.push([{ key_hash: "x".repeat(64), created_at: null }]);
     const result = await publishTwinKeyManifest(TENANT_ID, {
       s3: {
-        send: async () => {
+        send: async (command: unknown) => {
+          if ((command as object).constructor.name === "GetObjectCommand") {
+            const missing = new Error("no such key");
+            missing.name = "NoSuchKey";
+            throw missing;
+          }
           throw new Error("s3 exploded");
         },
       },
@@ -277,6 +301,128 @@ describe("publishTwinKeyManifest", () => {
     });
     expect(result).toEqual({ published: false, reason: "s3 exploded" });
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it("emits analyticsKey: true ONLY for flagged rows (THINK-656 D4)", async () => {
+    selectQueue.push([
+      {
+        id: "key-on",
+        key_hash: "1".repeat(64),
+        name: "default",
+        created_at: null,
+        analytics_key: true,
+      },
+      {
+        id: "key-off",
+        key_hash: "2".repeat(64),
+        name: "opted-out",
+        created_at: null,
+        analytics_key: false,
+      },
+    ]);
+    await publishTwinKeyManifest(TENANT_ID, { s3, bucket: BUCKET });
+    const [on, off] = manifestBody().keys;
+    expect(on!.analyticsKey).toBe(true);
+    expect(off).not.toHaveProperty("analyticsKey");
+  });
+
+  it("preserves operator-published manifest content across a republish (2026-08-07 analytics go-live shape)", async () => {
+    const machineClients = [
+      {
+        kind: "m2m",
+        clientId: "client-console",
+        lane: "console-proxy",
+        securityGroups: ["*"],
+        operatorKey: true,
+      },
+      {
+        kind: "m2m",
+        clientId: "client-platform",
+        lane: "platform-agent",
+        trustedSubsystem: true,
+        analyticsKey: true,
+      },
+    ];
+    existingManifest = {
+      formatVersion: "twin-mcp-keys/v2",
+      tenantId: TENANT_ID,
+      generatedAt: "2026-08-07T00:00:00.000Z",
+      keys: [
+        {
+          // Product-owned entry (has keyId) with a HAND-SET kbTrace and a
+          // stale hand-set trustedSubsystem the DB now says is off.
+          keyHash: "a".repeat(64),
+          keyId: "key-db",
+          name: "default",
+          kbTrace: true,
+          trustedSubsystem: true,
+          securityGroups: ["STALE"],
+        },
+        {
+          // Hand-added entry: no keyId — the DB knows nothing about it.
+          keyHash: "b".repeat(64),
+          name: "evals-worker",
+          securityGroups: ["*"],
+          kbCollections: ["*"],
+          kbTrace: true,
+          analyticsKey: true,
+        },
+        {
+          // Product-owned entry whose row was REVOKED: must be dropped.
+          keyHash: "c".repeat(64),
+          keyId: "key-revoked",
+          name: "old",
+        },
+      ],
+      machineClients,
+    };
+    selectQueue.push([
+      {
+        id: "key-db",
+        key_hash: "a".repeat(64),
+        name: "default",
+        created_at: null,
+        security_groups: ["*"],
+        kb_collections: ["*"],
+        trusted_subsystem: false,
+        analytics_key: true,
+      },
+    ]);
+    const result = await publishTwinKeyManifest(TENANT_ID, {
+      s3,
+      bucket: BUCKET,
+    });
+    expect(result.published).toBe(true);
+    const doc = manifestBody() as unknown as Record<string, unknown>;
+
+    // Top-level operator field carried forward verbatim.
+    expect(doc.machineClients).toEqual(machineClients);
+
+    const keys = doc.keys as Array<Record<string, unknown>>;
+    const dbEntry = keys.find((k) => k.keyId === "key-db")!;
+    // Hand-set unknown field preserved…
+    expect(dbEntry.kbTrace).toBe(true);
+    // …product-owned fields recomputed from the DB (stale hand values lose).
+    expect(dbEntry.securityGroups).toEqual(["*"]);
+    expect(dbEntry).not.toHaveProperty("trustedSubsystem");
+    expect(dbEntry.analyticsKey).toBe(true);
+
+    // Hand-added entry survives whole; revoked product entry is gone.
+    const handAdded = keys.find((k) => k.keyHash === "b".repeat(64));
+    expect(handAdded).toMatchObject({ name: "evals-worker", kbTrace: true });
+    expect(keys.find((k) => k.keyHash === "c".repeat(64))).toBeUndefined();
+  });
+
+  it("REFUSES to publish when the existing manifest cannot be read (clobber guard)", async () => {
+    selectQueue.push([{ key_hash: "x".repeat(64), created_at: null }]);
+    getObjectError = new Error("access denied");
+    const result = await publishTwinKeyManifest(TENANT_ID, {
+      s3,
+      bucket: BUCKET,
+    });
+    expect(result.published).toBe(false);
+    expect(result.reason).toContain("refusing to clobber");
+    expect(puts.length).toBe(0);
   });
 });
 

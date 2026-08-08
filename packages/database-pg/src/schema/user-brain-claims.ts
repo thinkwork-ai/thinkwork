@@ -21,7 +21,8 @@
  *   - `enabled = false` still publishes an entry (as `disabled: true`), so
  *     the Brain fails closed instead of falling back to legacy grants.
  *
- * See drizzle/0284_user_brain_claims.sql for the canonical DDL — this
+ * See drizzle/0284_user_brain_claims.sql for the canonical DDL (plus
+ * 0286 for analytics_key) — this
  * Drizzle schema mirrors that hand-rolled file (not registered in
  * meta/_journal.json); apply via psql.
  */
@@ -78,6 +79,14 @@ export const userBrainClaims = pgTable(
     is_operator: boolean("is_operator").notNull().default(false),
     /** Diagnostic, not a grant: echoes KB retrieval traces to the user. */
     kb_trace: boolean("kb_trace").notNull().default(false),
+    /**
+     * Analytics-channel visibility (THINK-656 D4): emitted to the manifest
+     * as `analyticsKey` so the user's brain_ask loop may consult the
+     * mart_analytics briefing tools. Tool visibility, not a data grant —
+     * default TRUE (all users get analytics unless an operator opts them
+     * out).
+     */
+    analytics_key: boolean("analytics_key").notNull().default(true),
     /** False publishes the entry as `disabled: true` — never omits it. */
     enabled: boolean("enabled").notNull().default(true),
     notes: text("notes"),

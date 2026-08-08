@@ -8,8 +8,8 @@
  * token). Raw keys are never stored. Mirrors tenant_mcp_admin_keys.
  *
  * See drizzle/0274_tenant_mcp_twin_keys.sql for the canonical DDL (plus
- * 0281 for suffix/expiry, 0282 for the grant columns and 0285 for the
- * trusted-subsystem marker) — this Drizzle
+ * 0281 for suffix/expiry, 0282 for the grant columns, 0285 for the
+ * trusted-subsystem marker and 0286 for analytics_key) — this Drizzle
  * schema mirrors that hand-rolled DDL (not registered in
  * meta/_journal.json); apply via psql.
  */
@@ -78,6 +78,14 @@ export const tenantMcpTwinKeys = pgTable(
      * the published manifest (twin-mcp-keys/v2), not by this database.
      */
     trusted_subsystem: boolean("trusted_subsystem").notNull().default(false),
+    /**
+     * Analytics-channel visibility (THINK-656 D4): emitted to the manifest
+     * as `analyticsKey: true` so the key's brain_ask loop may consult the
+     * mart_analytics briefing tools. Tool visibility, not a data grant —
+     * hence default TRUE (every key gets analytics unless an operator
+     * turns it off). Enforced platform-side from the published manifest.
+     */
+    analytics_key: boolean("analytics_key").notNull().default(true),
     created_at: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
