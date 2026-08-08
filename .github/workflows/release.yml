@@ -108,7 +108,14 @@ jobs:
 
       - uses: docker/setup-qemu-action@v3
 
-      - uses: docker/setup-buildx-action@v3
+      # Blacksmith sticky-disk builder (persistent NVMe layer cache)
+      # replaces docker/setup-buildx-action + type=gha caching. The
+      # arm64 Pi build still runs under QEMU here — the release job is
+      # one unit because the manifest step needs all image digests —
+      # but warm layer cache makes the emulated rebuild cheap.
+      - uses: useblacksmith/setup-docker-builder@v2
+        with:
+          cache-key: release-docker
 
       - name: Login to GHCR
         run: echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
@@ -156,7 +163,7 @@ jobs:
 
       - name: Build and push AgentCore Pi amd64
         id: pi-amd64
-        uses: docker/build-push-action@v6
+        uses: useblacksmith/build-push-action@v2
         with:
           context: .
           file: packages/agentcore-pi/agent-container/Dockerfile
@@ -168,13 +175,11 @@ jobs:
           build-args: |
             GIT_SHA=${{ steps.release.outputs.commit }}
             BUILD_TIME=${{ steps.build_time.outputs.value }}
-          cache-from: type=gha,scope=release-pi-amd64
-          cache-to: type=gha,scope=release-pi-amd64,mode=max
           provenance: false
 
       - name: Build and push AgentCore Pi arm64
         id: pi-arm64
-        uses: docker/build-push-action@v6
+        uses: useblacksmith/build-push-action@v2
         with:
           context: .
           file: packages/agentcore-pi/agent-container/Dockerfile
@@ -188,13 +193,11 @@ jobs:
           build-args: |
             GIT_SHA=${{ steps.release.outputs.commit }}
             BUILD_TIME=${{ steps.build_time.outputs.value }}
-          cache-from: type=gha,scope=release-pi-arm64
-          cache-to: type=gha,scope=release-pi-arm64,mode=max
           provenance: false
 
       - name: Build and push n8n runtime amd64
         id: n8n-amd64
-        uses: docker/build-push-action@v6
+        uses: useblacksmith/build-push-action@v2
         with:
           context: plugins/n8n/runtime
           platforms: linux/amd64
@@ -206,8 +209,6 @@ jobs:
             ${{ steps.n8n_runtime_repository.outputs.value }}:${{ steps.release.outputs.commit }}-n8n-amd64
           build-args: |
             N8N_BASE_IMAGE=n8nio/n8n:2.27.3@sha256:a772d24e6b4f9b3848be5a57c5e45437eed1965bbbcefa2f9a93f4835b6639fa
-          cache-from: type=gha,scope=release-n8n-amd64
-          cache-to: type=gha,scope=release-n8n-amd64,mode=max
           provenance: false
 
       - name: Build release manifest
