@@ -8,6 +8,7 @@ const workspacePackages = [
   path.resolve(monorepoRoot, "packages/pricing-config"),
   path.resolve(monorepoRoot, "packages/pi-extensions"),
   path.resolve(monorepoRoot, "packages/thread-json-render"),
+  path.resolve(monorepoRoot, "packages/chart-renderer"),
   path.resolve(monorepoRoot, "packages/deployment-profile"),
   // Consumed from .ts source (main -> ./src/index.ts) so Metro transpiles
   // the shared graph logic in place — must be watched to resolve it.
