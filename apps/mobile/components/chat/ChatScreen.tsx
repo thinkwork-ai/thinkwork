@@ -283,6 +283,25 @@ function ChatView({
     },
     [send],
   );
+
+  // Hoisted out of the FlatList props so cell identity is stable across
+  // renders — with ChatBubble memoized, untouched rows skip re-render.
+  const keyExtractor = useCallback((item: ChatMessage) => item.id, []);
+  const renderItem = useCallback(
+    ({ item }: { item: ChatMessage }) => (
+      <WebContent centered>
+        <ChatBubble
+          message={item}
+          onEnvelopeAction={handleEnvelopeAction}
+          animate={
+            initialIds.current !== null && !initialIds.current.has(item.id)
+          }
+        />
+      </WebContent>
+    ),
+    [handleEnvelopeAction],
+  );
+
   return (
     <KeyboardAvoidingView
       className="flex-1 bg-white dark:bg-neutral-950"
@@ -360,19 +379,8 @@ function ChatView({
           ref={listRef}
           data={messages}
           inverted
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <WebContent centered>
-              <ChatBubble
-                message={item}
-                onEnvelopeAction={handleEnvelopeAction}
-                animate={
-                  initialIds.current !== null &&
-                  !initialIds.current.has(item.id)
-                }
-              />
-            </WebContent>
-          )}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
           contentContainerStyle={{ paddingVertical: 12 }}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"

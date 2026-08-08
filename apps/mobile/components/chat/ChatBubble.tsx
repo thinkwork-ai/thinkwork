@@ -4,6 +4,7 @@ import { Text } from "@/components/ui/typography";
 import type { ChatMessage } from "@/hooks/useGatewayChat";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { ArtifactCard } from "./ArtifactCard";
+import { ChartCard } from "./ChartCard";
 import { DocumentPlateCard } from "./DocumentPlateCard";
 import { isDocumentArtifactMetadata } from "@/lib/document-frame";
 import { type UiAction } from "@/lib/ui-envelope-types";
@@ -157,7 +158,7 @@ function MobileJsonRenderFallbackCard({
   );
 }
 
-export function ChatBubble({
+function ChatBubbleImpl({
   message,
   onEnvelopeAction,
   showSystemMessages = false,
@@ -200,12 +201,14 @@ export function ChatBubble({
   const isUser = message.role === "user";
   const content = getRenderableMessageContent(message, showSystemMessages);
   const genuiFallbacks = !isUser ? (message.genuiFallbacks ?? []) : [];
+  const chartParts = !isUser ? (message.chartParts ?? []) : [];
 
   // Don't render empty bubbles (e.g., hidden system messages or tool calls with no text content)
   if (
     !content &&
     !message.isStreaming &&
     genuiFallbacks.length === 0 &&
+    chartParts.length === 0 &&
     !message.durableArtifact &&
     !message.toolResults?.length
   )
@@ -242,13 +245,6 @@ export function ChatBubble({
   }
 
   // GenUI: typed tool results attached to message (rendered after text content)
-  if (!isUser && message.toolResults) {
-    console.log(
-      "[GenUI ChatBubble] toolResults:",
-      message.toolResults.length,
-      "items",
-    );
-  }
   const genuiComponents = !isUser
     ? ((message.toolResults || [])
         .filter((tr) => tr && typeof tr._type === "string")
@@ -352,6 +348,13 @@ export function ChatBubble({
           ) : displayContent ? (
             <MarkdownMessage content={displayContent} isUser={isUser} />
           ) : null}
+          {chartParts.length > 0 ? (
+            <View className="gap-3 mt-2">
+              {chartParts.map((part) => (
+                <ChartCard key={part.id} part={part} />
+              ))}
+            </View>
+          ) : null}
           {genuiFallbacks.length > 0 ? (
             <View className="gap-2 mt-2">
               {genuiFallbacks.map((fallback) => (
@@ -396,3 +399,9 @@ export function ChatBubble({
     </View>
   );
 }
+
+/**
+ * Memoized: thread lists re-render on every streaming token, and bubbles are
+ * pure in their props (THINK-680).
+ */
+export const ChatBubble = React.memo(ChatBubbleImpl);

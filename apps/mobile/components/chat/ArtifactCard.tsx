@@ -6,6 +6,7 @@ import { MarkdownMessage } from "./MarkdownMessage";
 import {
   FileText,
   BarChart3,
+  ChartColumn,
   Notebook,
   ClipboardList,
   PenLine,
@@ -14,7 +15,7 @@ import {
 
 const TYPE_CONFIG: Record<string, { label: string; Icon: typeof FileText }> = {
   report: { label: "Report", Icon: BarChart3 },
-  data_view: { label: "Data View", Icon: BarChart3 },
+  data_view: { label: "Data View", Icon: ChartColumn },
   note: { label: "Note", Icon: Notebook },
   plan: { label: "Plan", Icon: ClipboardList },
   draft: { label: "Draft", Icon: PenLine },

@@ -38,9 +38,36 @@ type BranchSpan = {
   eventIndices: number[];
 };
 
-const MAIN_COLOR = "#eab308";
-const RESPONSE_COLOR = "#06b6d4";
-const BRANCH_COLORS = ["#a855f7", "#3b82f6", "#ec4899", "#14b8a6", "#f97316"];
+/**
+ * Timeline hues, per theme (THINK-675). The dark set is the original palette;
+ * the light set keeps the same hues at darker/saturated values so they stay
+ * readable on a white surface.
+ */
+type TimelinePalette = {
+  main: string;
+  response: string;
+  tool: string;
+  branches: string[];
+};
+
+const TIMELINE_PALETTE: Record<"dark" | "light", TimelinePalette> = {
+  dark: {
+    main: "#eab308",
+    response: "#06b6d4",
+    tool: "#facc15",
+    branches: ["#a855f7", "#3b82f6", "#ec4899", "#14b8a6", "#f97316"],
+  },
+  light: {
+    main: "#a16207",
+    response: "#0e7490",
+    tool: "#a16207",
+    branches: ["#7e22ce", "#1d4ed8", "#be185d", "#0f766e", "#c2410c"],
+  },
+};
+
+function timelinePalette(isDark: boolean): TimelinePalette {
+  return isDark ? TIMELINE_PALETTE.dark : TIMELINE_PALETTE.light;
+}
 const ROW_H = 34;
 const NODE_R = 4;
 const MAIN_X = 8;
@@ -247,7 +274,10 @@ function reparentSubAgentEvents(events: TimelineEvent[]): void {
   }
 }
 
-function buildBranches(events: TimelineEvent[]): BranchSpan[] {
+function buildBranches(
+  events: TimelineEvent[],
+  palette: TimelinePalette,
+): BranchSpan[] {
   const branches: BranchSpan[] = [];
   const activeLanes = new Set<number>();
 
@@ -280,7 +310,7 @@ function buildBranches(events: TimelineEvent[]): BranchSpan[] {
     branches.push({
       name,
       laneIndex: lane,
-      color: BRANCH_COLORS[branches.length % BRANCH_COLORS.length],
+      color: palette.branches[branches.length % palette.branches.length],
       forkIdx: i,
       mergeIdx,
       eventIndices,
@@ -297,12 +327,20 @@ function getBranchForEvent(
   return branches.find((b) => b.eventIndices.includes(eventIdx)) ?? null;
 }
 
-function EventIcon({ event, color }: { event: TimelineEvent; color: string }) {
+function EventIcon({
+  event,
+  color,
+  palette,
+}: {
+  event: TimelineEvent;
+  color: string;
+  palette: TimelinePalette;
+}) {
   if (event.type === "llm") return <Cpu size={15} color={color} />;
   if (event.type === "response")
-    return <Bot size={15} color={RESPONSE_COLOR} />;
+    return <Bot size={15} color={palette.response} />;
   if (event.toolType === "sub_agent") return <Bot size={15} color={color} />;
-  return <Zap size={15} color="#facc15" />;
+  return <Zap size={15} color={palette.tool} />;
 }
 
 export function TurnExecutionTimeline({
@@ -403,7 +441,8 @@ export function TurnExecutionTimeline({
       ? 0
       : Number(usage?.cached_write_tokens || usage?.cachedWriteTokens || 0);
 
-  const branches = buildBranches(events);
+  const palette = timelinePalette(isDark);
+  const branches = buildBranches(events, palette);
   const hasBranches = branches.length > 0;
   const maxLane = hasBranches
     ? Math.max(...branches.map((b) => b.laneIndex))
@@ -454,7 +493,7 @@ export function TurnExecutionTimeline({
               y1={ROW_H / 2}
               x2={MAIN_X}
               y2={svgHeight - ROW_H / 2}
-              stroke={MAIN_COLOR}
+              stroke={palette.main}
               strokeWidth={2.5}
               opacity={0.5}
             />
@@ -465,7 +504,7 @@ export function TurnExecutionTimeline({
                 y1={ROW_H / 2}
                 x2={MAIN_X}
                 y2={firstFork * ROW_H + ROW_H / 2}
-                stroke={MAIN_COLOR}
+                stroke={palette.main}
                 strokeWidth={2.5}
                 opacity={0.5}
               />
@@ -474,7 +513,7 @@ export function TurnExecutionTimeline({
                 y1={firstFork * ROW_H + ROW_H / 2}
                 x2={MAIN_X}
                 y2={lastMerge * ROW_H + ROW_H / 2}
-                stroke={MAIN_COLOR}
+                stroke={palette.main}
                 strokeWidth={2.5}
                 opacity={0.3}
               />
@@ -483,7 +522,7 @@ export function TurnExecutionTimeline({
                 y1={lastMerge * ROW_H + ROW_H / 2}
                 x2={MAIN_X}
                 y2={svgHeight - ROW_H / 2}
-                stroke={MAIN_COLOR}
+                stroke={palette.main}
                 strokeWidth={2.5}
                 opacity={0.5}
               />
@@ -543,7 +582,7 @@ export function TurnExecutionTimeline({
                 cx={cx}
                 cy={index * ROW_H + ROW_H / 2}
                 r={NODE_R}
-                fill={branch ? branch.color : MAIN_COLOR}
+                fill={branch ? branch.color : palette.main}
               />
             );
           })}
@@ -553,7 +592,7 @@ export function TurnExecutionTimeline({
           const branch = getBranchForEvent(index, branches);
           const color =
             branch?.color ||
-            (event.type === "response" ? RESPONSE_COLOR : MAIN_COLOR);
+            (event.type === "response" ? palette.response : palette.main);
           const label =
             event.type === "llm"
               ? event.modelId || "LLM"
@@ -608,7 +647,7 @@ export function TurnExecutionTimeline({
               className="flex-row items-center gap-2 rounded-md active:opacity-70"
               style={{ minHeight: ROW_H }}
             >
-              <EventIcon event={event} color={color} />
+              <EventIcon event={event} color={color} palette={palette} />
               <Text className="flex-1 text-sm font-medium" numberOfLines={1}>
                 {label}
               </Text>

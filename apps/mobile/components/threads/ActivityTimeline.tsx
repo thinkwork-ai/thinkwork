@@ -16,6 +16,7 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
+  ChartColumn,
   Copy,
   FileText,
   MapPin,
@@ -39,6 +40,8 @@ import {
   getGenUIComponent,
   type MobileJsonRenderFallback,
 } from "@/lib/genui-registry";
+import type { ChartMessagePart } from "@thinkwork/chart-renderer";
+import { ChartCard } from "@/components/chat/ChartCard";
 import { ThreadTurnEventsQuery } from "@/lib/graphql-queries";
 import { TurnExecutionTimeline } from "@/components/threads/TurnExecutionTimeline";
 import { resolveHumanMessageDisplay } from "@/lib/thread-message-display";
@@ -87,6 +90,7 @@ interface Message {
   createdAt: string;
   toolResults?: Array<Record<string, unknown>> | null;
   genuiFallbacks?: MobileJsonRenderFallback[] | null;
+  chartParts?: ChartMessagePart[] | null;
   metadata?: any;
   durableArtifact?: {
     id: string;
@@ -149,6 +153,16 @@ type TimelineItem =
       data: {
         id: string;
         fallback: MobileJsonRenderFallback;
+        message: Message;
+        createdAt: string;
+      };
+      sortKey: number;
+    }
+  | {
+      kind: "chart";
+      data: {
+        id: string;
+        part: ChartMessagePart;
         message: Message;
         createdAt: string;
       };
@@ -296,6 +310,24 @@ function mergeTimeline(
             sortKey: new Date(m.createdAt).getTime() + 1,
           });
         }
+      }
+    }
+    // Charts are additive: unlike the json-render fallback cards, a chart
+    // complements the agent's prose rather than restating it, so it renders
+    // even when the message also carries text.
+    if (m.chartParts) {
+      for (let ci = 0; ci < m.chartParts.length; ci++) {
+        const part = m.chartParts[ci];
+        items.push({
+          kind: "chart",
+          data: {
+            id: `${m.id}-chart-${part.id}`,
+            part,
+            message: m,
+            createdAt: m.createdAt,
+          },
+          sortKey: new Date(m.createdAt).getTime() + 1.5 + ci * 0.01,
+        });
       }
     }
     if (m.genuiFallbacks) {
@@ -1266,7 +1298,11 @@ export function ActivityTimeline({
   const lastAgentIndex = useMemo(() => {
     for (let i = timeline.length - 1; i >= 0; i--) {
       const item = timeline[i];
-      if (item.kind === "genui" || item.kind === "data-json-render-fallback")
+      if (
+        item.kind === "genui" ||
+        item.kind === "data-json-render-fallback" ||
+        item.kind === "chart"
+      )
         continue; // skip generated UI blocks, find the agent message before them
       if (
         item.kind === "message" &&
@@ -1342,6 +1378,9 @@ export function ActivityTimeline({
       } else if (item.kind === "data-json-render-fallback") {
         icon = <FileText size={16} color={RESPONSE_COLOR} />;
         iconBorder = RESPONSE_COLOR;
+      } else if (item.kind === "chart") {
+        icon = <ChartColumn size={16} color={RESPONSE_COLOR} />;
+        iconBorder = RESPONSE_COLOR;
       } else if (item.kind === "genui") {
         const genuiType = String(item.data.toolResult._type || "");
         const { icon: gIcon, color: gColor } = getGenuiIconConfig(genuiType);
@@ -1403,6 +1442,8 @@ export function ActivityTimeline({
             colors={colors}
           />
         );
+      } else if (item.kind === "chart") {
+        content = <ChartCard part={item.data.part} />;
       } else if (item.kind === "message") {
         const isUser =
           (item.data.role || "").toLowerCase() === "user" ||

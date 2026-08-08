@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import { loadOrCreateIdentity, signPayload } from "./useDeviceIdentity";
 import type { UiEnvelope } from "@/lib/ui-envelope-types";
 import type { MobileJsonRenderFallback } from "@/lib/genui-registry";
+import type { ChartMessagePart } from "@thinkwork/chart-renderer";
 
 export interface GatewayChatOptions {
   useDeviceAuth?: boolean;
@@ -52,6 +53,8 @@ export interface ChatMessage {
   toolResults?: Array<Record<string, unknown>> | null;
   /** Thread data-json-render parts rendered as mobile-safe fallback summaries. */
   genuiFallbacks?: MobileJsonRenderFallback[] | null;
+  /** Thread `data-chart` parts rendered as inline analytics cards. */
+  chartParts?: ChartMessagePart[] | null;
   timestamp: number;
   isStreaming?: boolean;
   isTypingPlaceholder?: boolean;

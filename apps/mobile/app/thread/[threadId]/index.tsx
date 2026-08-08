@@ -101,6 +101,7 @@ import {
 import { CreateRecipeMutation } from "@/lib/graphql-queries";
 import { useAppMode } from "@/lib/hooks/use-app-mode";
 import { parseThreadJsonRenderFallbacks } from "@/lib/genui-registry";
+import { parseChartParts } from "@/lib/chart-parts";
 import { Text, Muted } from "@/components/ui/typography";
 import { COLORS } from "@/lib/theme";
 import { useQuery, useMutation } from "urql";
@@ -564,6 +565,7 @@ export default function ThreadDetailRoute() {
         ...m,
         toolResults,
         genuiFallbacks: parseThreadJsonRenderFallbacks(m.parts),
+        chartParts: parseChartParts(m.parts),
       };
     });
   }, [messagesData]);

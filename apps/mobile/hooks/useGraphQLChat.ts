@@ -11,6 +11,7 @@ import {
 // subset; this hook needs the superset.
 import { useMessages } from "@/lib/hooks/use-messages";
 import { parseThreadJsonRenderFallbacks } from "@/lib/genui-registry";
+import { parseChartParts } from "@/lib/chart-parts";
 import type { ChatMessage } from "./useGatewayChat";
 
 export interface CallerIdentity {
@@ -101,6 +102,7 @@ export function useGraphQLChat(
         }
       }
       const genuiFallbacks = parseThreadJsonRenderFallbacks(m.parts);
+      const chartParts = parseChartParts(m.parts);
 
       return {
         id: m.id,
@@ -111,6 +113,7 @@ export function useGraphQLChat(
         durableArtifact: m.durableArtifact ?? null,
         toolResults,
         genuiFallbacks,
+        chartParts,
         timestamp: new Date(m.createdAt).getTime(),
         isStreaming: false,
       };
