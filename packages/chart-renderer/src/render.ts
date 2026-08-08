@@ -562,9 +562,26 @@ function renderFunnel(data: ChartDirectiveData, ctx: Ctx): string {
       first > 0 && i > 0
         ? `<tspan font-size="${ctx.fs(10)}" font-weight="400" fill="${ctx.c.muted}"> · ${Math.round((Math.max(0, p.value) / first) * 100)}%</tspan>`
         : "";
+    // Long stage names wrap to two lines inside the label column instead of
+    // overflowing the left edge ("Active Engagement" → "ve Engagement").
+    const labelBudget = Math.max(
+      6,
+      Math.floor(labelRight / (5.6 * (ctx.fs(11) / 11))),
+    );
+    const labelLines = wrapLabel(p.label, labelBudget);
+    const labelCenter = yTop + segmentHeight / 2;
+    const label = labelLines
+      .map((line, li) => {
+        const y =
+          labelLines.length === 1
+            ? r2(labelCenter + 4)
+            : r2(labelCenter - 3 + li * 14);
+        return `<text x="${labelRight}" y="${y}" font-size="${ctx.fs(11)}" fill="${ctx.c.muted}" text-anchor="end">${esc(line)}</text>`;
+      })
+      .join("");
     segments +=
       `<polygon points="${points}" fill="${hue}"/>` +
-      `<text x="${labelRight}" y="${r2(yTop + segmentHeight / 2 + 4)}" font-size="${ctx.fs(11)}" fill="${ctx.c.muted}" text-anchor="end">${esc(p.label)}</text>` +
+      label +
       `<text x="${r2(center + topHalf + 12)}" y="${yTop + 14}" font-size="${ctx.fs(12)}" font-weight="600" fill="${ctx.c.ink}">${fmt(p.value)}${pct}</text>`;
   }
 
