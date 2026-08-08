@@ -137,9 +137,9 @@ export function Concepts() {
             term="Agent"
             example={
               <>
-                The agent you meet on the new-thread screen is your
-                tenant&apos;s default agent; a company can run many, each shaped
-                for a different job.
+                The agent you meet on the new-thread screen is your{" "}
+                <strong>Enterprise Agent</strong> — your company runs one, and
+                Spaces, skills and sub-agents shape it for each job.
               </>
             }
             seeAlso={[

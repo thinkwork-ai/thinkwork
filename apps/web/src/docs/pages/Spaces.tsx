@@ -86,8 +86,8 @@ export function Spaces() {
           <strong>Settings → Spaces → New Space</strong> asks for three things:
           a <strong>name</strong>, a <strong>description</strong>, and{" "}
           <strong>access</strong> — Public or Private. There is no agent to
-          pick, no model, no tool list. Those come from the tenant agent, and
-          the space narrows them afterwards.
+          pick, no model, no tool list. Those come from the Enterprise Agent,
+          and the space narrows them afterwards.
         </p>
         <Callout tone="warn" title="A space is not a second agent">
           <p>
