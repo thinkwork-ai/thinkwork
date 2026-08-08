@@ -20,6 +20,7 @@ import { Route as AuthCallbackRouteImport } from "./routes/auth/callback";
 import { Route as AuthedSettingsRouteImport } from "./routes/_authed/settings";
 import { Route as AuthedShellRouteImport } from "./routes/_authed/_shell";
 import { Route as AuthedSettingsIndexRouteImport } from "./routes/_authed/settings.index";
+import { Route as AuthedDocsIndexRouteImport } from "./routes/_authed/docs.index";
 import { Route as AuthedSettingsToolsRouteImport } from "./routes/_authed/settings.tools";
 import { Route as AuthedSettingsRoutineRepoRouteImport } from "./routes/_authed/settings.routine-repo";
 import { Route as AuthedSettingsModelCatalogRouteImport } from "./routes/_authed/settings.model-catalog";
@@ -31,6 +32,7 @@ import { Route as AuthedSettingsArtifactsRouteImport } from "./routes/_authed/se
 import { Route as AuthedSettingsAnalyticsRouteImport } from "./routes/_authed/settings.analytics";
 import { Route as AuthedSettingsActivityRouteImport } from "./routes/_authed/settings.activity";
 import { Route as AuthedDocumentsViewRouteImport } from "./routes/_authed/documents.view";
+import { Route as AuthedDocsSlugRouteImport } from "./routes/_authed/docs.$slug";
 import { Route as AuthedShellProfileRouteImport } from "./routes/_authed/_shell/profile";
 import { Route as AuthedShellNewRouteImport } from "./routes/_authed/_shell/new";
 import { Route as AuthedShellCustomizeRouteImport } from "./routes/_authed/_shell/customize";
@@ -152,6 +154,11 @@ const AuthedSettingsIndexRoute = AuthedSettingsIndexRouteImport.update({
   path: "/",
   getParentRoute: () => AuthedSettingsRoute,
 } as any);
+const AuthedDocsIndexRoute = AuthedDocsIndexRouteImport.update({
+  id: "/docs/",
+  path: "/docs/",
+  getParentRoute: () => AuthedRoute,
+} as any);
 const AuthedSettingsToolsRoute = AuthedSettingsToolsRouteImport.update({
   id: "/tools",
   path: "/tools",
@@ -208,6 +215,11 @@ const AuthedSettingsActivityRoute = AuthedSettingsActivityRouteImport.update({
 const AuthedDocumentsViewRoute = AuthedDocumentsViewRouteImport.update({
   id: "/documents/view",
   path: "/documents/view",
+  getParentRoute: () => AuthedRoute,
+} as any);
+const AuthedDocsSlugRoute = AuthedDocsSlugRouteImport.update({
+  id: "/docs/$slug",
+  path: "/docs/$slug",
   getParentRoute: () => AuthedRoute,
 } as any);
 const AuthedShellProfileRoute = AuthedShellProfileRouteImport.update({
@@ -618,6 +630,7 @@ export interface FileRoutesByFullPath {
   "/customize": typeof AuthedShellCustomizeRouteWithChildren;
   "/new": typeof AuthedShellNewRoute;
   "/profile": typeof AuthedShellProfileRoute;
+  "/docs/$slug": typeof AuthedDocsSlugRoute;
   "/documents/view": typeof AuthedDocumentsViewRoute;
   "/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
@@ -629,6 +642,7 @@ export interface FileRoutesByFullPath {
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
   "/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
+  "/docs/": typeof AuthedDocsIndexRoute;
   "/settings/": typeof AuthedSettingsIndexRoute;
   "/activity/$threadId": typeof AuthedShellActivityThreadIdRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
@@ -704,6 +718,7 @@ export interface FileRoutesByTo {
   "/onboarding/welcome": typeof OnboardingWelcomeRoute;
   "/new": typeof AuthedShellNewRoute;
   "/profile": typeof AuthedShellProfileRoute;
+  "/docs/$slug": typeof AuthedDocsSlugRoute;
   "/documents/view": typeof AuthedDocumentsViewRoute;
   "/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
@@ -714,6 +729,7 @@ export interface FileRoutesByTo {
   "/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
   "/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
   "/settings/tools": typeof AuthedSettingsToolsRoute;
+  "/docs": typeof AuthedDocsIndexRoute;
   "/settings": typeof AuthedSettingsIndexRoute;
   "/activity/$threadId": typeof AuthedShellActivityThreadIdRoute;
   "/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
@@ -795,6 +811,7 @@ export interface FileRoutesById {
   "/_authed/_shell/customize": typeof AuthedShellCustomizeRouteWithChildren;
   "/_authed/_shell/new": typeof AuthedShellNewRoute;
   "/_authed/_shell/profile": typeof AuthedShellProfileRoute;
+  "/_authed/docs/$slug": typeof AuthedDocsSlugRoute;
   "/_authed/documents/view": typeof AuthedDocumentsViewRoute;
   "/_authed/settings/activity": typeof AuthedSettingsActivityRouteWithChildren;
   "/_authed/settings/analytics": typeof AuthedSettingsAnalyticsRoute;
@@ -806,6 +823,7 @@ export interface FileRoutesById {
   "/_authed/settings/model-catalog": typeof AuthedSettingsModelCatalogRoute;
   "/_authed/settings/routine-repo": typeof AuthedSettingsRoutineRepoRoute;
   "/_authed/settings/tools": typeof AuthedSettingsToolsRoute;
+  "/_authed/docs/": typeof AuthedDocsIndexRoute;
   "/_authed/settings/": typeof AuthedSettingsIndexRoute;
   "/_authed/_shell/activity/$threadId": typeof AuthedShellActivityThreadIdRoute;
   "/_authed/_shell/approvals/$approvalId": typeof AuthedShellApprovalsApprovalIdRoute;
@@ -886,6 +904,7 @@ export interface FileRouteTypes {
     | "/customize"
     | "/new"
     | "/profile"
+    | "/docs/$slug"
     | "/documents/view"
     | "/settings/activity"
     | "/settings/analytics"
@@ -897,6 +916,7 @@ export interface FileRouteTypes {
     | "/settings/model-catalog"
     | "/settings/routine-repo"
     | "/settings/tools"
+    | "/docs/"
     | "/settings/"
     | "/activity/$threadId"
     | "/approvals/$approvalId"
@@ -972,6 +992,7 @@ export interface FileRouteTypes {
     | "/onboarding/welcome"
     | "/new"
     | "/profile"
+    | "/docs/$slug"
     | "/documents/view"
     | "/settings/activity"
     | "/settings/analytics"
@@ -982,6 +1003,7 @@ export interface FileRouteTypes {
     | "/settings/model-catalog"
     | "/settings/routine-repo"
     | "/settings/tools"
+    | "/docs"
     | "/settings"
     | "/activity/$threadId"
     | "/approvals/$approvalId"
@@ -1062,6 +1084,7 @@ export interface FileRouteTypes {
     | "/_authed/_shell/customize"
     | "/_authed/_shell/new"
     | "/_authed/_shell/profile"
+    | "/_authed/docs/$slug"
     | "/_authed/documents/view"
     | "/_authed/settings/activity"
     | "/_authed/settings/analytics"
@@ -1073,6 +1096,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/model-catalog"
     | "/_authed/settings/routine-repo"
     | "/_authed/settings/tools"
+    | "/_authed/docs/"
     | "/_authed/settings/"
     | "/_authed/_shell/activity/$threadId"
     | "/_authed/_shell/approvals/$approvalId"
@@ -1229,6 +1253,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsIndexRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/docs/": {
+      id: "/_authed/docs/";
+      path: "/docs";
+      fullPath: "/docs/";
+      preLoaderRoute: typeof AuthedDocsIndexRouteImport;
+      parentRoute: typeof AuthedRoute;
+    };
     "/_authed/settings/tools": {
       id: "/_authed/settings/tools";
       path: "/tools";
@@ -1304,6 +1335,13 @@ declare module "@tanstack/react-router" {
       path: "/documents/view";
       fullPath: "/documents/view";
       preLoaderRoute: typeof AuthedDocumentsViewRouteImport;
+      parentRoute: typeof AuthedRoute;
+    };
+    "/_authed/docs/$slug": {
+      id: "/_authed/docs/$slug";
+      path: "/docs/$slug";
+      fullPath: "/docs/$slug";
+      preLoaderRoute: typeof AuthedDocsSlugRouteImport;
       parentRoute: typeof AuthedRoute;
     };
     "/_authed/_shell/profile": {
@@ -2056,14 +2094,18 @@ const AuthedSettingsRouteWithChildren = AuthedSettingsRoute._addFileChildren(
 interface AuthedRouteChildren {
   AuthedShellRoute: typeof AuthedShellRouteWithChildren;
   AuthedSettingsRoute: typeof AuthedSettingsRouteWithChildren;
+  AuthedDocsSlugRoute: typeof AuthedDocsSlugRoute;
   AuthedDocumentsViewRoute: typeof AuthedDocumentsViewRoute;
+  AuthedDocsIndexRoute: typeof AuthedDocsIndexRoute;
   AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute: typeof AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute;
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedShellRoute: AuthedShellRouteWithChildren,
   AuthedSettingsRoute: AuthedSettingsRouteWithChildren,
+  AuthedDocsSlugRoute: AuthedDocsSlugRoute,
   AuthedDocumentsViewRoute: AuthedDocumentsViewRoute,
+  AuthedDocsIndexRoute: AuthedDocsIndexRoute,
   AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute:
     AuthedCrmProviderObjectTypeObjectIdWorkflowKeyRoute,
 };
