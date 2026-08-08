@@ -20,3 +20,5 @@ export {
   validateChartMessagePart,
   type ChartMessagePart,
 } from "./part.js";
+export { chartNarration } from "./narration.js";
+export { chartFitsWidth } from "./fitness.js";
