@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { PixelRatio, Pressable, View } from "react-native";
 import { useColorScheme } from "nativewind";
 import { useRouter } from "expo-router";
-import { ChevronDown, ChevronUp, Maximize2 } from "lucide-react-native";
+import { ChevronDown, ChevronUp } from "lucide-react-native";
 import { SvgXml } from "react-native-svg";
 import {
   chartFitsWidth,
@@ -106,10 +106,6 @@ export function ChartCard({ part }: ChartCardProps) {
           {svg && size ? (
             <SvgXml xml={svg} width={size.width} height={size.height} />
           ) : null}
-        </View>
-        {/* Discoverability affordance — the tap itself is the interaction. */}
-        <View className="absolute top-0 right-3" pointerEvents="none">
-          <Maximize2 size={16} color={colors.mutedForeground} />
         </View>
       </Pressable>
 
