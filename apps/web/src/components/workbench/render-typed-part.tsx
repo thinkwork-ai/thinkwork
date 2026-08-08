@@ -20,7 +20,12 @@
  */
 
 import type { ReactNode } from "react";
+import {
+  CHART_MESSAGE_PART_TYPE,
+  validateChartMessagePart,
+} from "@thinkwork/chart-renderer";
 import type { KnowledgeCitation } from "@/components/ai-elements/sources";
+import { ChartCard } from "@/components/workbench/ChartCard";
 import {
   DraftAppletPreview,
   isDraftAppPreviewOutput,
@@ -242,6 +247,23 @@ export function renderTypedPart(
       const uri = typeof data.uri === "string" ? data.uri : undefined;
       if (!html) return null;
       return <McpAppFrame key={key} html={html} title={title} uri={uri} />;
+    }
+    if (part.type === CHART_MESSAGE_PART_TYPE) {
+      // The server is the single validator; a part that fails validation here
+      // degrades to the unsupported strip rather than rendering a broken chart.
+      // Accept the part as-is (the persisted `{type, id, data}` row, the same
+      // shape mobile validates) and fall back to a reconstruction that fills a
+      // missing id from the render key for accumulator-built stream parts.
+      const chart =
+        validateChartMessagePart(part) ??
+        validateChartMessagePart({
+          type: part.type,
+          id: typeof part.id === "string" && part.id ? part.id : key,
+          data: part.data,
+        });
+      if (chart) {
+        return <ChartCard key={key} part={chart} />;
+      }
     }
     if (part.type === "data-runbook-queue" || part.type === "data-task-queue") {
       // Queue data is projected into the prompt composer by TaskThreadView.
