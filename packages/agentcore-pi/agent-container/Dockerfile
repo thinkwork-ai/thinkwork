@@ -57,6 +57,12 @@ COPY packages/pi-runtime-core/src/ packages/pi-runtime-core/src/
 COPY packages/thread-json-render/package.json packages/thread-json-render/package.json
 COPY packages/thread-json-render/tsconfig.json packages/thread-json-render/tsconfig.json
 COPY packages/thread-json-render/src/ packages/thread-json-render/src/
+# @thinkwork/pi-runtime-core emits data-chart parts through
+# @thinkwork/chart-renderer (emit_analytics_chart, THINK-672) — same contract
+# as thread-json-render above.
+COPY packages/chart-renderer/package.json packages/chart-renderer/package.json
+COPY packages/chart-renderer/tsconfig.json packages/chart-renderer/tsconfig.json
+COPY packages/chart-renderer/src/ packages/chart-renderer/src/
 # @thinkwork/pi-extensions — shared Pi-extension capability package (plan §004
 # U5). agentcore-pi loads the memory extension from it; the source must be
 # present for the frozen install + the tsc compile against it.
@@ -74,6 +80,7 @@ RUN corepack enable && pnpm install \
     --filter @thinkwork/pi-aws \
     --filter @thinkwork/pi-runtime-core \
     --filter @thinkwork/thread-json-render \
+    --filter @thinkwork/chart-renderer \
     --filter @thinkwork/pi-extensions \
     --prod=false --frozen-lockfile
 # Build the workspace deps first so their dist/ exists for the runtime import
@@ -82,6 +89,7 @@ RUN corepack enable && pnpm install \
 # pi-extensions depends on pi-runtime-core, so build it after.
 RUN pnpm --filter @thinkwork/pi-aws build
 RUN pnpm --filter @thinkwork/thread-json-render build
+RUN pnpm --filter @thinkwork/chart-renderer build
 RUN pnpm --filter @thinkwork/pi-runtime-core build
 RUN pnpm --filter @thinkwork/pi-extensions build
 RUN pnpm --filter @thinkwork/agentcore-pi build
