@@ -13,7 +13,7 @@
     "build:web": "npm run css && expo export --platform web",
     "codegen": "graphql-codegen --config codegen.ts",
     "test": "vitest run --config vitest.config.ts",
-    "eas-build-post-install": "pnpm --filter @thinkwork/database-pg --filter @thinkwork/thread-json-render --filter @thinkwork/deployment-profile --filter @thinkwork/pricing-config --filter @thinkwork/react-native-sdk build"
+    "eas-build-post-install": "pnpm --filter @thinkwork/database-pg --filter @thinkwork/chart-renderer --filter @thinkwork/thread-json-render --filter @thinkwork/deployment-profile --filter @thinkwork/pricing-config --filter @thinkwork/react-native-sdk build"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
@@ -30,6 +30,7 @@
     "@tabler/icons-react-native": "^3.37.1",
     "@tanstack/react-query": "^5.90.21",
     "@thinkwork/deployment-profile": "workspace:*",
+    "@thinkwork/chart-renderer": "workspace:*",
     "@thinkwork/graph-core": "workspace:*",
     "@thinkwork/pricing-config": "workspace:*",
     "@thinkwork/react-native-sdk": "workspace:*",
