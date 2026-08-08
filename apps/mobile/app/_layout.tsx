@@ -13,7 +13,14 @@ LogBox.ignoreLogs([
   "Cannot update a component",
   "[AppSync WS] Subscription error",
 ]);
-import { View, Platform, AppState, AppStateStatus, Alert } from "react-native";
+import {
+  View,
+  Platform,
+  AppState,
+  AppStateStatus,
+  Alert,
+  AccessibilityInfo,
+} from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import * as SystemUI from "expo-system-ui";
 import {
@@ -91,6 +98,27 @@ function RootLayoutNav() {
   const router = useRouter();
   const navigationState = useRootNavigationState();
   const navigationReady = !!navigationState?.key;
+
+  // Reduce Motion: the chart inspector presents as a slide-in modal sheet;
+  // when the user has asked the system to cut motion we present it without
+  // the slide animation instead.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => {
+        if (!cancelled) setReduceMotion(enabled);
+      })
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener(
+      "reduceMotionChanged",
+      (enabled) => setReduceMotion(enabled),
+    );
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (navigationReady) {
@@ -459,6 +487,14 @@ function RootLayoutNav() {
                 <Stack.Screen name="routines/builder" />
                 <Stack.Screen name="routines/builder-chat" />
                 <Stack.Screen name="fleet/[id]/inbox" />
+                <Stack.Screen
+                  name="chart-inspector"
+                  options={{
+                    presentation: "modal",
+                    headerShown: false,
+                    animation: reduceMotion ? "none" : "slide_from_bottom",
+                  }}
+                />
               </Stack>
 
               {needsBiometricUnlock && (
