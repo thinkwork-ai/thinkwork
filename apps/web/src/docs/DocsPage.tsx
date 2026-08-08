@@ -85,12 +85,11 @@ function DocsNav({ activeSlug }: { activeSlug?: string }) {
         className="min-h-0 flex-1 overflow-y-auto px-2 pb-4"
         aria-label="Documentation"
       >
-        {DOC_SECTIONS.map((section, index) => (
+        {DOC_SECTIONS.map((section) => (
           <NavSection
             key={section.label}
             section={section}
             activeSlug={activeSlug}
-            defaultOpenOnHome={index === 0}
           />
         ))}
       </nav>
@@ -99,33 +98,27 @@ function DocsNav({ activeSlug }: { activeSlug?: string }) {
 }
 
 /**
- * One collapsible section of the docs tree. Two dozen pages make a flat list
- * of lookalike headers unreadable, so the nav is a tree: chevroned section
- * headers, pages on an indent guide, and only the section you are reading
- * open by default — the rest are one click away. Navigating to a page in a
- * collapsed section (a cross-link from an article, a home card) auto-reveals
- * its section; a manual toggle wins until the next navigation says otherwise.
+ * One collapsible section of the docs tree. Sections are collapsed by
+ * default and the toggle is purely manual — navigating never expands or
+ * collapses anything (decision: Eric 2026-08-08). The one exception is
+ * first render: the section holding the deep-linked page starts open so
+ * the current page is never hidden.
  */
 function NavSection({
   section,
   activeSlug,
-  defaultOpenOnHome,
 }: {
   section: DocSectionDef;
   activeSlug?: string;
-  defaultOpenOnHome: boolean;
 }) {
   const containsActive = section.pages.some((p) => p.slug === activeSlug);
-  const [override, setOverride] = useState<boolean | null>(null);
-  // A navigation resets any manual toggle: the tree follows the reader.
-  useEffect(() => setOverride(null), [activeSlug]);
-  const open = override ?? (activeSlug ? containsActive : defaultOpenOnHome);
+  const [open, setOpen] = useState(containsActive);
   return (
     <div className="pt-1.5">
       <button
         type="button"
         aria-expanded={open}
-        onClick={() => setOverride(!open)}
+        onClick={() => setOpen(!open)}
         className={cn(
           "flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-[11px] font-medium tracking-widest uppercase outline-none hover:bg-muted/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
           containsActive ? "text-foreground/90" : "text-muted-foreground",
@@ -139,9 +132,6 @@ function NavSection({
           )}
         />
         <span className="truncate">{section.label}</span>
-        <span className="ml-auto pr-0.5 font-mono text-[10px] tracking-normal text-muted-foreground/50">
-          {section.pages.length}
-        </span>
       </button>
       {open ? (
         <div className="mt-0.5 mb-1 ml-[13px] border-l border-border/60 pl-1.5">
