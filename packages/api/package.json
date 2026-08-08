@@ -57,6 +57,7 @@
     "@smithy/signature-v4": "^5.6.6",
     "@thinkwork/agent-loops-core": "workspace:*",
     "@thinkwork/capability-contracts": "workspace:*",
+    "@thinkwork/chart-renderer": "workspace:*",
     "@thinkwork/database-pg": "workspace:*",
     "@thinkwork/deployment-runner": "workspace:*",
     "@thinkwork/evals-core": "workspace:*",

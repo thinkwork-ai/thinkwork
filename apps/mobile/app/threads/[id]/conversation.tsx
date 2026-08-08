@@ -36,6 +36,7 @@ import {
   MyApprovedModelCatalogQuery,
 } from "@/lib/graphql-queries";
 import { parseThreadJsonRenderFallbacks } from "@/lib/genui-registry";
+import { parseChartParts } from "@/lib/chart-parts";
 import { useMe } from "@/lib/hooks/use-users";
 import { useTurnCompletion } from "@/lib/hooks/use-turn-completion";
 import { mentionCandidatesForTargets } from "@/lib/thread-mentions";
@@ -174,6 +175,7 @@ export default function ThreadConversationScreen() {
         durableArtifact: m.durableArtifact ?? null,
         toolResults,
         genuiFallbacks: parseThreadJsonRenderFallbacks(m.parts),
+        chartParts: parseChartParts(m.parts),
         timestamp: new Date(m.createdAt).getTime(),
         isStreaming: false,
       };

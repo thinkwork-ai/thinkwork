@@ -21,7 +21,12 @@ import {
   computeAnalysis,
   getAnalysisOp,
 } from "./document-analyses.js";
-import { renderChart } from "./document-charts.js";
+import {
+  CHART_TYPES,
+  renderChart,
+  validateChartDirectiveData,
+} from "@thinkwork/chart-renderer";
+import type { ChartDirectiveData, ChartType } from "@thinkwork/chart-renderer";
 import type {
   CompositorDiagnostic,
   DirectiveEngine,
@@ -273,33 +278,14 @@ const timelineSpec: DirectiveSpec = {
 // testable and let U3 land as its own unit.
 // ---------------------------------------------------------------------------
 
-export const CHART_TYPES = [
-  "bar",
-  "line",
-  "donut",
-  "stat-strip",
-  "sparkline",
-  "meter",
-  "funnel",
-] as const;
-export type ChartType = (typeof CHART_TYPES)[number];
-
-export interface ChartSeriesPoint {
-  label: string;
-  value: number;
-}
-
-export interface ChartDirectiveData {
-  type: ChartType;
-  title: string;
-  /** One-line qualifier under the title (unit / what one mark measures). */
-  qualifier?: string;
-  series: ChartSeriesPoint[];
-  /** Figure caption: the takeaway, not a chart description. */
-  caption?: string;
-  /** meter only: the maximum the value is measured against. */
-  max?: number;
-}
+// The chart data contract now lives in @thinkwork/chart-renderer (shared with
+// native clients); re-exported here so api-internal importers are unchanged.
+export { CHART_TYPES };
+export type {
+  ChartDirectiveData,
+  ChartSeriesPoint,
+  ChartType,
+} from "@thinkwork/chart-renderer";
 
 /** Seam kept injectable for tests; production wires the house renderer. */
 export type ChartRenderer = (data: ChartDirectiveData) => string;
@@ -329,60 +315,19 @@ export const makeChartSpec = (
         CHART_SCHEMA as DirectiveSpec,
       );
     }
-    const type = root.type;
-    if (!(CHART_TYPES as readonly string[]).includes(type as string)) {
+    // The chart contract itself lives in @thinkwork/chart-renderer — the one
+    // validator shared with the runtime's emit_analytics_chart tool and the
+    // finalize part normalizer (THINK-672). Only the directive-facing message
+    // prefix is local: the validator says "chart needs a `title`.", the
+    // directive has always said "tw:chart needs a `title`." so the model can
+    // see which fenced block it must repair.
+    const validated = validateChartDirectiveData(root);
+    if (!validated.ok) {
       return reject(
         "chart",
-        `Unknown chart type ${JSON.stringify(type)}. Supported types: ${CHART_TYPES.join(", ")}.`,
-        CHART_SCHEMA as DirectiveSpec,
-      );
-    }
-    const title = textOf(root.title);
-    if (title === null || title.trim() === "") {
-      return reject(
-        "chart",
-        "tw:chart needs a `title`.",
-        CHART_SCHEMA as DirectiveSpec,
-      );
-    }
-    const rawSeries = root.series;
-    if (
-      !Array.isArray(rawSeries) ||
-      rawSeries.length === 0 ||
-      rawSeries.length > 24
-    ) {
-      return reject(
-        "chart",
-        "tw:chart needs a `series` list with 1–24 points.",
-        CHART_SCHEMA as DirectiveSpec,
-      );
-    }
-    const series: ChartSeriesPoint[] = [];
-    for (const [i, point] of rawSeries.entries()) {
-      const rec = asRecord(point);
-      const label = textOf(rec?.label);
-      const value = rec?.value;
-      if (
-        label === null ||
-        typeof value !== "number" ||
-        !Number.isFinite(value)
-      ) {
-        return reject(
-          "chart",
-          `series[${i}] must be { label: string, value: finite number }.`,
-          CHART_SCHEMA as DirectiveSpec,
-        );
-      }
-      series.push({ label, value });
-    }
-    const max = root.max;
-    if (
-      max !== undefined &&
-      (typeof max !== "number" || !Number.isFinite(max))
-    ) {
-      return reject(
-        "chart",
-        "`max` must be a finite number.",
+        validated.error.startsWith("chart ")
+          ? `tw:${validated.error}`
+          : validated.error,
         CHART_SCHEMA as DirectiveSpec,
       );
     }
@@ -392,14 +337,7 @@ export const makeChartSpec = (
         "Chart rendering is not available on this release yet — express the data as a markdown table instead.",
       );
     }
-    const chartData: ChartDirectiveData = {
-      type: type as ChartType,
-      title: title.trim(),
-      qualifier: textOf(root.qualifier) ?? undefined,
-      series,
-      caption: textOf(root.caption) ?? undefined,
-      max: max as number | undefined,
-    };
+    const chartData: ChartDirectiveData = validated.data;
     const html = chartFigureHtml(chartRenderer(chartData), chartData);
     return { ok: true, html, containsSvg: true };
   },

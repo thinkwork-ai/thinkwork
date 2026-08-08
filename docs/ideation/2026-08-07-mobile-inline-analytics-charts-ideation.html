@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ideation: Mobile Inline Analytics Charts</title>
+<style>
+  :root {
+    --bg: #faf9f7; --card: #ffffff; --ink: #1a1d23; --muted: #5c6370;
+    --line: #e3e0da; --accent: #2563eb; --accent-soft: #eff4fe; --accent-text: #1d4ed8;
+    --warn-soft: #fdf3e7; --warn-text: #b45309; --ok-soft: #ecf7ef; --ok-text: #15803d;
+    --code-bg: #f1efeb;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .page { max-width: 900px; margin-inline: auto; padding: 40px 28px 60px; }
+  .prose, p, li, dd { max-width: 72ch; }
+  h1 { font-size: 1.7em; line-height: 1.25; margin: 0.2em 0 0.3em; }
+  h2 { font-size: 1.25em; margin: 2.2em 0 0.6em; padding-top: 0.6em; border-top: 1px solid var(--line); }
+  h3 { font-size: 1.05em; margin: 0 0 0.4em; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 0.88em; }
+  a { color: var(--accent-text); }
+  .eyebrow { font-size: 0.72em; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .meta { color: var(--muted); font-size: 0.9em; margin-bottom: 0.4em; }
+  .meta code { background: none; padding: 0; color: inherit; }
+  .idea { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; margin: 16px 0; }
+  .idea-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .chip { display: inline-block; border-radius: 999px; padding: 2px 11px; font-size: 0.75em; font-weight: 600; }
+  .chip-id { background: var(--accent-soft); color: var(--accent-text); }
+  .chip-axis { background: var(--code-bg); color: var(--muted); }
+  .chip-conf { background: var(--ok-soft); color: var(--ok-text); }
+  .chip-cx { background: var(--warn-soft); color: var(--warn-text); }
+  dl.fields { margin: 10px 0 0; }
+  dl.fields dt { font-size: 0.72em; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 700; margin-top: 12px; }
+  dl.fields dd { margin: 3px 0 0 0; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.93em; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .jump { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 18px; font-size: 0.93em; }
+  .jump ol { margin: 6px 0; padding-left: 1.4em; }
+  figure { margin: 18px 0; }
+  figure svg { max-width: 100%; height: auto; display: block; margin-inline: auto; }
+  figcaption { font-size: 0.85em; color: var(--muted); text-align: center; margin-top: 6px; max-width: none; }
+  .callout { background: var(--warn-soft); border-radius: 8px; padding: 12px 16px; margin: 14px 0; }
+  .callout .eyebrow { color: var(--warn-text); }
+  footer.composition-signal { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--line);
+    font-size: 0.8em; color: var(--muted); }
+  ul { padding-left: 1.3em; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="eyebrow">Ideation &middot; repo-grounded</div>
+<h1>Mobile Inline Analytics Charts</h1>
+<p class="meta">
+  <strong>Date:</strong> 2026-08-07 &nbsp;&middot;&nbsp;
+  <strong>Topic:</strong> mobile-inline-analytics-charts &nbsp;&middot;&nbsp;
+  <strong>Mode:</strong> repo-grounded<br>
+  <strong>Focus:</strong> Land brain analytics responses in the Mobile app with rich in-thread chart UX — reuse the Plate SVG chart technology to render charts inline in the conversation thread instead of emitting an artifact. Target UX per user mockup: inline chart card (title, funnel, caption takeaway) with a collapsible "Chart data" table beneath it.
+</p>
+
+<h2 id="grounding-context">Grounding Context</h2>
+<div class="prose">
+<p><strong>Codebase context.</strong> The "Plate SVG technology" is the Document Compositor's <em>house chart renderer</em> (<code>packages/api/src/lib/artifacts/document-charts.ts</code>): pure, deterministic string-template functions from <code>ChartDirectiveData</code> to static SVG — no script, no DOM, hardcoded 720&times;250 viewBox, XML-escaped at the boundary, colored exclusively through CSS custom properties (<code>var(--accent)</code>, <code>var(--ink)</code>&hellip;). It renders <code>tw:chart</code> fenced directives (kinds: bar, line, donut, stat-strip, sparkline, meter, <strong>funnel</strong>) compiled server-side into scriptless plate HTML, viewed on mobile through a JS-disabled WebView behind a link-out card. Separately, web thread GenUI renders Recharts charts from a <em>disjoint</em> catalog (<code>area|bar|line|pie</code>, <code>packages/thread-json-render/src/catalog.ts:302</code>); mobile's GenUI registry has no chart entry, so charts degrade to an "Open this thread on web" card. <code>react-native-svg@15.12.1</code> is already a mobile dependency, unused for charts. Analytics transport today: agent markdown with <code>tw:*</code> directives, typed <code>Message.parts</code> (Vercel AI SDK shape), and <code>data_view</code> artifact rows that render identically to generic report cards.</p>
+<p><strong>Verified corrections.</strong> Two claims were adversarially checked and settled this run: (1)&nbsp;<code>react-native-svg</code> <strong>cannot resolve CSS custom properties</strong> — house SVG strings handed to <code>SvgXml</code> unmodified render unstyled; every native-SVG idea below requires a literal-color substitution pass. (2)&nbsp;The <code>analytics-display</code> portable contract (<code>AnalyticsDisplayRenderPayload</code>, THNK-57) <strong>never shipped</strong> — no such package exists in the repo; the learnings doc claiming it did (<a href="https://github.com/thinkwork-ai/thinkwork/blob/main/docs/solutions/architecture-patterns/analytics-display-portable-contract-cross-surface-2026-06-20.md"><code>analytics-display-portable-contract&hellip;.md</code></a>) is stale.</p>
+<p><strong>External context.</strong> The dominant 2026 generative-UI pattern is "agent emits a validated declarative spec from a pre-approved catalog; each client renders natively" (Vercel AI SDK, Google A2UI, VegaChat, chat2plot) — validating the chart-as-data direction over server-rendered pixels. Mobile engine tiers: react-native-svg (light, static), Skia/Victory Native XL (GPU, +3&ndash;5&nbsp;MB), WebView-in-thread (unendorsed; scroll jank in FlatList). ChatGPT ships an inline static/interactive chart toggle.</p>
+<p><strong>Known pain.</strong> Adding a <code>tw:</code> directive kind touches ~7 hand-maintained seams that fail silently (THINK-205 shipped a defect caught only by pixel-level dogfooding). Web's <code>--chart-1..5</code> tokens are byte-identical in light and dark (dark mode is a no-op); mobile's one SVG feature (<code>TurnExecutionTimeline</code>) hardcodes hex and ignores its own <code>isDark</code> prop.</p>
+</div>
+
+<h2 id="topic-axes">Topic Axes</h2>
+<ul>
+  <li><strong>chart-rendering-engine</strong> — how chart pixels get drawn on mobile</li>
+  <li><strong>analytics-payload-contract</strong> — what the brain emits and how it reaches clients</li>
+  <li><strong>thread-inline-ux</strong> — placement and interaction in the mobile thread</li>
+  <li><strong>theming-a11y-performance</strong> — dark mode tokens, accessibility, scroll performance</li>
+  <li><strong>cross-surface-parity</strong> — one chart catalog across web Data View, compositor, and mobile</li>
+</ul>
+
+<h2 id="ranked-ideas">Ranked Ideas</h2>
+<div class="jump">
+  <span class="eyebrow">Jump to</span>
+  <ol>
+    <li><a href="#i1">Chart-as-data: <code>ChartDirectiveData</code> becomes a typed message part</a></li>
+    <li><a href="#i2">Run the house renderer on-device, with a resolved chart-role token contract</a></li>
+    <li><a href="#i3">Ship the mockup card: inline chart + caption + collapsible "Chart data" table</a></li>
+    <li><a href="#i4">The Trustworthy Chart Block: fallback, narration, and provenance as required fields</a></li>
+    <li><a href="#i5">Render ladder: PNG sidecars v0 &rarr; native SVG v1 &rarr; tap-to-open inspector v2</a></li>
+    <li><a href="#i6">Drift insurance: crown the house catalog, codegen the seams, golden-render CI</a></li>
+    <li><a href="#i7">Takeaway-first: the insight is the unit, the chart is the garnish</a></li>
+  </ol>
+</div>
+
+<article class="idea" id="i1">
+  <div class="idea-head">
+    <span class="chip chip-id">1</span><h3>Chart-as-data: <code>ChartDirectiveData</code> becomes a typed message part</h3>
+  </div>
+  <div class="idea-head">
+    <span class="chip chip-axis">analytics-payload-contract</span>
+    <span class="chip chip-conf">Confidence 85%</span>
+    <span class="chip chip-cx">Complexity Medium</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>Break the assumption that the compiler's <em>output</em> (HTML/SVG) is the transport. The server keeps validating <code>tw:chart</code> fences, but emits the already-closed <code>ChartDirectiveData</code> shape (<code>type, title, qualifier?, series[1&ndash;24], caption?, max?</code>) as a typed part on the message — alongside, not instead of, document compilation. Each client renders the data with its own engine; the server stays the single validator. Mobile gets its chart with the turn, in the scroll, with no artifact fetch and no navigation.</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> <code>packages/api/src/lib/artifacts/document-directives.ts:292-305</code> — <code>ChartDirectiveData</code> is a closed, serializable interface and rendering is already injected (<code>export type ChartRenderer = (data: ChartDirectiveData) =&gt; string</code>); <code>packages/database-pg/graphql/types/messages.graphql:33-40</code> — typed UIMessage parts are persisted at turn-finalize. <code>external:</code> spec-as-data is the converging industry pattern (VegaChat, chat2plot, Google A2UI).</dd>
+    <dt>Rationale</dt>
+    <dd>The whole cross-surface problem dissolves if the wire format is the directive's <em>data</em>, not its render. The persistence slot already exists — no new tables, no new artifact type — and the deferred THNK-34 inline-analytics plan already specified exactly this portable-payload shape before it stalled. The mobile mockup is the forcing function to un-defer it.</dd>
+    <dt>Downsides</dt>
+    <dd>Touches the GraphQL schema and turn-finalize path, so it needs cross-team sign-off before either client builds against it. Duplicates chart data between the compiled document and the message part for document-shaped responses.</dd>
+  </dl>
+  <figure>
+    <svg viewBox="0 0 760 240" role="img" aria-label="ChartDirectiveData flows from server validation to three per-surface renderers">
+      <rect x="20" y="80" width="180" height="80" rx="10" fill="#eff4fe" stroke="#2563eb"/>
+      <text x="110" y="112" text-anchor="middle" font-size="13" font-weight="600" fill="#1a1d23">tw:chart fence</text>
+      <text x="110" y="132" text-anchor="middle" font-size="11" fill="#5c6370">validated server-side</text>
+      <text x="110" y="148" text-anchor="middle" font-size="11" fill="#5c6370">ChartDirectiveData part</text>
+      <line x1="200" y1="120" x2="280" y2="50" stroke="#5c6370" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="200" y1="120" x2="280" y2="120" stroke="#5c6370" stroke-width="1.5" marker-end="url(#arr)"/>
+      <line x1="200" y1="120" x2="280" y2="190" stroke="#5c6370" stroke-width="1.5" marker-end="url(#arr)"/>
+      <rect x="290" y="25" width="200" height="52" rx="8" fill="#ffffff" stroke="#e3e0da"/>
+      <text x="390" y="47" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1d23">Web: house SVG / Recharts</text>
+      <text x="390" y="64" text-anchor="middle" font-size="11" fill="#5c6370">plate + Data View</text>
+      <rect x="290" y="95" width="200" height="52" rx="8" fill="#ecf7ef" stroke="#15803d"/>
+      <text x="390" y="117" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1d23">Mobile: react-native-svg</text>
+      <text x="390" y="134" text-anchor="middle" font-size="11" fill="#15803d">inline in the thread scroll</text>
+      <rect x="290" y="165" width="200" height="52" rx="8" fill="#ffffff" stroke="#e3e0da"/>
+      <text x="390" y="187" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1d23">Email: inline-styled table</text>
+      <text x="390" y="204" text-anchor="middle" font-size="11" fill="#5c6370">existing degradation path</text>
+      <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#5c6370"/></marker></defs>
+    </svg>
+    <figcaption>One validated data shape travels; each surface renders with its own engine. Illustrative, not a spec.</figcaption>
+  </figure>
+</article>
+
+<article class="idea" id="i2">
+  <div class="idea-head">
+    <span class="chip chip-id">2</span><h3>Run the house renderer on-device, with a resolved chart-role token contract</h3>
+  </div>
+  <div class="idea-head">
+    <span class="chip chip-axis">chart-rendering-engine</span>
+    <span class="chip chip-conf">Confidence 75%</span>
+    <span class="chip chip-cx">Complexity Medium</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>Extract the house chart renderer into a shared package and run it on the phone: mobile calls <code>renderChart(data, frame, palette)</code> locally and mounts the SVG string via <code>react-native-svg</code>'s <code>SvgXml</code>. Two changes make it portable: (a) parameterize the hardcoded 720&times;250 frame so layout reflows at actual device width and font scale (the funnel's 10px tick labels are illegible when a desktop SVG is scaled to a 360pt card); (b) replace <code>var(--x)</code> color references with a <strong>resolved palette parameter</strong> — a shared chart-role token contract (ink, muted, accent, line, series ramp) resolved to literal colors per surface and theme. Web CSS consumes the same roles via cascade; mobile passes literal values; email inlines safe hex.</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> <code>document-charts.ts:1-20</code> — "pure, deterministic functions from directive data to static SVG&hellip; no script, no external references, fixed viewBox layout arithmetic, no randomness" — nothing depends on a server or DOM. <code>direct:</code> verified this run: <code>react-native-svg</code> cannot resolve CSS custom properties, so palette resolution is mandatory, not optional. <code>direct:</code> <code>packages/ui/src/theme.css:74-78</code> vs <code>109-113</code> — <code>--chart-1..5</code> byte-identical in light and dark; <code>TurnExecutionTimeline.tsx</code> hardcodes hex and never uses its <code>isDark</code> prop for strokes.</dd>
+    <dt>Rationale</dt>
+    <dd>This is the user's "Plate SVG technology on mobile" instinct, sharpened: share the <em>renderer function</em>, not the SVG string. Mobile gets all 7 house kinds — including the mockup's funnel — with zero WebViews in the thread, and the token contract fixes two shipped theming defects (web's dark-mode no-op, the timeline's ignored <code>isDark</code>) as side effects rather than new work.</dd>
+    <dt>Downsides</dt>
+    <dd>The extraction moves audited rendering code across a package boundary (the KTD4 inject-after-sanitize gate must be preserved on web). Reflow means mobile output diverges pixel-wise from the server render — golden-render CI (idea 6) becomes more important. Dynamic Type support requires the layout functions to accept font scale, a real but mechanical parameterization.</dd>
+  </dl>
+</article>
+
+<article class="idea" id="i3">
+  <div class="idea-head">
+    <span class="chip chip-id">3</span><h3>Ship the mockup card: inline chart + caption + collapsible "Chart data" table</h3>
+  </div>
+  <div class="idea-head">
+    <span class="chip chip-axis">thread-inline-ux</span>
+    <span class="chip chip-conf">Confidence 90%</span>
+    <span class="chip chip-cx">Complexity Low</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>Build the inline analytics card exactly as mocked: title, chart, caption takeaway ("Numo ($50k) is the highest-value deal in Negotiation"), then a collapsible "&#9654; Chart data" disclosure revealing the table — rendered directly in the thread scroll. Concretely: give <code>data_view</code> its own card body instead of the generic report treatment, register a chart component in the mobile GenUI registry so the "Open this thread on web" fallback stops firing for charts, and derive the disclosure table from the chart's own <code>series</code> array rather than having the agent author the numbers twice.</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> <code>apps/mobile/components/chat/ArtifactCard.tsx:15-22</code> — <code>data_view</code> is mapped to the same config as <code>report</code> ("no special inline rendering"); <code>apps/mobile/lib/genui-registry.ts:146-154</code> — the registry holds only <code>task_list</code>, <code>task</code>, <code>question_card</code>, and everything else degrades to the open-on-web card; <code>app/settings/usage.tsx:120-125</code> — the collapse/chevron pattern already ships in the app.</dd>
+    <dt>Rationale</dt>
+    <dd>This is the deliverable the user pointed at and called perfect. Every piece of chrome it needs already exists (card, badge, disclosure); only the chart body is new, so it is the highest-certainty, lowest-novelty-risk item on the list — and deriving the table from <code>series</code> kills a data-drift risk inside a single message before it is born.</dd>
+    <dt>Downsides</dt>
+    <dd>Depends on a chart body renderer existing (ideas 2 or 5 supply one). Card-level scope only — multi-chart responses and interactivity are deliberately deferred.</dd>
+  </dl>
+</article>
+
+<article class="idea" id="i4">
+  <div class="idea-head">
+    <span class="chip chip-id">4</span><h3>The Trustworthy Chart Block: fallback, narration, and provenance as required fields</h3>
+  </div>
+  <div class="idea-head">
+    <span class="chip chip-axis">analytics-payload-contract</span>
+    <span class="chip chip-conf">Confidence 80%</span>
+    <span class="chip chip-cx">Complexity Medium</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>Define the analytics unit the way Slack Block Kit defines rich blocks: a chart block is <em>invalid</em> unless it carries all its representations — <code>{chart data, takeaway caption, table rows, one-sentence summary}</code> — validated at emission like <code>tw:sources</code> already is. Three payoffs from one validation layer: (a) degraded clients render table-first instead of an apology card, making "Open on web" structurally impossible; (b) screen-reader narration is derived from the data by one shared function ("Funnel, six stages, Contacted 2 down to Won 3; takeaway: &hellip;") instead of per-surface ARIA; (c) the existing provenance ledger cross-check extends to gate chart <em>numbers</em> — a chart whose figures don't trace to a tool call this turn is rejected for self-repair, the same way citing an uncalled tool already is.</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> <code>packages/pi-extensions/src/document-composer.ts:135-181</code> — the ledger cross-check already rejects <code>tw:sources</code> fences citing uninvoked tools and returns a REJECTED result for self-repair; <code>packages/api/src/lib/artifact-delivery.ts:59-67</code> — "raw YAML must never reach a recipient" is already email's contract; <code>document-directives.ts:299</code> — caption is contractually "the takeaway, not a chart description." <code>external:</code> Slack Block Kit's mandatory per-block <code>text</code> fallback is why Slack never shows a broken block.</dd>
+    <dt>Rationale</dt>
+    <dd>Reframes "how do we render charts on mobile" into "what must an analytics block always carry" — and the answer makes the mockup's chart+caption+disclosure-table the contract's <em>natural</em> rendering, with accessibility and degraded surfaces solved by the same required fields. The provenance leg matters most: an inline chart is exactly where a hallucinated pipeline number is most damaging and least detectable in front of a customer.</dd>
+    <dt>Downsides</dt>
+    <dd>Stricter emission validation means more agent self-repair round-trips; the narration function and number-tracing heuristics need real design work (aggregates vs raw tool rows).</dd>
+  </dl>
+  <figure>
+    <svg viewBox="0 0 760 190" role="img" aria-label="Anatomy of the chart block: four required fields feeding three guarantees">
+      <rect x="20" y="30" width="250" height="130" rx="10" fill="#ffffff" stroke="#2563eb"/>
+      <text x="145" y="20" text-anchor="middle" font-size="11" font-weight="700" fill="#5c6370">CHART BLOCK — ALL FIELDS REQUIRED</text>
+      <text x="40" y="58" font-size="12" fill="#1a1d23">&#9679; chart data (series, kind)</text>
+      <text x="40" y="82" font-size="12" fill="#1a1d23">&#9679; takeaway caption</text>
+      <text x="40" y="106" font-size="12" fill="#1a1d23">&#9679; table rows</text>
+      <text x="40" y="130" font-size="12" fill="#1a1d23">&#9679; one-sentence summary</text>
+      <line x1="270" y1="60" x2="360" y2="50" stroke="#5c6370" stroke-width="1.5" marker-end="url(#arr2)"/>
+      <line x1="270" y1="95" x2="360" y2="95" stroke="#5c6370" stroke-width="1.5" marker-end="url(#arr2)"/>
+      <line x1="270" y1="130" x2="360" y2="140" stroke="#5c6370" stroke-width="1.5" marker-end="url(#arr2)"/>
+      <rect x="370" y="30" width="360" height="40" rx="8" fill="#ecf7ef"/>
+      <text x="550" y="55" text-anchor="middle" font-size="12" fill="#15803d">worst case = the mockup's disclosure table, never "open on web"</text>
+      <rect x="370" y="76" width="360" height="40" rx="8" fill="#ecf7ef"/>
+      <text x="550" y="101" text-anchor="middle" font-size="12" fill="#15803d">screen-reader narration derived once, all surfaces</text>
+      <rect x="370" y="122" width="360" height="40" rx="8" fill="#ecf7ef"/>
+      <text x="550" y="147" text-anchor="middle" font-size="12" fill="#15803d">numbers gated by the tw:sources provenance ledger</text>
+      <defs><marker id="arr2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#5c6370"/></marker></defs>
+    </svg>
+    <figcaption>Required fields turn fallback, accessibility, and provenance into properties of the contract, not per-surface effort. Illustrative, not a spec.</figcaption>
+  </figure>
+</article>
+
+<article class="idea" id="i5">
+  <div class="idea-head">
+    <span class="chip chip-id">5</span><h3>Render ladder: PNG sidecars v0 &rarr; native SVG v1 &rarr; tap-to-open inspector v2</h3>
+  </div>
+  <div class="idea-head">
+    <span class="chip chip-axis">chart-rendering-engine</span>
+    <span class="chip chip-conf">Confidence 75%</span>
+    <span class="chip chip-cx">Complexity Medium, staged</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>Sequence the engine work as a ladder off one payload. <strong>v0:</strong> at compile time the server rasterizes each chart into light- and dark-theme PNG sidecars; mobile renders a plain <code>&lt;Image&gt;</code> — zero parse cost, perfectly scroll-safe, ships the mockup next sprint, and structurally sidesteps the <code>var()</code> problem (colors baked server-side). It also upgrades email from table-only to image charts for free. <strong>v1:</strong> swap the body for the shared on-device renderer (idea 2) to gain sharpness, Dynamic Type, and offline generation. <strong>v2:</strong> tap opens a full-screen GPU inspector (Victory Native XL / Skia: scrub tooltips, drill-in) fed by the same <code>ChartDirectiveData</code> — ChatGPT's shipped static/interactive toggle, adapted to a FlatList thread where the toggle is navigation.</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> <code>artifact-delivery.ts:59-67</code> — email's table-only degradation exists because clients strip SVG; PNG sidecars repair it. <code>external:</code> ChatGPT's interactive/static chart toggle; Victory Native XL / react-native-skia documented at 60&ndash;120fps for +3&ndash;5&nbsp;MB binary; resvg/sharp are proven Lambda rasterizers. <code>reasoned:</code> each rung delivers user-visible value alone and no rung blocks the next — the payload contract is the only shared dependency.</dd>
+    <dt>Rationale</dt>
+    <dd>The fleet's engine candidates (bake variants, reflow on-device, render endpoint, GPU) are usually framed as competitors; sequencing them as a ladder converts an architecture fight into a shipping plan. v0 is the only path that gets the mockup in front of users while the renderer extraction (idea 2) is still in flight.</dd>
+    <dt>Downsides</dt>
+    <dd>PNGs are blurry on zoom and ignore Dynamic Type (acceptable for a v0, which is why v1 exists); the v2 inspector's +3&ndash;5&nbsp;MB binary cost needs an explicit product yes/no; three rungs means the team must resist stopping at v0 forever.</dd>
+  </dl>
+  <figure>
+    <svg viewBox="0 0 760 130" role="img" aria-label="Three-rung render ladder sharing one payload">
+      <rect x="20" y="45" width="215" height="60" rx="8" fill="#eff4fe" stroke="#2563eb"/>
+      <text x="127" y="70" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1d23">v0 — baked PNG sidecars</text>
+      <text x="127" y="88" text-anchor="middle" font-size="11" fill="#5c6370">ships the mockup now; fixes email</text>
+      <rect x="272" y="45" width="215" height="60" rx="8" fill="#ffffff" stroke="#e3e0da"/>
+      <text x="379" y="70" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1d23">v1 — on-device house SVG</text>
+      <text x="379" y="88" text-anchor="middle" font-size="11" fill="#5c6370">sharp, themed, Dynamic Type</text>
+      <rect x="524" y="45" width="215" height="60" rx="8" fill="#ffffff" stroke="#e3e0da"/>
+      <text x="631" y="70" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1d23">v2 — tap-to-open inspector</text>
+      <text x="631" y="88" text-anchor="middle" font-size="11" fill="#5c6370">Skia / Victory XL, full screen</text>
+      <line x1="235" y1="75" x2="270" y2="75" stroke="#5c6370" stroke-width="1.5" marker-end="url(#arr3)"/>
+      <line x1="487" y1="75" x2="522" y2="75" stroke="#5c6370" stroke-width="1.5" marker-end="url(#arr3)"/>
+      <text x="380" y="25" text-anchor="middle" font-size="11" font-weight="700" fill="#5c6370">ONE ChartDirectiveData PAYLOAD FEEDS EVERY RUNG</text>
+      <defs><marker id="arr3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#5c6370"/></marker></defs>
+    </svg>
+    <figcaption>Each rung is independently shippable; none blocks the next. Illustrative, not a spec.</figcaption>
+  </figure>
+</article>
+
+<article class="idea" id="i6">
+  <div class="idea-head">
+    <span class="chip chip-id">6</span><h3>Drift insurance: crown the house catalog, codegen the seams, golden-render CI</h3>
+  </div>
+  <div class="idea-head">
+    <span class="chip chip-axis">cross-surface-parity</span>
+    <span class="chip chip-conf">Confidence 70%</span>
+    <span class="chip chip-cx">Complexity Medium</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>Before mobile becomes a third chart surface, retire the conditions that make surfaces drift. (a) <strong>Crown the house catalog</strong> (<code>bar|line|donut|stat-strip|sparkline|meter|funnel</code>) as the single analytics chart vocabulary — the GenUI catalog (<code>area|bar|line|pie</code>) cannot even render the mockup's funnel, and the competing <code>analytics-display/v1</code> contract was confirmed never-shipped, so this is a decision, not a migration. (b) <strong>Codegen the mirrors</strong>: generate web's <code>PLATE_DIRECTIVE_KINDS</code>, exemplar snippets, workspace-defaults guidance, and the new mobile registry from <code>DEFAULT_REGISTRY</code> at build time, so mobile never becomes hand-synced seam #8. (c) <strong>Golden-render CI</strong>: one fixture corpus (every kind &times; edge cases &times; themes) rendered by every engine, snapshot-diffed — byte-exact, because the renderer was engineered deterministic (<code>r2()</code> exists precisely to kill float noise).</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> <code>docs/solutions/architecture-patterns/new-tw-directive-kind-checklist.md</code> — 7 hand-maintained seams, "silent UX gap if missed, not test failure," THINK-205 shipped and was caught only by pixel-level dogfooding; <code>document-charts.ts:38-39</code> — "Fixed-precision coordinate — kills float noise, keeps output stable"; verified this run: no <code>analytics-display</code> package exists anywhere in the repo.</dd>
+    <dt>Rationale</dt>
+    <dd>Every engine idea above adds a renderer or a variant, which multiplies exactly the drift surface the repo's own history flags as its chronic failure mode. This bundle is the prerequisite that makes having more than one render target safe — and determinism already paid for the CI leg; nobody is collecting the payoff.</dd>
+    <dt>Downsides</dt>
+    <dd>Contradicts the (unshipped) portable-contract plan's catalog, so the team must formally supersede it; codegen infra is unglamorous work that competes with the visible mockup for priority; cross-engine snapshots need per-engine harnesses.</dd>
+  </dl>
+</article>
+
+<article class="idea" id="i7">
+  <div class="idea-head">
+    <span class="chip chip-id">7</span><h3>Takeaway-first: the insight is the unit, the chart is the garnish</h3>
+  </div>
+  <div class="idea-head">
+    <span class="chip chip-axis">thread-inline-ux</span>
+    <span class="chip chip-conf">Confidence 65%</span>
+    <span class="chip chip-cx">Complexity Low</span>
+  </div>
+  <dl class="fields">
+    <dt>Description</dt>
+    <dd>Design the mobile analytics unit insight-first: takeaway sentence leads, then a stat-strip or chart <em>when the kind survives a phone width</em>, table always available under disclosure. Encode per-kind mobile fitness rules — a 24-point donut on a 360pt screen should <em>choose</em> to render as a stat-strip + table instead of an unreadable chart. Small-screen degradation becomes a design principle rather than a failure mode.</dd>
+    <dt>Basis</dt>
+    <dd><code>direct:</code> <code>document-directives.ts:299</code> — the contract already encodes the hierarchy: caption is "the takeaway, not a chart description." The user's own mockup foregrounds the annotation line. <code>reasoned:</code> the analytics answer's value is the judgment ("Numo is the highest-value deal in Negotiation"), which survives every screen size; the chart is evidence for it, and evidence can change form.</dd>
+    <dt>Rationale</dt>
+    <dd>Cheap insurance against the most likely quality failure of this whole program: shipping technically-correct charts that are illegible or meaningless at phone width. Forces the per-kind fitness conversation before renderer code hardcodes assumptions.</dd>
+    <dt>Downsides</dt>
+    <dd>Fitness rules are judgment calls that need design ownership; risks over-suppressing charts users actually want if tuned conservatively.</dd>
+  </dl>
+</article>
+
+<h2 id="rejection-summary">Rejection Summary</h2>
+<table>
+  <thead><tr><th>#</th><th>Idea</th><th>Reason Rejected</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Server-baked mobile-size SVG variants ("game-asset LOD bake")</td><td>Superseded — on-device reflow (idea 2) handles width/font-scale better, and PNG sidecars (idea 5 v0) cover the bake path more simply.</td></tr>
+    <tr><td>2</td><td>Chart tile/render endpoint, CDN-cached</td><td>Verifier: map-tile analogy doesn't hold (no pan/zoom grid); adds a network dependency and offline loss for value the PNG sidecar already delivers.</td></tr>
+    <tr><td>3</td><td>Inline per-chart mini WebView (zero-client-release forever)</td><td>Evidence-flagged: WebView-in-FlatList scroll jank is exactly the case external research calls unendorsed; the zero-release property is real but the cost is the thread's core feel.</td></tr>
+    <tr><td>4</td><td>Chart deck for multi-chart messages + ChatBubble memoization</td><td>Verifier: scope-mixing — the deck is a v2 UX concern once single charts land; memoization is a routine perf task, not a direction.</td></tr>
+    <tr><td>5</td><td>Recharts-in-WebView for maximal web code reuse</td><td>Cut by generators as warm-up: dossier evidence (jank, no endorsement) refutes it before critique.</td></tr>
+    <tr><td>6</td><td>Generic "shared chart component library"</td><td>Restates the problem without a mechanism; ideas 1+2 are the concrete version.</td></tr>
+    <tr><td>7</td><td>Register chart in mobile GenUI registry (standalone)</td><td>Folded into idea 3 — it is the landing mechanics of the mockup card, not a separate direction.</td></tr>
+    <tr><td>8</td><td>Chart-role token contract (standalone)</td><td>Folded into idea 2 — the verifier's var() finding makes palette resolution a mandatory constraint of the renderer move, not a sibling idea.</td></tr>
+    <tr><td>9</td><td>A11y narration from data / provenance gate / mandatory fallback (standalone trio)</td><td>Merged into idea 4 — all three are legs of one validated-block contract.</td></tr>
+    <tr><td>10</td><td>Crown house catalog / codegen seams / golden CI (standalone trio)</td><td>Merged into idea 6 — one drift-insurance bundle with a single decision at its head.</td></tr>
+  </tbody>
+</table>
+<p class="prose"><em>Housekeeping flag surfaced during verification:</em> the learnings doc <code>docs/solutions/architecture-patterns/analytics-display-portable-contract-cross-surface-2026-06-20.md</code> states the analytics-display contract shipped; the repo shows it never did. Worth correcting so future sessions don't build on it.</p>
+
+<footer class="composition-signal">Composed 2026-08-07 by ce-ideate from the session focus "landing brain analytics in Mobile with inline Plate-SVG charts" and the user's inline-funnel mockup &middot; run 8bb84801 &middot; 39 raw ideas from 5 frames, verified against repo evidence dossiers.</footer>
+
+</div>
+</body>
+</html>

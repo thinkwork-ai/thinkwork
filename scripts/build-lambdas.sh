@@ -129,8 +129,10 @@ echo ""
 echo "Preparing workspace package exports"
 pnpm --dir "$REPO_ROOT" --filter @thinkwork/thread-json-render build >/dev/null
 pnpm --dir "$REPO_ROOT" --filter @thinkwork/pi-runtime-core build >/dev/null
+pnpm --dir "$REPO_ROOT" --filter @thinkwork/chart-renderer build >/dev/null
 echo "  ✓ thread-json-render"
 echo "  ✓ pi-runtime-core"
+echo "  ✓ chart-renderer"
 echo ""
 
 # ---------------------------------------------------------------------------

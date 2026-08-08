@@ -1,13 +1,17 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Message, Usage } from "@earendil-works/pi-ai";
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
+import type { ChartMessagePart } from "@thinkwork/chart-renderer";
 import type { ThreadJsonRenderPart } from "@thinkwork/thread-json-render";
 
 import type { SessionStore } from "./durable-session-manager.js";
 import type { McpAppPart } from "./mcp-app-runtime.js";
 import type { ModelRoutedToolCallRecord } from "./model-routing-policy.js";
 
-export type DurableUiMessagePart = ThreadJsonRenderPart | McpAppPart;
+export type DurableUiMessagePart =
+  | ThreadJsonRenderPart
+  | McpAppPart
+  | ChartMessagePart;
 
 export type AgentProfileRunStatus =
   | "completed"
