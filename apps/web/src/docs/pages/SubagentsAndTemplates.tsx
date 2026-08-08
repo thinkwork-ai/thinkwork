@@ -206,8 +206,8 @@ export function SubagentsAndTemplates() {
 
       <Section id="templates" title="Templates and fleet rollout">
         <p>
-          Each tenant runs one platform agent, and specialization happens inside
-          it — sub-agent folders for delegation,{" "}
+          Each company runs one Enterprise Agent, and specialization happens
+          inside it — sub-agent folders for delegation,{" "}
           <DocLink slug="spaces">spaces</DocLink> for the context a piece of
           work happens in. That is the shape to reach for first. Templates sit
           underneath it as authoring infrastructure rather than a daily control

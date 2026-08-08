@@ -136,7 +136,7 @@ export function AppTour() {
               <FlowNode
                 icon={SettingsIcon}
                 title="Profile & Settings"
-                sub="your account and files; the tenant's agents, Spaces and users"
+                sub="your account and files; your company's agents, Spaces and users"
                 tone="source"
               />
             </FlowChain>

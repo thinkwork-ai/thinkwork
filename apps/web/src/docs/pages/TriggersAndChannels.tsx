@@ -265,11 +265,11 @@ export function TriggersAndChannels() {
         >
           <p>
             Slack has no per-channel configuration today. Every mention and DM
-            reaches the tenant agent and lands in the general space, whatever
-            channel it came from. If you need Slack work carrying a specific
-            space&apos;s context, that context has to be tenant-level for now —
-            older docs describing a channel-to-space binding describe an
-            intention, not a feature.
+            reaches the Enterprise Agent and lands in the general space,
+            whatever channel it came from. If you need Slack work carrying a
+            specific space&apos;s context, that context has to be tenant-level
+            for now — older docs describing a channel-to-space binding describe
+            an intention, not a feature.
           </p>
         </Callout>
         <p>

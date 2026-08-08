@@ -214,7 +214,7 @@ export const DOC_SECTIONS: DocSectionDef[] = [
         slug: "compounding-memory",
         title: "Compounding memory",
         blurb:
-          "Scattered memories distilled into Entity, Topic and Decision pages you can browse.",
+          "How the agent studies its own threads so the second week costs less than the first.",
         toc: COMPOUNDING_MEMORY_TOC,
         component: CompoundingMemory,
       },

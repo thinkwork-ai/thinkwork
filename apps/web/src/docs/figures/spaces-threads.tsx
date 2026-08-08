@@ -3,7 +3,7 @@
  *
  * Two pictures that the kit's FlowChain cannot draw:
  *  - SpaceCompositionDiagram — a Space is not a step in a sequence, it is a
- *    layer wrapped around the one tenant agent. That needs a band with four
+ *    layer wrapped around the one Enterprise Agent. That needs a band with four
  *    parallel parts inside it, not a chain.
  *  - WorkArrivesDiagram — four independent entry points converging on one
  *    thread is a genuine fan-in; drawn as elbowed edges meeting one box.
@@ -58,7 +58,7 @@ export function SpaceCompositionDiagram() {
 
   return (
     <Diagram
-      title="A Space layered over the tenant agent: members, files, triggers and threads"
+      title="A Space layered over the Enterprise Agent: members, files, triggers and threads"
       viewBox="0 0 720 430"
       caption="One agent per tenant. A Space does not clone it — it wraps it, so the same agent arrives at a Support turn and a Finance turn with different local context."
     >
@@ -68,8 +68,8 @@ export function SpaceCompositionDiagram() {
         y={34}
         w={640}
         h={62}
-        title="The tenant agent"
-        sub="one per tenant — instructions, skills, connectors"
+        title="The Enterprise Agent"
+        sub="your company's one agent — instructions, skills, connectors"
         tone="compute"
       />
       <DgArrow d="M 360 96 L 360 146" label="shaped by" labelAt={[360, 121]} />
