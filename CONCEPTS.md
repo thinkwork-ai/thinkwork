@@ -50,9 +50,21 @@ A schema migration authored directly as SQL rather than generated from the ORM s
 
 The integrity-pinned description of a platform release — its artifact bundles, runtime images, and compatibility floors (including the minimum runner version) — that a Deployment Controller consumes to apply that release.
 
+### Release Cutover
+
+The operator act of moving customer Stages onto a published release: cut and publish the release, then instruct each Stage's Deployment Controller to apply it. Cutover is per-Stage and evidence-driven — the update for a Stage is composed from that Stage's prior successful Deployment Evidence, carrying forward customer-owned facts the release itself cannot supply (most importantly the Pi Image Pin), so a cutover attempt that starts from a blank input rather than history is refused before anything is applied.
+
+### Release Mirror
+
+The release-time copy of a release's runtime image into each customer account's own container registry, driven by a declared list of customer targets. Customer Stages only ever run images that were deliberately placed in their own registry — never images pulled from the vendor's registry at apply time — and adding a new customer account to the declared target list is the entire onboarding step for it to receive future mirrors.
+
+### Pi Image Pin
+
+The customer-registry image reference a customer Stage's runtime is pinned to, carried in the deployment input independently of the release version — the two advance on separate cadences. The pin must reference the customer's own registry; a full customer update with no valid pin anywhere in the Stage's deployment history fails fast, before anything is applied, rather than falling back to the vendor's registry. Web-only updates are exempt, since they do not touch the runtime.
+
 ### Deployment Evidence
 
-The per-run record a Deployment Runner writes for operators and the control plane: what was planned, what was applied, run status, and which inputs the runner actually consumed. Evidence is how version skew and dropped inputs become visible.
+The per-run record a Deployment Runner writes for operators and the control plane: what was planned, what was applied, run status, and which inputs the runner actually consumed. Evidence is how version skew and dropped inputs become visible — and it is the history a Release Cutover recovers the Pi Image Pin and other customer-owned facts from.
 
 ### State Backend
 
