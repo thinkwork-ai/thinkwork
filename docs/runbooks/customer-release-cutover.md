@@ -1,40 +1,45 @@
-# Customer release cutover — controller deploy + Pi image mirror + skill seed
+# Customer release cutover — `thinkwork release deploy` + skill seed
 
-Proven end-to-end 2026-07-06 shipping v0.1.0-canary.320 to `tei-e2e` (acct 637423202447) and `mcpherson` (acct 024350822488). This is the CLI path; the Settings → Releases UI (`docs/runbooks/settings-release-upgrades.md`) is the operator-facing equivalent.
+Proven end-to-end 2026-08-09 shipping v0.1.0-canary.449 to `tei-e2e` (acct 637423202447) and `mcpherson` (acct 024350822488). This is the CLI path; the Settings → Releases UI (`docs/runbooks/settings-release-upgrades.md`) is the operator-facing equivalent.
+
+> **History**: the 2026-07-06 version of this runbook documented a manual docker Pi-image mirror plus a raw `thinkwork deploy --controller` invocation. Both are obsolete — see "What changed" at the bottom, because the old deploy path now **fails by design** and the failure message doesn't name this fix.
 
 ## 0. Preconditions
 
-- A `v0.1.0-canary.N` tag whose `release.yml` run completed (GitHub release has `thinkwork-release.json` + `platform-artifacts.tar.gz`).
-- AWS profiles for each customer account; docker running; access to the dev ECR (for the image mirror).
+- A `v0.1.0-canary.N` tag whose `release.yml` run completed (GitHub release has `thinkwork-release.json` + `platform-artifacts.tar.gz`, and the `Mirror arm64 Pi image (<stage>)` jobs succeeded for every customer target).
+- AWS profiles for each customer account. No docker, no dev-ECR access — the image mirror is CI's job now.
 
-## 1. Pre-mirror the Pi image (do this BEFORE the deploy)
+## 1. Cut the release (if not already tagged)
 
-The runner's terraform mirror step pulls the release Pi image from **GHCR, which is private to customer CodeBuild runners** — the pull fails and the step silently keeps the existing `pi-latest` (`terraform/modules/app/agentcore-pi/main.tf` WARN path). Pre-pushing the new image into the customer ECR turns that "keep existing" fallback into "keep the new image":
-
-```bash
-# amd64 — customer Pi is Lambda-hosted on amd64. The dev ECR's <sha>-pi tag is
-# the same build; use it when GHCR read:packages scope is unavailable.
-SRC=487219502366.dkr.ecr.us-east-1.amazonaws.com/thinkwork-dev-agentcore:<git-sha>-pi
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 487219502366.dkr.ecr.us-east-1.amazonaws.com
-docker pull $SRC
-for each stack:
-  aws ecr get-login-password --profile <p> --region us-east-1 | docker login --username AWS --password-stdin <acct>.dkr.ecr.us-east-1.amazonaws.com
-  docker tag $SRC <acct>.dkr.ecr.us-east-1.amazonaws.com/thinkwork-<stage>-agentcore:pi-latest
-  docker tag $SRC <acct>.dkr.ecr.us-east-1.amazonaws.com/thinkwork-<stage>-agentcore:<release-tag>-pi-amd64
-  docker push both tags
-```
-
-## 2. Controller deploy per stack
+Nothing auto-mints canary tags (`canary-release-tagging-web-desktop-2026-06-11.md`). Tag the merged main and push:
 
 ```bash
-TAG=v0.1.0-canary.N
-URL="https://github.com/thinkwork-ai/thinkwork/releases/download/$TAG/thinkwork-release.json"
-SHA=$(curl -sL "$URL" | shasum -a 256 | awk '{print $1}')
-AWS_REGION=us-east-1 AWS_PROFILE=<profile> thinkwork deploy \
-  --controller --controller-action update -s <stage> \
-  --release-version "$TAG" --manifest-url "$URL" --manifest-sha256 "$SHA"
-# → prints the Step Functions execution ARN; poll describe-execution until SUCCEEDED.
+git fetch --tags && git tag --sort=-creatordate | head -3   # find next N
+git tag v0.1.0-canary.N origin/main && git push origin v0.1.0-canary.N
+gh run watch $(gh run list --workflow=release.yml --limit 1 --json databaseId --jq '.[0].databaseId')
 ```
+
+`release.yml` builds the platform artifacts **and mirrors the arm64 Pi image into every customer ECR** listed in `.github/release-mirror-targets.json` (THINK-616). Adding a new enterprise account to that file is the only change needed for it to inherit the mirror.
+
+## 2. Deploy per stack — one command
+
+```bash
+AWS_REGION=us-east-1 AWS_PROFILE=<profile> thinkwork release deploy v0.1.0-canary.N -s <stage> -y
+# add --no-wait to start the controller execution and poll yourself:
+#   aws stepfunctions describe-execution --execution-arn <printed-arn>
+# add --web-only to sync only the web static bundle (no terraform, no Pi pin needed)
+```
+
+`thinkwork release deploy` (CLI ≥ 0.13) resolves the manifest URL + sha256 from the GitHub release itself and — critically — **recovers the prior successful controller input from the stack's deployment history**, carrying forward the non-derivable environment facts: the customer-ECR `agentcorePiSourceImageUri` pin, AgentCore Harness configuration, and feature flags. Bare `thinkwork release -s <stage>` prompts over the last five releases.
+
+Do **not** use `thinkwork deploy --controller --controller-action update` for a customer release. It builds a fresh controller input with no Pi pin, and the runner refuses it:
+
+```
+RuntimeError: Customer foundation updates require an explicit customer-ECR
+agentcorePiSourceImageUri; refusing to fall back to the release registry.
+```
+
+That guard is intentional (`runner.py: resolve_agentcore_pi_source_image_uri` — customer stacks must never pull the release registry's image at apply time). The raw deploy path remains correct only for greenfield installs and dev stacks.
 
 ## 3. Verify per stack
 
@@ -58,3 +63,9 @@ If the release changed default-skill content, run the seed one-off per stack (pa
 
 - Runner self-updates only after a successful run; a stack stuck on a broken runner needs the hot-stage unblock (`runner-guardrail-preconditions-need-bootstrap-fallback-2026-07-04.md`).
 - n8n cert/DNS preservation and the `agent_step_bridge_credential` guardrail history: PR #3344.
+- A failed controller execution fails **fast and clean** on the Pi-pin guard (before any terraform), so a guard failure leaves the stack untouched — rerun with `thinkwork release deploy`, no cleanup needed (observed live 2026-08-09 on both stacks).
+
+## What changed since 2026-07-06 (why the old steps are gone)
+
+1. **Manual Pi-image mirror → CI**: `release.yml`'s `mirror-customer-images` job (THINK-616) pushes the arm64 Pi image into each customer ECR under `<releaseVersion>-pi-arm64`, driven by `.github/release-mirror-targets.json`. The docker/dev-ECR pre-mirror is no longer part of the cutover.
+2. **Raw controller deploy → `thinkwork release deploy`**: the runner now hard-refuses customer foundation updates without a customer-ECR Pi pin, and only the release command recovers that pin from deployment history (`apps/cli/src/commands/release/helpers.ts: recoverPriorControllerInput` / `buildControllerUpdateInput`).
