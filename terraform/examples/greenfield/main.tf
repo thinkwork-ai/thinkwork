@@ -81,6 +81,12 @@ variable "plugin_catalog_github_token_secret_arn" {
   default     = ""
 }
 
+variable "brain_m2m_platform_agent_secret_arn" {
+  description = "Optional Secrets Manager ARN of the Company Brain platform-agent machine-lane secret (Cognito client-credentials blob, THINK-628). When set, the shared API Lambda role may read it so MCP config build can mint short-lived bearers for the Brain connector. Empty leaves the tkt_ lane untouched."
+  type        = string
+  default     = ""
+}
+
 variable "db_password" {
   description = "Master password for the Aurora cluster"
   type        = string
@@ -899,6 +905,7 @@ module "thinkwork" {
   account_id = var.account_id
 
   plugin_catalog_github_token_secret_arn = var.plugin_catalog_github_token_secret_arn
+  brain_m2m_platform_agent_secret_arn    = var.brain_m2m_platform_agent_secret_arn
 
   db_password                                 = var.db_password
   database_engine                             = var.database_engine

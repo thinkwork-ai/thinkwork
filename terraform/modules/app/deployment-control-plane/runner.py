@@ -4828,6 +4828,17 @@ def write_runner_files(payload, runner_secrets):
             "brainMcpUrl",
             default=safe_get(reviewed_payload, "brainMcpUrl", default=""),
         ),
+        # Company Brain platform-agent machine lane (THINK-628/THINK-710).
+        # Secrets Manager ARN of etl-platform/brain-mcp/m2m/platform-agent in
+        # this account; grants the shared API Lambda role read so MCP config
+        # build can mint Cognito bearers for the Brain connector. Environment
+        # posture: durable home is the runner-secrets document. Empty leaves
+        # the tkt_ lane untouched.
+        "brain_m2m_platform_agent_secret_arn": safe_get(
+            runner_secrets,
+            "brainM2mPlatformAgentSecretArn",
+            default=safe_get(reviewed_payload, "brainM2mPlatformAgentSecretArn", default=""),
+        ),
     }
     enforce_customer_domain_preservation(
         current_outputs,
@@ -4980,6 +4991,16 @@ variable "neptune_load_bucket" {{
 }}
 
 variable "neptune_loader_role_arn" {{
+  type    = string
+  default = ""
+}}
+
+variable "brain_mcp_url" {{
+  type    = string
+  default = ""
+}}
+
+variable "brain_m2m_platform_agent_secret_arn" {{
   type    = string
   default = ""
 }}
@@ -5446,6 +5467,8 @@ module "thinkwork" {{
   neptune_client_security_group_id = var.neptune_client_security_group_id
   neptune_load_bucket              = var.neptune_load_bucket
   neptune_loader_role_arn          = var.neptune_loader_role_arn
+  brain_mcp_url                    = var.brain_mcp_url
+  brain_m2m_platform_agent_secret_arn = var.brain_m2m_platform_agent_secret_arn
   enable_workspace_orchestration = true
   enable_agentcore_multiplayer_proof          = var.enable_agentcore_multiplayer_proof
   agentcore_multiplayer_proof_tenant_slug     = var.agentcore_multiplayer_proof_tenant_slug
