@@ -170,7 +170,7 @@ For retrieval, assert on **rank**, not merely presence — see
 - [Bedrock KB indexes nothing from scanned pages and screenshot SOPs](./bedrock-kb-image-bearing-pdfs-2026-07-25.md)
   — why page-level transcription exists at all, and its measured economics
 - [Rank, not presence, is the retrieval metric on SOP corpora](../architecture-patterns/kb-hybrid-retrieval-for-sop-corpora-2026-07-25.md)
-- [A release-version bump does NOT update the Pi runtime image](../operations/pi-runtime-image-decoupled-from-release-version-2026-07-25.md)
+- [A release-version bump does NOT update the Pi runtime image](../operations/pi-runtime-image-decoupled-from-release-version.md)
 - `packages/api/knowledge-base-manager.ts` — sync, ingestion, deletion settlement
 - `packages/api/src/handlers/kb-transcribe.ts` — the preprocessing worker
 - `packages/database-pg/drizzle/0278_kb_page_transcription.sql` — manifest columns

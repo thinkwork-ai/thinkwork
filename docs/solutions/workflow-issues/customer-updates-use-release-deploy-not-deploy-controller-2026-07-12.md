@@ -133,7 +133,7 @@ refresh):
 ## Related
 
 - `docs/runbooks/customer-release-cutover.md` — the authoritative current procedure (refreshed in PR #4260)
-- [Pi runtime image is decoupled from the release version](../operations/pi-runtime-image-decoupled-from-release-version-2026-07-25.md) — the two-pins model; its manual-mirror section predates #4209
+- [Pi runtime image is decoupled from the release version](../operations/pi-runtime-image-decoupled-from-release-version.md) — the two-pins model and how to verify a runtime actually adopted its image
 - [Runner guardrail preconditions need a bootstrap fallback](runner-guardrail-preconditions-need-bootstrap-fallback-2026-07-04.md) — same pattern: runner guards that read prior-deployment state
 - [Canary releases: manual v* tags](canary-release-tagging-web-desktop-2026-06-11.md) — how the release the cutover ships is cut
 - [Release manifest + deployment status contract](../architecture-patterns/release-manifest-deployment-status-contract-2026-06-11.md) — the evidence store `release deploy` recovers the pin from
