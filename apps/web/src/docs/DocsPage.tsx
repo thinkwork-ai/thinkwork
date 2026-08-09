@@ -21,7 +21,7 @@
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { BookOpen, ChevronRight, Hammer } from "lucide-react";
+import { BookOpen, ChevronRight, Hammer, SearchIcon } from "lucide-react";
 import { cn } from "@thinkwork/ui";
 import {
   DOC_SECTIONS,
@@ -30,6 +30,7 @@ import {
   type DocPageDef,
   type DocSectionDef,
 } from "@/docs/registry";
+import { DocsSearchPalette } from "@/docs/DocsSearchPalette";
 
 export function DocsPage() {
   const params = useParams({ strict: false }) as { slug?: string };
@@ -41,9 +42,27 @@ export function DocsPage() {
       : "Agent Documentation";
   }, [page]);
 
+  // Cmd+K docs search (Eric 2026-08-09): docs render outside the app shell,
+  // so the shell's own Cmd+K (ChatSidebar) is never mounted here.
+  const [searchOpen, setSearchOpen] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   return (
     <div className="dark flex h-svh min-h-0 bg-background text-foreground">
-      <DocsNav activeSlug={page?.slug} />
+      <DocsSearchPalette open={searchOpen} onOpenChange={setSearchOpen} />
+      <DocsNav
+        activeSlug={page?.slug}
+        onOpenSearch={() => setSearchOpen(true)}
+      />
 
       {/* key resets scroll when the article changes — one shared container,
           no scroll restoration surprises. */}
@@ -59,7 +78,20 @@ export function DocsPage() {
   );
 }
 
-function DocsNav({ activeSlug }: { activeSlug?: string }) {
+/** "⌘K" on Apple platforms, "Ctrl K" elsewhere — the hint, not the binding. */
+function shortcutHint(): string {
+  const platform =
+    typeof navigator === "undefined" ? "" : (navigator.platform ?? "");
+  return /mac|iphone|ipad/i.test(platform) ? "⌘K" : "Ctrl K";
+}
+
+function DocsNav({
+  activeSlug,
+  onOpenSearch,
+}: {
+  activeSlug?: string;
+  onOpenSearch: () => void;
+}) {
   return (
     <aside className="hidden w-64 shrink-0 flex-col border-r border-border/60 bg-muted/10 md:flex">
       {/* Brand row mirrors the app sidebar (h-7 logo, text-base semibold
@@ -80,6 +112,24 @@ function DocsNav({ activeSlug }: { activeSlug?: string }) {
             Agent Documentation
           </span>
         </Link>
+      </div>
+      {/* Search trigger, shaped like an input so it reads as "search lives
+          here" — the actual affordance is the palette it opens. */}
+      <div className="px-3 pb-2">
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          data-testid="docs-search-trigger"
+          className="flex h-8 w-full items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-2.5 text-sm text-muted-foreground outline-none hover:border-foreground/25 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <SearchIcon className="size-3.5 shrink-0 opacity-60" aria-hidden />
+          <span className="min-w-0 flex-1 truncate text-left">
+            Search docs…
+          </span>
+          <kbd className="shrink-0 rounded border border-border/60 bg-muted/40 px-1 font-sans text-[10px] text-muted-foreground/80">
+            {shortcutHint()}
+          </kbd>
+        </button>
       </div>
       <nav
         className="min-h-0 flex-1 overflow-y-auto px-2 pb-4"
