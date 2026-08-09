@@ -133,3 +133,11 @@ db_password = "CHANGE_ME_strong_password_here"
 # ses_inbound_domain = "agents.thinkwork.ai"
 # ses_parent_domain = "thinkwork.ai"
 # tenant_slugs      = ["dev"]
+
+# Company Brain platform-agent machine lane (optional, THINK-628/THINK-710).
+# Secrets Manager ARN of etl-platform/brain-mcp/m2m/platform-agent in this
+# account. When set, the shared API Lambda role gets read on it so MCP config
+# build can mint short-lived Cognito bearers for the Brain connector instead
+# of using a stored tkt_ key. Leave empty until the lane's manifest entry is
+# published (see the Brain repo's brain-mcp-m2m-migration runbook).
+# brain_m2m_platform_agent_secret_arn = "arn:aws:secretsmanager:us-east-1:<account-id>:secret:etl-platform/brain-mcp/m2m/platform-agent-XXXXXX"
