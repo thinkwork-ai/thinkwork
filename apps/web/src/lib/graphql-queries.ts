@@ -2727,6 +2727,19 @@ export const DeleteThreadMutation = gql`
   }
 `;
 
+// THINK-781: "Send to the Brain" — flag a thread whose answer looks wrong
+// for the Brain's Platform Agent to investigate. Sibling of the eval flag
+// (investigation, not eval-case creation); a thread can be both.
+export const FlagThreadToBrainMutation = gql`
+  mutation FlagThreadToBrain($input: FlagThreadToBrainInput!) {
+    flagThreadToBrain(input: $input) {
+      flagId
+      taskId
+      note
+    }
+  }
+`;
+
 // THINK-166 U3: saved canvases visible to a thread, keyed by stablePartId —
 // resolves checked-out canvas emissions (THINK-145 R13; the artifact row
 // lives in the HOME thread) to their original artifact so the transcript can

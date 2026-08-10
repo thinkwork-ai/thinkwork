@@ -1,0 +1,52 @@
+# "Send to the Brain" thread flags (THINK-781).
+#
+# A user who thinks a thread's answer looks wrong can flag it to the
+# ThinkWork Brain, whose Platform Agent triages the flag as a
+# `flag-triage` task (THINK-780). This is an INVESTIGATION path, distinct
+# from `flagThreadForEval` (which creates an eval artifact and notifies
+# no one) — the same thread can be both flagged for evaluation and sent
+# to the Brain.
+#
+# The mutation serializes the raw conversation (same fidelity the eval
+# flag captures, including pasted content) and POSTs it to the Brain ops
+# API `/flags` endpoint, authenticated with the account's existing Brain
+# m2m credential (the provisioned `digital-twin` connector's
+# service-credential lane).
+
+type FlagThreadToBrainResult {
+  """
+  Server-minted flag id — always present on acceptance.
+  """
+  flagId: String!
+  """
+  The dispatched `flag-triage` Platform Agent task. Null when the Brain
+  accepted the flag but could not immediately dispatch the investigation
+  (see `note`).
+  """
+  taskId: String
+  """
+  Brain-side annotation, present when the flag was accepted but the
+  investigation could not be dispatched immediately.
+  """
+  note: String
+}
+
+input FlagThreadToBrainInput {
+  threadId: ID!
+  """
+  Required free-text "what looks wrong" note — it becomes the
+  investigation's steer. Truncated to the Brain's 4000-char cap.
+  """
+  note: String!
+}
+
+extend type Mutation {
+  """
+  Flag a thread to the ThinkWork Brain for investigation (THINK-781).
+  Caller must be able to see the thread (owner / participant / linked
+  work-item assignee); tenant is derived from the thread row. 4xx from
+  the Brain surfaces as BAD_USER_INPUT; 5xx/timeouts surface as
+  SERVICE_UNAVAILABLE ("couldn't reach the Brain — try again").
+  """
+  flagThreadToBrain(input: FlagThreadToBrainInput!): FlagThreadToBrainResult!
+}
