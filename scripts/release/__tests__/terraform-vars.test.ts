@@ -179,12 +179,14 @@ test("the coexistence auth phase still demands an RFC3339 deadline", async () =>
 
 test("produces the full variable set", async () => {
   const { vars } = await run();
-  // 62 -var flags: 65 at extraction, minus capability_self_extension_tenants
+  // 64 -var flags: 65 at extraction, minus capability_self_extension_tenants
   // (self-extension removal), analyst vars (#4137), the ontology/KG pair
   // (THINK-408), and the hindsight/memory-engine trio (THINK-407), plus the
   // provisioned-concurrency pair for chat-agent-invoke/workspace-renderer
   // (THINK-583 U3), plus agentcore_runtime_dispatch_enabled
   // (THINK-585 U6), plus auth_state_store (THINK-643, dev-only default
-  // "dynamo" here). A change here is fine — an unnoticed change is not.
-  assert.equal(vars.size, 62);
+  // "dynamo" here), plus the Brain ops-api pair
+  // brain_ops_api_url/brain_ops_m2m_secret_arn (THINK-781). A change here
+  // is fine — an unnoticed change is not.
+  assert.equal(vars.size, 64);
 });
