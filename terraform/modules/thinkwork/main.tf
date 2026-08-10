@@ -1131,6 +1131,8 @@ module "api" {
 
   plugin_catalog_github_token_secret_arn = var.plugin_catalog_github_token_secret_arn
   brain_m2m_platform_agent_secret_arn    = var.brain_m2m_platform_agent_secret_arn
+  brain_ops_api_url                      = var.brain_ops_api_url
+  brain_ops_m2m_secret_arn               = var.brain_ops_m2m_secret_arn
 
   brain_artifacts_kms_key_arn = module.kms.key_arn
 

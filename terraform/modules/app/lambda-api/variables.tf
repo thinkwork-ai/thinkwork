@@ -122,6 +122,18 @@ variable "brain_m2m_platform_agent_secret_arn" {
   default     = ""
 }
 
+variable "brain_ops_api_url" {
+  description = "Optional Company Brain ops-api base URL (the API Gateway endpoint the Brain console uses, e.g. https://xxxx.execute-api.us-east-1.amazonaws.com). When set alongside brain_ops_m2m_secret_arn, the flagThreadToBrain mutation can POST /flags (THINK-781). Empty disables the Send-to-the-Brain action."
+  type        = string
+  default     = ""
+}
+
+variable "brain_ops_m2m_secret_arn" {
+  description = "Optional Secrets Manager ARN of the Brain agent-identity m2m secret (Cognito client-credentials blob for the ops-api operator pool, scope etl-agent/tasks — e.g. etl-platform/agent/cognito-m2m-brain). When set, the shared API Lambda role may read it so flagThreadToBrain can mint bearers for POST /flags (THINK-781)."
+  type        = string
+  default     = ""
+}
+
 variable "brain_artifacts_kms_key_arn" {
   description = "Optional KMS key ARN used to encrypt canonical ThinkWork Brain artifacts. AES256 encryption is used when unset."
   type        = string

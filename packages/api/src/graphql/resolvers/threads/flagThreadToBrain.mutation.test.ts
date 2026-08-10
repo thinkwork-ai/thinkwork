@@ -11,7 +11,8 @@ const {
   selectQueue,
   mockResolveCallerTenantId,
   mockResolveCallerUserId,
-  mockResolveTarget,
+  mockGetSecret,
+  mockCachedM2mToken,
   mockPostBrainFlag,
   mockGetConfig,
   resetState,
@@ -21,7 +22,8 @@ const {
     selectQueue,
     mockResolveCallerTenantId: vi.fn(),
     mockResolveCallerUserId: vi.fn(),
-    mockResolveTarget: vi.fn(),
+    mockGetSecret: vi.fn(),
+    mockCachedM2mToken: vi.fn(),
     mockPostBrainFlag: vi.fn(),
     mockGetConfig: vi.fn(),
     resetState: () => {
@@ -74,16 +76,15 @@ vi.mock("./access.js", () => ({
   callerVisibleThreadPredicate: vi.fn(() => ({ visible: true })),
 }));
 
-vi.mock("../../../lib/mcp-configs.js", () => ({
-  resolveTenantMcpServerTarget: mockResolveTarget,
-}));
-
-vi.mock("../../../lib/twin/provision-connector.js", () => ({
-  TWIN_CONNECTOR_SLUG: "digital-twin",
-}));
+vi.mock("../../../lib/twin/m2m-token.js", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("../../../lib/twin/m2m-token.js")>();
+  return { ...original, cachedM2mToken: mockCachedM2mToken };
+});
 
 vi.mock("@thinkwork/runtime-config", () => ({
   getConfig: mockGetConfig,
+  getSecret: mockGetSecret,
 }));
 
 vi.mock("../../../lib/brain/flag-thread.js", async (importOriginal) => {
@@ -129,16 +130,23 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockResolveCallerTenantId.mockResolvedValue(TENANT_ID);
   mockResolveCallerUserId.mockResolvedValue(USER_ID);
-  mockResolveTarget.mockResolvedValue({
-    kind: "ok",
-    authType: "service_credential",
-    target: {
-      url: "https://mcp.brain.thinkwork.ai/mcp",
-      name: "digital-twin",
-      token: "m2m-token",
-    },
+  mockGetConfig.mockImplementation((key: string) => {
+    if (key === "BRAIN_OPS_API_URL")
+      return "https://opsapi.execute-api.us-east-1.amazonaws.com";
+    if (key === "BRAIN_OPS_M2M_SECRET_ARN")
+      return "arn:aws:secretsmanager:us-east-1:1:secret:brain-agent-m2m";
+    if (key === "ADMIN_URL") return "https://mcpherson.thinkwork.ai";
+    return "";
   });
-  mockGetConfig.mockReturnValue("https://mcpherson.thinkwork.ai");
+  mockGetSecret.mockResolvedValue(
+    JSON.stringify({
+      client_id: "client",
+      client_secret: "secret",
+      token_url: "https://pool.auth.us-east-1.amazoncognito.com/oauth2/token",
+      scope: "etl-agent/tasks",
+    }),
+  );
+  mockCachedM2mToken.mockResolvedValue("m2m-token");
   mockPostBrainFlag.mockResolvedValue({
     kind: "accepted",
     flagId: "flag-1",
@@ -171,12 +179,9 @@ describe("flagThreadToBrain", () => {
     expect(mockPostBrainFlag).not.toHaveBeenCalled();
   });
 
-  it("fails with FAILED_PRECONDITION when the Brain connector is not provisioned", async () => {
+  it("fails with FAILED_PRECONDITION when the ops-api config is absent", async () => {
     selectQueue.push([{ id: THREAD_ID, tenant_id: TENANT_ID }]);
-    mockResolveTarget.mockResolvedValue({
-      kind: "missing",
-      reason: "MCP server no longer exists",
-    });
+    mockGetConfig.mockReturnValue("");
     await expect(
       flagThreadToBrain(
         null,
@@ -198,14 +203,14 @@ describe("flagThreadToBrain", () => {
     );
     expect(result).toEqual({ flagId: "flag-1", taskId: "task-1", note: null });
 
-    expect(mockResolveTarget).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenantId: TENANT_ID,
-        serverName: "digital-twin",
-      }),
+    expect(mockCachedM2mToken).toHaveBeenCalledWith(
+      "arn:aws:secretsmanager:us-east-1:1:secret:brain-agent-m2m",
+      expect.objectContaining({ clientId: "client" }),
     );
     const call = mockPostBrainFlag.mock.calls[0][0];
-    expect(call.flagsUrl).toBe("https://mcp.brain.thinkwork.ai/flags");
+    expect(call.flagsUrl).toBe(
+      "https://opsapi.execute-api.us-east-1.amazonaws.com/flags",
+    );
     expect(call.token).toBe("m2m-token");
     expect(call.payload).toEqual({
       source: "thinkwork-agent",

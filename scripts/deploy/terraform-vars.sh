@@ -121,6 +121,11 @@ TF_VAR_ARGS=(
   # twin-connector provisioning registers agents against it instead
   # of the product /mcp/twin route.
   -var "brain_mcp_url=${BRAIN_MCP_URL:-}"
+  # THINK-781: Brain ops-api base URL + agent-identity m2m secret for the
+  # Send-to-the-Brain flag path. Empty = the action reports "no Brain
+  # connection configured".
+  -var "brain_ops_api_url=${BRAIN_OPS_API_URL:-}"
+  -var "brain_ops_m2m_secret_arn=${BRAIN_OPS_M2M_SECRET_ARN:-}"
   -var "neptune_cluster_resource_id=${NEPTUNE_CLUSTER_RESOURCE_ID:-}"
   -var "neptune_client_security_group_id=${NEPTUNE_CLIENT_SG_ID:-}"
   # Bulk-rebuild lane (THINK-331): loader staging bucket + cluster

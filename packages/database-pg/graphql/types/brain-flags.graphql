@@ -9,9 +9,9 @@
 #
 # The mutation serializes the raw conversation (same fidelity the eval
 # flag captures, including pasted content) and POSTs it to the Brain ops
-# API `/flags` endpoint, authenticated with the account's existing Brain
-# m2m credential (the provisioned `digital-twin` connector's
-# service-credential lane).
+# API `/flags` endpoint (BRAIN_OPS_API_URL), authenticated with a bearer
+# minted from the Brain agent-identity m2m secret
+# (BRAIN_OPS_M2M_SECRET_ARN, scope etl-agent/tasks).
 
 type FlagThreadToBrainResult {
   """

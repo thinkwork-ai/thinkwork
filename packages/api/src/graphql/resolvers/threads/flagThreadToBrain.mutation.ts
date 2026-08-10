@@ -13,15 +13,16 @@
  * user with no path to raise a false conclusion. Cross-tenant or invisible
  * threads surface as NOT_FOUND (no existence oracle).
  *
- * Transport: POST {brain_ops_api}/flags with the account's existing Brain
- * m2m bearer — resolved through the provisioned `digital-twin` connector
- * (service-credential lane), the same credential the /mcp surface uses.
- * The ops URL is the connector URL with the /mcp suffix rewritten, the
- * same derivation the KB surface uses.
+ * Transport: POST {BRAIN_OPS_API_URL}/flags with a bearer minted from the
+ * Brain's AGENT-IDENTITY m2m secret (BRAIN_OPS_M2M_SECRET_ARN — the
+ * `etl-platform/agent/cognito-m2m-brain` blob, operator pool, scope
+ * `etl-agent/tasks`). Deliberately NOT the /mcp platform-agent lane
+ * credential: /flags verifies against the ops-api's own Cognito pool and
+ * a brain-mcp lane token gets a 401 there (verified live, 2026-08-10).
  */
 
 import { GraphQLError } from "graphql";
-import { getConfig } from "@thinkwork/runtime-config";
+import { getConfig, getSecret } from "@thinkwork/runtime-config";
 import type { GraphQLContext } from "../../context.js";
 import { asc, db, eq, and, messages, threads } from "../../utils.js";
 import {
@@ -29,8 +30,10 @@ import {
   resolveCallerUserId,
 } from "../core/resolve-auth-user.js";
 import { callerVisibleThreadPredicate } from "./access.js";
-import { resolveTenantMcpServerTarget } from "../../../lib/mcp-configs.js";
-import { TWIN_CONNECTOR_SLUG } from "../../../lib/twin/provision-connector.js";
+import {
+  cachedM2mToken,
+  m2mCredentialsFromSecret,
+} from "../../../lib/twin/m2m-token.js";
 import {
   brainFlagsUrlFrom,
   buildBrainFlagPayload,
@@ -89,21 +92,36 @@ export const flagThreadToBrain = async (
   if (!thread) throw gqlError("Thread not found", "NOT_FOUND");
   const tenantId = thread.tenant_id;
 
-  // The account's Brain connection — the provisioned digital-twin
-  // connector row carries the m2m secretRef and the Brain base URL.
-  const resolved = await resolveTenantMcpServerTarget({
-    tenantId,
-    serverName: TWIN_CONNECTOR_SLUG,
-    logPrefix: LOG_PREFIX,
-  });
-  if (resolved.kind !== "ok") {
-    console.error(
-      `${LOG_PREFIX} Brain connector unavailable for tenant ${tenantId}: ${resolved.reason}`,
-    );
-    throw gqlError(
+  // The account's Brain ops-api connection: base URL + agent-identity m2m
+  // secret, both stage config (SSM runtime-config document / env).
+  const opsApiUrl = (getConfig("BRAIN_OPS_API_URL", "") || "").trim();
+  const secretRef = (getConfig("BRAIN_OPS_M2M_SECRET_ARN", "") || "").trim();
+  const notConfigured = () =>
+    gqlError(
       "This account has no Brain connection configured — ask your operator.",
       "FAILED_PRECONDITION",
     );
+  if (!opsApiUrl || !secretRef) {
+    console.error(
+      `${LOG_PREFIX} BRAIN_OPS_API_URL / BRAIN_OPS_M2M_SECRET_ARN not configured`,
+    );
+    throw notConfigured();
+  }
+  let token: string;
+  try {
+    const secretValue: unknown = JSON.parse(await getSecret(secretRef));
+    const creds = m2mCredentialsFromSecret(
+      secretValue as Record<string, unknown>,
+    );
+    if (!creds) throw new Error("secret is not a client-credentials blob");
+    token = await cachedM2mToken(secretRef, creds);
+  } catch (err) {
+    console.error(
+      `${LOG_PREFIX} could not mint Brain ops-api bearer: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    throw notConfigured();
   }
 
   // Raw conversation, same fidelity the eval flag captures (content
@@ -132,9 +150,8 @@ export const flagThreadToBrain = async (
   });
 
   const result = await postBrainFlag({
-    flagsUrl: brainFlagsUrlFrom(resolved.target.url),
-    token: resolved.target.token ?? null,
-    headers: resolved.target.headers,
+    flagsUrl: brainFlagsUrlFrom(opsApiUrl),
+    token,
     payload,
   });
 
