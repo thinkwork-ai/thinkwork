@@ -4,6 +4,7 @@ import { useQuery } from "urql";
 import {
   BookOpen,
   CircleUserRound,
+  GraduationCap,
   LogOut,
   RefreshCw,
   Settings,
@@ -43,6 +44,7 @@ import { getSpacesDeploymentProfileSnapshot } from "@/lib/deployment-profile";
 import { openInNewTab } from "@/lib/open-in-new-tab";
 import { rememberSettingsReturnTo } from "@/lib/settings-return";
 import { SidebarDeployedReleaseQuery } from "@/lib/settings-queries";
+import { TeachBrainDialog } from "@/components/workbench/TeachBrainDialog";
 import { useTenant } from "@/context/TenantContext";
 
 export function SpacesSidebar() {
@@ -149,6 +151,10 @@ function AccountMenu({
   // dialog is controlled (not trigger-based) because the dropdown unmounts its
   // own children on select, which would tear down a nested trigger mid-open.
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
+  // "Teach the Brain" (THINK-784) — global entry, no thread context.
+  // Controlled like the sign-out dialog: the dropdown unmounts its children
+  // on select, so the dialog must live outside the menu items.
+  const [teachBrainOpen, setTeachBrainOpen] = useState(false);
 
   return (
     <DropdownMenu>
@@ -236,6 +242,13 @@ function AccountMenu({
           <BookOpen className="mr-2 h-4 w-4" />
           Documentation
         </DropdownMenuItem>
+        <DropdownMenuItem
+          data-testid="sidebar-teach-brain"
+          onSelect={() => setTeachBrainOpen(true)}
+        >
+          <GraduationCap className="mr-2 h-4 w-4" />
+          Teach the Brain
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => setConfirmSignOutOpen(true)}>
           <LogOut className="mr-2 h-4 w-4" />
@@ -274,6 +287,10 @@ function AccountMenu({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <TeachBrainDialog
+        open={teachBrainOpen}
+        onOpenChange={setTeachBrainOpen}
+      />
     </DropdownMenu>
   );
 }

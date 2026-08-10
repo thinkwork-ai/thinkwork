@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "urql";
-import { MoreHorizontal, Archive, Trash2, Pencil, Brain } from "lucide-react";
+import { MoreHorizontal, Archive, Trash2, Pencil } from "lucide-react";
 import { IconPin, IconPinnedOff } from "@tabler/icons-react";
 import { THREAD_RENAME_EVENT } from "@/lib/thread-rename";
 import { toast } from "sonner";
@@ -29,7 +29,6 @@ import {
 } from "@/lib/graphql-queries";
 import { desktopToolbarButtonClassName } from "@/lib/desktop-chrome";
 import { setThreadDeletePending } from "@/lib/pending-thread-deletes";
-import { SendToBrainDialog } from "./SendToBrainDialog";
 
 export interface AttachedArtifactSummary {
   id: string;
@@ -51,7 +50,6 @@ export interface ThreadDetailActionsProps {
 
 export function ThreadDetailActions(props: ThreadDetailActionsProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [brainFlagOpen, setBrainFlagOpen] = useState(false);
   const navigate = useNavigate();
   const [, updateThread] = useMutation(UpdateThreadMutation);
   const [, pinThread] = useMutation(PinThreadMutation);
@@ -172,18 +170,6 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
             <Pencil className="mr-2 h-3.5 w-3.5" />
             Rename thread
           </DropdownMenuItem>
-          <DropdownMenuItem
-            className="whitespace-nowrap"
-            data-testid="thread-actions-send-to-brain"
-            // Defer the dialog open by one frame so Radix's menu close
-            // doesn't race with the dialog's open animation (same as Delete).
-            onSelect={() => {
-              window.setTimeout(() => setBrainFlagOpen(true), 0);
-            }}
-          >
-            <Brain className="mr-2 h-3.5 w-3.5" />
-            Send to the Brain
-          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             className="whitespace-nowrap"
@@ -221,11 +207,6 @@ export function ThreadDetailActions(props: ThreadDetailActionsProps) {
         {...props}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
-      />
-      <SendToBrainDialog
-        threadId={props.threadId}
-        open={brainFlagOpen}
-        onOpenChange={setBrainFlagOpen}
       />
     </>
   );

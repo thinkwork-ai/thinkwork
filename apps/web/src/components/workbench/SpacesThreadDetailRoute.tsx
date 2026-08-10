@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
-import { Flag, Info, PanelRight } from "lucide-react";
+import { Brain, Flag, GraduationCap, Info, PanelRight } from "lucide-react";
 import { toast } from "sonner";
 import { describeSendMessageError } from "@/lib/send-message-error";
-import { TooltipIconButton } from "@thinkwork/ui";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  TooltipIconButton,
+} from "@thinkwork/ui";
 import {
   parseSpaceRecord,
   type LinkedTaskSummary,
@@ -30,6 +36,8 @@ import {
 } from "@/components/artifacts/thread-artifact-panel-store";
 import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions";
 import { FlagThreadForEvalDialog } from "@/components/workbench/FlagThreadForEvalDialog";
+import { SendToBrainDialog } from "@/components/workbench/SendToBrainDialog";
+import { TeachBrainDialog } from "@/components/workbench/TeachBrainDialog";
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import type { UserQuestionRecord } from "@/lib/ui-message-types";
@@ -447,6 +455,11 @@ export function SpacesThreadDetailRoute({
   // via TenantContext.isOperator; the mutation re-checks server-side.
   const [flagEvalTurnId, setFlagEvalTurnId] = useState<string | null>(null);
   const [flagEvalOpen, setFlagEvalOpen] = useState(false);
+  // "Send to the Brain" dialog (THINK-781): member-level, no turn required.
+  const [brainFlagOpen, setBrainFlagOpen] = useState(false);
+  // "Teach the Brain" from this thread (THINK-784): the conversation rides
+  // along as context_thread_url.
+  const [teachBrainOpen, setTeachBrainOpen] = useState(false);
   // Start null — NEVER the global stored pick. The composer must reflect
   // what THIS thread runs on: its own last-used model, or the tenant
   // Agent's configured default while the first turn is still in flight.
@@ -1730,20 +1743,46 @@ export function SpacesThreadDetailRoute({
     ),
     action: (
       <div className={`flex items-center ${desktopToolbarGapClassName}`}>
-        {isOperator && latestCompletedTurnId ? (
-          <TooltipIconButton
-            type="button"
-            label="Flag for evaluation"
-            data-testid="thread-flag-for-eval"
-            className={desktopToolbarButtonClassName}
-            onClick={() => {
-              setFlagEvalTurnId(latestCompletedTurnId);
-              setFlagEvalOpen(true);
-            }}
-          >
-            <Flag className="size-4" />
-          </TooltipIconButton>
-        ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <TooltipIconButton
+              type="button"
+              label="Flag thread"
+              data-testid="thread-flag-menu"
+              className={desktopToolbarButtonClassName}
+            >
+              <Flag className="size-4" />
+            </TooltipIconButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-[12rem]">
+            {isOperator && latestCompletedTurnId ? (
+              <DropdownMenuItem
+                data-testid="thread-flag-for-eval"
+                onSelect={() => {
+                  setFlagEvalTurnId(latestCompletedTurnId);
+                  setFlagEvalOpen(true);
+                }}
+              >
+                <Flag className="size-4" />
+                Flag for evaluation
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem
+              data-testid="thread-flag-send-to-brain"
+              onSelect={() => setBrainFlagOpen(true)}
+            >
+              <Brain className="size-4" />
+              Send to the Brain
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              data-testid="thread-flag-teach-brain"
+              onSelect={() => setTeachBrainOpen(true)}
+            >
+              <GraduationCap className="size-4" />
+              Teach a correction from this conversation
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <TooltipIconButton
           type="button"
           label={threadInfoOpen ? "Close thread info" : "Open thread info"}
@@ -2051,6 +2090,16 @@ export function SpacesThreadDetailRoute({
         tenantId={tenantId ?? ""}
         threadId={threadId}
         turnId={flagEvalTurnId}
+      />
+      <SendToBrainDialog
+        open={brainFlagOpen}
+        onOpenChange={setBrainFlagOpen}
+        threadId={threadId}
+      />
+      <TeachBrainDialog
+        open={teachBrainOpen}
+        onOpenChange={setTeachBrainOpen}
+        threadId={threadId}
       />
     </>
   );
