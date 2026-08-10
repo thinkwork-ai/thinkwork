@@ -51,6 +51,12 @@ aws lambda get-function --function-name thinkwork-<stage>-agentcore-pi --profile
 
 Customer Pi is **Lambda-hosted** — there is no Bedrock AgentCore runtime and no `UpdateAgentRuntime` step on these stacks.
 
+If the release adds a **new runner-wired terraform variable** (vars_json allowlist + generated-root declaration + module argument), also verify the value actually landed — a green run does not prove it (see the runner-lag trap below):
+
+```bash
+aws ssm get-parameter --name /thinkwork/<stage>/runtime-config --profile <p> --region us-east-1 --query Parameter.Value --output text | jq 'keys'
+```
+
 ## 4. Default-skill content (customer deploys do NOT run the seeder)
 
 If the release changed default-skill content, run the seed one-off per stack (pattern in `docs/solutions/integration-issues/default-skill-content-updates-never-reach-agents-…`):
@@ -61,6 +67,7 @@ If the release changed default-skill content, run the seed one-off per stack (pa
 
 ## Known traps
 
+- **Release N runs with the runner staged by release N−1** — the CodeBuild runner fetches its script from the evidence bucket at build start, and that S3 object is updated by the run itself. A release that adds a new runner-wired terraform variable therefore half-applies silently on its first pass (new vars fall back to defaults, runtime-config keys missing, run still green). Fix: run the identical `thinkwork release deploy` a second time (idempotent), or ship the runner.py change one release ahead. Observed live 2026-08-10 with v0.1.0-canary.450 on both stacks (`docs/solutions/integration-issues/release-deploy-runner-script-lags-one-release.md`).
 - Runner self-updates only after a successful run; a stack stuck on a broken runner needs the hot-stage unblock (`runner-guardrail-preconditions-need-bootstrap-fallback-2026-07-04.md`).
 - n8n cert/DNS preservation and the `agent_step_bridge_credential` guardrail history: PR #3344.
 - A failed controller execution fails **fast and clean** on the Pi-pin guard (before any terraform), so a guard failure leaves the stack untouched — rerun with `thinkwork release deploy`, no cleanup needed (observed live 2026-08-09 on both stacks).

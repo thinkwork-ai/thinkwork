@@ -114,6 +114,14 @@ Every one of these failures stopped the deploy cleanly: the runner refused
 before terraform, the customer stacks stayed on their previous release, and
 failure evidence landed in their evidence buckets. Nothing half-deployed.
 
+The inverse gap exists, though: a fully *successful* run can half-**apply** a
+release. The run applying release N executes the runner staged by release N−1,
+so a release adding a new runner-wired terraform variable silently applies with
+that variable's default on its first pass — green run, missing runtime-config
+keys. See
+[release-deploy-runner-script-lags-one-release](../integration-issues/release-deploy-runner-script-lags-one-release.md)
+(observed 2026-08-10, v0.1.0-canary.450).
+
 ## The meta-lesson: proven-once runbooks drift
 
 `docs/runbooks/customer-release-cutover.md` was "proven end-to-end 2026-07-06"
@@ -135,5 +143,6 @@ refresh):
 - `docs/runbooks/customer-release-cutover.md` — the authoritative current procedure (refreshed in PR #4260)
 - [Pi runtime image is decoupled from the release version](../operations/pi-runtime-image-decoupled-from-release-version.md) — the two-pins model and how to verify a runtime actually adopted its image
 - [Runner guardrail preconditions need a bootstrap fallback](runner-guardrail-preconditions-need-bootstrap-fallback-2026-07-04.md) — same pattern: runner guards that read prior-deployment state
+- [Release N deploys with the runner staged by release N−1](../integration-issues/release-deploy-runner-script-lags-one-release.md) — the silent counterpart to the clean failures above: a successful run that half-applies a release
 - [Canary releases: manual v* tags](canary-release-tagging-web-desktop-2026-06-11.md) — how the release the cutover ships is cut
 - [Release manifest + deployment status contract](../architecture-patterns/release-manifest-deployment-status-contract-2026-06-11.md) — the evidence store `release deploy` recovers the pin from
