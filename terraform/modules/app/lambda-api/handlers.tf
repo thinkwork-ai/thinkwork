@@ -82,6 +82,14 @@ locals {
     # mcp-twin-provision registers the twin connector against it instead
     # of the product /mcp/twin route. Empty = legacy default.
     BRAIN_MCP_URL = var.brain_mcp_url
+    # THINK-781: Brain ops-api base URL + the agent-identity m2m secret the
+    # flagThreadToBrain resolver posts /flags with. NOT the /mcp lane pair
+    # above — POST /flags verifies against the Brain's operator pool, so it
+    # needs the etl-platform/agent/cognito-m2m-brain credential (scope
+    # etl-agent/tasks), not the brain-mcp platform-agent lane. Empty = the
+    # "Send to the Brain" action fails with "no Brain connection configured".
+    BRAIN_OPS_API_URL        = var.brain_ops_api_url
+    BRAIN_OPS_M2M_SECRET_ARN = var.brain_ops_m2m_secret_arn
     # Same class of bug, second instance (2026-07-22): a post-apply
     # twin-export hook read BRAIN_ARTIFACTS_BUCKET from env it never had
     # and silently returned skipped_no_bucket on every apply.

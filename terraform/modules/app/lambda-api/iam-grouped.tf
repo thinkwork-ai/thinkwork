@@ -310,6 +310,16 @@ locals {
         Resource = var.brain_m2m_platform_agent_secret_arn
       },
     ] : [],
+    # Brain ops-api agent identity (THINK-781): flagThreadToBrain mints a
+    # bearer from this secret to POST /flags. Same posture as the machine
+    # lane above — read-only, one exact ARN, count-gated.
+    var.brain_ops_m2m_secret_arn != "" ? [
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = var.brain_ops_m2m_secret_arn
+      },
+    ] : [],
     # (was standalone managed policy "lambda_deployment_evidence_read")
     # Access to the deployment evidence bucket: graphql-http's deployments
     # resolvers read deployment/status/current.json (deployed-release pointer

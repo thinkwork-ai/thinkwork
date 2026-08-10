@@ -975,6 +975,18 @@ variable "brain_m2m_platform_agent_secret_arn" {
   default     = ""
 }
 
+variable "brain_ops_api_url" {
+  description = "Optional Company Brain ops-api base URL for the Send-to-the-Brain flag path (THINK-781). Empty disables the action."
+  type        = string
+  default     = ""
+}
+
+variable "brain_ops_m2m_secret_arn" {
+  description = "Optional Secrets Manager ARN of the Brain agent-identity m2m secret (ops-api operator pool, scope etl-agent/tasks) used by flagThreadToBrain to POST /flags (THINK-781)."
+  type        = string
+  default     = ""
+}
+
 variable "database_name" {
   description = "Aurora database name"
   type        = string

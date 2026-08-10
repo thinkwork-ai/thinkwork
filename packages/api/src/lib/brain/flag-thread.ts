@@ -1,0 +1,219 @@
+/**
+ * Brain thread-flag client (THINK-781).
+ *
+ * Builds and posts a "Send to the Brain" flag to the Brain ops API
+ * (`POST {brain_ops_api}/flags`, THINK-780). The ops base URL is derived
+ * from the tenant's provisioned Brain MCP URL the same way the KB surface
+ * is (`/mcp` or `/mcp/twin` suffix stripped); auth is the account's
+ * existing Brain m2m bearer resolved by the connector machinery.
+ *
+ * The Brain validates server-side; these caps mirror its limits so an
+ * oversize conversation is truncated defensively client-side instead of
+ * bouncing with a 400:
+ *   - 200 conversation messages (oldest dropped first),
+ *   - 8000 chars per message text,
+ *   - 4000-char note,
+ *   - 500-char identifier fields.
+ */
+
+import {
+  extractMessageText,
+  type ThreadMessageRow,
+} from "../evals/thread-snapshot.js";
+
+export const BRAIN_FLAG_MAX_CONVERSATION_MESSAGES = 200;
+export const BRAIN_FLAG_MAX_MESSAGE_TEXT_CHARS = 8000;
+export const BRAIN_FLAG_MAX_NOTE_CHARS = 4000;
+export const BRAIN_FLAG_MAX_IDENTIFIER_CHARS = 500;
+
+/** Default request timeout — the Brain answers a /flags POST quickly. */
+const DEFAULT_TIMEOUT_MS = 20_000;
+
+export interface BrainFlagConversationMessage {
+  role: "user" | "assistant";
+  at?: string;
+  text: string;
+}
+
+export interface BrainFlagPayload {
+  source: "thinkwork-agent";
+  thread_id: string;
+  thread_url?: string;
+  flagged_by?: string;
+  note: string;
+  conversation: BrainFlagConversationMessage[];
+}
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? value.slice(0, max) : value;
+}
+
+function toIso(value: Date | string | null | undefined): string | null {
+  if (value == null) return null;
+  const ms = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : null;
+}
+
+/**
+ * Derive the Brain ops-API `/flags` URL from the connector's MCP URL
+ * (`https://mcp.brain.thinkwork.ai/mcp` or `.../mcp/twin` → `.../flags`) —
+ * the same suffix rewrite `twinKbUrlFrom` uses for the KB surface.
+ */
+export function brainFlagsUrlFrom(mcpUrl: string): string {
+  const base = mcpUrl.replace(/\/mcp(\/twin)?\/?$/, "").replace(/\/+$/, "");
+  return `${base}/flags`;
+}
+
+/**
+ * Serialize the raw thread into the Brain's `conversation` shape — same
+ * text fidelity the eval flag captures (content column first, then typed
+ * text/response parts, so pasted content rides along verbatim), capped
+ * defensively to the Brain's limits. Only user/assistant messages carry
+ * conversational text the triage needs; system/tool rows are skipped.
+ */
+export function buildBrainFlagConversation(
+  rows: ThreadMessageRow[],
+): BrainFlagConversationMessage[] {
+  const conversation: BrainFlagConversationMessage[] = [];
+  for (const row of rows) {
+    const role = String(row.role ?? "")
+      .trim()
+      .toLowerCase();
+    if (role !== "user" && role !== "assistant") continue;
+    const text = extractMessageText(row);
+    if (!text || text.trim().length === 0) continue;
+    const at = toIso(row.created_at ?? null);
+    conversation.push({
+      role,
+      ...(at ? { at } : {}),
+      text: truncate(text, BRAIN_FLAG_MAX_MESSAGE_TEXT_CHARS),
+    });
+  }
+  // Cap at 200 messages, dropping the oldest — the flagged answer is at
+  // the recent end of the thread.
+  return conversation.length > BRAIN_FLAG_MAX_CONVERSATION_MESSAGES
+    ? conversation.slice(
+        conversation.length - BRAIN_FLAG_MAX_CONVERSATION_MESSAGES,
+      )
+    : conversation;
+}
+
+export function buildBrainFlagPayload(input: {
+  threadId: string;
+  threadUrl: string | null;
+  flaggedBy: string | null;
+  note: string;
+  messages: ThreadMessageRow[];
+}): BrainFlagPayload {
+  const threadUrl = input.threadUrl?.trim() || null;
+  const flaggedBy = input.flaggedBy?.trim() || null;
+  return {
+    source: "thinkwork-agent",
+    thread_id: truncate(input.threadId, BRAIN_FLAG_MAX_IDENTIFIER_CHARS),
+    ...(threadUrl
+      ? { thread_url: truncate(threadUrl, BRAIN_FLAG_MAX_IDENTIFIER_CHARS) }
+      : {}),
+    ...(flaggedBy
+      ? { flagged_by: truncate(flaggedBy, BRAIN_FLAG_MAX_IDENTIFIER_CHARS) }
+      : {}),
+    note: truncate(input.note.trim(), BRAIN_FLAG_MAX_NOTE_CHARS),
+    conversation: buildBrainFlagConversation(input.messages),
+  };
+}
+
+export type PostBrainFlagResult =
+  | {
+      kind: "accepted";
+      flagId: string;
+      taskId: string | null;
+      note: string | null;
+    }
+  | { kind: "rejected"; status: number; message: string }
+  | { kind: "unreachable"; message: string };
+
+/**
+ * POST the flag to the Brain ops API. 2xx with a flag_id is acceptance
+ * (202 per contract; task_id may be absent when the Brain accepted the
+ * flag but could not immediately dispatch — that is still success). 4xx
+ * is validation feedback to surface verbatim; 5xx / network errors /
+ * timeouts are retryable ("couldn't reach the Brain").
+ */
+export async function postBrainFlag(input: {
+  flagsUrl: string;
+  token: string | null;
+  headers?: Record<string, string>;
+  payload: BrainFlagPayload;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+}): Promise<PostBrainFlagResult> {
+  const fetchImpl = input.fetchImpl ?? fetch;
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    input.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+  );
+  let response: Response;
+  try {
+    response = await fetchImpl(input.flagsUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(input.token ? { authorization: `Bearer ${input.token}` } : {}),
+        ...(input.headers ?? {}),
+      },
+      body: JSON.stringify(input.payload),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    return {
+      kind: "unreachable",
+      message:
+        err instanceof Error && err.name === "AbortError"
+          ? "The Brain did not respond in time."
+          : err instanceof Error
+            ? err.message
+            : String(err),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+
+  let body: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = await response.json();
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      body = parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Non-JSON body — fall through with the status alone.
+  }
+
+  if (response.ok) {
+    const flagId = typeof body.flag_id === "string" ? body.flag_id : null;
+    if (!flagId) {
+      return {
+        kind: "unreachable",
+        message: `The Brain answered ${response.status} without a flag id.`,
+      };
+    }
+    return {
+      kind: "accepted",
+      flagId,
+      taskId: typeof body.task_id === "string" ? body.task_id : null,
+      note: typeof body.note === "string" ? body.note : null,
+    };
+  }
+
+  const detail =
+    typeof body.error === "string"
+      ? body.error
+      : typeof body.message === "string"
+        ? body.message
+        : typeof body.detail === "string"
+          ? body.detail
+          : `HTTP ${response.status}`;
+  if (response.status >= 400 && response.status < 500) {
+    return { kind: "rejected", status: response.status, message: detail };
+  }
+  return { kind: "unreachable", message: detail };
+}

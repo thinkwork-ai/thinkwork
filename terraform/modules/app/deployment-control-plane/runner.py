@@ -4839,6 +4839,19 @@ def write_runner_files(payload, runner_secrets):
             "brainM2mPlatformAgentSecretArn",
             default=safe_get(reviewed_payload, "brainM2mPlatformAgentSecretArn", default=""),
         ),
+        # Brain ops-api flag intake (THINK-781): base URL + agent-identity
+        # m2m secret ARN for flagThreadToBrain's POST /flags. Empty leaves
+        # the Send-to-the-Brain action reporting "not configured".
+        "brain_ops_api_url": safe_get(
+            runner_secrets,
+            "brainOpsApiUrl",
+            default=safe_get(reviewed_payload, "brainOpsApiUrl", default=""),
+        ),
+        "brain_ops_m2m_secret_arn": safe_get(
+            runner_secrets,
+            "brainOpsM2mSecretArn",
+            default=safe_get(reviewed_payload, "brainOpsM2mSecretArn", default=""),
+        ),
     }
     enforce_customer_domain_preservation(
         current_outputs,
@@ -5001,6 +5014,16 @@ variable "brain_mcp_url" {{
 }}
 
 variable "brain_m2m_platform_agent_secret_arn" {{
+  type    = string
+  default = ""
+}}
+
+variable "brain_ops_api_url" {{
+  type    = string
+  default = ""
+}}
+
+variable "brain_ops_m2m_secret_arn" {{
   type    = string
   default = ""
 }}
@@ -5469,6 +5492,8 @@ module "thinkwork" {{
   neptune_loader_role_arn          = var.neptune_loader_role_arn
   brain_mcp_url                    = var.brain_mcp_url
   brain_m2m_platform_agent_secret_arn = var.brain_m2m_platform_agent_secret_arn
+  brain_ops_api_url                = var.brain_ops_api_url
+  brain_ops_m2m_secret_arn         = var.brain_ops_m2m_secret_arn
   enable_workspace_orchestration = true
   enable_agentcore_multiplayer_proof          = var.enable_agentcore_multiplayer_proof
   agentcore_multiplayer_proof_tenant_slug     = var.agentcore_multiplayer_proof_tenant_slug

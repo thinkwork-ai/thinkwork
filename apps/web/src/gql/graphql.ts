@@ -2813,6 +2813,32 @@ export type FlagThreadForEvalResult = {
   dataset: EvalDataset;
 };
 
+export type FlagThreadToBrainInput = {
+  /**
+   * Required free-text "what looks wrong" note — it becomes the
+   * investigation's steer. Truncated to the Brain's 4000-char cap.
+   */
+  note: Scalars['String']['input'];
+  threadId: Scalars['ID']['input'];
+};
+
+export type FlagThreadToBrainResult = {
+  __typename?: 'FlagThreadToBrainResult';
+  /** Server-minted flag id — always present on acceptance. */
+  flagId: Scalars['String']['output'];
+  /**
+   * Brain-side annotation, present when the flag was accepted but the
+   * investigation could not be dispatched immediately.
+   */
+  note?: Maybe<Scalars['String']['output']>;
+  /**
+   * The dispatched `flag-triage` Platform Agent task. Null when the Brain
+   * accepted the flag but could not immediately dispatch the investigation
+   * (see `note`).
+   */
+  taskId?: Maybe<Scalars['String']['output']>;
+};
+
 export type GrantCapabilityInput = {
   agentId?: InputMaybe<Scalars['ID']['input']>;
   agentProfileId?: InputMaybe<Scalars['ID']['input']>;
@@ -3982,6 +4008,14 @@ export type Mutation = {
   eraseMemorySource: MemorySourceEraseResult;
   escalateThread: Thread;
   flagThreadForEval: FlagThreadForEvalResult;
+  /**
+   * Flag a thread to the ThinkWork Brain for investigation (THINK-781).
+   * Caller must be able to see the thread (owner / participant / linked
+   * work-item assignee); tenant is derived from the thread row. 4xx from
+   * the Brain surfaces as BAD_USER_INPUT; 5xx/timeouts surface as
+   * SERVICE_UNAVAILABLE ("couldn't reach the Brain — try again").
+   */
+  flagThreadToBrain: FlagThreadToBrainResult;
   grantCapability: CapabilityMutationResult;
   /**
    * Insert an active grant for a source binding, superseding (revoking) any
@@ -4907,6 +4941,11 @@ export type MutationEscalateThreadArgs = {
 
 export type MutationFlagThreadForEvalArgs = {
   input: FlagThreadForEvalInput;
+};
+
+
+export type MutationFlagThreadToBrainArgs = {
+  input: FlagThreadToBrainInput;
 };
 
 
