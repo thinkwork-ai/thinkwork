@@ -170,8 +170,9 @@ describe("ThreadDetailActions (dropdown trigger)", () => {
     expect(screen.getByText("Rename thread")).toBeTruthy();
     expect(screen.getByText("Archive thread")).toBeTruthy();
     expect(screen.getByText("Delete thread")).toBeTruthy();
-    // THINK-781: the Brain-investigation flag is a thread-menu action.
-    expect(screen.getByText("Send to the Brain")).toBeTruthy();
+    // THINK-781: the Brain-investigation flag lives in the header flag
+    // dropdown (SpacesThreadDetailRoute), not this "…" menu.
+    expect(screen.queryByText("Send to the Brain")).toBeNull();
     // The System Prompt item moved to the operator execution trace (U3).
     expect(screen.queryByText("System Prompt")).toBeNull();
     expect(screen.queryByTestId("thread-actions-system-prompt")).toBeNull();

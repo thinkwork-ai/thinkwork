@@ -39,6 +39,7 @@ vi.mock("urql", () => ({
       fetching: false,
     },
   ],
+  useMutation: () => [{ fetching: false, stale: false }, vi.fn()],
 }));
 vi.mock("@/lib/open-in-new-tab", () => ({
   openInNewTab: openInNewTabMock,
@@ -54,6 +55,12 @@ vi.mock("@/context/AuthContext", () => ({
 }));
 vi.mock("@/components/shell/ChatSidebar", () => ({
   ChatSidebar: () => <nav data-testid="chat-sidebar" />,
+}));
+// The teach dialog has its own suite (TeachBrainDialog.test.tsx); here it
+// only matters that the menu item opens it.
+vi.mock("@/components/workbench/TeachBrainDialog", () => ({
+  TeachBrainDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="teach-brain-dialog" /> : null,
 }));
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
@@ -257,6 +264,16 @@ describe("SpacesSidebar", () => {
     fireEvent.click(screen.getByTestId("sidebar-docs"));
 
     expect(openInNewTabMock).toHaveBeenCalledWith("/docs");
+    expect(routerMocks.navigate).not.toHaveBeenCalled();
+  });
+
+  it("opens the Teach-the-Brain dialog from the account menu (THINK-784)", () => {
+    render(<SpacesSidebar />);
+
+    expect(screen.queryByTestId("teach-brain-dialog")).toBeNull();
+    fireEvent.click(screen.getByTestId("sidebar-teach-brain"));
+
+    expect(screen.getByTestId("teach-brain-dialog")).toBeTruthy();
     expect(routerMocks.navigate).not.toHaveBeenCalled();
   });
 

@@ -20,14 +20,12 @@ import {
   extractMessageText,
   type ThreadMessageRow,
 } from "../evals/thread-snapshot.js";
+import { postBrainOps } from "./ops-post.js";
 
 export const BRAIN_FLAG_MAX_CONVERSATION_MESSAGES = 200;
 export const BRAIN_FLAG_MAX_MESSAGE_TEXT_CHARS = 8000;
 export const BRAIN_FLAG_MAX_NOTE_CHARS = 4000;
 export const BRAIN_FLAG_MAX_IDENTIFIER_CHARS = 500;
-
-/** Default request timeout — the Brain answers a /flags POST quickly. */
-const DEFAULT_TIMEOUT_MS = 20_000;
 
 export interface BrainFlagConversationMessage {
   role: "user" | "assistant";
@@ -146,74 +144,20 @@ export async function postBrainFlag(input: {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }): Promise<PostBrainFlagResult> {
-  const fetchImpl = input.fetchImpl ?? fetch;
-  const controller = new AbortController();
-  const timer = setTimeout(
-    () => controller.abort(),
-    input.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-  );
-  let response: Response;
-  try {
-    response = await fetchImpl(input.flagsUrl, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...(input.token ? { authorization: `Bearer ${input.token}` } : {}),
-        ...(input.headers ?? {}),
-      },
-      body: JSON.stringify(input.payload),
-      signal: controller.signal,
-    });
-  } catch (err) {
-    return {
-      kind: "unreachable",
-      message:
-        err instanceof Error && err.name === "AbortError"
-          ? "The Brain did not respond in time."
-          : err instanceof Error
-            ? err.message
-            : String(err),
-    };
-  } finally {
-    clearTimeout(timer);
-  }
-
-  let body: Record<string, unknown> = {};
-  try {
-    const parsed: unknown = await response.json();
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      body = parsed as Record<string, unknown>;
-    }
-  } catch {
-    // Non-JSON body — fall through with the status alone.
-  }
-
-  if (response.ok) {
-    const flagId = typeof body.flag_id === "string" ? body.flag_id : null;
-    if (!flagId) {
-      return {
-        kind: "unreachable",
-        message: `The Brain answered ${response.status} without a flag id.`,
-      };
-    }
-    return {
-      kind: "accepted",
-      flagId,
-      taskId: typeof body.task_id === "string" ? body.task_id : null,
-      note: typeof body.note === "string" ? body.note : null,
-    };
-  }
-
-  const detail =
-    typeof body.error === "string"
-      ? body.error
-      : typeof body.message === "string"
-        ? body.message
-        : typeof body.detail === "string"
-          ? body.detail
-          : `HTTP ${response.status}`;
-  if (response.status >= 400 && response.status < 500) {
-    return { kind: "rejected", status: response.status, message: detail };
-  }
-  return { kind: "unreachable", message: detail };
+  const result = await postBrainOps({
+    url: input.flagsUrl,
+    idField: "flag_id",
+    token: input.token,
+    headers: input.headers,
+    payload: input.payload,
+    fetchImpl: input.fetchImpl,
+    timeoutMs: input.timeoutMs,
+  });
+  if (result.kind !== "accepted") return result;
+  return {
+    kind: "accepted",
+    flagId: result.id,
+    taskId: result.taskId,
+    note: result.note,
+  };
 }

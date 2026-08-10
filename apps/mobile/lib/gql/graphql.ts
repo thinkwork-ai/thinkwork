@@ -4291,6 +4291,13 @@ export type Mutation = {
   /** Submit a draft for trust/review. */
   submitSkillDraft: SkillDraft;
   /**
+   * Send expert knowledge to the ThinkWork Brain for review (THINK-784).
+   * `taught_by` is attributed server-side from the signed-in caller. 4xx
+   * from the Brain surfaces as BAD_USER_INPUT; 5xx/timeouts surface as
+   * SERVICE_UNAVAILABLE ("couldn't reach the Brain — try again").
+   */
+  teachBrain: TeachBrainResult;
+  /**
    * Inserts a synthetic delivery row for the webhook so an operator can
    * confirm the config exists and the delivery-log pipeline is reachable.
    * Does NOT trigger any downstream dispatch — the row carries
@@ -5737,6 +5744,11 @@ export type MutationSubmitRunFeedbackArgs = {
 
 export type MutationSubmitSkillDraftArgs = {
   input: SubmitSkillDraftInput;
+};
+
+
+export type MutationTeachBrainArgs = {
+  input: TeachBrainInput;
 };
 
 
@@ -9609,6 +9621,37 @@ export enum SubscriptionInvalidationField {
   OnThreadUpdated = 'ON_THREAD_UPDATED',
   OnWorkspaceAccessRevoked = 'ON_WORKSPACE_ACCESS_REVOKED'
 }
+
+export type TeachBrainInput = {
+  /**
+   * Required free-text statement — what the Brain should know, in the
+   * expert's own words. Truncated to the Brain's 4000-char cap.
+   */
+  text: Scalars['String']['input'];
+  /**
+   * Optional thread the teaching was taught from; resolves to
+   * `context_thread_url` server-side. The caller must be able to see the
+   * thread.
+   */
+  threadId?: InputMaybe<Scalars['ID']['input']>;
+};
+
+export type TeachBrainResult = {
+  __typename?: 'TeachBrainResult';
+  /**
+   * Brain-side annotation, present when the teaching was accepted but the
+   * investigation could not be dispatched immediately.
+   */
+  note?: Maybe<Scalars['String']['output']>;
+  /**
+   * The dispatched teaching-distill Platform Agent task. Null when the
+   * Brain accepted the teaching but could not immediately dispatch the
+   * investigation (see `note`).
+   */
+  taskId?: Maybe<Scalars['String']['output']>;
+  /** Server-minted teaching id — always present on acceptance. */
+  teachingId: Scalars['String']['output'];
+};
 
 export type Tenant = {
   __typename?: 'Tenant';

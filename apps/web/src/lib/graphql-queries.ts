@@ -2740,6 +2740,16 @@ export const FlagThreadToBrainMutation = gql`
   }
 `;
 
+export const TeachBrainMutation = gql`
+  mutation TeachBrain($input: TeachBrainInput!) {
+    teachBrain(input: $input) {
+      teachingId
+      taskId
+      note
+    }
+  }
+`;
+
 // THINK-166 U3: saved canvases visible to a thread, keyed by stablePartId —
 // resolves checked-out canvas emissions (THINK-145 R13; the artifact row
 // lives in the HOME thread) to their original artifact so the transcript can
