@@ -288,3 +288,93 @@ export function ContextCompositionDiagram() {
     </Diagram>
   );
 }
+
+/**
+ * The consolidation loop in the report figure language (2026-08-11 docs
+ * overhaul; modeled on the Brain's FlywheelLoopFigure): fill-card boxes,
+ * teal strokes, italic muted edge labels, and a real return edge — the
+ * loop is the argument. No amber here on purpose: every stage runs
+ * unattended, and amber is reserved for the places a human is
+ * load-bearing.
+ *
+ * Drawn from the shipped code: thread-idle-memory-learning.ts (the
+ * after-quiet trigger), requester-memory/learner.ts (sorting; corrections
+ * and decisions skip staging), requester-memory/dreaming.ts (the
+ * light/REM/deep nightly pass) and requester-memory/storage.ts (the
+ * memory/ file layout).
+ */
+export function ConsolidationLoopFigure() {
+  return (
+    <figure className="pt-1">
+      {/* The SVG scales to its column rather than scrolling. */}
+      <div>
+        <svg
+          viewBox="0 0 760 320"
+          role="img"
+          aria-label="The consolidation loop: work happens, the idle learner reads the quiet thread, most findings are staged as candidates, the nightly pass consolidates them, MEMORY.md is rewritten, and the file is read on the next turn — corrections skip the staging step"
+          className="block h-auto w-full"
+        >
+          <defs>
+            <marker
+              id="cm-arr"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 1 L 9 5 L 0 9 z" className="fill-muted-foreground" />
+            </marker>
+          </defs>
+
+          {/* top row: work → idle learner → staged */}
+          <rect x="20" y="36" width="180" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="36" y="62" className="fill-foreground font-sans text-[15px] font-semibold">1 · Work happens</text>
+          <text x="36" y="82" className="fill-muted-foreground font-sans text-[11px]">a thread runs, then goes quiet</text>
+
+          <rect x="290" y="36" width="180" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="306" y="62" className="fill-foreground font-sans text-[15px] font-semibold">2 · Idle learner</text>
+          <text x="306" y="82" className="fill-muted-foreground font-sans text-[11px]">reads it once, sorts what it found</text>
+
+          <rect x="560" y="36" width="180" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="576" y="62" className="fill-foreground font-sans text-[15px] font-semibold">3 · Staged</text>
+          <text x="576" y="82" className="fill-muted-foreground font-sans text-[11px]">candidates wait to recur</text>
+
+          <line x1="200" y1="67" x2="284" y2="67" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#cm-arr)" />
+          <text x="214" y="58" className="fill-muted-foreground font-sans text-[11px] italic">quiet thread</text>
+          <line x1="470" y1="67" x2="554" y2="67" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#cm-arr)" />
+          <text x="480" y="58" className="fill-muted-foreground font-sans text-[11px] italic">most findings</text>
+
+          {/* nightly pass */}
+          <rect x="560" y="176" width="180" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="576" y="202" className="fill-foreground font-sans text-[15px] font-semibold">4 · Nightly pass</text>
+          <text x="576" y="222" className="fill-muted-foreground font-sans text-[11px]">light · REM · deep</text>
+
+          <line x1="650" y1="98" x2="650" y2="170" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#cm-arr)" />
+          <text x="660" y="138" className="fill-muted-foreground font-sans text-[11px] italic">re-read that night</text>
+
+          {/* the file, and the return edge */}
+          <rect x="290" y="176" width="180" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="306" y="202" className="fill-foreground font-sans text-[15px] font-semibold">5 · MEMORY.md</text>
+          <text x="306" y="222" className="fill-muted-foreground font-sans text-[11px]">the durable set, compacted</text>
+
+          {/* corrections skip staging */}
+          <line x1="380" y1="98" x2="380" y2="170" className="stroke-muted-foreground" strokeWidth="1.3" strokeDasharray="4 3" markerEnd="url(#cm-arr)" />
+          <text x="230" y="138" className="fill-muted-foreground font-sans text-[11px] italic">corrections go straight in</text>
+
+          <line x1="554" y1="207" x2="476" y2="207" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#cm-arr)" />
+          <text x="478" y="198" className="fill-muted-foreground font-sans text-[11px] italic">promote · compact</text>
+
+          <path d="M 290 207 L 110 207 L 110 104" fill="none" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#cm-arr)" />
+          <text x="122" y="172" className="fill-muted-foreground font-sans text-[11px] italic">read on the next turn</text>
+        </svg>
+      </div>
+      <figcaption className="mt-2 font-sans text-[13px] leading-6 text-muted-foreground">
+        Every stage runs unattended. What the loop converges on is a plain
+        markdown file in your workspace — which is also why correcting it is
+        just editing a file.
+      </figcaption>
+    </figure>
+  );
+}
