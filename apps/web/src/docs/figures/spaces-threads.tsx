@@ -1,114 +1,92 @@
 /**
- * Figures for the Spaces & threads section (THINK-697).
+ * Figures for the Spaces & threads section, in the report figure language
+ * (2026-08-11 docs overhaul; modeled on memory.tsx's ConsolidationLoopFigure):
+ * fill-card boxes with teal strokes, muted edges with arrowheads, italic
+ * 11px edge labels. Two pictures that an inline <Flow> cannot draw:
  *
- * Two pictures that the kit's FlowChain cannot draw:
  *  - SpaceCompositionDiagram — a Space is not a step in a sequence, it is a
- *    layer wrapped around the one Enterprise Agent. That needs a band with four
- *    parallel parts inside it, not a chain.
+ *    layer wrapped around the one Enterprise Agent. That needs an enclosure
+ *    with four parallel parts inside it, not a chain.
  *  - WorkArrivesDiagram — four independent entry points converging on one
- *    thread is a genuine fan-in; drawn as elbowed edges meeting one box.
+ *    thread is a genuine fan-in, drawn with elbowed edges meeting one box.
  *
- * Both follow the house rules in ../diagrams.tsx: fixed viewBox, tone accents
- * only, 13/11/10px type.
+ * No amber in either figure on purpose: nothing here is a human-in-the-loop
+ * step. Marker ids are unique per figure: `sc-arr` and `wa-arr`.
  */
-import { Diagram, DgArrow, DgBox, DgChip, DgGroup, DgLabel } from "../diagrams";
 
 /**
  * What a Space is made of, and what it sits on top of. The point the picture
  * has to land: there is one agent per tenant, and the Space is the layer that
- * makes that agent behave like a Support agent or a Finance agent.
+ * makes that agent arrive at a Support turn and a Finance turn knowing
+ * different things.
  */
 export function SpaceCompositionDiagram() {
-  const parts: {
-    x: number;
-    title: string;
-    sub: string;
-    tone: "consumer" | "storage" | "source" | "graph";
-    chips: string[];
-  }[] = [
-    {
-      x: 40,
-      title: "Members",
-      sub: "who can open it",
-      tone: "consumer",
-      chips: ["public", "private"],
-    },
-    {
-      x: 204,
-      title: "Space files",
-      sub: "local procedures",
-      tone: "storage",
-      chips: ["SPACE.md", "docs/"],
-    },
-    {
-      x: 368,
-      title: "Triggers",
-      sub: "how work arrives",
-      tone: "source",
-      chips: ["email", "schedule"],
-    },
-    {
-      x: 532,
-      title: "Threads",
-      sub: "what happened here",
-      tone: "graph",
-      chips: ["CHAT-1962"],
-    },
+  const parts = [
+    { x: 44, title: "Members", sub: "who can open it" },
+    { x: 220, title: "Space files", sub: "SPACE.md, docs/ …" },
+    { x: 396, title: "Triggers", sub: "how work arrives" },
+    { x: 572, title: "Threads", sub: "what happened here" },
   ];
 
   return (
-    <Diagram
-      title="A Space layered over the Enterprise Agent: members, files, triggers and threads"
-      viewBox="0 0 720 430"
-      caption="One agent per tenant. A Space does not clone it — it wraps it, so the same agent arrives at a Support turn and a Finance turn with different local context."
-    >
-      <DgLabel x={40} y={24} text="Tenant" />
-      <DgBox
-        x={40}
-        y={34}
-        w={640}
-        h={62}
-        title="The Enterprise Agent"
-        sub="your company's one agent — instructions, skills, connectors"
-        tone="compute"
-      />
-      <DgArrow d="M 360 96 L 360 146" label="shaped by" labelAt={[360, 121]} />
+    <figure className="pt-1">
+      {/* The SVG scales to its column rather than scrolling. */}
+      <div>
+        <svg
+          viewBox="0 0 760 392"
+          role="img"
+          aria-label="A Space layered over the Enterprise Agent: the tenant's one agent on top, a Space carrying members, space files, triggers and threads beneath it, and what the agent works from on one turn — its own baseline plus this Space's layer"
+          className="block h-auto w-full"
+        >
+          <defs>
+            <marker
+              id="sc-arr"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 1 L 9 5 L 0 9 z" className="fill-muted-foreground" />
+            </marker>
+          </defs>
 
-      <DgGroup x={24} y={150} w={672} h={172} label="Space — Support" />
-      {parts.map((part) => (
-        <g key={part.title}>
-          <DgBox
-            x={part.x}
-            y={186}
-            w={148}
-            h={112}
-            title={part.title}
-            sub={part.sub}
-            tone={part.tone}
-            align="top"
-          />
-          {part.chips.map((chip, index) => (
-            <DgChip
-              key={chip}
-              x={part.x + 14}
-              y={242 + index * 24}
-              label={chip}
-              tone={part.tone}
-            />
+          {/* the one agent */}
+          <rect x="140" y="20" width="480" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="380" y="46" textAnchor="middle" className="fill-foreground font-sans text-[15px] font-semibold">The Enterprise Agent</text>
+          <text x="380" y="66" textAnchor="middle" className="fill-muted-foreground font-sans text-[11px]">your tenant&apos;s one agent — instructions, skills, connectors</text>
+
+          <line x1="380" y1="82" x2="380" y2="126" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#sc-arr)" />
+          <text x="392" y="110" className="fill-muted-foreground font-sans text-[11px] italic">wrapped by</text>
+
+          {/* the Space enclosure with its four parts */}
+          <rect x="24" y="132" width="712" height="140" rx="10" className="fill-none stroke-muted-foreground/40" strokeWidth="1.3" strokeDasharray="5 4" />
+          <text x="44" y="156" className="fill-muted-foreground font-sans text-[11px] font-semibold tracking-[0.08em] uppercase">A Space</text>
+
+          {parts.map((part) => (
+            <g key={part.title}>
+              <rect x={part.x} y={172} width="144" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+              <text x={part.x + 16} y={198} className="fill-foreground font-sans text-[14px] font-semibold">{part.title}</text>
+              <text x={part.x + 16} y={218} className="fill-muted-foreground font-sans text-[11px]">{part.sub}</text>
+            </g>
           ))}
-        </g>
-      ))}
 
-      <DgArrow d="M 360 322 L 360 360" label="one turn" labelAt={[360, 341]} />
-      <DgBox
-        x={168}
-        y={362}
-        w={384}
-        h={58}
-        title="What the agent works from, this turn"
-        sub="the agent's baseline plus this Space — not the others"
-      />
-    </Diagram>
+          <line x1="380" y1="272" x2="380" y2="316" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#sc-arr)" />
+          <text x="392" y="298" className="fill-muted-foreground font-sans text-[11px] italic">one turn</text>
+
+          {/* what a turn works from */}
+          <rect x="180" y="322" width="400" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="380" y="348" textAnchor="middle" className="fill-foreground font-sans text-[15px] font-semibold">What the agent works from, this turn</text>
+          <text x="380" y="368" textAnchor="middle" className="fill-muted-foreground font-sans text-[11px]">the agent&apos;s baseline plus this Space — not the others</text>
+        </svg>
+      </div>
+      <figcaption className="mt-2 font-sans text-[13px] leading-6 text-muted-foreground">
+        One agent per tenant. A Space does not clone it — it wraps it, so the
+        same agent arrives at a Support turn and a Finance turn with different
+        local context.
+      </figcaption>
+    </figure>
   );
 }
 
@@ -118,66 +96,68 @@ export function SpaceCompositionDiagram() {
  * only difference afterwards is the channel stamped on the thread.
  */
 export function WorkArrivesDiagram() {
-  const sources: {
-    x: number;
-    title: string;
-    sub: string;
-    /** Where its edge meets the thread box. */
-    into: number;
-  }[] = [
-    { x: 24, title: "Chat", sub: "you type in the app", into: 225 },
-    { x: 192, title: "Email", sub: "to the Space address", into: 315 },
-    { x: 360, title: "Schedule", sub: "rate or cron", into: 405 },
-    { x: 528, title: "Webhook", sub: "an external POST", into: 495 },
+  const sources = [
+    { x: 24, title: "Chat", sub: "you type in the app", into: 250 },
+    { x: 208, title: "Email", sub: "to the Space address", into: 337 },
+    { x: 392, title: "Schedule", sub: "a time fires", into: 424 },
+    { x: 576, title: "Webhook", sub: "an external POST", into: 511 },
   ];
 
   return (
-    <Diagram
-      title="Chat, email, schedule and webhook converging on one thread in a Space"
-      viewBox="0 0 720 356"
-      caption="Four entry points, one container. Whatever started the work, it becomes a thread in a Space and the agent runs with that Space's context."
-    >
-      <DgLabel x={24} y={20} text="How work arrives" />
-      {sources.map((source) => (
-        <g key={source.title}>
-          <DgBox
-            x={source.x}
-            y={30}
-            w={168}
-            h={56}
-            title={source.title}
-            sub={source.sub}
-            tone="source"
-          />
-          <DgArrow
-            d={`M ${source.x + 84} 86 L ${source.x + 84} 126 L ${source.into} 126 L ${source.into} 154`}
-          />
-        </g>
-      ))}
+    <figure className="pt-1">
+      {/* The SVG scales to its column rather than scrolling. */}
+      <div>
+        <svg
+          viewBox="0 0 760 330"
+          role="img"
+          aria-label="Chat, email, schedule and webhook converging on one thread in a Space; the agent then runs one turn with that Space's context"
+          className="block h-auto w-full"
+        >
+          <defs>
+            <marker
+              id="wa-arr"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 1 L 9 5 L 0 9 z" className="fill-muted-foreground" />
+            </marker>
+          </defs>
 
-      <DgBox
-        x={180}
-        y={156}
-        w={360}
-        h={62}
-        title="A thread in the Space"
-        sub="the channel is recorded on the thread"
-        tone="graph"
-      />
-      <DgArrow
-        d="M 360 218 L 360 258"
-        label="agent turn"
-        labelAt={[360, 238]}
-      />
-      <DgBox
-        x={180}
-        y={260}
-        w={360}
-        h={62}
-        title="The agent runs in this Space"
-        sub="its files, its memory, its members"
-        tone="compute"
-      />
-    </Diagram>
+          {sources.map((source) => (
+            <g key={source.title}>
+              <rect x={source.x} y={20} width="160" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+              <text x={source.x + 16} y={46} className="fill-foreground font-sans text-[14px] font-semibold">{source.title}</text>
+              <text x={source.x + 16} y={66} className="fill-muted-foreground font-sans text-[11px]">{source.sub}</text>
+              <path
+                d={`M ${source.x + 80} 82 L ${source.x + 80} 112 L ${source.into} 112 L ${source.into} 136`}
+                fill="none"
+                className="stroke-muted-foreground"
+                strokeWidth="1.3"
+                markerEnd="url(#wa-arr)"
+              />
+            </g>
+          ))}
+
+          <rect x="210" y="142" width="340" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="380" y="168" textAnchor="middle" className="fill-foreground font-sans text-[15px] font-semibold">A thread in the Space</text>
+          <text x="380" y="188" textAnchor="middle" className="fill-muted-foreground font-sans text-[11px]">the channel is recorded on the thread</text>
+
+          <line x1="380" y1="204" x2="380" y2="248" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#wa-arr)" />
+          <text x="392" y="230" className="fill-muted-foreground font-sans text-[11px] italic">agent turn</text>
+
+          <rect x="210" y="254" width="340" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="380" y="280" textAnchor="middle" className="fill-foreground font-sans text-[15px] font-semibold">The agent runs in this Space</text>
+          <text x="380" y="300" textAnchor="middle" className="fill-muted-foreground font-sans text-[11px]">its files, its context, its members</text>
+        </svg>
+      </div>
+      <figcaption className="mt-2 font-sans text-[13px] leading-6 text-muted-foreground">
+        Four entry points, one container. Whatever started the work, it becomes
+        a thread in a Space, and the agent runs with that Space&apos;s context.
+      </figcaption>
+    </figure>
   );
 }

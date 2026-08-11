@@ -1,13 +1,42 @@
 /**
  * GitHub & Google Workspace (Tools & integrations) — THINK-699.
  *
- * These two names get grouped together in people's heads and they are almost
- * opposites: Google Workspace is the canonical per-user connector, while
- * GitHub is mostly platform plumbing (workspace version control) with the
- * agent-facing half arriving as an ordinary connector. Saying that plainly is
- * the job of this page.
+ * These two names get grouped together in people's heads and they are
+ * almost opposites: Google Workspace is the canonical per-user connector,
+ * while GitHub is mostly platform-level plumbing with per-user reach
+ * arriving through your own GitHub connection or an ordinary MCP connector.
+ *
+ * Report restyle (2026-08-11). Claims verified against the shipped code:
+ * packages/database-pg/src/schema/integrations.ts (connections owned by
+ * one user), apps/web/src/components/settings/SettingsConnections.tsx and
+ * apps/mobile/components/credentials/IntegrationsSection.tsx (the
+ * Connections rows, statuses, Reconnect), packages/api/src/lib/
+ * oauth-token.ts (owner-only resolution, expiry marking, quiet failure,
+ * GITHUB_ACCESS_TOKEN for the sandbox, buildSkillEnvOverrides binding a
+ * wired connection to the agent), packages/api/src/lib/memory-sources/
+ * adapters/gmail.ts + resolvers/memory-sources/* (owner-only mail source,
+ * content-free evidence rows, encrypted S3 storage, personal automation
+ * schedules), packages/api/src/handlers/connections.ts (disconnect =
+ * secret deletion, nothing else touched), packages/api/src/handlers/
+ * github-app.ts (the App surface: installations + webhook deliveries),
+ * and packages/api/src/lib/pi-extensions/github-import.ts (repo + ref
+ * extension import for review).
+ *
+ * Dropped from the pre-restyle page: the claim that the GitHub App keeps
+ * agent workspaces under version control with the repo as source of truth
+ * — that library (packages/lambda/github-workspace.ts) is retired Code
+ * Factory code with no Terraform wiring, and the shipped workspace design
+ * (workspace-overlay.ts) makes the S3 prefix the source of truth.
  */
-import { Callout, DocArticle, DocLink, Section } from "../kit";
+import {
+  CardGrid,
+  DocLink,
+  DocTable,
+  InfoCard,
+  Invariant,
+  ReportArticle,
+  ReportSection,
+} from "../kit";
 import type { DocTocEntry } from "../registry";
 
 export const GITHUB_AND_GOOGLE_TOC: DocTocEntry[] = [
@@ -20,77 +49,42 @@ export const GITHUB_AND_GOOGLE_TOC: DocTocEntry[] = [
 
 export function GithubAndGoogle() {
   return (
-    <DocArticle
+    <ReportArticle
       eyebrow="Tools & integrations"
       title="GitHub & Google Workspace"
-      lead="Google Workspace is the connector that acts as a specific person — you. GitHub is mostly the opposite: a platform-level installation that keeps agent workspaces under version control. Knowing which is which saves a lot of confused setup."
+      lead="Google Workspace is the connector that acts as a specific person — you. GitHub is mostly the opposite: platform-level plumbing, with your own GitHub identity as a separate, optional connection. Knowing which is which saves a lot of confused setup."
     >
-      <Section id="per-user-oauth" title="Why these two are different">
+      <ReportSection id="per-user-oauth" title="Why these two are different">
         <p>
           Both are &quot;GitHub&quot; and &quot;Google&quot; in conversation,
           and they sit at opposite ends of the{" "}
           <DocLink slug="connectors-and-mcp">credential split</DocLink>:
         </p>
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/20 text-left text-xs text-muted-foreground">
-                <th className="px-3 py-2 font-medium">&nbsp;</th>
-                <th className="px-3 py-2 font-medium">Google Workspace</th>
-                <th className="px-3 py-2 font-medium">GitHub</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60 text-[13px] [&_td]:px-3 [&_td]:py-2">
-              <tr>
-                <td className="font-medium whitespace-nowrap">Acts as</td>
-                <td className="text-foreground/80">You, personally</td>
-                <td className="text-foreground/80">The platform</td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">Set up by</td>
-                <td className="text-foreground/80">
-                  Each member, for themselves
-                </td>
-                <td className="text-foreground/80">
-                  An operator, once per tenant
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">
-                  Mainly used for
-                </td>
-                <td className="text-foreground/80">
-                  Mail and calendar — as context, and as things the agent can
-                  act on for you
-                </td>
-                <td className="text-foreground/80">
-                  Version control for agent workspaces, and importing platform
-                  extensions
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">
-                  Agent-facing tools
-                </td>
-                <td className="text-foreground/80">
-                  Supplied by the skills and connectors wired to your connection
-                </td>
-                <td className="text-foreground/80">
-                  Register GitHub&apos;s MCP server like any other connector
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <CardGrid>
+          <InfoCard title="Google Workspace — acts as you">
+            <p>
+              Each member connects their own account, and the agent works in
+              that member&apos;s mail and calendar with that member&apos;s
+              token. There is no tenant-wide Google credential.
+            </p>
+          </InfoCard>
+          <InfoCard title="GitHub — mostly platform plumbing">
+            <p>
+              The tenant-level GitHub App install and the extension-import
+              workflow are operator machinery. Your own reach into GitHub is a
+              separate, personal connection — or an MCP connector.
+            </p>
+          </InfoCard>
+        </CardGrid>
         <p>
           The reason a per-user connection exists at all is that some work has
           no meaningful tenant-wide answer. &quot;Check my calendar&quot; is a
           different question for every member, and the only correct credential
           is that member&apos;s own.
         </p>
-      </Section>
+      </ReportSection>
 
-      <Section id="google-workspace" title="Google Workspace">
+      <ReportSection id="google-workspace" title="Google Workspace">
         <p>
           <strong>Settings → Connectors → Connections</strong> in the web app,
           or the <strong>Credential Locker</strong> on{" "}
@@ -103,109 +97,116 @@ export function GithubAndGoogle() {
         </p>
         <ul>
           <li>
-            <strong>Doing things in your mail and calendar</strong> — the agent
-            acting as you through the skills and connectors your tenant has
-            wired to Google. It is your token that is used, so anything the
-            agent does is something you could have done yourself, and shows up
-            in Google&apos;s own audit trail as you.
+            <strong>Doing things in your mail and calendar</strong> — the
+            agent acting as you through the skills and connectors your tenant
+            has wired to Google. It is your token that is used, so anything
+            the agent does is something you could have done yourself, and
+            shows up in Google&apos;s own audit trail as you.
           </li>
           <li>
             <strong>Mail as a memory source</strong> — your own correspondence
-            distilled into your personal <DocLink slug="memory">memory</DocLink>
-            , so the agent knows the context of an ongoing thread without you
-            pasting it in. This is opt-in and personal: it feeds your memory,
-            not the tenant&apos;s.
+            distilled into your personal{" "}
+            <DocLink slug="memory">memory</DocLink>, so the agent knows the
+            context of an ongoing thread without you pasting it in. This is
+            opt-in and personal: it feeds your memory, not the tenant&apos;s.
           </li>
           <li>
             <strong>Personal automations</strong> — the standing kind of duty
             described on{" "}
-            <DocLink slug="automations">Automations &amp; scheduling</DocLink>,
-            running against your account on a schedule.
+            <DocLink slug="automations">Automations &amp; scheduling</DocLink>
+            , running against your own account on a schedule you own.
           </li>
         </ul>
-        <Callout tone="note" title="What is stored from your mail">
+        <p>
+          What is stored from your mail is deliberately thin. Message content
+          never lands inline in the database: a processed mail thread is
+          stored encrypted in your own AWS account, and the row that indexes
+          it keeps only ids, counts and a content hash. Attachments are
+          recorded as metadata — filename, type, size — never content.
+        </p>
+        <Invariant title="A mailbox is only ever read as its owner">
           <p>
-            Message content never lands inline in the database. A processed mail
-            thread is stored encrypted in your own AWS account, and the row that
-            indexes it keeps only ids, counts and a content hash. Attachments
-            are recorded as metadata — filename, type, size — never content.
+            The mail path fails closed: reading your mailbox requires an
+            active connection that <strong>you</strong> own, whether the
+            reader is a turn you started or an automation running overnight.
+            No operator, teammate, or tenant-wide credential can stand in for
+            it. One consequence for teams: a workflow that depends on Google
+            works for exactly the people who have connected, and quietly does
+            less for everyone else — treat &quot;everyone connects&quot; as
+            part of the rollout, not an afterthought.
           </p>
-        </Callout>
-        <Callout tone="warn" title="Your connection is genuinely yours">
-          <p>
-            Nobody else&apos;s agent turn uses your Google token — not an
-            operator&apos;s, not a teammate&apos;s, not an unattended job that
-            someone else scheduled. The flip side is that a workflow which
-            depends on Google works for exactly the people who have connected
-            it, and quietly does less for everyone else. When you roll out
-            something mail- or calendar-shaped to a team, treat &quot;everyone
-            connects&quot; as part of the rollout, not as an afterthought.
-          </p>
-        </Callout>
-      </Section>
+        </Invariant>
+        <p>
+          One nuance for operators wiring skills: a skill wired to a specific
+          connection acts through <em>that</em> connection wherever the agent
+          runs. Wire a shared agent&apos;s skill to a shared credential, not
+          to your own account.
+        </p>
+      </ReportSection>
 
-      <Section id="microsoft-365" title="Microsoft 365">
+      <ReportSection id="microsoft-365" title="Microsoft 365">
         <p>
           The same shape, for Outlook mail and calendar: your own connection,
-          made in the same place, with the same per-person semantics. If your
-          organisation runs Microsoft rather than Google, everything on this
-          page about Google Workspace reads across unchanged — connect the
-          Microsoft 365 row instead.
+          made in the same places, with the same per-person semantics. If your
+          organisation runs Microsoft rather than Google, connect the
+          Microsoft 365 row instead. One current asymmetry: mail as a{" "}
+          <em>memory source</em> is Google-only today — the Microsoft
+          connection covers acting on your mail and calendar, not distilling
+          your correspondence into memory.
         </p>
         <p>
-          There is no benefit to connecting both unless you genuinely use both.
-          Two live mail connections means two sources feeding the same personal
-          memory.
+          There is no benefit to connecting both unless you genuinely use
+          both.
         </p>
-      </Section>
+      </ReportSection>
 
-      <Section id="github" title="GitHub">
+      <ReportSection id="github" title="GitHub">
         <p>
-          GitHub shows up in ThinkWork in two places, and neither is the one
-          people expect.
+          GitHub shows up in ThinkWork in three places, and none of them is
+          the one people usually expect.
         </p>
+        <DocTable
+          head={["Piece", "What it is", "Set up by"]}
+          rows={[
+            [
+              <strong>The GitHub App install</strong>,
+              "The tenant-level integration surface: it records which installations exist and logs the webhook deliveries GitHub sends. Plumbing, not agent tools.",
+              "An operator, once per tenant",
+            ],
+            [
+              <strong>Extension import</strong>,
+              "An operator points the platform at a repository and ref to bring a platform extension in for review. An operator workflow, not an agent capability.",
+              "An operator, per import",
+            ],
+            [
+              <strong>Your GitHub connection</strong>,
+              <>
+                A personal connection like Google&apos;s: once connected, a
+                sandbox turn you run carries your GitHub token, so the{" "}
+                <code>gh</code> CLI works as you.
+              </>,
+              "You, for yourself",
+            ],
+          ]}
+        />
         <p>
-          <strong>Version control for agent workspaces.</strong> When the GitHub
-          App is installed for a tenant, every agent&apos;s workspace files —{" "}
-          <code>INSTRUCTIONS.md</code>, skills, connector definitions — live in
-          a repository, and that repository is the source of truth. Edits made
-          in the app are commits; the platform&apos;s own copy is a cache kept
-          in step behind the scenes. The payoff is ordinary and large: the agent
-          folder has a history, a diff, and a blame. See{" "}
-          <DocLink slug="agent-folder">the agent folder</DocLink> for what is in
-          it and{" "}
-          <DocLink slug="workspace-composition">workspace composition</DocLink>{" "}
-          for how it is assembled.
+          The trap worth naming: installing the GitHub App does{" "}
+          <strong>not</strong> give the agent tools for browsing issues,
+          reviewing pull requests or committing to your repositories. If you
+          want the agent to work <em>on</em> GitHub during a turn, connect
+          your own GitHub account — or register GitHub&apos;s MCP server as an
+          ordinary <DocLink slug="connectors-and-mcp">connector</DocLink> with
+          per-user OAuth, so each engineer&apos;s reach in GitHub is their
+          own. Two different systems, similar names.
         </p>
-        <p>
-          <strong>Importing platform extensions.</strong> An operator can point
-          the platform at a GitHub repository and ref to bring an extension in
-          for review. That is an operator workflow, not an agent capability.
-        </p>
-        <Callout
-          tone="warn"
-          title="The GitHub App is not how the agent reads your repos"
-        >
-          <p>
-            This is the trap. Installing the GitHub App does{" "}
-            <strong>not</strong> give the agent tools for browsing issues,
-            reviewing pull requests or committing to your product repositories —
-            it is workspace plumbing for one specific repository. If you want
-            the agent to work <em>on</em> GitHub during a turn, register
-            GitHub&apos;s MCP server as an ordinary{" "}
-            <DocLink slug="connectors-and-mcp">connector</DocLink> and choose
-            per-user OAuth, so each engineer&apos;s reach in GitHub is their
-            own. Two different systems, similar names.
-          </p>
-        </Callout>
-      </Section>
+      </ReportSection>
 
-      <Section id="expiry" title="Expiry, reconnecting and revoking">
+      <ReportSection id="expiry" title="Expiry, reconnecting and revoking">
         <ul>
           <li>
             <strong>Expiry is normal and visible.</strong> Provider tokens age
-            out; the connection row flips to <em>expired</em> and Connect turns
-            into Reconnect. Reconnecting is the same one-tap flow.
+            out; the connection row flips to <em>expired</em> and Connect
+            turns into Reconnect. Reconnecting is the same one-tap flow.
           </li>
           <li>
             <strong>An expired connection fails quietly at the edges.</strong>{" "}
@@ -214,17 +215,17 @@ export function GithubAndGoogle() {
           </li>
           <li>
             <strong>Disconnect is a real revoke.</strong> Disconnecting from
-            Connections or the Credential Locker stops the platform using that
-            credential. Work already done — threads, memories, artifacts —
+            Connections or the Credential Locker deletes the stored credential
+            outright. Work already done — threads, memories, artifacts —
             stays; it is a credential, not an eraser.
           </li>
           <li>
             <strong>Revoking at the provider works too</strong>, and shows up
-            here as an expired connection on next use. Doing both is the belt
-            and braces.
+            here as an expired connection the next time the token is used.
+            Doing both is the belt and braces.
           </li>
         </ul>
-      </Section>
-    </DocArticle>
+      </ReportSection>
+    </ReportArticle>
   );
 }

@@ -1,233 +1,187 @@
 /**
- * Figures for the Tools & integrations section (THINK-699).
- *
- * Two pictures the prose cannot carry:
+ * Figures for the Tools & integrations section (THINK-699), in the report
+ * figure language (2026-08-11 docs overhaul; modeled on memory.tsx's
+ * ConsolidationLoopFigure): fill-card boxes with teal strokes, muted edges
+ * with arrowhead markers, italic 11px edge labels, one unique marker id per
+ * figure.
  *
  *  - `ConnectorCredentialsDiagram` — the question every reader asks first,
- *    "whose password is this?". Three parties author three different things,
- *    and only one of them is a secret the agent could ever leak.
- *  - `ToolCallFlowDiagram` — what actually happens inside one turn when the
- *    agent reaches outside itself, including the two shapes an answer can
- *    come back in.
+ *    "whose password is this?". Two parties author two different halves, and
+ *    the workspace only ever carries references. The one amber element in
+ *    the section's figures is the OAuth-consent box: a human authorizing
+ *    their own account is the load-bearing human step; the signing and
+ *    resolution machinery around it is platform automation and stays teal.
+ *  - `ToolCallFlowDiagram` — the tool loop inside one turn, drawn as a
+ *    loop: the result of any tool re-enters the same turn.
  *
- * Built from the shared primitives in `../diagrams.tsx` per
- * `figures/README.md`: fixed viewBox, tone accents only, 13/11/10px type.
+ * Drawn from the shipped code: packages/api/src/lib/capabilities/
+ * definition-schemas.ts (sidecar fields; credential references only, raw
+ * secrets rejected at parse), sidecar-signing.ts + manifest-compile.ts
+ * (platform-signed sidecars; unsigned/drifted/disabled withheld),
+ * packages/api/src/lib/mcp-configs.ts (per-user token resolution at
+ * dispatch), packages/database-pg/src/schema/integrations.ts and
+ * mcp-servers.ts (token values in Secrets Manager, registry rows), and
+ * packages/agentcore-pi/agent-container/src/{server.ts,mcp-connect.ts}
+ * (one flat tool list; listTools discovery; results returning to the turn).
  */
-import { Diagram, DgArrow, DgBox, DgChip, DgGroup, DgLabel } from "../diagrams";
 
 /**
- * Who holds which credential. The load-bearing claim is the bottom half: the
- * workspace and the model see references, the platform resolves values.
+ * Who holds which credential. The load-bearing claim is the bottom half:
+ * the workspace and the model see references, the platform resolves values
+ * at call time.
  */
 export function ConnectorCredentialsDiagram() {
   return (
-    <Diagram
-      title="Who authorizes what: your per-user connection, the operator's tenant registration, and the credentials the runtime resolves at call time"
-      viewBox="0 0 700 470"
-      caption="Two people configure a connector and neither of them hands the agent a secret. You authorize your own account; an operator registers the endpoint. Both write references into the agent's workspace — the values stay in Secrets Manager and are resolved per call."
-    >
-      {/* Band 1 — the two authors */}
-      <DgLabel x={40} y={26} text="Authored by" />
+    <figure className="pt-1">
+      <div>
+        <svg
+          viewBox="0 0 760 452"
+          role="img"
+          aria-label="Who authorizes what: you authorize your own account through OAuth consent and the token value lands in Secrets Manager; an operator registers the endpoint in the connector registry; both are recorded in the agent folder's signed sidecar as references only; the value is resolved per call for the turn acting as you"
+          className="block h-auto w-full"
+        >
+          <defs>
+            <marker
+              id="cn-arr"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 1 L 9 5 L 0 9 z" className="fill-muted-foreground" />
+            </marker>
+          </defs>
 
-      <DgBox
-        x={40}
-        y={40}
-        w={290}
-        h={76}
-        tone="consumer"
-        align="top"
-        title="You"
-        sub="Connect your own account"
-      />
-      <DgChip x={56} y={82} label="Google Workspace" tone="consumer" />
-      <DgChip x={176} y={82} label="Microsoft 365" tone="consumer" />
+          {/* Row 1 — the two authors. The human consent box is the amber
+              element: a person authorizing their own account. */}
+          <rect x="20" y="36" width="330" height="62" rx="8" className="fill-card stroke-amber-400/60" strokeWidth="1.5" strokeDasharray="6 4" />
+          <text x="36" y="62" className="fill-foreground font-sans text-[15px] font-semibold">You</text>
+          <text x="36" y="82" className="fill-muted-foreground font-sans text-[11px]">authorize your own account — OAuth consent</text>
 
-      <DgBox
-        x={370}
-        y={40}
-        w={290}
-        h={76}
-        tone="source"
-        align="top"
-        title="An operator"
-        sub="Register the endpoint for the tenant"
-      />
-      <DgChip x={386} y={82} label="URL + transport" tone="source" />
-      <DgChip x={506} y={82} label="auth type" tone="source" />
+          <rect x="410" y="36" width="330" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="426" y="62" className="fill-foreground font-sans text-[15px] font-semibold">An operator</text>
+          <text x="426" y="82" className="fill-muted-foreground font-sans text-[11px]">registers the endpoint for the tenant</text>
 
-      {/* Band 2 — where each half lands */}
-      <DgArrow
-        d="M 185 116 L 185 168"
-        label="OAuth consent"
-        labelAt={[185, 142]}
-      />
-      <DgArrow
-        d="M 515 116 L 515 168"
-        label="registration"
-        labelAt={[515, 142]}
-      />
+          <line x1="185" y1="98" x2="185" y2="164" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#cn-arr)" />
+          <text x="196" y="136" className="fill-muted-foreground font-sans text-[11px] italic">your consent</text>
+          <line x1="575" y1="98" x2="575" y2="164" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#cn-arr)" />
+          <text x="586" y="136" className="fill-muted-foreground font-sans text-[11px] italic">registration</text>
 
-      <DgLabel x={40} y={158} text="Stored as" />
+          {/* Row 2 — where each half lands */}
+          <rect x="20" y="170" width="330" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="36" y="196" className="fill-foreground font-sans text-[15px] font-semibold">Secrets Manager</text>
+          <text x="36" y="216" className="fill-muted-foreground font-sans text-[11px]">token values, encrypted, per user</text>
 
-      <DgBox
-        x={40}
-        y={168}
-        w={290}
-        h={64}
-        tone="storage"
-        title="Secrets Manager"
-        sub="Token values, encrypted, per user"
-      />
-      <DgBox
-        x={370}
-        y={168}
-        w={290}
-        h={64}
-        tone="storage"
-        title="Connector registry"
-        sub="Endpoint, transport, auth pattern"
-      />
+          <rect x="410" y="170" width="330" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="426" y="196" className="fill-foreground font-sans text-[15px] font-semibold">Connector registry</text>
+          <text x="426" y="216" className="fill-muted-foreground font-sans text-[11px]">URL, transport, auth type</text>
 
-      {/* Band 3 — the workspace only ever sees references */}
-      <DgArrow d="M 185 232 L 185 288" />
-      <DgArrow d="M 515 232 L 515 288" />
+          <line x1="185" y1="232" x2="185" y2="278" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#cn-arr)" />
+          <text x="196" y="260" className="fill-muted-foreground font-sans text-[11px] italic">a reference, never the value</text>
+          <line x1="575" y1="232" x2="575" y2="278" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#cn-arr)" />
 
-      <DgBox
-        x={40}
-        y={288}
-        w={620}
-        h={76}
-        tone="neutral"
-        align="top"
-        title="The agent folder"
-        sub="connectors/<name>/ — presence grants it, the sidecar shapes it"
-      />
-      <DgChip x={120} y={330} label="enabled" />
-      <DgChip x={212} y={330} label="allowed operations" />
-      <DgChip x={382} y={330} label="approval policy" />
-      <DgChip x={516} y={330} label="credential ref" />
+          {/* Row 3 — the workspace only ever sees references */}
+          <rect x="20" y="284" width="720" height="66" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="36" y="310" className="fill-foreground font-sans text-[15px] font-semibold">The agent folder — connectors/&lt;slug&gt;/</text>
+          <text x="36" y="330" className="fill-muted-foreground font-sans text-[11px]">platform-signed sidecar: enabled · allowed operations · approval policy · credential references</text>
 
-      {/* Band 4 — resolution happens at call time, not in the folder */}
-      <DgArrow
-        d="M 350 364 L 350 412"
-        label="resolved per call"
-        labelAt={[350, 388]}
-      />
+          {/* Row 4 — resolution happens at call time, not in the folder */}
+          <line x1="380" y1="350" x2="380" y2="392" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#cn-arr)" />
+          <text x="391" y="376" className="fill-muted-foreground font-sans text-[11px] italic">resolved per call</text>
 
-      <DgGroup x={150} y={412} w={400} h={48} />
-      <DgBox
-        x={158}
-        y={418}
-        w={384}
-        h={36}
-        tone="compute"
-        title="The turn, acting as you"
-      />
-    </Diagram>
+          <rect x="250" y="398" width="260" height="48" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="266" y="427" className="fill-foreground font-sans text-[15px] font-semibold">The turn, acting as you</text>
+        </svg>
+      </div>
+      <figcaption className="mt-2 font-sans text-[13px] leading-6 text-muted-foreground">
+        Two people configure a connector and neither of them hands the agent a
+        secret. Both halves are recorded in the agent folder as references; the
+        values stay in Secrets Manager and are resolved per call.
+      </figcaption>
+    </figure>
   );
 }
 
 /**
- * One turn, from your message to what comes back. The fan in the middle is
- * the point: built-in tools, skills and connector tools are one flat set to
- * the model, and the result of any of them re-enters the same turn.
+ * One turn, from your message to what comes back. The loop is the point:
+ * built-in tools, skills and connector tools are one flat set to the model,
+ * and the result of any of them re-enters the same turn.
  */
 export function ToolCallFlowDiagram() {
   return (
-    <Diagram
-      title="A turn that calls a tool: your message, the agent's tool choice, the result returning to the same turn, and the three shapes an answer can take"
-      viewBox="0 0 700 540"
-      caption="Tool calls happen inside a turn, not after it. Whatever a tool returns comes back to the same turn, so the agent can call another one, correct itself, or answer — and the answer may arrive as prose, as a chart card, or as an artifact."
-    >
-      <DgBox
-        x={200}
-        y={24}
-        w={300}
-        h={52}
-        tone="consumer"
-        title="Your message"
-        sub="Or a schedule, or a Slack mention"
-      />
+    <figure className="pt-1">
+      <div>
+        <svg
+          viewBox="0 0 760 452"
+          role="img"
+          aria-label="A turn that calls a tool: your message starts a turn, the agent picks a tool from one flat list drawn from built-in tools, skills and connector tools, the result re-enters the same turn, and the agent calls again or answers"
+          className="block h-auto w-full"
+        >
+          <defs>
+            <marker
+              id="tl-arr"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 1 L 9 5 L 0 9 z" className="fill-muted-foreground" />
+            </marker>
+          </defs>
 
-      <DgArrow d="M 350 76 L 350 124" />
+          {/* the spine: message → pick → families → result */}
+          <rect x="290" y="20" width="220" height="56" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="306" y="44" className="fill-foreground font-sans text-[15px] font-semibold">Your message</text>
+          <text x="306" y="62" className="fill-muted-foreground font-sans text-[11px]">or a schedule, or a Slack mention</text>
 
-      <DgBox
-        x={200}
-        y={124}
-        w={300}
-        h={60}
-        tone="compute"
-        title="The agent picks a tool"
-        sub="From one flat list, by description"
-      />
+          <line x1="400" y1="76" x2="400" y2="110" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#tl-arr)" />
+          <text x="411" y="98" className="fill-muted-foreground font-sans text-[11px] italic">starts a turn</text>
 
-      {/* Fan out to the three families */}
-      <DgArrow d="M 320 184 L 320 214 L 135 214 L 135 258" />
-      <DgArrow d="M 350 184 L 350 258" />
-      <DgArrow d="M 380 184 L 380 214 L 565 214 L 565 258" />
+          <rect x="290" y="116" width="220" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="306" y="142" className="fill-foreground font-sans text-[15px] font-semibold">The agent picks a tool</text>
+          <text x="306" y="162" className="fill-muted-foreground font-sans text-[11px]">one flat list, chosen by description</text>
 
-      <DgGroup x={24} y={238} w={652} h={112} label="Available this turn" />
+          {/* fork to the three families */}
+          <line x1="400" y1="178" x2="400" y2="244" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#tl-arr)" />
+          <path d="M 340 178 L 340 212 L 132 212 L 132 244" fill="none" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#tl-arr)" />
+          <path d="M 460 178 L 460 212 L 628 212 L 628 244" fill="none" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#tl-arr)" />
 
-      <DgBox
-        x={40}
-        y={258}
-        w={190}
-        h={76}
-        tone="source"
-        align="top"
-        title="Built-in tools"
-        sub="Shipped with the platform"
-      />
-      <DgChip x={56} y={300} label="web search" tone="source" />
-      <DgChip x={146} y={300} label="sandbox" tone="source" />
+          <rect x="20" y="250" width="225" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="36" y="276" className="fill-foreground font-sans text-[15px] font-semibold">Built-in tools</text>
+          <text x="36" y="296" className="fill-muted-foreground font-sans text-[11px]">shipped with the platform</text>
 
-      <DgBox
-        x={255}
-        y={258}
-        w={190}
-        h={76}
-        tone="source"
-        align="top"
-        title="Skills"
-        sub="Installed procedures"
-      />
-      <DgChip x={271} y={300} label="skills/<slug>/" tone="source" />
+          <rect x="268" y="250" width="225" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="284" y="276" className="fill-foreground font-sans text-[15px] font-semibold">Skills</text>
+          <text x="284" y="296" className="fill-muted-foreground font-sans text-[11px]">installed procedures</text>
 
-      <DgBox
-        x={470}
-        y={258}
-        w={190}
-        h={76}
-        tone="source"
-        align="top"
-        title="Connector tools"
-        sub="Discovered from the server"
-      />
-      <DgChip x={486} y={300} label="MCP over HTTP" tone="source" />
+          <rect x="515" y="250" width="225" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="531" y="276" className="fill-foreground font-sans text-[15px] font-semibold">Connector tools</text>
+          <text x="531" y="296" className="fill-muted-foreground font-sans text-[11px]">discovered from the MCP server</text>
 
-      {/* Converge back into the turn */}
-      <DgArrow d="M 135 334 L 135 378 L 320 378 L 320 406" />
-      <DgArrow d="M 350 350 L 350 406" />
-      <DgArrow d="M 565 334 L 565 378 L 380 378 L 380 406" />
+          {/* converge back into the turn */}
+          <path d="M 132 312 L 132 344 L 340 344 L 340 372" fill="none" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#tl-arr)" />
+          <line x1="400" y1="312" x2="400" y2="372" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#tl-arr)" />
+          <path d="M 628 312 L 628 344 L 460 344 L 460 372" fill="none" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#tl-arr)" />
 
-      <DgBox
-        x={200}
-        y={406}
-        w={300}
-        h={52}
-        tone="compute"
-        title="Result re-enters the turn"
-        sub="Call again, or answer"
-      />
+          <rect x="290" y="378" width="220" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="306" y="404" className="fill-foreground font-sans text-[15px] font-semibold">The result comes back</text>
+          <text x="306" y="424" className="fill-muted-foreground font-sans text-[11px]">into the same turn</text>
 
-      {/* What comes back */}
-      <DgArrow d="M 320 458 L 320 478 L 130 478 L 130 498" />
-      <DgArrow d="M 350 458 L 350 498" />
-      <DgArrow d="M 380 458 L 380 478 L 570 478 L 570 498" />
-
-      <DgBox x={40} y={498} w={180} h={36} tone="graph" title="Reply text" />
-      <DgBox x={260} y={498} w={180} h={36} tone="graph" title="Chart card" />
-      <DgBox x={480} y={498} w={180} h={36} tone="graph" title="Artifact" />
-    </Diagram>
+          {/* the return edge — the loop is the argument */}
+          <path d="M 510 409 L 744 409 L 744 147 L 516 147" fill="none" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#tl-arr)" />
+          <text x="548" y="138" className="fill-muted-foreground font-sans text-[11px] italic">calls again, or answers</text>
+        </svg>
+      </div>
+      <figcaption className="mt-2 font-sans text-[13px] leading-6 text-muted-foreground">
+        Tool calls happen inside a turn, not after it. Whatever a tool returns
+        re-enters the same turn, so the agent can call another tool, correct
+        itself, or answer — nothing about a connector is a separate step you
+        wait for.
+      </figcaption>
+    </figure>
   );
 }
