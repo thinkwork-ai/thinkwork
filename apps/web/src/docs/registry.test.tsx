@@ -29,12 +29,15 @@ const ALL_PAGES = DOC_SECTIONS.flatMap((section) => section.pages);
 
 describe("docs registry", () => {
   it("publishes the seven-section information architecture", () => {
+    // Eric 2026-08-11: tools before memory — retrieval-and-context references
+    // tool results; Compounding Memory is the concept capstone before the two
+    // operator sections, mirroring the Brain's flagship-last nav.
     expect(DOC_SECTIONS.map((section) => section.label)).toEqual([
       "Start here",
       "Agents",
       "Spaces & threads",
-      "Memory",
       "Tools & integrations",
+      "Memory",
       "Automations & quality",
       "Operations",
     ]);

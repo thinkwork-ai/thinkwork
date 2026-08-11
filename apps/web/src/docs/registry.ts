@@ -91,8 +91,8 @@ export interface DocSectionDef {
 
 /**
  * Seven sections, grouped by the question a reader is asking: orientation,
- * what an agent is, where work happens, what the agent remembers, what it
- * can reach, how you keep it honest, how you run the platform. No section
+ * what an agent is, where work happens, what it can reach, what the agent
+ * remembers, how you keep it honest, how you run the platform. No section
  * has fewer than three pages — a one-page section is just a page.
  */
 export const DOC_SECTIONS: DocSectionDef[] = [
@@ -200,35 +200,6 @@ export const DOC_SECTIONS: DocSectionDef[] = [
     ],
   },
   {
-    label: "Memory",
-    pages: [
-      {
-        slug: "memory",
-        title: "How memory works",
-        blurb:
-          "The managed memory engine, what gets written to it, and what never does.",
-        toc: MEMORY_TOC,
-        component: Memory,
-      },
-      {
-        slug: "compounding-memory",
-        title: "Compounding memory",
-        blurb:
-          "How the agent studies its own threads so the second week costs less than the first.",
-        toc: COMPOUNDING_MEMORY_TOC,
-        component: CompoundingMemory,
-      },
-      {
-        slug: "retrieval-and-context",
-        title: "Retrieval & context",
-        blurb:
-          "How the right memory reaches the right turn, and how to tell whether it did.",
-        toc: RETRIEVAL_AND_CONTEXT_TOC,
-        component: RetrievalAndContext,
-      },
-    ],
-  },
-  {
     label: "Tools & integrations",
     pages: [
       {
@@ -262,6 +233,38 @@ export const DOC_SECTIONS: DocSectionDef[] = [
           "What an agent hands back beyond text — inline charts, artifacts, and how to share them.",
         toc: CHARTS_AND_ARTIFACTS_TOC,
         component: ChartsAndArtifacts,
+      },
+    ],
+  },
+  // Eric 2026-08-11: tools before memory — retrieval-and-context references
+  // tool results; Compounding Memory is the concept capstone before the two
+  // operator sections, mirroring the Brain's flagship-last nav.
+  {
+    label: "Memory",
+    pages: [
+      {
+        slug: "memory",
+        title: "How memory works",
+        blurb:
+          "The managed memory engine, what gets written to it, and what never does.",
+        toc: MEMORY_TOC,
+        component: Memory,
+      },
+      {
+        slug: "compounding-memory",
+        title: "Compounding memory",
+        blurb:
+          "How the agent studies its own threads so the second week costs less than the first.",
+        toc: COMPOUNDING_MEMORY_TOC,
+        component: CompoundingMemory,
+      },
+      {
+        slug: "retrieval-and-context",
+        title: "Retrieval & context",
+        blurb:
+          "How the right memory reaches the right turn, and how to tell whether it did.",
+        toc: RETRIEVAL_AND_CONTEXT_TOC,
+        component: RetrievalAndContext,
       },
     ],
   },
