@@ -1,14 +1,37 @@
 /**
  * Evaluations (Automations & quality) — THINK-700.
  *
- * Grounded in the shipped surface: /settings/evaluations, its Studio,
- * profiles, datasets and run detail. Two things the old guide got wrong
- * and this page must not repeat: the Mastra/promptfoo framing is dead, and
- * the AgentCore built-in evaluators are selectable but not yet scoring —
- * they persist as skipped rows, so the honest statement is that assertions
- * are what grade a run today.
+ * Converted to the report restyle (Eric 2026-08-11). Claims verified
+ * against the shipped code: packages/evals-core/src/scoring.ts (the
+ * assertion switch — contains/not-contains/icontains/equals/regex/
+ * llm-rubric — and summarizeEvalStatuses: pass ÷ (pass + fail), errors
+ * excluded, all-error runs score null never 0%), packages/evals-core/src/
+ * types.ts (case status exactly pass|fail|error), packages/evals-core/src/
+ * trial-aggregation.ts (majority verdict; no majority → unstable, kept out
+ * of the score), packages/database-pg/src/schema/evaluations.ts (runs pin
+ * dataset_version + profile_snapshot + scoring_version at launch),
+ * packages/api/src/lib/evals/engines/agentcore.ts (built-in evaluators
+ * persist as skipped stubs — selectable, not yet scoring), packages/api/
+ * src/graphql/resolvers/evaluations/index.ts (override requires a reason
+ * and sits beside the judge's verdict; starter-pack seeding is idempotent
+ * via a tenant+seed-name unique index), packages/api/src/lib/eval-seeds.ts
+ * (the adversarial seed packs and their categories), and apps/web/src/
+ * components/settings/{EvalTestCaseForm,SettingsEvaluations,
+ * SettingsEvalStudio}.tsx (the six authoring assertion types, the 16
+ * built-in evaluators, the 30-day trend, Compare profiles).
+ *
+ * Two things the old guide got wrong and this page must not repeat: the
+ * Mastra/promptfoo framing is dead, and the AgentCore built-in evaluators
+ * are selectable but not yet scoring — assertions are the grade today.
  */
-import { Callout, DocArticle, DocLink, Section, Term } from "../kit";
+import {
+  DocLink,
+  DocTable,
+  PullQuote,
+  ReportArticle,
+  ReportSection,
+  Term,
+} from "../kit";
 import { EvalLoopDiagram } from "../figures/automations";
 import type { DocTocEntry } from "../registry";
 
@@ -23,12 +46,12 @@ export const EVALUATIONS_TOC: DocTocEntry[] = [
 
 export function Evaluations() {
   return (
-    <DocArticle
+    <ReportArticle
       eyebrow="Automations & quality"
       title="Evaluations"
       lead="Evaluations are how you find out whether a change made the agent better, rather than hoping so: a stored question with a checkable expectation, run again after every edit."
     >
-      <Section id="what-a-run-proves" title="What a run proves">
+      <ReportSection id="what-a-run-proves" title="What a run proves">
         <p>
           Agent quality has an awkward property — it is invisible from the
           inside. An agent that reaches the wrong conclusion reaches it
@@ -62,101 +85,73 @@ export function Evaluations() {
             can fix.
           </li>
         </ul>
+        <p>
+          Evaluations are an <strong>operator</strong> surface, under{" "}
+          <strong>Settings → Evaluations</strong>. Underneath, the scoring layer
+          is AWS Bedrock AgentCore Evaluations, which is why you will see
+          AgentCore vocabulary on the screens — but nothing about authoring or
+          reading a run requires you to think about it.
+        </p>
+      </ReportSection>
 
-        <Callout tone="note" title="Where this lives">
-          <p>
-            Evaluations are an <strong>operator</strong> surface, under{" "}
-            <strong>Settings → Evaluations</strong>. Underneath, the scoring
-            layer is AWS Bedrock AgentCore Evaluations, which is why you will
-            see AgentCore vocabulary on the screens — but nothing about
-            authoring or reading a run requires you to think about it.
-          </p>
-        </Callout>
-      </Section>
-
-      <Section id="test-cases" title="Writing a test case">
+      <ReportSection id="test-cases" title="Writing a test case">
         <p>
           Cases live in <strong>Evaluation Studio</strong>. A case is small on
           purpose:
         </p>
-
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/20 text-left text-xs text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Field</th>
-                <th className="px-3 py-2 font-medium">What to put in it</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60 text-[13px] [&_td]:px-3 [&_td]:py-2">
-              <tr>
-                <td className="font-medium whitespace-nowrap">Name</td>
-                <td className="text-foreground/80">
-                  The behaviour, phrased as the thing that should happen —
-                  &ldquo;Refuses to reveal the system prompt&rdquo;. You will
-                  read this in a list of failures, not in context.
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">Category</td>
-                <td className="text-foreground/80">
-                  Your grouping, and the unit a run is launched over. Keep one
-                  category to one concern — a pass rate is only interpretable if
-                  the cases inside it are about the same thing.
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">User prompt</td>
-                <td className="text-foreground/80">
-                  What gets sent to the agent, exactly as a person would send
-                  it.
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">
-                  System prompt override
-                </td>
-                <td className="text-foreground/80">
-                  Optional. Leave it empty and the case runs against the
-                  agent&apos;s real instructions — which is usually the point.
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">Assertions</td>
-                <td className="text-foreground/80">
-                  The checkable part. A case passes only if{" "}
-                  <strong>every</strong> assertion passes.
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">Enabled</td>
-                <td className="text-foreground/80">
-                  Disabled cases are skipped by every run. Better than deleting
-                  a case you are unsure about.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
+        <DocTable
+          head={["Field", "What to put in it"]}
+          rows={[
+            [
+              <strong>Name</strong>,
+              <>
+                The behaviour, phrased as the thing that should happen —
+                &ldquo;Refuses to reveal the system prompt&rdquo;. You will read
+                this in a list of failures, not in context.
+              </>,
+            ],
+            [
+              <strong>Category</strong>,
+              "Your grouping, and the unit a run is launched over. Keep one category to one concern — a pass rate is only interpretable if the cases inside it are about the same thing.",
+            ],
+            [
+              <strong>User prompt</strong>,
+              "What gets sent to the agent, exactly as a person would send it.",
+            ],
+            [
+              <strong>System prompt override</strong>,
+              "Optional. Leave it empty and the case runs against the agent's real instructions — which is usually the point.",
+            ],
+            [
+              <strong>Assertions</strong>,
+              <>
+                The checkable part. A case passes only if <strong>every</strong>{" "}
+                assertion passes.
+              </>,
+            ],
+            [
+              <strong>Enabled</strong>,
+              "Disabled cases are skipped by every run. Better than deleting a case you are unsure about.",
+            ],
+          ]}
+        />
         <p>
           There is no &ldquo;expected answer&rdquo; box, and that is deliberate.
           You are not asserting that the agent produces one exact paragraph —
           you are asserting the properties that paragraph must have.
         </p>
-
         <p>
           Studio also ships a <strong>starter pack</strong> of adversarial cases
-          across four categories — prompt injection, tool misuse, data boundary,
-          and safety and scope. Importing it is a button, and re-importing is
-          safe: it skips names it has already imported. It is the fastest way to
-          have a meaningful set of cases on day one, but it is a floor, not a
-          suite. The cases that catch <em>your</em> regressions are the ones
-          drawn from questions your people actually asked.
+          — prompt injection, tool misuse, data boundary, and safety and scope,
+          among other packs. Importing it is a button, and re-importing is safe:
+          it skips names it has already imported. It is the fastest way to have
+          a meaningful set of cases on day one, but it is a floor, not a suite.
+          The cases that catch <em>your</em> regressions are the ones drawn from
+          questions your people actually asked.
         </p>
-      </Section>
+      </ReportSection>
 
-      <Section id="evaluators" title="How a case is graded">
+      <ReportSection id="evaluators" title="How a case is graded">
         <p>
           Grading happens in two layers, and only one of them is doing work
           today.
@@ -165,87 +160,42 @@ export function Evaluations() {
           <strong>Assertions</strong> are yours, and they are what decides pass
           or fail. Six types:
         </p>
-
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/20 text-left text-xs text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Type</th>
-                <th className="px-3 py-2 font-medium">Passes when</th>
-                <th className="px-3 py-2 font-medium">Cost</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60 text-[13px] [&_td]:px-3 [&_td]:py-2">
-              <tr>
-                <td className="font-mono text-xs whitespace-nowrap">
-                  contains
-                </td>
-                <td className="text-foreground/80">
-                  the answer contains this text
-                </td>
-                <td className="text-muted-foreground">free</td>
-              </tr>
-              <tr>
-                <td className="font-mono text-xs whitespace-nowrap">
-                  not-contains
-                </td>
-                <td className="text-foreground/80">
-                  the answer does <em>not</em> contain it — the shape most
-                  safety cases take
-                </td>
-                <td className="text-muted-foreground">free</td>
-              </tr>
-              <tr>
-                <td className="font-mono text-xs whitespace-nowrap">
-                  icontains
-                </td>
-                <td className="text-foreground/80">contains, ignoring case</td>
-                <td className="text-muted-foreground">free</td>
-              </tr>
-              <tr>
-                <td className="font-mono text-xs whitespace-nowrap">equals</td>
-                <td className="text-foreground/80">
-                  the answer is exactly this string
-                </td>
-                <td className="text-muted-foreground">free</td>
-              </tr>
-              <tr>
-                <td className="font-mono text-xs whitespace-nowrap">regex</td>
-                <td className="text-foreground/80">
-                  a pattern matches — for shaped output like an ID or a date
-                </td>
-                <td className="text-muted-foreground">free</td>
-              </tr>
-              <tr>
-                <td className="font-mono text-xs whitespace-nowrap">
-                  llm-rubric
-                </td>
-                <td className="text-foreground/80">
-                  a second model, acting as judge, agrees the answer meets a
-                  standard you wrote in plain English
-                </td>
-                <td className="text-muted-foreground">spends tokens</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
+        <DocTable
+          head={["Type", "Passes when", "Cost"]}
+          rows={[
+            [<code>contains</code>, "the answer contains this text", "free"],
+            [
+              <code>not-contains</code>,
+              <>
+                the answer does <em>not</em> contain it — the shape most safety
+                cases take
+              </>,
+              "free",
+            ],
+            [<code>icontains</code>, "contains, ignoring case", "free"],
+            [<code>equals</code>, "the answer is exactly this string", "free"],
+            [
+              <code>regex</code>,
+              "a pattern matches — for shaped output like an ID or a date",
+              "free",
+            ],
+            [
+              <code>llm-rubric</code>,
+              "a second model, acting as judge, agrees the answer meets a standard you wrote in plain English",
+              "spends tokens",
+            ],
+          ]}
+        />
         <p>
           Reach for <code>llm-rubric</code> only when the claim is genuinely
           about meaning — &ldquo;explains that damage must be reported within 48
           hours&rdquo; is not a substring test. Everything else should be
-          structural: exact, free, and stable across reruns.
+          structural: exact, free, and stable across reruns. And nothing passes
+          vacuously: if the judge cannot run, a rubric assertion is recorded as
+          an <strong>error</strong>, never as a pass — which matters most for
+          the negative cases, where &ldquo;must not leak the system
+          prompt&rdquo; must never turn green because the grader was broken.
         </p>
-
-        <Callout tone="warn" title="Nothing passes vacuously">
-          <p>
-            If the judge cannot run, a rubric assertion is recorded as an{" "}
-            <strong>error</strong> — never as a pass. This matters most for the
-            negative cases: &ldquo;must not leak the system prompt&rdquo; must
-            never turn green because the grader was broken.
-          </p>
-        </Callout>
-
         <p>
           <strong>Built-in evaluators</strong> are the second layer. When you
           author a case you can tick any of the sixteen evaluators Bedrock
@@ -253,25 +203,20 @@ export function Evaluations() {
           relevance, conciseness, coherence, instruction following, refusal,
           harmfulness and stereotyping over the answer; tool-selection and
           tool-parameter accuracy over the calls it made; and goal success plus
-          three trajectory-match evaluators over the whole session.
+          three trajectory-match evaluators over the whole session. But ticking
+          an evaluator today records it on the case and shows it on the result
+          as <strong>skipped</strong>. Turning them on is a deliberate follow-up
+          with its own cost controls, because each evaluator is another model
+          call per case.
         </p>
+        <PullQuote who="the grading layer, honestly stated">
+          Until the built-in evaluators are switched on, your assertions are the
+          grade — a case with no assertions and four evaluators ticked proves
+          nothing.
+        </PullQuote>
+      </ReportSection>
 
-        <Callout
-          tone="warn"
-          title="Built-in evaluators are selectable, but not yet scoring"
-        >
-          <p>
-            Ticking an evaluator today records it on the case and shows it on
-            the result as <strong>skipped</strong>. Turning them on is a
-            deliberate follow-up with its own cost controls, because each
-            evaluator is another model call per case. Until then,{" "}
-            <strong>your assertions are the grade</strong> — a case with no
-            assertions and four evaluators ticked proves nothing.
-          </p>
-        </Callout>
-      </Section>
-
-      <Section id="profiles-and-datasets" title="Profiles and datasets">
+      <ReportSection id="profiles-and-datasets" title="Profiles and datasets">
         <p>
           Two small objects exist so that a comparison between two runs is
           honest.
@@ -303,18 +248,16 @@ export function Evaluations() {
           counts, cost per case, latency — and flags when the two are not really
           comparable because a version or a judge drifted between them.
         </p>
-      </Section>
+      </ReportSection>
 
-      <Section id="reading-a-run" title="Reading a run">
+      <ReportSection id="reading-a-run" title="Reading a run">
         <p>
           <strong>Run evaluation</strong> asks for three things: a profile, then
           either a set of categories or one dataset. Runs execute case by case,
           so a slow case does not hold up the rest, and the page updates live
           while it goes.
         </p>
-
         <EvalLoopDiagram />
-
         <p>Every case lands in one of three states, and the last two differ:</p>
         <ul>
           <li>
@@ -339,17 +282,13 @@ export function Evaluations() {
           &ldquo;we could not measure&rdquo; and &ldquo;we measured zero&rdquo;
           are different facts and must never be plotted as the same point.
         </p>
-
-        <Callout tone="tip" title="Read the error count before the pass rate">
-          <p>
-            A rate computed over four scored cases is noise wearing a percentage
-            sign. The run header shows passed, failed, errored and unstable
-            together for exactly this reason — and each of those counts is
-            clickable, so &ldquo;show me only the behavioural failures&rdquo; is
-            one click.
-          </p>
-        </Callout>
-
+        <p>
+          So read the error count before the pass rate: a rate computed over
+          four scored cases is noise wearing a percentage sign. The run header
+          shows passed, failed, errored and unstable together for exactly this
+          reason — and each of those counts is clickable, so &ldquo;show me only
+          the behavioural failures&rdquo; is one click.
+        </p>
         <p>What to look at, in order:</p>
         <ol>
           <li>
@@ -371,7 +310,6 @@ export function Evaluations() {
             what the agent did to produce it, not just what it said.
           </li>
         </ol>
-
         <p>
           When the grader is wrong — and a model judge sometimes is — an
           operator can <strong>override</strong> a verdict with a required
@@ -381,9 +319,9 @@ export function Evaluations() {
           next run does not need one. A category accumulating standing overrides
           has a rubric problem, not a grading problem.
         </p>
-      </Section>
+      </ReportSection>
 
-      <Section id="iterating" title="Iterating">
+      <ReportSection id="iterating" title="Iterating">
         <p>
           The loop is worth naming because most teams do the first three steps
           and stop. Author a case, run it, read it — and then nothing changes,
@@ -408,16 +346,11 @@ export function Evaluations() {
             the case deliberately and say so.
           </li>
         </ul>
-
-        <Callout tone="warn" title="Never edit a case just to make a run green">
-          <p>
-            It is the one move that destroys the value of the whole set. The
-            moment cases are tuned to the current behaviour, the pass rate stops
-            measuring quality and starts measuring how recently someone edited
-            the cases.
-          </p>
-        </Callout>
-
+        <PullQuote who="the one move that destroys the whole set">
+          Never edit a case just to make a run green. The moment cases are tuned
+          to the current behaviour, the pass rate stops measuring quality and
+          starts measuring how recently someone edited the cases.
+        </PullQuote>
         <p>Habits that make a set of cases worth keeping:</p>
         <ol>
           <li>
@@ -444,7 +377,6 @@ export function Evaluations() {
             Runs are launched by hand, so the discipline is yours to keep.
           </li>
         </ol>
-
         <p>
           The natural partner to this page is{" "}
           <DocLink slug="automations">automations</DocLink>: unattended work is
@@ -456,7 +388,7 @@ export function Evaluations() {
           </DocLink>
           .
         </p>
-      </Section>
-    </DocArticle>
+      </ReportSection>
+    </ReportArticle>
   );
 }

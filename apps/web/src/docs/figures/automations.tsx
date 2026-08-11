@@ -1,163 +1,501 @@
 /**
- * Figures for the "Automations & quality" section (THINK-700).
+ * Figures for the "Automations & quality" section (THINK-700), redrawn in
+ * the report figure language (2026-08-11 docs overhaul; modeled on
+ * figures/memory.tsx → ConsolidationLoopFigure): fill-card boxes with teal
+ * strokes, muted edges with italic 11px labels, a unique marker id per
+ * figure, and SVGs that scale to the column rather than scroll.
  *
- * Two pictures, both drawn from the primitives in ../diagrams so they sit
- * in the same drawing surface as every other figure in the docs:
+ *  - ScheduleAnchorDiagram (marker `sa-arr`) — why "every four hours" and
+ *    "every day at 9" behave differently. An interval counts forward from
+ *    the moment the automation was saved (AWS Scheduler rate() semantics,
+ *    packages/lambda/job-schedule-manager.ts); a daily preset is pinned to
+ *    the clock. Easier to see on two timelines than to read in a sentence.
+ *  - EvalLoopDiagram (marker `el-arr`) — the evaluation loop drawn as a
+ *    loop: author, run, score, read, fix, and a real return edge back to
+ *    the run. Scoring semantics per packages/evals-core/src/scoring.ts
+ *    (errors excluded from the pass rate).
  *
- *  - ScheduleAnchorDiagram — why "every four hours" and "every day at 9"
- *    behave differently. An interval counts from the moment you saved the
- *    automation; a daily/weekly preset is pinned to the clock. This is the
- *    single thing people get wrong about scheduling, and it is much easier
- *    to see on a timeline than to read in a sentence.
- *  - EvalLoopDiagram — evaluations as the loop they actually are: author,
- *    run, score, read, fix, run the same cases again. Drawn as a vertical
- *    column with a return spine so the "again" is part of the picture.
+ * No amber in either figure on purpose: nothing here is a human gate.
  */
-import { Diagram, DgArrow, DgBox, DgChip, DgLabel } from "../diagrams";
 
 /**
  * The scheduling gotcha, on two timelines that start at the same instant.
  */
 export function ScheduleAnchorDiagram() {
   return (
-    <Diagram
-      title="An interval schedule counts forward from the moment the automation was saved, while a daily preset fires at the same wall-clock time regardless of when it was saved"
-      viewBox="0 0 860 232"
-      caption="Both automations were created at the same moment, 10:20. The interval one inherits that 10:20 forever — and picks up a new offset every time you save it again. The daily preset ignores when you saved it and fires at 09:00 UTC."
-    >
-      <DgLabel x={20} y={20} text="Interval — every 4 hours" />
-      <DgBox
-        x={20}
-        y={32}
-        w={150}
-        h={44}
-        title="Saved 10:20"
-        sub="you press Create"
-        tone="source"
-      />
-      <DgChip x={20} y={84} label="counts from save" tone="source" />
-      <DgArrow d="M 178 54 L 826 54" />
-      <DgBox x={252} y={36} w={92} h={36} title="14:20" tone="compute" />
-      <DgBox x={402} y={36} w={92} h={36} title="18:20" tone="compute" />
-      <DgBox x={552} y={36} w={92} h={36} title="22:20" tone="compute" />
-      <DgBox x={702} y={36} w={92} h={36} title="02:20" tone="compute" />
+    <figure className="pt-1">
+      {/* The SVG scales to its column rather than scrolling. */}
+      <div>
+        <svg
+          viewBox="0 0 760 272"
+          role="img"
+          aria-label="Two automations saved at the same moment, 10:20. The interval schedule fires at 14:20, 18:20 and 22:20 — counting from the save. The daily preset fires at 09:00 each day, anchored to the clock."
+          className="block h-auto w-full"
+        >
+          <defs>
+            <marker
+              id="sa-arr"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 1 L 9 5 L 0 9 z" className="fill-muted-foreground" />
+            </marker>
+          </defs>
 
-      <DgLabel x={20} y={132} text="Daily preset — 9:00 AM" />
-      <DgBox
-        x={20}
-        y={144}
-        w={150}
-        h={44}
-        title="Saved 10:20"
-        sub="the same moment"
-        tone="source"
-      />
-      <DgChip x={20} y={196} label="anchored to the clock" tone="source" />
-      <DgArrow d="M 178 166 L 826 166" />
-      <DgBox x={302} y={148} w={122} h={36} title="Tue 09:00" tone="graph" />
-      <DgBox x={492} y={148} w={122} h={36} title="Wed 09:00" tone="graph" />
-      <DgBox x={682} y={148} w={122} h={36} title="Thu 09:00" tone="graph" />
-    </Diagram>
+          {/* Lane 1: the interval schedule */}
+          <text
+            x="20"
+            y="24"
+            className="fill-foreground font-sans text-[12px] font-semibold"
+          >
+            Interval — every 4 hours
+          </text>
+          <line
+            x1="170"
+            y1="68"
+            x2="742"
+            y2="68"
+            className="stroke-muted-foreground"
+            strokeWidth="1.3"
+            markerEnd="url(#sa-arr)"
+          />
+          <rect
+            x="20"
+            y="40"
+            width="150"
+            height="56"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="34"
+            y="64"
+            className="fill-foreground font-sans text-[14px] font-semibold"
+          >
+            Saved 10:20
+          </text>
+          <text
+            x="34"
+            y="82"
+            className="fill-muted-foreground font-sans text-[11px]"
+          >
+            you press Create
+          </text>
+
+          <rect
+            x="248"
+            y="48"
+            width="96"
+            height="40"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="270"
+            y="72"
+            className="fill-foreground font-sans text-[13px] font-semibold"
+          >
+            14:20
+          </text>
+          <rect
+            x="408"
+            y="48"
+            width="96"
+            height="40"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="430"
+            y="72"
+            className="fill-foreground font-sans text-[13px] font-semibold"
+          >
+            18:20
+          </text>
+          <rect
+            x="568"
+            y="48"
+            width="96"
+            height="40"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="590"
+            y="72"
+            className="fill-foreground font-sans text-[13px] font-semibold"
+          >
+            22:20
+          </text>
+
+          <text
+            x="20"
+            y="118"
+            className="fill-muted-foreground font-sans text-[11px] italic"
+          >
+            counts forward from the save — editing restarts the clock
+          </text>
+
+          {/* Lane 2: the daily preset */}
+          <text
+            x="20"
+            y="164"
+            className="fill-foreground font-sans text-[12px] font-semibold"
+          >
+            Daily preset — 9:00 AM
+          </text>
+          <line
+            x1="170"
+            y1="208"
+            x2="742"
+            y2="208"
+            className="stroke-muted-foreground"
+            strokeWidth="1.3"
+            markerEnd="url(#sa-arr)"
+          />
+          <rect
+            x="20"
+            y="180"
+            width="150"
+            height="56"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="34"
+            y="204"
+            className="fill-foreground font-sans text-[14px] font-semibold"
+          >
+            Saved 10:20
+          </text>
+          <text
+            x="34"
+            y="222"
+            className="fill-muted-foreground font-sans text-[11px]"
+          >
+            the same moment
+          </text>
+
+          <rect
+            x="248"
+            y="188"
+            width="112"
+            height="40"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="264"
+            y="212"
+            className="fill-foreground font-sans text-[13px] font-semibold"
+          >
+            Tue 09:00
+          </text>
+          <rect
+            x="408"
+            y="188"
+            width="112"
+            height="40"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="424"
+            y="212"
+            className="fill-foreground font-sans text-[13px] font-semibold"
+          >
+            Wed 09:00
+          </text>
+          <rect
+            x="568"
+            y="188"
+            width="112"
+            height="40"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="584"
+            y="212"
+            className="fill-foreground font-sans text-[13px] font-semibold"
+          >
+            Thu 09:00
+          </text>
+
+          <text
+            x="20"
+            y="258"
+            className="fill-muted-foreground font-sans text-[11px] italic"
+          >
+            anchored to the clock — the save moment is irrelevant
+          </text>
+        </svg>
+      </div>
+      <figcaption className="mt-2 font-sans text-[13px] leading-6 text-muted-foreground">
+        Both automations were created at the same moment. The interval one
+        inherits that 10:20 forever — and picks up a new offset every time it is
+        saved again. The daily preset ignores when it was saved and fires at
+        09:00 UTC.
+      </figcaption>
+    </figure>
   );
 }
 
 /**
- * The evaluation loop. Vertical column, return spine on the left, so the
- * re-run edge is drawn rather than implied by a numbered list.
+ * The evaluation loop, drawn as a loop. The return edge from "fix" back to
+ * "run" is the point of the picture: the same cases, run again, are what
+ * turn an edit into a verdict.
  */
 export function EvalLoopDiagram() {
   return (
-    <Diagram
-      title="A test case is authored, run against the agent, scored by assertions and judged rubrics, read as a pass rate that excludes errors, and fed back into the instructions before the same cases are run again"
-      viewBox="0 0 500 566"
-      caption="The loop only pays off if the last edge is real. A run that nobody reads, or a fix that never gets re-scored against the same cases, is a number without a decision attached to it."
-    >
-      <DgBox
-        x={120}
-        y={20}
-        w={340}
-        h={82}
-        title="Write a test case"
-        sub="a prompt, plus what must be true of the answer"
-        tone="source"
-        align="top"
-      />
-      <DgChip x={138} y={66} label="contains" tone="source" />
-      <DgChip x={205} y={66} label="regex" tone="source" />
-      <DgChip x={255} y={66} label="llm-rubric" tone="source" />
+    <figure className="pt-1">
+      {/* The SVG scales to its column rather than scrolling. */}
+      <div>
+        <svg
+          viewBox="0 0 760 320"
+          role="img"
+          aria-label="The evaluation loop: write a test case, start a run, every case is scored, the run is read as a pass rate that excludes errors, something is fixed, and the same cases are run again — a return edge closes the loop."
+          className="block h-auto w-full"
+        >
+          <defs>
+            <marker
+              id="el-arr"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 1 L 9 5 L 0 9 z" className="fill-muted-foreground" />
+            </marker>
+          </defs>
 
-      <DgArrow
-        d="M 290 102 L 290 136"
-        label="give it a category"
-        labelAt={[290, 119]}
-      />
+          {/* top row: write → run → score */}
+          <rect
+            x="20"
+            y="36"
+            width="180"
+            height="62"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="36"
+            y="62"
+            className="fill-foreground font-sans text-[15px] font-semibold"
+          >
+            1 · Write a case
+          </text>
+          <text
+            x="36"
+            y="82"
+            className="fill-muted-foreground font-sans text-[11px]"
+          >
+            a prompt, plus what must be true
+          </text>
 
-      <DgBox
-        x={120}
-        y={136}
-        w={340}
-        h={82}
-        title="Start a run"
-        sub="a profile, then categories or one dataset"
-        tone="compute"
-        align="top"
-      />
-      <DgChip x={138} y={182} label="model pinned" tone="compute" />
-      <DgChip x={227} y={182} label="judge pinned" tone="compute" />
-      <DgChip x={316} y={182} label="trials" tone="compute" />
+          <rect
+            x="290"
+            y="36"
+            width="180"
+            height="62"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="306"
+            y="62"
+            className="fill-foreground font-sans text-[15px] font-semibold"
+          >
+            2 · Start a run
+          </text>
+          <text
+            x="306"
+            y="82"
+            className="fill-muted-foreground font-sans text-[11px]"
+          >
+            profile and dataset version pinned
+          </text>
 
-      <DgArrow
-        d="M 290 218 L 290 252"
-        label="one row per case"
-        labelAt={[290, 235]}
-      />
+          <rect
+            x="560"
+            y="36"
+            width="180"
+            height="62"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="576"
+            y="62"
+            className="fill-foreground font-sans text-[15px] font-semibold"
+          >
+            3 · Score
+          </text>
+          <text
+            x="576"
+            y="82"
+            className="fill-muted-foreground font-sans text-[11px]"
+          >
+            pass · fail · error, per case
+          </text>
 
-      <DgBox
-        x={120}
-        y={252}
-        w={340}
-        h={82}
-        title="Every case is scored"
-        sub="assertions checked, rubrics judged by a model"
-        tone="compute"
-        align="top"
-      />
-      <DgChip x={138} y={298} label="pass" tone="graph" />
-      <DgChip x={182} y={298} label="fail" tone="consumer" />
-      <DgChip x={226} y={298} label="error" />
+          <line
+            x1="200"
+            y1="67"
+            x2="284"
+            y2="67"
+            className="stroke-muted-foreground"
+            strokeWidth="1.3"
+            markerEnd="url(#el-arr)"
+          />
+          <text
+            x="216"
+            y="58"
+            className="fill-muted-foreground font-sans text-[11px] italic"
+          >
+            a category
+          </text>
+          <line
+            x1="470"
+            y1="67"
+            x2="554"
+            y2="67"
+            className="stroke-muted-foreground"
+            strokeWidth="1.3"
+            markerEnd="url(#el-arr)"
+          />
+          <text
+            x="478"
+            y="58"
+            className="fill-muted-foreground font-sans text-[11px] italic"
+          >
+            case by case
+          </text>
 
-      <DgArrow d="M 290 334 L 290 368" label="roll up" labelAt={[290, 351]} />
+          {/* bottom row: read ← score, fix ← read */}
+          <rect
+            x="560"
+            y="176"
+            width="180"
+            height="62"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="576"
+            y="202"
+            className="fill-foreground font-sans text-[15px] font-semibold"
+          >
+            4 · Read the run
+          </text>
+          <text
+            x="576"
+            y="222"
+            className="fill-muted-foreground font-sans text-[11px]"
+          >
+            pass ÷ (pass + fail), errors apart
+          </text>
 
-      <DgBox
-        x={120}
-        y={368}
-        w={340}
-        h={82}
-        title="Read the run"
-        sub="pass ÷ (pass + fail)"
-        tone="graph"
-        align="top"
-      />
-      <DgChip x={138} y={414} label="errors excluded" />
-      <DgChip x={244} y={414} label="unstable excluded" />
+          <line
+            x1="650"
+            y1="98"
+            x2="650"
+            y2="170"
+            className="stroke-muted-foreground"
+            strokeWidth="1.3"
+            markerEnd="url(#el-arr)"
+          />
+          <text
+            x="660"
+            y="138"
+            className="fill-muted-foreground font-sans text-[11px] italic"
+          >
+            roll up
+          </text>
 
-      <DgArrow d="M 290 450 L 290 484" label="diagnose" labelAt={[290, 467]} />
+          <rect
+            x="290"
+            y="176"
+            width="180"
+            height="62"
+            rx="8"
+            className="fill-card stroke-teal-400/50"
+            strokeWidth="1.5"
+          />
+          <text
+            x="306"
+            y="202"
+            className="fill-foreground font-sans text-[15px] font-semibold"
+          >
+            5 · Fix something
+          </text>
+          <text
+            x="306"
+            y="222"
+            className="fill-muted-foreground font-sans text-[11px]"
+          >
+            the agent, the case, or the bar
+          </text>
 
-      <DgBox
-        x={120}
-        y={484}
-        w={340}
-        h={56}
-        title="Change the instructions, a skill, or the case"
-        sub="then run the same cases again"
-        tone="consumer"
-      />
+          <line
+            x1="554"
+            y1="207"
+            x2="476"
+            y2="207"
+            className="stroke-muted-foreground"
+            strokeWidth="1.3"
+            markerEnd="url(#el-arr)"
+          />
+          <text
+            x="482"
+            y="198"
+            className="fill-muted-foreground font-sans text-[11px] italic"
+          >
+            diagnose
+          </text>
 
-      <DgArrow
-        d="M 120 512 L 58 512 Q 50 512 50 504 L 50 69 Q 50 61 58 61 L 112 61"
-        label="re-run"
-        labelAt={[50, 290]}
-      />
-    </Diagram>
+          {/* the return edge — the loop */}
+          <line
+            x1="380"
+            y1="176"
+            x2="380"
+            y2="104"
+            className="stroke-muted-foreground"
+            strokeWidth="1.3"
+            markerEnd="url(#el-arr)"
+          />
+          <text
+            x="180"
+            y="144"
+            className="fill-muted-foreground font-sans text-[11px] italic"
+          >
+            run the same cases again
+          </text>
+        </svg>
+      </div>
+      <figcaption className="mt-2 font-sans text-[13px] leading-6 text-muted-foreground">
+        The loop only pays off if the return edge is real. A run that nobody
+        reads, or a fix that never gets re-scored against the same cases, is a
+        number without a decision attached to it.
+      </figcaption>
+    </figure>
   );
 }
