@@ -1,5 +1,12 @@
+import { useLayoutEffect, useRef } from "react";
 import { cn } from "@thinkwork/ui";
 import { useTenantBranding } from "@/hooks/useTenantBranding";
+
+// Header text auto-fits the space left of the logo: it renders at the
+// default nav-title size and scales down (never below the minimum) until it
+// fits on one line. Below the minimum it truncates with an ellipsis.
+const MAX_BRAND_FONT_PX = 16; // matches the default text-base header
+const MIN_BRAND_FONT_PX = 11;
 
 /**
  * Logo + optional header text for the app/settings nav headers, driven by
@@ -12,6 +19,29 @@ import { useTenantBranding } from "@/hooks/useTenantBranding";
  */
 export function BrandMark({ collapsible = false }: { collapsible?: boolean }) {
   const { logoSrc, isCustomLogo, headerText, loaded } = useTenantBranding();
+  const textRef = useRef<HTMLSpanElement>(null);
+
+  useLayoutEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    const fit = () => {
+      // Measure the text's natural width at the maximum size, then scale
+      // the font down proportionally until it fits the allocated width.
+      el.style.fontSize = `${MAX_BRAND_FONT_PX}px`;
+      const needed = el.scrollWidth;
+      const available = el.clientWidth;
+      if (needed > available && available > 0) {
+        const scaled = (available / needed) * MAX_BRAND_FONT_PX;
+        // Round down to 0.5px steps so rounding never re-triggers ellipsis.
+        const next = Math.max(MIN_BRAND_FONT_PX, Math.floor(scaled * 2) / 2);
+        el.style.fontSize = `${next}px`;
+      }
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [headerText, loaded]);
 
   if (!loaded) {
     return <span aria-hidden className="h-7 w-7 shrink-0" />;
@@ -23,15 +53,22 @@ export function BrandMark({ collapsible = false }: { collapsible?: boolean }) {
         src={logoSrc}
         alt={headerText ?? "Home"}
         className={cn(
-          "h-7 shrink-0 object-contain",
-          isCustomLogo ? "w-auto max-w-44 object-left" : "w-7",
+          "shrink-0 object-contain",
+          // Custom logos render smaller alongside text so a full company
+          // name still fits; logo-only mode gets the full header height.
+          isCustomLogo
+            ? headerText
+              ? "h-5 w-auto max-w-24 object-left"
+              : "h-7 w-auto max-w-44 object-left"
+            : "h-7 w-7",
           collapsible && isCustomLogo && "group-data-[collapsible=icon]:w-7",
         )}
       />
       {headerText ? (
         <span
+          ref={textRef}
           className={cn(
-            "truncate text-base font-semibold leading-none tracking-tight",
+            "min-w-0 flex-1 truncate font-semibold leading-none tracking-tight",
             collapsible && "group-data-[collapsible=icon]:hidden",
           )}
         >
