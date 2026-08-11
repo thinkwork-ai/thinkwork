@@ -6,24 +6,43 @@
  * Rename one and you break links from other sections — add an alias entry
  * rather than renaming.
  *
- * Vocabulary is sourced from CONCEPTS.md and from the shipped surfaces, not
- * from the older Starlight MDX, which still describes retired designs.
+ * Converted to the report restyle (Eric 2026-08-11), claims re-verified
+ * against the shipped code: packages/api/src/lib/agent-folder-format.ts +
+ * lib/workspace-constants.ts (the recursive folder shape) with
+ * packages/agentcore-pi/agent-container/src/runtime/
+ * manifest-agent-profiles.ts (the description as routing guidance in the
+ * parent's roster), lib/catalog-install.ts + lib/skill-trust/*
+ * (publish/scan/sign, install-as-copy) with packages/agentcore-pi/
+ * agent-container/src/runtime/pinned-skills.ts (runtime reads only the
+ * installed copy), lib/capabilities/{sidecar-signing,manifest-compile}.ts
+ * (signed connector sidecars, grants-by-presence subset enforcement),
+ * lib/mentions/parse-message-mentions.ts (# vs @), packages/database-pg/
+ * src/schema/{threads,work-items,artifacts,artifact-shares,wiki,
+ * evaluations,agent-loops}.ts with lib/work-items/status-service.ts and
+ * lib/artifacts/* (spaces, threads, work items, artifacts), lib/memory/
+ * adapters/agentcore-adapter.ts + lib/requester-memory/dreaming.ts
+ * (per-requester memory, the nightly pass), lib/wiki/promotion-scorer.ts
+ * (evidence thresholds), lib/email-channel/first-send-approval.ts (the
+ * shipped approval card), and packages/evals-core/src/scoring.ts.
+ *
+ * Softened in that verification: the Space entry no longer claims live
+ * tool restriction (space tool/MCP policy retired, THINK-302 U6); the
+ * approval entry describes the shipped email-send approval rather than
+ * the not-yet-wired generic parked-turn machinery; the wiki entry no
+ * longer claims the agent reads it first (the shipped MEMORY_GUIDE ladder
+ * has no wiki rung); artifacts "belong to a Space" is scoped to saved
+ * artifacts.
  */
-import { Bot, FileBox, MessageSquare, Orbit, Sparkles } from "lucide-react";
 import {
-  Callout,
-  DocArticle,
   DocLink,
-  FlowChain,
-  FlowChip,
-  FlowDiagram,
-  FlowJoint,
-  FlowLane,
-  FlowLegend,
-  FlowLink,
-  FlowNode,
+  DocTable,
+  Flow,
+  FlowArrow,
+  FlowBox,
   GlossaryEntry,
-  Section,
+  PullQuote,
+  ReportArticle,
+  ReportSection,
 } from "../kit";
 import type { DocTocEntry } from "../registry";
 
@@ -38,99 +57,41 @@ export const CONCEPTS_TOC: DocTocEntry[] = [
 
 export function Concepts() {
   return (
-    <DocArticle
+    <ReportArticle
       eyebrow="Start here"
       title="Core concepts"
       lead="Every other page in these docs leans on the same handful of words. This page defines them once, in the order they build on each other — an agent is made of things, it works inside a Space, and it leaves something behind."
     >
-      <Section id="how-the-pieces-fit" title="How the pieces fit">
-        <p>
-          Two sentences carry the whole model.{" "}
-          <strong>
-            An agent is a folder of files — instructions, skills, connectors and
-            sub-agents — and that folder is what the runtime loads.
-          </strong>{" "}
-          <strong>
-            The work happens in a Space, one thread at a time, and each thread
-            can leave behind artifacts, work items and memory.
-          </strong>
-        </p>
-        <FlowDiagram>
-          <FlowLane
-            step="01"
-            label="What an agent is"
-            note="files, all the way down"
-          >
-            <FlowChain>
-              <FlowNode
-                icon={Bot}
-                title="The agent"
-                sub="one folder, one set of instructions"
-                tone="compute"
-              >
-                <FlowChip>INSTRUCTIONS.md</FlowChip>
-              </FlowNode>
-              <FlowLink label="holds" />
-              <FlowNode
-                icon={Sparkles}
-                title="Its capabilities"
-                sub="what it can do, reach, and delegate to"
-                tone="source"
-              >
-                <FlowChip>skills/</FlowChip>
-                <FlowChip>connectors/</FlowChip>
-                <FlowChip>agents/</FlowChip>
-              </FlowNode>
-            </FlowChain>
-          </FlowLane>
+      <ReportSection id="how-the-pieces-fit" title="How the pieces fit">
+        <PullQuote who="the whole model, in two sentences">
+          An agent is a folder of files — instructions, skills, connectors and
+          sub-agents — and that folder is what the runtime loads. The work
+          happens in a Space, one thread at a time, and each thread can leave
+          behind artifacts, work items and memory.
+        </PullQuote>
+        <p>First sentence — what an agent is, files all the way down:</p>
+        <Flow>
+          <FlowBox title="The agent" sub="one folder — INSTRUCTIONS.md" />
+          <FlowArrow label="holds" />
+          <FlowBox
+            title="Its capabilities"
+            sub="skills/ · connectors/ · agents/"
+          />
+        </Flow>
+        <p>Second sentence — where the work happens, and what it leaves:</p>
+        <Flow>
+          <FlowBox title="A Space" sub="membership, context, limits" />
+          <FlowArrow label="contains" />
+          <FlowBox title="A thread" sub="one conversation, one record" />
+          <FlowArrow label="produces" />
+          <FlowBox
+            title="What outlives it"
+            sub="artifacts, work items, memory"
+          />
+        </Flow>
+      </ReportSection>
 
-          <FlowJoint label="the agent works inside a Space" />
-
-          <FlowLane
-            step="02"
-            label="Where the work happens"
-            note="and what it leaves"
-          >
-            <FlowChain>
-              <FlowNode
-                icon={Orbit}
-                title="A Space"
-                sub="membership, context, and limits"
-                tone="graph"
-              />
-              <FlowLink label="contains" />
-              <FlowNode
-                icon={MessageSquare}
-                title="A thread"
-                sub="one conversation, one durable record"
-                tone="consumer"
-              />
-              <FlowLink label="produces" />
-              <FlowNode
-                icon={FileBox}
-                title="What outlives it"
-                sub="artifacts, work items, memory"
-                tone="storage"
-              >
-                <FlowChip>artifacts</FlowChip>
-                <FlowChip>work items</FlowChip>
-                <FlowChip>memory</FlowChip>
-              </FlowNode>
-            </FlowChain>
-          </FlowLane>
-        </FlowDiagram>
-        <FlowLegend
-          items={[
-            { tone: "compute", label: "The agent" },
-            { tone: "source", label: "What it can reach" },
-            { tone: "graph", label: "Where work lives" },
-            { tone: "consumer", label: "People talking" },
-            { tone: "storage", label: "What persists" },
-          ]}
-        />
-      </Section>
-
-      <Section id="agents" title="Agents and what they carry">
+      <ReportSection id="agents" title="Agents and what they carry">
         <div className="space-y-8">
           <GlossaryEntry
             id="agent"
@@ -216,6 +177,9 @@ export function Concepts() {
               The copy matters: the runtime reads the installed copy and never
               the catalog, so republishing a skill changes nothing for an agent
               that already has it until the skill is explicitly reinstalled.
+              (The one exception is a skill you pin in the composer for a single
+              turn, which is fetched straight from the catalog and never
+              installed.)
             </p>
           </GlossaryEntry>
 
@@ -265,8 +229,9 @@ export function Concepts() {
             <p>
               A narrower agent living inside another agent&apos;s folder, at{" "}
               <code>agents/&lt;slug&gt;/</code>. It has the same shape as its
-              parent and a required <code>description</code>, which is passed
-              verbatim as the description of the tool that delegates to it.
+              parent and a required <code>description</code>, which becomes the
+              routing guidance the parent reads when choosing which sub-agent to
+              hand a job to.
             </p>
             <p>
               A sub-agent gets capabilities by <em>presence</em> — a connector
@@ -300,9 +265,9 @@ export function Concepts() {
             </p>
           </GlossaryEntry>
         </div>
-      </Section>
+      </ReportSection>
 
-      <Section id="spaces-and-threads" title="Spaces, threads and output">
+      <ReportSection id="spaces-and-threads" title="Spaces, threads and output">
         <div className="space-y-8">
           <GlossaryEntry
             id="space"
@@ -327,9 +292,9 @@ export function Concepts() {
             </p>
             <p>
               A Space also <em>shapes</em> the agent without granting it new
-              reach: it can add context and skills and can restrict what the
-              agent may do inside it. That asymmetry is the point — a Space can
-              confine an agent, never widen it.
+              reach: it can add context and skills, but it is never where the
+              agent picks up new systems to touch. That asymmetry is the point —
+              a Space colors the work inside it, and it cannot widen the agent.
             </p>
           </GlossaryEntry>
 
@@ -413,15 +378,15 @@ export function Concepts() {
               <strong>applets</strong> (a small generated app).
             </p>
             <p>
-              Artifacts belong to a Space rather than to the thread that
-              produced them, keep a version history, and can be downloaded or
+              A saved artifact belongs to a Space rather than to the thread that
+              produced it, keeps a version history, and can be downloaded or
               shared — documents can also get a revocable public link.
             </p>
           </GlossaryEntry>
         </div>
-      </Section>
+      </ReportSection>
 
-      <Section id="memory-terms" title="Memory">
+      <ReportSection id="memory-terms" title="Memory">
         <div className="space-y-8">
           <GlossaryEntry
             id="memory"
@@ -469,18 +434,17 @@ export function Concepts() {
               rather than per person.
             </p>
             <p>
-              The agent reads it first and drills into raw recall only when it
-              needs detail. Pages are earned mechanically — an entity is
-              promoted when it crosses evidence thresholds such as being
-              mentioned across enough distinct threads — so the absence of a
+              The agent can search it, and drills into raw recall when it needs
+              underlying detail. Pages are earned mechanically — an entity is
+              promoted when it crosses evidence thresholds — so the absence of a
               page means &ldquo;not yet established&rdquo;, not
               &ldquo;unknown&rdquo;.
             </p>
           </GlossaryEntry>
         </div>
-      </Section>
+      </ReportSection>
 
-      <Section id="standing-work" title="Standing work and quality">
+      <ReportSection id="standing-work" title="Standing work and quality">
         <div className="space-y-8">
           <GlossaryEntry
             id="automation"
@@ -516,7 +480,7 @@ export function Concepts() {
             example={
               <>
                 The agent drafts an outbound email and stops; you read it in
-                Approvals and press <strong>Approve &amp; send</strong> or{" "}
+                Approvals and press <strong>Approve</strong> or{" "}
                 <strong>Deny</strong>.
               </>
             }
@@ -527,14 +491,15 @@ export function Concepts() {
           >
             <p>
               A pause the agent takes before an action a human should authorize.
-              The gated action is still available to the agent — calling it
-              checkpoints the turn and surfaces a card instead of executing.
+              The gated action does not execute when the agent calls it: the
+              call comes back as pending human review, and the request surfaces
+              as a card on the Approvals surface with the full contents laid out
+              for a decision.
             </p>
             <p>
-              Approving resumes the turn exactly where it stopped; denying
-              returns the refusal to the agent as the result of that call, so it
-              can carry on sensibly rather than crashing. The sidebar shows
-              Approvals only while something is pending.
+              Approving releases the action; denying refuses it. The sidebar
+              shows Approvals only while something is pending, so its absence
+              means nothing is waiting on you.
             </p>
           </GlossaryEntry>
 
@@ -569,45 +534,30 @@ export function Concepts() {
             </p>
           </GlossaryEntry>
         </div>
-      </Section>
+      </ReportSection>
 
-      <Section id="naming-notes" title="Naming notes">
+      <ReportSection id="naming-notes" title="Naming notes">
         <p>
           A few places where the product, the docs and the interface use
           different words for one thing — worth knowing so you do not go looking
           for a second feature that does not exist.
         </p>
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/20 text-left text-xs text-muted-foreground">
-                <th className="px-3 py-2 font-medium">You may see</th>
-                <th className="px-3 py-2 font-medium">Read it as</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60 text-[13px]">
-              {NAMING_ROWS.map((row) => (
-                <tr key={row.seen}>
-                  <td className="px-3 py-2 font-medium whitespace-nowrap">
-                    {row.seen}
-                  </td>
-                  <td className="px-3 py-2 text-foreground/80">{row.means}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <Callout tone="note" title="Terms link back here">
-          <p>
-            A dotted underline anywhere in these docs jumps to its definition on
-            this page. If you arrived by clicking one, the entry you wanted is
-            the heading just above the fold.{" "}
-            <DocLink slug="app-tour">App tour</DocLink> is the next page if you
-            would rather see where all of this appears in the interface.
-          </p>
-        </Callout>
-      </Section>
-    </DocArticle>
+        <DocTable
+          head={["You may see", "Read it as"]}
+          rows={NAMING_ROWS.map((row) => [
+            <strong key={row.seen}>{row.seen}</strong>,
+            row.means,
+          ])}
+        />
+        <p>
+          A dotted underline anywhere in these docs jumps to its definition on
+          this page. If you arrived by clicking one, the entry you wanted is the
+          heading just above the fold.{" "}
+          <DocLink slug="app-tour">App tour</DocLink> is the next page if you
+          would rather see where all of this appears in the interface.
+        </p>
+      </ReportSection>
+    </ReportArticle>
   );
 }
 
