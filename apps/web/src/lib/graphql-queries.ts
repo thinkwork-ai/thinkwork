@@ -2740,6 +2740,19 @@ export const FlagThreadToBrainMutation = gql`
   }
 `;
 
+export const BrainExpertQuestionsQuery = gql`
+  query BrainExpertQuestions {
+    brainExpertQuestions {
+      id
+      question
+      why
+      domain
+      taskId
+      createdAt
+    }
+  }
+`;
+
 export const TeachBrainMutation = gql`
   mutation TeachBrain($input: TeachBrainInput!) {
     teachBrain(input: $input) {

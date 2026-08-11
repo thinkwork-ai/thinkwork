@@ -70,6 +70,21 @@ describe("buildBrainTeachingPayload", () => {
     });
   });
 
+  it("carries answers_question_id when answering an expert question", () => {
+    expect(
+      buildBrainTeachingPayload({
+        taughtBy: "expert@mcpherson.com",
+        text: "answer",
+        answersQuestionId: "11111111-1111-4111-8111-111111111111",
+      }),
+    ).toEqual({
+      source: "thinkwork-agent",
+      taught_by: "expert@mcpherson.com",
+      text: "answer",
+      answers_question_id: "11111111-1111-4111-8111-111111111111",
+    });
+  });
+
   it("truncates text and identifiers to the Brain's caps", () => {
     const payload = buildBrainTeachingPayload({
       taughtBy: "x".repeat(600),

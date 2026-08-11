@@ -107,6 +107,39 @@ describe("TeachBrainDialog", () => {
     });
   });
 
+  it("answers an expert question: shows the question and sends answersQuestionId", async () => {
+    render(
+      <TeachBrainDialog
+        open
+        onOpenChange={vi.fn()}
+        question={{
+          id: "11111111-1111-4111-8111-111111111111",
+          question: "What is the Waco generator's nickname?",
+          why: "Two conflicting names in the data.",
+        }}
+      />,
+    );
+    expect(screen.getByText("The Brain has a question for you")).toBeTruthy();
+    expect(
+      screen.getByText("What is the Waco generator's nickname?"),
+    ).toBeTruthy();
+
+    fireEvent.change(screen.getByTestId("teach-brain-text"), {
+      target: { value: "The Beast." },
+    });
+    fireEvent.click(screen.getByTestId("teach-brain-submit"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("teach-brain-confirmation")).toBeTruthy(),
+    );
+    expect(teachMutation).toHaveBeenCalledWith({
+      input: {
+        text: "The Beast.",
+        answersQuestionId: "11111111-1111-4111-8111-111111111111",
+      },
+    });
+  });
+
   it("surfaces a mutation error inline and keeps the form for retry", async () => {
     teachMutation.mockResolvedValue({
       error: {

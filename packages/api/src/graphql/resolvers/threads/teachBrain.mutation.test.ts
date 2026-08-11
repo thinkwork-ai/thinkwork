@@ -170,6 +170,28 @@ describe("teachBrain", () => {
     });
   });
 
+  it("rejects a non-UUID answersQuestionId before posting", async () => {
+    await expect(
+      teachBrain(
+        null,
+        { input: { text: "answer", answersQuestionId: "not-a-uuid" } },
+        cognitoCtx(),
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expect(mockPostBrainTeaching).not.toHaveBeenCalled();
+  });
+
+  it("passes a valid answersQuestionId through to the payload", async () => {
+    const questionId = "44444444-4444-4444-8444-444444444444";
+    await teachBrain(
+      null,
+      { input: { text: "answer", answersQuestionId: questionId } },
+      cognitoCtx(),
+    );
+    const call = mockPostBrainTeaching.mock.calls[0][0];
+    expect(call.payload.answers_question_id).toBe(questionId);
+  });
+
   it("resolves a visible thread to context_thread_url", async () => {
     selectQueue.push([{ id: THREAD_ID }]);
     await teachBrain(

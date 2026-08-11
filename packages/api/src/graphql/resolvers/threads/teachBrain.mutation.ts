@@ -48,7 +48,11 @@ function gqlError(message: string, code: string): GraphQLError {
 interface TeachBrainInput {
   text: string;
   threadId?: string | null;
+  answersQuestionId?: string | null;
 }
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const teachBrain = async (
   _parent: unknown,
@@ -65,6 +69,13 @@ export const teachBrain = async (
 
   // The Brain requires attribution; the caller's email is the identity we
   // hold for every cognito sign-in (Google-federated included).
+  // Answering a Brain expert question (THINK-787): the Brain requires a
+  // UUID; reject early rather than bounce on its 400.
+  const answersQuestionId = args.input.answersQuestionId?.trim() || null;
+  if (answersQuestionId && !UUID_RE.test(answersQuestionId)) {
+    throw gqlError("answersQuestionId must be a UUID.", "BAD_USER_INPUT");
+  }
+
   const taughtBy = (ctx.auth.email ?? "").trim();
   if (!taughtBy) {
     throw gqlError(
@@ -141,6 +152,7 @@ export const teachBrain = async (
     taughtBy,
     text,
     contextThreadUrl,
+    answersQuestionId,
   });
 
   const result = await postBrainTeaching({
