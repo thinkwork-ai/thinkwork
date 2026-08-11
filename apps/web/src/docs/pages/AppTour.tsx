@@ -1,31 +1,36 @@
 /**
  * App tour (Start here) — THINK-695.
  *
- * No screenshots this pass, by decision — so the map is a diagram and the
- * surfaces are described by what they answer, not by what they look like.
- * Everything here is grounded in apps/web/src/routes/_authed/_shell/* and
- * components/settings/settings-nav.tsx; if a route moves, this page moves.
+ * No screenshots this pass, by decision — so the map is a stage spine and
+ * the surfaces are described by what they answer, not by what they look
+ * like. Converted to the report restyle (Eric 2026-08-11), claims
+ * re-verified against the shipped code: apps/web/src/components/shell/
+ * ChatSidebar.tsx + SearchPalette.tsx + SearchAskView.tsx (sidebar
+ * structure, Cmd+K rungs), apps/web/src/components/SpacesSidebar.tsx (the
+ * settings gear footer), apps/web/src/context/PageHeaderContext.tsx +
+ * components/AppTopBar.tsx (the per-page top bar; /new hides it),
+ * apps/web/src/components/workbench/{SpacesComposer,SpacesThreadDetailRoute,
+ * TaskThreadView,ThreadDetailActions}.tsx (composer, thread page, info and
+ * artifact panels), apps/web/src/routes/_authed/_shell/spaces.$spaceId.tsx
+ * + spaces.index.tsx (Space home, the /spaces redirect), apps/web/src/
+ * components/work-items/* (URL-driven views, group-by set, detail layout),
+ * apps/web/src/components/artifacts/* and agent-loops/* and approvals/*
+ * (those surfaces), apps/web/src/components/profile/SelfProfilePage.tsx,
+ * and apps/web/src/components/settings/settings-nav.tsx + OperatorGuard.tsx
+ * (alphabetised nav, role gating).
+ *
+ * Dropped in that verification: "agents involved" as an info-panel row
+ * (the data exists but no row renders it) and "cited" on palette Ask
+ * answers (the citations slot is an unwired seam today).
  */
 import {
-  CalendarClock,
-  FileBox,
-  ListChecks,
-  MessageSquarePlus,
-  Settings as SettingsIcon,
-  ShieldCheck,
-} from "lucide-react";
-import {
-  Callout,
-  DocArticle,
   DocLink,
-  FlowChain,
-  FlowChip,
-  FlowDiagram,
-  FlowJoint,
-  FlowLane,
-  FlowLegend,
-  FlowNode,
-  Section,
+  DocTable,
+  PullQuote,
+  ReportArticle,
+  ReportSection,
+  Stage,
+  Stages,
   Term,
 } from "../kit";
 import type { DocTocEntry } from "../registry";
@@ -38,122 +43,67 @@ export const APP_TOUR_TOC: DocTocEntry[] = [
   { id: "shared-idioms", title: "Shared idioms" },
 ];
 
+/** Surface heading inside a report section — the h3 the kit doesn't style. */
+function SurfaceHeading({ children }: { children: string }) {
+  return (
+    <h3 className="pt-3 font-sans text-[17px] font-semibold tracking-tight">
+      {children}
+    </h3>
+  );
+}
+
 export function AppTour() {
   return (
-    <DocArticle
+    <ReportArticle
       eyebrow="Start here"
       title="App tour"
       lead="A walk through the app in the order you meet it — the work surfaces first, then the settings that configure them. Read this once and the navigation stops being a guess."
     >
-      <Section id="the-map" title="A map of the app">
+      <ReportSection id="the-map" title="A map of the app">
         <p>
           The app is arranged around one arc: you start something, you converse
           about it, you follow through on what came out, and occasionally you go
           and configure how all of that behaves. Every surface sits in one of
           those bands.
         </p>
-        <FlowDiagram>
-          <FlowLane step="01" label="Start" note="where you land after sign-in">
-            <FlowChain>
-              <FlowNode
-                icon={MessageSquarePlus}
-                title="New thread"
-                sub="the composer — Space, model, attachments, mentions"
-                tone="consumer"
-              />
-            </FlowChain>
-          </FlowLane>
+        <Stages>
+          <Stage num="1" title="Start" tag="where you land after sign-in">
+            <p>
+              <strong>New thread</strong> — the composer: Space, model,
+              attachments, mentions. Sending creates a thread.
+            </p>
+          </Stage>
+          <Stage num="2" title="Converse" tag="most of your time">
+            <p>
+              <strong>The thread</strong>, and the <strong>Space</strong> it
+              belongs to — the conversation itself, an info panel, an artifact
+              panel, and the Space&apos;s own home page.
+            </p>
+          </Stage>
+          <Stage num="3" title="Follow through" tag="what the work became">
+            <p>
+              Three peers, not a sequence: <strong>Work Items</strong> (status,
+              owner, due date — list or board), <strong>Artifacts</strong>{" "}
+              (documents, canvases and applets), and <strong>Approvals</strong>{" "}
+              (decisions the agent is waiting on).
+            </p>
+          </Stage>
+          <Stage num="4" title="Delegate" tag="standing duties">
+            <p>
+              <strong>Automations</strong> — schedule or webhook triggers, and
+              their run history. Some work should not need you.
+            </p>
+          </Stage>
+          <Stage num="5" title="Configure" tag="behind all of it">
+            <p>
+              <strong>Profile</strong> for you; <strong>Settings</strong> for
+              the tenant — your company&apos;s agents, Spaces and users.
+            </p>
+          </Stage>
+        </Stages>
+      </ReportSection>
 
-          <FlowJoint label="sending creates a thread" />
-
-          <FlowLane step="02" label="Converse" note="most of your time">
-            <FlowChain>
-              <FlowNode
-                icon={MessageSquarePlus}
-                title="Thread & Space"
-                sub="the conversation, and the room it belongs to"
-                tone="graph"
-              >
-                <FlowChip>info panel</FlowChip>
-                <FlowChip>artifact panel</FlowChip>
-                <FlowChip>Space home</FlowChip>
-              </FlowNode>
-            </FlowChain>
-          </FlowLane>
-
-          <FlowJoint label="turns leave things behind" />
-
-          <FlowLane
-            step="03"
-            label="Follow through"
-            note="what the work became"
-          >
-            {/* Three peers, not a sequence — spaced rather than chained, so
-                no arrow implies an order that does not exist. */}
-            <div className="mx-auto flex w-full max-w-md flex-col gap-2">
-              <FlowNode
-                icon={ListChecks}
-                title="Work Items"
-                sub="status, owner, due date — list or board"
-                tone="storage"
-              />
-              <FlowNode
-                icon={FileBox}
-                title="Artifacts"
-                sub="documents, canvases and applets"
-                tone="storage"
-              />
-              <FlowNode
-                icon={ShieldCheck}
-                title="Approvals"
-                sub="decisions the agent is waiting on"
-                tone="storage"
-              />
-            </div>
-          </FlowLane>
-
-          <FlowJoint label="some work should not need you" />
-
-          <FlowLane step="04" label="Delegate" note="standing duties">
-            <FlowChain>
-              <FlowNode
-                icon={CalendarClock}
-                title="Automations"
-                sub="schedule or webhook triggers, and their run history"
-                tone="compute"
-              />
-            </FlowChain>
-          </FlowLane>
-
-          <FlowJoint label="and behind all of it" />
-
-          <FlowLane
-            step="05"
-            label="Configure"
-            note="Profile for you, Settings for the tenant"
-          >
-            <FlowChain>
-              <FlowNode
-                icon={SettingsIcon}
-                title="Profile & Settings"
-                sub="your account and files; your company's agents, Spaces and users"
-                tone="source"
-              />
-            </FlowChain>
-          </FlowLane>
-        </FlowDiagram>
-        <FlowLegend
-          items={[
-            { tone: "consumer", label: "You, starting work" },
-            { tone: "graph", label: "Where the conversation lives" },
-            { tone: "storage", label: "What the work produced" },
-            { tone: "compute", label: "Work that runs itself" },
-            { tone: "source", label: "Configuration" },
-          ]}
-        />
-      </Section>
-
-      <Section id="chrome" title="The sidebar and the top bar">
+      <ReportSection id="chrome" title="The sidebar and the top bar">
         <p>
           Two pieces of chrome are on every screen. The <strong>sidebar</strong>{" "}
           on the left is the navigation and your thread history; the{" "}
@@ -190,46 +140,47 @@ export function AppTour() {
           right. The new-thread screen hides it entirely, which is why the app
           looks barer there than anywhere else.
         </p>
-        <Callout tone="tip" title="Cmd+K is the fastest thing in the app">
-          <p>
-            The command palette opens from anywhere. Empty, it lists pinned and
-            recent threads. Type, and it offers three escalating rungs:{" "}
-            <strong>find</strong> (thread results as you type),{" "}
-            <strong>Ask</strong> (a cited answer streamed inline in the
-            palette), and <strong>Research this</strong> (a background errand
-            that comes back as a thread you can open later). Escalation is
-            always a deliberate click — typing never silently spends a turn.
-          </p>
-        </Callout>
-      </Section>
+        <PullQuote who="the fastest thing in the app">
+          Cmd+K opens the command palette from anywhere — and typing in it never
+          silently spends a turn.
+        </PullQuote>
+        <p>
+          Empty, the palette lists pinned and recent threads. Type, and it
+          offers three escalating rungs: <strong>find</strong> (thread results
+          as you type), <strong>Ask</strong> (an answer streamed inline in the
+          palette), and <strong>Research this</strong> (a background errand that
+          comes back as a thread you can open later). Escalating past find is
+          always a deliberate act — a click, or Cmd+Enter.
+        </p>
+      </ReportSection>
 
-      <Section id="work-surfaces" title="The work surfaces">
+      <ReportSection id="work-surfaces" title="The work surfaces">
         <p>
           Each surface answers one question. Descriptions below are what the
           page actually does, not what its name suggests.
         </p>
 
-        <h3 className="pt-2 text-base font-semibold">New thread</h3>
+        <SurfaceHeading>New thread</SurfaceHeading>
         <p>
           The composer, and where you land after signing in. Prompt box with{" "}
-          <code>@</code> mentions for people and <code>#</code> for agent
-          profiles, skill pinning, attachment upload, a Space selector, a model
-          selector, and a toggle for whether the agent answers at all. Sending
-          creates the thread immediately and routes you into it.
+          <code>@</code> mentions for people, <code>#</code> for agent profiles
+          and <code>/</code> to pin a skill, attachment upload, a Space
+          selector, a model selector, and a toggle for whether the agent answers
+          at all. Sending creates the thread immediately and routes you into it.
         </p>
 
-        <h3 className="pt-2 text-base font-semibold">A thread</h3>
+        <SurfaceHeading>A thread</SurfaceHeading>
         <p>
           The conversation and its workbench. The top bar carries breadcrumbs,
           an inline-editable title, and a <code>…</code> menu for pin, rename,
           archive and delete. Two panels slide in from the right: the{" "}
-          <strong>info panel</strong> (who started it, agents involved,
-          attachments, thread mode and its override, and a goal block with
-          completion actions) and the <strong>artifact panel</strong>, which
-          appears only once the thread has produced an artifact.
+          <strong>info panel</strong> (who started it, attachments, thread mode
+          and its override, and a goal block with completion actions) and the{" "}
+          <strong>artifact panel</strong>, which appears only once the thread
+          has produced an artifact.
         </p>
 
-        <h3 className="pt-2 text-base font-semibold">A Space</h3>
+        <SurfaceHeading>A Space</SurfaceHeading>
         <p>
           A Space&apos;s home page is a workroom rather than a settings screen:
           a <strong>New chat</strong> button, three work-item tiles (open
@@ -238,17 +189,15 @@ export function AppTour() {
           files icon in the top bar swaps the page for an editor over the
           Space&apos;s own context files.
         </p>
-        <Callout tone="note" title="There is no Spaces list in the sidebar">
-          <p>
-            Visiting <code>/spaces</code> sends you to the new-thread screen.
-            You reach a Space through its group in the sidebar, through the
-            new-thread <code>…</code> menu&apos;s Open Space list, or through a
-            thread that lives in it. Creating and administering Spaces is an
-            operator job under Settings.
-          </p>
-        </Callout>
+        <p>
+          There is no Spaces list in the sidebar — visiting <code>/spaces</code>{" "}
+          sends you to the new-thread screen. You reach a Space through its
+          group in the sidebar, through the new-thread <code>…</code>{" "}
+          menu&apos;s Open Space list, or through a thread that lives in it.
+          Creating and administering Spaces is an operator job under Settings.
+        </p>
 
-        <h3 className="pt-2 text-base font-semibold">Work Items</h3>
+        <SurfaceHeading>Work Items</SurfaceHeading>
         <p>
           The task surface, in two views chosen from the URL:{" "}
           <strong>list</strong> and <strong>board</strong>. Grouping, sorting,
@@ -265,12 +214,12 @@ export function AppTour() {
           blocked or on human hold.
         </p>
 
-        <h3 className="pt-2 text-base font-semibold">Artifacts</h3>
+        <SurfaceHeading>Artifacts</SurfaceHeading>
         <p>
-          A searchable table of what the agent produced — name, type, who it was
-          for, when, and version. There is no &ldquo;new artifact&rdquo; button
-          by design: artifacts come from threads, so the only header action is{" "}
-          <strong>New thread</strong>.
+          A searchable table of what the agent produced — name, type, the user
+          it was for, when it was generated, and version. There is no &ldquo;new
+          artifact&rdquo; button by design: artifacts come from threads, so the
+          only header action is <strong>New thread</strong>.
         </p>
         <p>
           Opening one renders it by kind — an applet mounts and runs, a document
@@ -278,7 +227,7 @@ export function AppTour() {
           download, delete and a pin toggle in the header.
         </p>
 
-        <h3 className="pt-2 text-base font-semibold">Automations</h3>
+        <SurfaceHeading>Automations</SurfaceHeading>
         <p>
           A table of standing duties: name (platform ones carry a{" "}
           <strong>Built-in</strong> badge), trigger, target, status and last
@@ -288,7 +237,7 @@ export function AppTour() {
           delete: pausing is the off-switch, and built-ins cannot be removed.
         </p>
 
-        <h3 className="pt-2 text-base font-semibold">Approvals</h3>
+        <SurfaceHeading>Approvals</SurfaceHeading>
         <p>
           A two-pane reading surface, like a mail client: pending decisions on
           the left, the full request on the right with <strong>Approve</strong>{" "}
@@ -297,7 +246,7 @@ export function AppTour() {
           degrades to that same selection rather than erroring.
         </p>
 
-        <h3 className="pt-2 text-base font-semibold">Profile</h3>
+        <SurfaceHeading>Profile</SurfaceHeading>
         <p>
           Your own account: name, email, role badge, account usage, and the
           models available to you. A toggle in the top bar swaps it for an
@@ -305,50 +254,32 @@ export function AppTour() {
           shape how the agent works with you specifically. Role, budget and
           model settings are read-only unless you are an owner or admin.
         </p>
-      </Section>
+      </ReportSection>
 
-      <Section id="settings" title="Settings and operator surfaces">
+      <ReportSection id="settings" title="Settings and operator surfaces">
         <p>
           Settings has its own sidebar, alphabetised. Three sections are visible
           to everyone; the rest appear only for owners and admins, and if you
           are a member you will simply never see them listed.
         </p>
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/20 text-left text-xs text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Section</th>
-                <th className="px-3 py-2 font-medium">Who sees it</th>
-                <th className="px-3 py-2 font-medium">What it is for</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60 text-[13px]">
-              {SETTINGS_ROWS.map((row) => (
-                <tr key={row.section}>
-                  <td className="px-3 py-2 font-medium whitespace-nowrap">
-                    {row.section}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">
-                    {row.who}
-                  </td>
-                  <td className="px-3 py-2 text-foreground/80">{row.what}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <Callout tone="warn" title="Hidden is not the same as forbidden">
-          <p>
-            Role checks in the interface only decide what is rendered. Every
-            operator action is re-checked on the server, so pasting an operator
-            URL as a member gets you redirected, not through. The reverse also
-            holds: a section missing from your sidebar means your role, not a
-            broken deployment.
-          </p>
-        </Callout>
-      </Section>
+        <DocTable
+          head={["Section", "Who sees it", "What it is for"]}
+          rows={SETTINGS_ROWS.map((row) => [
+            <strong key={row.section}>{row.section}</strong>,
+            row.who,
+            row.what,
+          ])}
+        />
+        <p>
+          Hidden is not the same as forbidden, and the reverse holds too. Role
+          checks in the interface only decide what is rendered; every operator
+          action is re-checked on the server, so pasting an operator URL as a
+          member gets you redirected, not through. And a section missing from
+          your sidebar means your role, not a broken deployment.
+        </p>
+      </ReportSection>
 
-      <Section id="shared-idioms" title="Shared idioms">
+      <ReportSection id="shared-idioms" title="Shared idioms">
         <p>
           A handful of patterns repeat everywhere. Learning them once saves
           relearning each surface:
@@ -393,8 +324,8 @@ export function AppTour() {
           <DocLink slug="mobile-app">Mobile app</DocLink> covers what changes
           when the same work is on a phone.
         </p>
-      </Section>
-    </DocArticle>
+      </ReportSection>
+    </ReportArticle>
   );
 }
 
