@@ -1,0 +1,41 @@
+# Expert questions from the ThinkWork Brain (THINK-787).
+#
+# The Brain's Consult loop (THINK-786) files questions for named domain
+# experts. This surface pulls the open questions addressed to the
+# signed-in user ("The Brain has a question for you"); answering goes
+# through the existing `teachBrain` mutation with `answersQuestionId`,
+# which the Brain links to the question and flips it to answered.
+#
+# Transport: GET {BRAIN_OPS_API_URL}/expert-questions?status=open and
+# GET {BRAIN_OPS_API_URL}/experts, same agent-identity m2m bearer as
+# /flags and /teachings. Questions with no routed expert are an operator
+# concern and are never returned here.
+
+type BrainExpertQuestion {
+  """
+  Server-minted question id (UUID) — pass as `answersQuestionId` when
+  answering via `teachBrain`.
+  """
+  id: String!
+  question: String!
+  """
+  Why the Brain is asking (context.why), when provided.
+  """
+  why: String
+  domain: String
+  """
+  The Brain-side Platform Agent task awaiting this answer.
+  """
+  taskId: String
+  createdAt: String
+}
+
+extend type Query {
+  """
+  Open Brain questions addressed to the signed-in user, oldest first
+  (THINK-787). Empty when the caller is not a registered expert or has
+  no open questions. Errors from the Brain surface as
+  SERVICE_UNAVAILABLE; an unconfigured Brain connection returns [].
+  """
+  brainExpertQuestions: [BrainExpertQuestion!]!
+}

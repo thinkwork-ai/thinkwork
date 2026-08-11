@@ -32,11 +32,27 @@ import { TeachBrainMutation } from "@/lib/graphql-queries";
 /** Client-side cap mirroring the Brain's 4000-char statement limit. */
 export const TEACH_BRAIN_MAX_TEXT_CHARS = 4000;
 
+export interface TeachBrainQuestion {
+  /** Expert-question id (UUID) — sent as answersQuestionId. */
+  id: string;
+  question: string;
+  why?: string | null;
+  domain?: string | null;
+}
+
 export interface TeachBrainDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** When taught from a thread, the conversation rides along as context. */
   threadId?: string;
+  /**
+   * When answering a Brain expert question (THINK-787), the question being
+   * answered — the dialog becomes "The Brain has a question for you" and
+   * the teaching is linked back to the question server-side.
+   */
+  question?: TeachBrainQuestion;
+  /** Called after a successful submit (e.g. to re-pull the open list). */
+  onAccepted?: () => void;
 }
 
 interface AcceptedTeaching {
@@ -49,6 +65,8 @@ export function TeachBrainDialog({
   open,
   onOpenChange,
   threadId,
+  question,
+  onAccepted,
 }: TeachBrainDialogProps) {
   const [{ fetching: submitting }, teachBrain] =
     useMutation(TeachBrainMutation);
@@ -74,6 +92,7 @@ export function TeachBrainDialog({
         input: {
           text: text.trim().slice(0, TEACH_BRAIN_MAX_TEXT_CHARS),
           ...(threadId ? { threadId } : {}),
+          ...(question ? { answersQuestionId: question.id } : {}),
         },
       });
       if (result.error) {
@@ -94,6 +113,7 @@ export function TeachBrainDialog({
         taskId: payload.taskId ?? null,
         note: payload.note ?? null,
       });
+      onAccepted?.();
     } catch (err) {
       console.error("[TeachBrainDialog] teach failed", err);
       setError(err instanceof Error ? err.message : "unknown error");
@@ -104,14 +124,34 @@ export function TeachBrainDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent data-testid="teach-brain-dialog">
         <DialogHeader>
-          <DialogTitle>Teach the Brain</DialogTitle>
+          <DialogTitle>
+            {question ? "The Brain has a question for you" : "Teach the Brain"}
+          </DialogTitle>
           <DialogDescription>
-            Know something the Brain doesn&apos;t? Say it in your own words. The
-            Brain grounds it against the data and drafts knowledge attributed to
-            you
-            {threadId ? " — this conversation is linked as context." : "."}
+            {question
+              ? "Answer in your own words. The Brain grounds it against the data and drafts knowledge attributed to you."
+              : `Know something the Brain doesn't? Say it in your own words. The Brain grounds it against the data and drafts knowledge attributed to you${
+                  threadId ? " — this conversation is linked as context." : "."
+                }`}
           </DialogDescription>
         </DialogHeader>
+
+        {question && !accepted ? (
+          <div
+            className="grid gap-1 rounded-md border border-border bg-muted/40 px-3 py-2"
+            data-testid="teach-brain-question"
+          >
+            <p className="text-sm font-medium">{question.question}</p>
+            {question.why ? (
+              <p className="text-xs text-muted-foreground">{question.why}</p>
+            ) : null}
+            {question.domain ? (
+              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {question.domain}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {accepted ? (
           <div className="grid gap-3" data-testid="teach-brain-confirmation">
@@ -126,7 +166,7 @@ export function TeachBrainDialog({
         ) : (
           <div className="grid gap-2">
             <Label htmlFor="teach-brain-text">
-              What should the Brain know?
+              {question ? "Your answer" : "What should the Brain know?"}
             </Label>
             <Textarea
               id="teach-brain-text"

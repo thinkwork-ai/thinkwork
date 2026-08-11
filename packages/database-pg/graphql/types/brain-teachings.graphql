@@ -42,6 +42,12 @@ input TeachBrainInput {
   thread.
   """
   threadId: ID
+  """
+  When answering a Brain expert question (THINK-787): the question's id
+  (UUID). The Brain links the teaching to the question and flips it to
+  answered.
+  """
+  answersQuestionId: ID
 }
 
 extend type Mutation {

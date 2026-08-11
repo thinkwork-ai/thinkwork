@@ -24,6 +24,8 @@ export interface BrainTeachingPayload {
   domain?: string;
   text: string;
   context_thread_url?: string;
+  /** Expert-question id this teaching answers (THINK-787); must be a UUID. */
+  answers_question_id?: string;
 }
 
 function truncate(value: string, max: number): string {
@@ -41,9 +43,11 @@ export function buildBrainTeachingPayload(input: {
   text: string;
   domain?: string | null;
   contextThreadUrl?: string | null;
+  answersQuestionId?: string | null;
 }): BrainTeachingPayload {
   const domain = input.domain?.trim() || null;
   const contextThreadUrl = input.contextThreadUrl?.trim() || null;
+  const answersQuestionId = input.answersQuestionId?.trim() || null;
   return {
     source: "thinkwork-agent",
     taught_by: truncate(
@@ -62,6 +66,7 @@ export function buildBrainTeachingPayload(input: {
           ),
         }
       : {}),
+    ...(answersQuestionId ? { answers_question_id: answersQuestionId } : {}),
   };
 }
 

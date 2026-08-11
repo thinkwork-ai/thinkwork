@@ -115,6 +115,7 @@ import {
 } from "@/lib/sidebar-section-prefs";
 import { requestSpacesComposerFocus } from "@/lib/composer-focus";
 import { InlineShortcutText } from "@/components/workbench/InlineShortcutText";
+import { BrainQuestionsSection } from "@/components/shell/BrainQuestionsSection";
 import {
   clearMissingThreadDeletes,
   setThreadDeletePending,
@@ -1308,6 +1309,7 @@ export function ChatSidebar() {
       </SidebarGroup>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-3">
+        <BrainQuestionsSection />
         <SidebarGroup className="px-3 group-data-[collapsible=icon]:hidden">
           {recentFetching && !recentData ? (
             <p className="px-2 py-2 text-xs text-sidebar-foreground/60">
