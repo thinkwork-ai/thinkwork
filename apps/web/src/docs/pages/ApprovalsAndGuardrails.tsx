@@ -1,24 +1,45 @@
 /**
  * Approvals & guardrails (Automations & quality) — THINK-700.
  *
- * Grounded in what actually ships: GUARDRAILS.md as the pinned, every-turn
- * safety floor, and the /approvals queue, which today gates exactly one
- * thing — the first outbound email to a recipient set. Tool-call approvals,
- * Slack approval notifications and an in-app audit viewer are all scaffolded
- * but inert, so none of them are described here as if a reader could use
- * them. Budgets and audit are included at user altitude because "what stops
- * the agent" is one question, not three.
+ * Converted to the report restyle (Eric 2026-08-11). Claims verified
+ * against the shipped code: packages/workspace-defaults/files/GUARDRAILS.md
+ * (the six default areas), packages/database-pg/src/schema/agents.ts (the
+ * per-file content-hash pins for guardrail-class files), packages/api/src/
+ * lib/workspace-overlay.ts (a deeper GUARDRAILS.md wins for its branch),
+ * packages/api/src/lib/email-channel/first-send-approval.ts + send-email
+ * (the send tool returns "pending human review" and files a
+ * computer_approval inbox item; recipient-set approvals are TENANT-scoped;
+ * EMAIL_APPROVAL_TTL_DAYS = 7, swept by inbox-approval-sweeper),
+ * approval-thread-event.ts (the decision is posted back into the thread),
+ * packages/api/src/graphql/resolvers/inbox/email-approval-auth (an
+ * assigned approval is decidable only by its assignee), apps/web/src/
+ * components/shell/ChatSidebar.tsx (the Approvals nav entry renders only
+ * while pendingApprovalCount > 0), packages/api/src/lib/push-notifications
+ * ("Approval needed" push), packages/api/src/lib/user-questions/consume.ts
+ * + goal-mode resume (the ask-a-question checkpoint), packages/api/src/lib/
+ * user-budget-enforcement.ts (the per-user monthly dollar stop),
+ * packages/database-pg/src/schema/guardrails.ts (Bedrock content-filter
+ * attachments), and packages/api/src/lib/compliance/ (the audit records and
+ * exports).
+ *
+ * Deliberately NOT documented: the generic parked-turn tool-approval
+ * checkpoint. Its schema exists (pending-tool-approvals) but nothing writes
+ * it — tool-approvals/authorize.ts says "no live caller until U11b" — so
+ * describing it would document scaffolding as product. The live gates are
+ * the email first-send review and the agent's own ask-a-question stop.
+ *
+ * Amber usage (this page is the genuine human-in-the-loop territory): one
+ * human Stage in the approval sequence, and two Invariants — "you approve a
+ * recipient, not a message" and "add, don't subtract".
  */
-import { Bell, CircleCheck, Mail, Send } from "lucide-react";
 import {
-  Callout,
-  DocArticle,
   DocLink,
-  FlowChain,
-  FlowDiagram,
-  FlowLink,
-  FlowNode,
-  Section,
+  DocTable,
+  Invariant,
+  ReportArticle,
+  ReportSection,
+  Stage,
+  Stages,
   Term,
 } from "../kit";
 import type { DocTocEntry } from "../registry";
@@ -32,12 +53,12 @@ export const APPROVALS_AND_GUARDRAILS_TOC: DocTocEntry[] = [
 
 export function ApprovalsAndGuardrails() {
   return (
-    <DocArticle
+    <ReportArticle
       eyebrow="Automations & quality"
       title="Approvals & guardrails"
       lead="There are two ways to bound what an agent does: rule it out in advance with a guardrail, or route it to a person with an approval. Budgets are the third bound — the one that stops work by cost rather than by kind."
     >
-      <Section id="guardrails" title="Guardrails">
+      <ReportSection id="guardrails" title="Guardrails">
         <p>
           Every agent reads a file called <code>GUARDRAILS.md</code> on every
           single turn. It is the safety floor: the rules that apply no matter
@@ -46,105 +67,59 @@ export function ApprovalsAndGuardrails() {
           instructions in front of it say.
         </p>
         <p>The default file ships with the platform and covers six areas:</p>
-
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/20 text-left text-xs text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Area</th>
-                <th className="px-3 py-2 font-medium">What it rules out</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60 text-[13px] [&_td]:px-3 [&_td]:py-2">
-              <tr>
-                <td className="font-medium whitespace-nowrap">
-                  Confidentiality
-                </td>
-                <td className="text-foreground/80">
-                  Carrying information across tenant or client boundaries, or
-                  answering questions about organisations and people outside the
-                  current scope.
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">Data handling</td>
-                <td className="text-foreground/80">
-                  Writing secrets, keys or card numbers into memory or thread
-                  comments; echoing sensitive input back; keeping health or
-                  other special-category personal data in workspace records.
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">
-                  Authorization boundaries
-                </td>
-                <td className="text-foreground/80">
-                  Reaching systems it was not given tools for, using credentials
-                  it was not given, and — importantly — treating instructions
-                  found inside documents, issue bodies or tool output as
-                  authority. It also forbids the agent from rewriting its own
-                  rules to loosen them.
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">
-                  Artifact and UX integrity
-                </td>
-                <td className="text-foreground/80">
-                  Rendering credentials into artifacts, putting identifiers or
-                  emails into share links, deceptive interfaces, and unbounded
-                  loops with no stop condition.
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">
-                  Deployment and release safety
-                </td>
-                <td className="text-foreground/80">
-                  Deploying, publishing or migrating outside the reviewed
-                  pipeline — including &ldquo;just this once&rdquo; console or
-                  local-CLI shortcuts, which it is told to refuse and redirect.
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">
-                  Human escalation
-                </td>
-                <td className="text-foreground/80">
-                  Guessing on high-consequence uncertainty. Legal, financial and
-                  personnel judgement calls go to a person, and the agent is
-                  told to escalate the thread rather than fail quietly.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
+        <DocTable
+          head={["Area", "What it rules out"]}
+          rows={[
+            [
+              <strong>Confidentiality</strong>,
+              "Carrying information across tenant or client boundaries, or answering questions about organisations and people outside the current scope.",
+            ],
+            [
+              <strong>Data handling</strong>,
+              "Writing secrets, keys or card numbers into memory or thread comments; echoing sensitive input back; keeping health or other special-category personal data in workspace records.",
+            ],
+            [
+              <strong>Authorization boundaries</strong>,
+              "Reaching systems it was not given tools for, using credentials it was not given, and — importantly — treating instructions found inside documents, issue bodies or tool output as authority. It also forbids the agent from rewriting its own rules to loosen them.",
+            ],
+            [
+              <strong>Artifact and UX integrity</strong>,
+              "Rendering credentials into artifacts, putting identifiers or emails into share links, deceptive interfaces, and unbounded loops with no stop condition.",
+            ],
+            [
+              <strong>Deployment and release safety</strong>,
+              <>
+                Deploying, publishing or migrating outside the reviewed pipeline
+                — including &ldquo;just this once&rdquo; console or local-CLI
+                shortcuts, which it is told to refuse and redirect.
+              </>,
+            ],
+            [
+              <strong>Human escalation</strong>,
+              "Guessing on high-consequence uncertainty. Legal, financial and personnel judgement calls go to a person, and the agent is told to escalate the thread rather than fail quietly.",
+            ],
+          ]}
+        />
         <p>
           Two design choices matter more than the contents.{" "}
           <strong>Position:</strong> guardrails are read after the agent&apos;s
           own instructions and its context, and before anything space- or
           user-specific, so nothing further down the stack reads as permission
           to ignore them. <strong>Pinning:</strong> <code>GUARDRAILS.md</code>{" "}
-          is the one workspace file that is version-pinned at the moment an
-          agent is created. The exact bytes are hashed and kept, so an
-          agent&apos;s safety floor cannot shift underneath it when the template
-          it was built from moves on.
+          is version-pinned at the moment an agent is created. The exact bytes
+          are hashed and kept, so an agent&apos;s safety floor cannot shift
+          underneath it when the template it was built from moves on.
         </p>
-
-        <Callout tone="note" title="Editing them">
-          <p>
-            Guardrails are an ordinary workspace file, edited in the workspace
-            editor wherever it appears — a Space&apos;s settings, a user&apos;s,
-            your own profile. Owners and admins can write; everyone else sees
-            them read-only, which is intentional: people should be able to read
-            the rules their agents are following. A deeper folder can carry its
-            own <code>GUARDRAILS.md</code> to tighten the rules for that branch
-            of work, and the nearest one wins.
-          </p>
-        </Callout>
-
-        <Callout tone="warn" title="Add, don't subtract">
+        <p>
+          Guardrails are an ordinary workspace file, edited in the workspace
+          editor wherever it appears — a Space&apos;s settings, a user&apos;s,
+          your own profile. Owners and admins can write; everyone else sees them
+          read-only, which is intentional: people should be able to read the
+          rules their agents are following. A deeper folder can carry its own{" "}
+          <code>GUARDRAILS.md</code> to tighten the rules for that branch of
+          work, and the nearest one wins.
+        </p>
+        <Invariant title="Add, don't subtract">
           <p>
             The useful edit is a rule of your own: a system that is off limits,
             a phrase that must never appear in customer-facing text, a threshold
@@ -157,89 +132,78 @@ export function ApprovalsAndGuardrails() {
             </DocLink>{" "}
             for how the layers combine.
           </p>
-        </Callout>
-
+        </Invariant>
         <p>
           Separately, an operator can attach a model-level content filter to a
           tenant, an agent or a Space. That runs underneath everything above, is
           configured outside the app today, and does not appear anywhere in the
           workspace files.
         </p>
-      </Section>
+      </ReportSection>
 
-      <Section id="approvals" title="Approvals">
+      <ReportSection id="approvals" title="Approvals">
         <p>
           A guardrail refuses. An <strong>approval</strong> pauses and asks.
           When an agent reaches an action that needs a human decision, it stops
           mid-work, files the request, and waits — the work resumes on its own
           the moment somebody decides.
         </p>
-
-        <Callout
-          tone="note"
-          title="Today, approvals gate outbound email — and only that"
-        >
-          <p>
-            The one action that reaches the approvals queue is{" "}
-            <strong>
-              the first email an agent sends to a given set of recipients
-            </strong>
-            . Tool calls, spend and publishing are not gated through this
-            surface. If you need those bounded, that is a guardrail, a tool
-            grant, or a budget — not an approval.
-          </p>
-        </Callout>
-
-        <FlowDiagram>
-          <FlowChain>
-            <FlowNode
-              icon={Mail}
-              title="The agent drafts an email"
-              sub="to a recipient set nobody in your tenant has approved before"
-              tone="compute"
-            />
-            <FlowLink label="pause" />
-            <FlowNode
-              icon={Bell}
-              title="An approval is filed"
-              sub="it appears in Approvals, and pushes to the phone of the person who asked"
-              tone="source"
-            />
-            <FlowLink label="decide" />
-            <FlowNode
-              icon={CircleCheck}
-              title="Approve or Deny"
-              sub="a decision wakes the agent, which either sends or stops"
-              tone="graph"
-            />
-            <FlowLink label="remember" />
-            <FlowNode
-              icon={Send}
-              title="That recipient set is now approved"
-              sub="later emails to the same people go straight out"
-              tone="consumer"
-            />
-          </FlowChain>
-        </FlowDiagram>
-
         <p>
-          <strong>Approvals</strong> appears in the sidebar only when something
+          Today, exactly one action reaches the approvals queue:{" "}
+          <strong>
+            the first email an agent sends to a given set of recipients
+          </strong>
+          . Tool calls, spend and publishing are not gated through this surface
+          — if you need those bounded, that is a guardrail, a tool grant, or a
+          budget, not an approval. Here is the sequence, end to end:
+        </p>
+        <Stages>
+          <Stage
+            num="1"
+            title="The agent drafts an email"
+            tag="nothing is sent"
+          >
+            <p>
+              The send tool itself comes back with &ldquo;pending human
+              review&rdquo; as its result — to the agent, an unapproved send
+              looks like a tool that answered &ldquo;not yet&rdquo;, and the
+              draft goes nowhere.
+            </p>
+          </Stage>
+          <Stage num="2" title="An approval is filed" tag="you are notified">
+            <p>
+              It appears under <strong>Approvals</strong> in the sidebar, as a
+              card inside the thread it came from, and as an{" "}
+              <em>Approval needed</em> push on{" "}
+              <DocLink slug="mobile-app">mobile</DocLink>, with Approve and
+              Reject directly on the notification.
+            </p>
+          </Stage>
+          <Stage num="3" title="A person decides" tag="approve or deny" human>
+            <p>
+              You see the recipients, the subject and the full body before you
+              decide. Two buttons: <strong>Approve &amp; send</strong> and{" "}
+              <strong>Deny</strong>. Denying sends nothing.
+            </p>
+          </Stage>
+          <Stage
+            num="4"
+            title="The recipient set is remembered"
+            tag="tenant-wide"
+          >
+            <p>
+              A decision wakes the agent, which either sends or stops — and an
+              approval is recorded against those recipients, so later emails to
+              the same people go straight out.
+            </p>
+          </Stage>
+        </Stages>
+        <p>
+          <strong>Approvals</strong> appears in the sidebar only while something
           is waiting, with a count on it. The surface reads like a mail client:
-          the queue on the left, the item you selected on the right. For an
-          email you see the recipients, the subject and the full body before you
-          decide. Two buttons: <strong>Approve &amp; send</strong> and{" "}
-          <strong>Deny</strong>. Denying sends nothing.
+          the queue on the left, the item you selected on the right.
         </p>
-        <p>
-          The same approval also shows up as a card inside the thread it came
-          from, so if you are already reading the conversation you do not have
-          to go anywhere else. And it pushes to mobile as{" "}
-          <em>Approval needed</em>, with Approve and Reject directly on the
-          notification — see <DocLink slug="mobile-app">the mobile app</DocLink>
-          .
-        </p>
-
-        <Callout tone="warn" title="You approve a recipient, not a message">
+        <Invariant title="You approve a recipient, not a message">
           <p>
             Approval is keyed to <strong>the set of recipients</strong> and it
             is remembered across your whole tenant — not to the specific email
@@ -251,8 +215,7 @@ export function ApprovalsAndGuardrails() {
             decision as &ldquo;yes, this agent may correspond with these
             people&rdquo;.
           </p>
-        </Callout>
-
+        </Invariant>
         <p>Three more things worth knowing before you rely on the queue:</p>
         <ul>
           <li>
@@ -271,17 +234,21 @@ export function ApprovalsAndGuardrails() {
             right, deny it and tell the agent what to change in the thread.
           </li>
         </ul>
-
         <p>
-          An <DocLink slug="automations">automation</DocLink> that stops for an
-          approval shows its run as <code>waiting_for_human</code> until
-          somebody decides — which is worth remembering for an unattended
-          automation, because a run that is waiting is a run that has not
-          finished.
+          The email gate is not the only way work stops for a person. An agent
+          that hits a genuine fork — a judgement call its guardrails tell it not
+          to guess on — can <strong>ask a question</strong>: the question lands
+          as a card in the thread, the run parks, and answering it (through the
+          card, or just by replying in the thread) resumes the work exactly
+          where it stopped. Either kind of stop shows an{" "}
+          <DocLink slug="automations">automation</DocLink> run as{" "}
+          <code>waiting_for_human</code> until somebody responds — worth
+          remembering for unattended automations, because a run that is waiting
+          is a run that has not finished.
         </p>
-      </Section>
+      </ReportSection>
 
-      <Section id="budgets-and-usage" title="Budgets and usage">
+      <ReportSection id="budgets-and-usage" title="Budgets and usage">
         <p>
           Agent work costs money per turn, and the bound on it is a{" "}
           <strong>monthly budget in dollars</strong>. The one you can set in the
@@ -310,87 +277,53 @@ export function ApprovalsAndGuardrails() {
           answer — see <DocLink slug="model-catalog">the model catalog</DocLink>{" "}
           for what the choices cost.
         </p>
+        <p>
+          Know the limits of the limit. Budgets are checked before work starts,
+          not during it, so a single expensive turn already in flight can carry
+          a user past their cap. There are no token-count caps — the unit is
+          dollars — and no warning before the limit is reached, so a budget is a
+          stop, not an alert. Tenant-wide and per-agent budgets exist in the
+          platform but have no screen yet; ask an operator.
+        </p>
+      </ReportSection>
 
-        <Callout tone="note" title="The limits of the limit">
-          <p>
-            Budgets are checked before work starts, not during it, so a single
-            expensive turn already in flight can carry a user past their cap.
-            There are no token-count caps — the unit is dollars — and no warning
-            before the limit is reached, so a budget is a stop, not an alert.
-            Tenant-wide and per-agent budgets exist in the platform but have no
-            screen yet; ask an operator.
-          </p>
-        </Callout>
-      </Section>
-
-      <Section id="audit-trail" title="What gets recorded">
+      <ReportSection id="audit-trail" title="What gets recorded">
         <p>
           Three kinds of record are kept, and it is worth knowing which is which
           when somebody asks &ldquo;who approved that?&rdquo;
         </p>
-
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/20 text-left text-xs text-muted-foreground">
-                <th className="px-3 py-2 font-medium">Record</th>
-                <th className="px-3 py-2 font-medium">Captures</th>
-                <th className="px-3 py-2 font-medium">Where you read it</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60 text-[13px] [&_td]:px-3 [&_td]:py-2">
-              <tr>
-                <td className="font-medium whitespace-nowrap">
-                  Approval decisions
-                </td>
-                <td className="text-foreground/80">
-                  Who approved or denied, when, and any note left with the
-                  decision. The decision is also written back into the
-                  originating thread, so the conversation does not end on
-                  &ldquo;awaiting review&rdquo;.
-                </td>
-                <td className="text-foreground/80">
-                  In the thread. The underlying activity log has no viewer yet.
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">
-                  Governance file edits
-                </td>
-                <td className="text-foreground/80">
-                  Every change to instructions, guardrails or capabilities —
-                  with a fingerprint of the previous content and a short,
-                  secret-scrubbed preview, so an edit is provable without
-                  copying the file into a log.
-                </td>
-                <td className="text-foreground/80">
-                  Compliance exports, produced by an operator.
-                </td>
-              </tr>
-              <tr>
-                <td className="font-medium whitespace-nowrap">Email ledger</td>
-                <td className="text-foreground/80">
-                  Draft created, approval requested, approved or denied — and
-                  when denied, whether a person did it or it expired.
-                </td>
-                <td className="text-foreground/80">
-                  Compliance exports; the outcome also lands in the thread.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <Callout tone="warn" title="There is no in-app audit browser yet">
-          <p>
-            The records above are kept, and an operator can export them as CSV
-            or NDJSON for an auditor. What does not exist is a screen you can
-            open to search them. If your process needs one, plan on the export —
-            and do not assume the thread is the archive, because a deleted
-            thread is not an audit trail.
-          </p>
-        </Callout>
-
+        <DocTable
+          head={["Record", "Captures", "Where you read it"]}
+          rows={[
+            [
+              <strong>Approval decisions</strong>,
+              <>
+                Who approved or denied, when, and any note left with the
+                decision. The decision is also written back into the originating
+                thread, so the conversation does not end on &ldquo;awaiting
+                review&rdquo;.
+              </>,
+              "In the thread. The underlying activity log has no viewer yet.",
+            ],
+            [
+              <strong>Governance file edits</strong>,
+              "Every change to instructions, guardrails or capabilities — with a fingerprint of the previous content and a short, secret-scrubbed preview, so an edit is provable without copying the file into a log.",
+              "Compliance exports, produced by an operator.",
+            ],
+            [
+              <strong>Email ledger</strong>,
+              "Draft created, approval requested, approved or denied — and when denied, whether a person did it or it expired.",
+              "Compliance exports; the outcome also lands in the thread.",
+            ],
+          ]}
+        />
+        <p>
+          There is no in-app audit browser yet. The records above are kept, and
+          an operator can export them as CSV or NDJSON for an auditor — what
+          does not exist is a screen you can open to search them. If your
+          process needs one, plan on the export, and do not assume the thread is
+          the archive, because a deleted thread is not an audit trail.
+        </p>
         <p>
           For where the tenant boundary is drawn and who can sign in at all, see{" "}
           <DocLink slug="security-and-tenancy">security and tenancy</DocLink>.
@@ -400,7 +333,7 @@ export function ApprovalsAndGuardrails() {
           asserting that an answer does <em>not</em> contain something is how a
           guardrail stops being a paragraph and starts being a check.
         </p>
-      </Section>
-    </DocArticle>
+      </ReportSection>
+    </ReportArticle>
   );
 }

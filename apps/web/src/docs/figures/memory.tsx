@@ -1,291 +1,209 @@
 /**
- * Figures for the Memory section (THINK-698).
+ * Figures for the Memory section (THINK-698; report restyle 2026-08-11).
  *
- * Two pictures, both vertical, both drawn from the shipped behaviour:
- *  - MemoryFlowDiagram — a turn's transcript becomes extracted memory,
- *    consolidation rewrites the requester's notes, and both reach later
- *    turns by different routes (a tool call vs. a mounted file).
- *  - ContextCompositionDiagram — what is already in front of the model
- *    when a turn starts, versus what the model has to go and fetch.
+ * Three pictures in the report figure language — fill-card boxes, teal
+ * strokes, italic muted edge labels, one unique marker id per figure:
+ *  - MemoryFlowDiagram (mf-arr) — after a turn ends, the transcript forks:
+ *    the managed engine extracts records on its own schedule, and the
+ *    consolidation passes rewrite the requester's markdown notes. A later
+ *    turn gets the notes for free and reaches the records only by asking.
+ *  - ContextCompositionDiagram (cc-arr) — what is already in front of the
+ *    model when a turn starts, versus what costs a tool call.
+ *  - ConsolidationLoopFigure (cm-arr) — the consolidation loop drawn as a
+ *    loop.
  *
- * House rules live in ./README.md: Dg* primitives only, tones for the five
- * roles, 13/11/10px type, one <title> per figure.
+ * Drawn from the shipped code: packages/agentcore-pi/agent-container/src/
+ * server.ts (fire-and-forget end-of-turn retain; attachment preamble +
+ * withheld notice as the system-prompt suffix), packages/pi-extensions/src/
+ * system-prompt-compose.ts (block order; date + requester ride the turn
+ * prompt), packages/api/src/lib/memory/adapters/agentcore-adapter.ts
+ * (extraction namespaces; recall is a query the agent runs), and
+ * packages/api/src/lib/requester-memory/{learner,dreaming}.ts (the idle
+ * learner and nightly pass read the thread record and the workspace, then
+ * write memory/ markdown). The old "read back from AgentCore" edge was
+ * dropped: dreaming reads Aurora messages and workspace files, not the
+ * engine.
  */
-import { Diagram, DgArrow, DgBox, DgChip, DgGroup, DgLabel } from "../diagrams";
 
 /**
- * The write path and the two read paths, in one column. The dashed lane on
- * the right is the point of the picture: extracted memory reaches a later
- * turn only because the agent asks for it, while consolidated notes are
- * simply there.
+ * The fork after a turn, and the two unequal read paths back. The dashed
+ * recall edge is the point of the picture: extracted memory reaches a
+ * later turn only because the agent asks, while the consolidated notes are
+ * simply mounted.
  */
 export function MemoryFlowDiagram() {
   return (
-    <Diagram
-      title="A turn is handed to AgentCore Memory after it ends; background extraction fills the namespaces; consolidation rewrites the requester's notes; later turns reach both by different routes"
-      viewBox="0 0 680 690"
-      caption="Two things happen after a turn, and neither of them blocks your answer. The engine extracts on its own schedule; the consolidation passes rewrite markdown you can read. A later turn recalls the first by calling a tool, and gets the second for free as mounted files."
-    >
-      <DgLabel x={20} y={22} text="During the turn" />
+    <figure className="pt-1">
+      <div>
+        <svg
+          viewBox="0 0 760 490"
+          role="img"
+          aria-label="After a turn ends its transcript is handed to AgentCore Memory for background extraction, and the idle learner plus nightly pass re-read the thread and write markdown notes; a later turn reads the notes as mounted files but reaches extracted records only by calling recall"
+          className="block h-auto w-full"
+        >
+          <defs>
+            <marker
+              id="mf-arr"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 1 L 9 5 L 0 9 z" className="fill-muted-foreground" />
+            </marker>
+          </defs>
 
-      <DgBox
-        x={180}
-        y={34}
-        w={320}
-        h={52}
-        title="A turn in a thread"
-        sub="your message, the agent's answer"
-        tone="source"
-      />
-      <DgBox
-        x={20}
-        y={116}
-        w={132}
-        h={52}
-        title="remember()"
-        sub="on request"
-        tone="compute"
-      />
+          {/* the turn */}
+          <rect x="270" y="20" width="220" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="286" y="46" className="fill-foreground font-sans text-[15px] font-semibold">A turn in a thread</text>
+          <text x="286" y="66" className="fill-muted-foreground font-sans text-[11px]">your message, the agent&apos;s answer</text>
 
-      <DgLabel x={20} y={104} text="After it ends" />
-      <DgArrow d="M 340 86 L 340 112" label="transcript" labelAt={[340, 99]} />
+          {/* fork left: the managed engine */}
+          <path d="M 310 82 L 310 112 L 180 112 L 180 146" fill="none" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#mf-arr)" />
+          <text x="40" y="104" className="fill-muted-foreground font-sans text-[11px] italic">transcript, handed off in the background</text>
 
-      <DgBox
-        x={180}
-        y={116}
-        w={320}
-        h={52}
-        title="Retain"
-        sub="one background invoke — your answer already shipped"
-        tone="compute"
-      />
+          <rect x="40" y="152" width="280" height="76" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="56" y="178" className="fill-foreground font-sans text-[15px] font-semibold">AgentCore Memory</text>
+          <text x="56" y="198" className="fill-muted-foreground font-sans text-[11px]">extraction on its own schedule —</text>
+          <text x="56" y="214" className="fill-muted-foreground font-sans text-[11px]">facts · preferences · summaries · episodes</text>
 
-      <DgArrow
-        d="M 340 168 L 340 200"
-        label="CreateEvent"
-        labelAt={[340, 184]}
-      />
-      {/* the explicit shelf writes straight into the store */}
-      <DgArrow d="M 86 168 L 86 262 L 136 262" dashed />
+          {/* fork right: the consolidation passes */}
+          <path d="M 450 82 L 450 112 L 580 112 L 580 146" fill="none" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#mf-arr)" />
+          <text x="512" y="104" className="fill-muted-foreground font-sans text-[11px] italic">re-read after it goes quiet</text>
 
-      <DgBox
-        x={140}
-        y={206}
-        w={400}
-        h={126}
-        title="Bedrock AgentCore Memory"
-        sub="background extraction, asynchronous and selective"
-        tone="storage"
-        align="top"
-      />
-      <DgChip x={158} y={258} label="facts" tone="storage" />
-      <DgChip x={222} y={258} label="preferences" tone="storage" />
-      <DgChip x={330} y={258} label="asked to remember" tone="storage" />
-      <DgChip x={158} y={290} label="session summary" tone="neutral" />
-      <DgChip x={288} y={290} label="episodes + reflections" tone="neutral" />
+          <rect x="440" y="152" width="280" height="76" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="456" y="178" className="fill-foreground font-sans text-[15px] font-semibold">Idle learner + nightly pass</text>
+          <text x="456" y="198" className="fill-muted-foreground font-sans text-[11px]">read the thread record and your</text>
+          <text x="456" y="214" className="fill-muted-foreground font-sans text-[11px]">existing notes, then sort and promote</text>
 
-      <DgLabel x={20} y={370} text="Overnight" />
-      <DgArrow d="M 340 332 L 340 388" label="read back" labelAt={[340, 360]} />
+          <line x1="580" y1="228" x2="580" y2="284" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#mf-arr)" />
+          <text x="592" y="260" className="fill-muted-foreground font-sans text-[11px] italic">writes markdown</text>
 
-      <DgBox
-        x={180}
-        y={392}
-        w={320}
-        h={52}
-        title="Idle learner + nightly consolidation"
-        sub="notice, reflect, promote, compact"
-        tone="compute"
-      />
+          <rect x="440" y="290" width="280" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="456" y="316" className="fill-foreground font-sans text-[15px] font-semibold">memory/ notes</text>
+          <text x="456" y="336" className="fill-muted-foreground font-sans text-[11px]">MEMORY.md · DREAMS.md · candidates/</text>
 
-      <DgArrow d="M 340 444 L 340 476" />
+          {/* the later turn, and the two read paths */}
+          <rect x="270" y="408" width="220" height="62" rx="8" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="286" y="434" className="fill-foreground font-sans text-[15px] font-semibold">A later turn</text>
+          <text x="286" y="454" className="fill-muted-foreground font-sans text-[11px]">in any thread</text>
 
-      <DgBox
-        x={140}
-        y={482}
-        w={400}
-        h={100}
-        title="Your memory notes"
-        sub="markdown in your workspace, versioned on every write"
-        tone="graph"
-        align="top"
-      />
-      <DgChip x={158} y={534} label="MEMORY.md" tone="graph" />
-      <DgChip x={252} y={534} label="DREAMS.md" tone="graph" />
-      <DgChip x={346} y={534} label="candidates/" tone="graph" />
-      <DgChip x={444} y={534} label="working/" tone="graph" />
+          <path d="M 580 352 L 580 439 L 496 439" fill="none" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#mf-arr)" />
+          <text x="592" y="388" className="fill-muted-foreground font-sans text-[11px] italic">mounted —</text>
+          <text x="592" y="404" className="fill-muted-foreground font-sans text-[11px] italic">read every turn</text>
 
-      <DgLabel x={20} y={608} text="Later turns" />
-      <DgArrow d="M 340 582 L 340 620" label="mounted" labelAt={[340, 601]} />
-
-      <DgBox
-        x={180}
-        y={626}
-        w={320}
-        h={52}
-        title="The next turn, in any thread"
-        tone="consumer"
-      />
-
-      {/* the recall lane: extracted memory only arrives if the agent asks */}
-      <DgArrow
-        d="M 540 262 L 604 262 L 604 652 L 504 652"
-        dashed
-        label="recall(query)"
-        labelAt={[604, 420]}
-      />
-
-      <DgGroup x={20} y={626} w={132} h={52} />
-      <text x={34} y={648} fontSize="10" fill="var(--muted-foreground)">
-        Notes sit in the
-      </text>
-      <text x={34} y={664} fontSize="10" fill="var(--muted-foreground)">
-        workspace; memory
-      </text>
-      <text x={34} y={680} fontSize="10" fill="var(--muted-foreground)">
-        has to be asked for.
-      </text>
-    </Diagram>
+          <path d="M 180 228 L 180 439 L 264 439" fill="none" className="stroke-muted-foreground" strokeWidth="1.3" strokeDasharray="4 3" markerEnd="url(#mf-arr)" />
+          <text x="60" y="388" className="fill-muted-foreground font-sans text-[11px] italic">recall(query) —</text>
+          <text x="60" y="404" className="fill-muted-foreground font-sans text-[11px] italic">only if the agent asks</text>
+        </svg>
+      </div>
+      <figcaption className="mt-2 font-sans text-[13px] leading-6 text-muted-foreground">
+        Both branches run after your answer has already shipped, and neither
+        blocks it. The asymmetry at the bottom is the one to remember: notes
+        are simply there on the next turn; extracted memory has to be asked
+        for.
+      </figcaption>
+    </figure>
   );
 }
 
 /**
- * What the model is holding when a turn begins, in the order the composer
- * actually emits it, versus what the model has to go and fetch. The split
- * between the two upper bands and the lower one is the whole point.
+ * What the model is holding when a turn begins — the cached system prompt
+ * in the order the composer emits it, then the per-turn block — versus
+ * what it has to go and fetch. The dashed boundary into the bottom band is
+ * the whole point.
  */
 export function ContextCompositionDiagram() {
   return (
-    <Diagram
-      title="The system prompt is assembled in a fixed order from policy blocks, workspace files and rosters; the turn prompt adds the date, the requester and recent history; skill bodies, memory and outside data are fetched with tools during the turn"
-      viewBox="0 0 680 716"
-      caption="Everything in the two upper bands is in front of the model before it writes a token. Everything in the lower band costs a tool call — which is why an agent that 'should have known' something often simply never went and looked."
-    >
-      <DgGroup
-        x={20}
-        y={26}
-        w={640}
-        h={386}
-        label="In the system prompt, in this order"
-      />
+    <figure className="pt-1">
+      <div>
+        <svg
+          viewBox="0 0 760 584"
+          role="img"
+          aria-label="The system prompt is assembled in a fixed order from policy blocks, the sub-agent roster, workspace files, the skill roster, and attachment previews plus a withheld-capability notice; the turn prompt adds the date, the requester and recent history; skill bodies, memory records and outside data are fetched with tool calls during the turn"
+          className="block h-auto w-full"
+        >
+          <defs>
+            <marker
+              id="cc-arr"
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 1 L 9 5 L 0 9 z" className="fill-muted-foreground" />
+            </marker>
+          </defs>
 
-      <DgBox
-        x={40}
-        y={56}
-        w={600}
-        h={44}
-        title="Requester profile policy"
-        sub="use the profile file first; use memory tools when asked to prove it"
-        tone="neutral"
-      />
-      <DgBox
-        x={40}
-        y={108}
-        w={600}
-        h={44}
-        title="Tool policy"
-        sub="written from the tools this turn actually has"
-        tone="compute"
-      />
-      <DgBox
-        x={40}
-        y={160}
-        w={600}
-        h={44}
-        title="Sub-agent roster"
-        sub="each one's description — never its instructions"
-        tone="compute"
-      />
+          {/* band 1: the system prompt */}
+          <rect x="20" y="30" width="720" height="272" rx="10" className="fill-none stroke-muted-foreground/40" strokeWidth="1" strokeDasharray="5 4" />
+          <text x="36" y="20" className="fill-muted-foreground font-sans text-[11px] font-semibold tracking-[0.08em] uppercase">The system prompt — stable, cached between turns</text>
 
-      <DgBox
-        x={40}
-        y={212}
-        w={600}
-        h={86}
-        title="Workspace files, verbatim"
-        sub="the only blocks a person writes by hand"
-        tone="source"
-        align="top"
-      />
-      <DgChip x={58} y={262} label="INSTRUCTIONS.md" tone="source" />
-      <DgChip x={166} y={262} label="CONTEXT.md" tone="source" />
-      <DgChip x={246} y={262} label="GUARDRAILS.md" tone="source" />
-      <DgChip x={343} y={262} label="SPACE.md" tone="source" />
-      <DgChip x={412} y={262} label="USER.md" tone="source" />
+          <rect x="40" y="46" width="680" height="40" rx="6" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="56" y="71" className="fill-foreground font-sans text-[13px] font-semibold">Profile &amp; tool policy</text>
+          <text x="230" y="71" className="fill-muted-foreground font-sans text-[11px]">written by the platform from the tools this turn actually has</text>
 
-      <DgBox
-        x={40}
-        y={306}
-        w={600}
-        h={44}
-        title="Skill roster"
-        sub="each skill's name and description — never its body"
-        tone="source"
-      />
-      <DgBox
-        x={40}
-        y={358}
-        w={600}
-        h={44}
-        title="Attachments, and a notice of anything withheld"
-        tone="neutral"
-      />
+          <rect x="40" y="94" width="680" height="40" rx="6" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="56" y="119" className="fill-foreground font-sans text-[13px] font-semibold">Sub-agent roster</text>
+          <text x="230" y="119" className="fill-muted-foreground font-sans text-[11px]">each one&apos;s description — never its instructions</text>
 
-      <DgArrow d="M 340 412 L 340 442" />
+          <rect x="40" y="142" width="680" height="56" rx="6" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="56" y="167" className="fill-foreground font-sans text-[13px] font-semibold">Workspace files, verbatim and in order</text>
+          <text x="56" y="187" className="fill-muted-foreground font-sans text-[11px]">INSTRUCTIONS.md · CONTEXT.md · GUARDRAILS.md · SPACE.md · User/USER.md</text>
 
-      <DgGroup x={20} y={446} w={640} h={104} label="In the turn prompt" />
-      <DgBox
-        x={40}
-        y={476}
-        w={290}
-        h={56}
-        title="Today's date, who is asking"
-        tone="consumer"
-      />
-      <DgBox
-        x={350}
-        y={476}
-        w={290}
-        h={56}
-        title="Recent history, then your message"
-        tone="consumer"
-      />
+          <rect x="40" y="206" width="680" height="40" rx="6" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="56" y="231" className="fill-foreground font-sans text-[13px] font-semibold">Skill roster</text>
+          <text x="230" y="231" className="fill-muted-foreground font-sans text-[11px]">each skill&apos;s name and description — never its body</text>
 
-      <DgArrow
-        d="M 340 550 L 340 580"
-        dashed
-        label="tool calls"
-        labelAt={[340, 565]}
-      />
+          <rect x="40" y="254" width="680" height="40" rx="6" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="56" y="279" className="fill-foreground font-sans text-[13px] font-semibold">Attachment previews + withheld notice</text>
+          <text x="360" y="279" className="fill-muted-foreground font-sans text-[11px]">what was granted but could not load, and why</text>
 
-      <DgGroup x={20} y={584} w={640} h={110} label="Fetched during the turn" />
-      <DgBox
-        x={40}
-        y={614}
-        w={190}
-        h={62}
-        title="Skill body"
-        sub="read when it applies"
-        tone="storage"
-      />
-      <DgBox
-        x={245}
-        y={614}
-        w={190}
-        h={62}
-        title="Long-term memory"
-        sub="only if the agent asks"
-        tone="storage"
-      />
-      <DgBox
-        x={450}
-        y={614}
-        w={190}
-        h={62}
-        title="Files and connectors"
-        sub="everything outside"
-        tone="storage"
-      />
-    </Diagram>
+          <line x1="380" y1="302" x2="380" y2="336" className="stroke-muted-foreground" strokeWidth="1.3" markerEnd="url(#cc-arr)" />
+
+          {/* band 2: the turn prompt */}
+          <rect x="20" y="356" width="720" height="90" rx="10" className="fill-none stroke-muted-foreground/40" strokeWidth="1" strokeDasharray="5 4" />
+          <text x="36" y="346" className="fill-muted-foreground font-sans text-[11px] font-semibold tracking-[0.08em] uppercase">The turn prompt — changes every turn</text>
+
+          <rect x="40" y="374" width="330" height="54" rx="6" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="56" y="399" className="fill-foreground font-sans text-[13px] font-semibold">Today&apos;s date, who is asking</text>
+          <text x="56" y="417" className="fill-muted-foreground font-sans text-[11px]">kept out of the cached half on purpose</text>
+
+          <rect x="390" y="374" width="330" height="54" rx="6" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="406" y="399" className="fill-foreground font-sans text-[13px] font-semibold">Recent history, then your message</text>
+          <text x="406" y="417" className="fill-muted-foreground font-sans text-[11px]">the last 30 messages of the thread</text>
+
+          <line x1="380" y1="446" x2="380" y2="480" className="stroke-muted-foreground" strokeWidth="1.3" strokeDasharray="4 3" markerEnd="url(#cc-arr)" />
+          <text x="392" y="468" className="fill-muted-foreground font-sans text-[11px] italic">tool calls</text>
+
+          {/* band 3: fetched during the turn */}
+          <rect x="20" y="500" width="720" height="76" rx="10" className="fill-none stroke-muted-foreground/40" strokeWidth="1" strokeDasharray="5 4" />
+          <text x="36" y="490" className="fill-muted-foreground font-sans text-[11px] font-semibold tracking-[0.08em] uppercase">Fetched only when the agent asks</text>
+
+          <rect x="40" y="514" width="213" height="48" rx="6" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="56" y="536" className="fill-foreground font-sans text-[13px] font-semibold">Skill bodies</text>
+          <text x="56" y="553" className="fill-muted-foreground font-sans text-[11px]">read when one applies</text>
+
+          <rect x="273" y="514" width="213" height="48" rx="6" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="289" y="536" className="fill-foreground font-sans text-[13px] font-semibold">Memory records</text>
+          <text x="289" y="553" className="fill-muted-foreground font-sans text-[11px]">via a recall the agent runs</text>
+
+          <rect x="507" y="514" width="213" height="48" rx="6" className="fill-card stroke-teal-400/50" strokeWidth="1.5" />
+          <text x="523" y="536" className="fill-foreground font-sans text-[13px] font-semibold">Files &amp; connectors</text>
+          <text x="523" y="553" className="fill-muted-foreground font-sans text-[11px]">everything outside the prompt</text>
+        </svg>
+      </div>
+      <figcaption className="mt-2 font-sans text-[13px] leading-6 text-muted-foreground">
+        Everything in the two upper bands is in front of the model before it
+        writes a token. Everything in the lower band costs a tool call —
+        which is why an agent that &ldquo;should have known&rdquo; something
+        often simply never went and looked.
+      </figcaption>
+    </figure>
   );
 }
 
