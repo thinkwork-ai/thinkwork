@@ -111,6 +111,7 @@ type Documents = {
     "\n  mutation SettingsRenameTenantSlug($tenantId: ID!, $newSlug: String!) {\n    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {\n      id\n      slug\n      updatedAt\n    }\n  }\n": typeof types.SettingsRenameTenantSlugDocument,
     "\n  query SettingsTenantFeatures($id: ID!) {\n    tenant(id: $id) {\n      id\n      settings {\n        id\n        features\n      }\n    }\n  }\n": typeof types.SettingsTenantFeaturesDocument,
     "\n  mutation SettingsUpdateTenantArtifactStyle(\n    $tenantId: ID!\n    $input: UpdateTenantSettingsInput!\n  ) {\n    updateTenantSettings(tenantId: $tenantId, input: $input) {\n      id\n      features\n      updatedAt\n    }\n  }\n": typeof types.SettingsUpdateTenantArtifactStyleDocument,
+    "\n  mutation SettingsUpdateTenantBranding(\n    $tenantId: ID!\n    $input: UpdateTenantSettingsInput!\n  ) {\n    updateTenantSettings(tenantId: $tenantId, input: $input) {\n      id\n      features\n      updatedAt\n    }\n  }\n": typeof types.SettingsUpdateTenantBrandingDocument,
     "\n  query SettingsSpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": typeof types.SettingsSpacesListDocument,
     "\n  mutation SettingsCreateSpace($input: CreateSpaceInput!) {\n    createSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": typeof types.SettingsCreateSpaceDocument,
     "\n  query SettingsSpace($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      slug\n      config\n      renderDiagnostics\n      toolPolicy\n      mcpPolicy\n      builtInTools\n    }\n  }\n": typeof types.SettingsSpaceDocument,
@@ -283,6 +284,7 @@ const documents: Documents = {
     "\n  mutation SettingsRenameTenantSlug($tenantId: ID!, $newSlug: String!) {\n    renameTenantSlug(tenantId: $tenantId, newSlug: $newSlug) {\n      id\n      slug\n      updatedAt\n    }\n  }\n": types.SettingsRenameTenantSlugDocument,
     "\n  query SettingsTenantFeatures($id: ID!) {\n    tenant(id: $id) {\n      id\n      settings {\n        id\n        features\n      }\n    }\n  }\n": types.SettingsTenantFeaturesDocument,
     "\n  mutation SettingsUpdateTenantArtifactStyle(\n    $tenantId: ID!\n    $input: UpdateTenantSettingsInput!\n  ) {\n    updateTenantSettings(tenantId: $tenantId, input: $input) {\n      id\n      features\n      updatedAt\n    }\n  }\n": types.SettingsUpdateTenantArtifactStyleDocument,
+    "\n  mutation SettingsUpdateTenantBranding(\n    $tenantId: ID!\n    $input: UpdateTenantSettingsInput!\n  ) {\n    updateTenantSettings(tenantId: $tenantId, input: $input) {\n      id\n      features\n      updatedAt\n    }\n  }\n": types.SettingsUpdateTenantBrandingDocument,
     "\n  query SettingsSpacesList($tenantId: ID!) {\n    spaces(tenantId: $tenantId, status: ACTIVE, includeAllForAdmin: true) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": types.SettingsSpacesListDocument,
     "\n  mutation SettingsCreateSpace($input: CreateSpaceInput!) {\n    createSpace(input: $input) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      updatedAt\n    }\n  }\n": types.SettingsCreateSpaceDocument,
     "\n  query SettingsSpace($id: ID!) {\n    space(id: $id) {\n      id\n      tenantId\n      name\n      description\n      status\n      accessMode\n      slug\n      config\n      renderDiagnostics\n      toolPolicy\n      mcpPolicy\n      builtInTools\n    }\n  }\n": types.SettingsSpaceDocument,
@@ -760,6 +762,10 @@ export function graphql(source: "\n  query SettingsTenantFeatures($id: ID!) {\n 
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation SettingsUpdateTenantArtifactStyle(\n    $tenantId: ID!\n    $input: UpdateTenantSettingsInput!\n  ) {\n    updateTenantSettings(tenantId: $tenantId, input: $input) {\n      id\n      features\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation SettingsUpdateTenantArtifactStyle(\n    $tenantId: ID!\n    $input: UpdateTenantSettingsInput!\n  ) {\n    updateTenantSettings(tenantId: $tenantId, input: $input) {\n      id\n      features\n      updatedAt\n    }\n  }\n"];
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SettingsUpdateTenantBranding(\n    $tenantId: ID!\n    $input: UpdateTenantSettingsInput!\n  ) {\n    updateTenantSettings(tenantId: $tenantId, input: $input) {\n      id\n      features\n      updatedAt\n    }\n  }\n"): (typeof documents)["\n  mutation SettingsUpdateTenantBranding(\n    $tenantId: ID!\n    $input: UpdateTenantSettingsInput!\n  ) {\n    updateTenantSettings(tenantId: $tenantId, input: $input) {\n      id\n      features\n      updatedAt\n    }\n  }\n"];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
