@@ -55,6 +55,8 @@ import {
   brandingFromFeatures,
   normalizeFeatures,
   DEFAULT_HEADER_TEXT,
+  DEFAULT_LOGO_HEIGHT_PX,
+  LOGO_SIZE_OPTIONS,
   MAX_HEADER_TEXT_LENGTH,
   MAX_LOGO_BYTES,
   type TenantBranding,
@@ -1211,6 +1213,9 @@ function BrandingRows() {
         ...(next.headerText !== undefined
           ? { headerText: next.headerText }
           : {}),
+        ...(next.logoHeightPx !== undefined
+          ? { logoHeightPx: next.logoHeightPx }
+          : {}),
         updatedAt: new Date().toISOString(),
       },
     };
@@ -1301,6 +1306,31 @@ function BrandingRows() {
           </label>
         </div>
       </SettingsRow>
+      {branding.logoDataUrl ? (
+        <SettingsRow
+          label="Logo Size"
+          description="Logo height in the navigation headers when Header Text is blank (logo-only mode)."
+        >
+          <Select
+            value={String(branding.logoHeightPx ?? DEFAULT_LOGO_HEIGHT_PX)}
+            onValueChange={(v) =>
+              void saveBranding({ ...branding, logoHeightPx: Number(v) })
+            }
+            disabled={saving}
+          >
+            <SelectTrigger className="w-40" data-testid="branding-logo-size">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LOGO_SIZE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.px} value={String(opt.px)}>
+                  {opt.label} ({opt.px}px)
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </SettingsRow>
+      ) : null}
       <SettingsRow
         label="Header Text"
         description="Shown next to the logo in the navigation headers. Leave blank to show only the logo."

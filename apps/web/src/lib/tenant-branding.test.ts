@@ -44,12 +44,35 @@ describe("brandingFromFeatures", () => {
   });
 });
 
+describe("logoHeightPx", () => {
+  it("passes through a saved size and clamps out-of-range values", () => {
+    expect(
+      brandingFromFeatures({ branding: { logoHeightPx: 56 } }).logoHeightPx,
+    ).toBe(56);
+    expect(
+      brandingFromFeatures({ branding: { logoHeightPx: 400 } }).logoHeightPx,
+    ).toBe(64);
+    expect(
+      brandingFromFeatures({ branding: { logoHeightPx: 4 } }).logoHeightPx,
+    ).toBe(20);
+    expect(
+      brandingFromFeatures({ branding: { logoHeightPx: "big" } }).logoHeightPx,
+    ).toBeUndefined();
+  });
+
+  it("resolves the saved size and defaults to 28", () => {
+    expect(resolveBranding({ logoHeightPx: 56 }).logoHeightPx).toBe(56);
+    expect(resolveBranding({}).logoHeightPx).toBe(28);
+  });
+});
+
 describe("resolveBranding", () => {
   it("falls back to the defaults when nothing is set", () => {
     expect(resolveBranding({})).toEqual({
       logoSrc: DEFAULT_LOGO_SRC,
       isCustomLogo: false,
       headerText: DEFAULT_HEADER_TEXT,
+      logoHeightPx: 28,
     });
   });
 
@@ -58,6 +81,7 @@ describe("resolveBranding", () => {
       logoSrc: LOGO,
       isCustomLogo: true,
       headerText: "Acme",
+      logoHeightPx: 28,
     });
   });
 
