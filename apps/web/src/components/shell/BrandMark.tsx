@@ -37,7 +37,8 @@ export function PoweredByThinkWork({ className }: { className?: string }) {
 }
 
 export function BrandMark({ collapsible = false }: { collapsible?: boolean }) {
-  const { logoSrc, isCustomLogo, headerText, loaded } = useTenantBranding();
+  const { logoSrc, isCustomLogo, headerText, logoHeightPx, loaded } =
+    useTenantBranding();
   const textRef = useRef<HTMLSpanElement>(null);
 
   useLayoutEffect(() => {
@@ -74,14 +75,22 @@ export function BrandMark({ collapsible = false }: { collapsible?: boolean }) {
         className={cn(
           "shrink-0 object-contain",
           // Custom logos render smaller alongside text so a full company
-          // name still fits; logo-only mode gets the full header height.
+          // name still fits; logo-only mode gets the configurable Logo Size
+          // height (inline style below) so a full lockup can fill the header.
           isCustomLogo
             ? headerText
               ? "h-4.5 w-auto max-w-24 object-left"
-              : "h-7 w-auto max-w-44 object-left"
+              : "ml-1 h-(--brand-logo-h) w-auto max-w-52 object-left group-data-[collapsible=icon]:ml-0"
             : "h-7 w-7",
-          collapsible && isCustomLogo && "group-data-[collapsible=icon]:w-7",
+          collapsible &&
+            isCustomLogo &&
+            "group-data-[collapsible=icon]:h-7 group-data-[collapsible=icon]:w-7",
         )}
+        style={
+          isCustomLogo && !headerText
+            ? ({ "--brand-logo-h": `${logoHeightPx}px` } as React.CSSProperties)
+            : undefined
+        }
       />
       {headerText ? (
         <span
