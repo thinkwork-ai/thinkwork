@@ -114,7 +114,9 @@ export function SpacesSidebar() {
               signOut();
             }}
           />
-          <PoweredByThinkWork />
+          {/* Tuck the attribution right under the Settings row — the
+              footer's own gap already provides enough separation. */}
+          <PoweredByThinkWork className="-mt-1 px-2 pb-1 pt-0" />
         </SidebarFooter>
       </Sidebar>
     </SidebarHealthProvider>

@@ -21,11 +21,16 @@ const MIN_BRAND_FONT_PX = 11;
  * Attribution line at the bottom of the nav sidebars, shown only when the
  * tenant runs a custom (white-label) logo.
  */
-export function PoweredByThinkWork() {
+export function PoweredByThinkWork({ className }: { className?: string }) {
   const { isCustomLogo, loaded } = useTenantBranding();
   if (!loaded || !isCustomLogo) return null;
   return (
-    <div className="px-3 pb-2 pt-1 text-[11px] leading-none text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">
+    <div
+      className={cn(
+        "px-3 pb-2 pt-1 text-[11px] leading-none text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden",
+        className,
+      )}
+    >
       Powered by ThinkWork
     </div>
   );
