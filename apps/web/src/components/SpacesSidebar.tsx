@@ -34,7 +34,7 @@ import {
   useSidebar,
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
-import { BrandMark } from "@/components/shell/BrandMark";
+import { BrandMark, PoweredByThinkWork } from "@/components/shell/BrandMark";
 import { ChatSidebar } from "@/components/shell/ChatSidebar";
 import {
   SidebarHealthProvider,
@@ -114,6 +114,7 @@ export function SpacesSidebar() {
               signOut();
             }}
           />
+          <PoweredByThinkWork />
         </SidebarFooter>
       </Sidebar>
     </SidebarHealthProvider>

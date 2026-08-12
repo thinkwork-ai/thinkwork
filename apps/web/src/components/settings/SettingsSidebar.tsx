@@ -2,7 +2,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
-import { BrandMark } from "@/components/shell/BrandMark";
+import { BrandMark, PoweredByThinkWork } from "@/components/shell/BrandMark";
 import { getSettingsReturnTo } from "@/lib/settings-return";
 import { visibleSettingsNavItems } from "@/components/settings/settings-nav";
 
@@ -96,6 +96,7 @@ export function SettingsSidebar({
             })}
           </div>
         </nav>
+        <PoweredByThinkWork />
       </div>
     </aside>
   );

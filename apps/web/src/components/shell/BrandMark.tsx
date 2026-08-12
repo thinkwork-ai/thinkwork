@@ -17,6 +17,20 @@ const MIN_BRAND_FONT_PX = 11;
  * `collapsible` adds the icon-rail behavior used by the main app sidebar
  * (text hides, a wide custom logo shrinks into the w-7 slot).
  */
+/**
+ * Attribution line at the bottom of the nav sidebars, shown only when the
+ * tenant runs a custom (white-label) logo.
+ */
+export function PoweredByThinkWork() {
+  const { isCustomLogo, loaded } = useTenantBranding();
+  if (!loaded || !isCustomLogo) return null;
+  return (
+    <div className="px-3 pb-2 pt-1 text-[11px] leading-none text-sidebar-foreground/45 group-data-[collapsible=icon]:hidden">
+      Powered by ThinkWork
+    </div>
+  );
+}
+
 export function BrandMark({ collapsible = false }: { collapsible?: boolean }) {
   const { logoSrc, isCustomLogo, headerText, loaded } = useTenantBranding();
   const textRef = useRef<HTMLSpanElement>(null);
