@@ -4,6 +4,7 @@ import { useMutation, useQuery } from "urql";
 import { toast } from "sonner";
 import {
   Button,
+  Input,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -32,6 +33,8 @@ import {
   useEditorWrap,
 } from "@/lib/editor-prefs";
 import {
+  SettingsTenantFeaturesQuery,
+  SettingsUpdateTenantBrandingMutation,
   SettingsDeploymentReleasesQuery,
   SettingsDeploymentStatusQuery,
   SettingsConfigureEmailProviderMutation,
@@ -48,6 +51,14 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsContent";
 import { SetUpMobileCard } from "@/components/settings/SetUpMobileCard";
+import {
+  brandingFromFeatures,
+  normalizeFeatures,
+  DEFAULT_HEADER_TEXT,
+  MAX_HEADER_TEXT_LENGTH,
+  MAX_LOGO_BYTES,
+  type TenantBranding,
+} from "@/lib/tenant-branding";
 
 export function SettingsGeneral() {
   const { isOperator, roleResolved } = useTenant();
@@ -79,6 +90,7 @@ export function SettingsGeneral() {
         <ThemeRow />
         <EditorFontSizeRow />
         <EditorWrapRow />
+        {showOperator ? <BrandingRows /> : null}
       </SettingsSection>
 
       {showOperator ? (
@@ -1154,6 +1166,173 @@ function EditorFontSizeRow() {
         </SelectContent>
       </Select>
     </SettingsRow>
+  );
+}
+
+// Accepted logo formats; the file is stored as a data URL on
+// tenant_settings.features.branding, so SVG/PNG with transparency work best.
+const LOGO_MIME_TYPES = [
+  "image/png",
+  "image/svg+xml",
+  "image/jpeg",
+  "image/webp",
+];
+
+function BrandingRows() {
+  const { tenantId } = useTenant();
+  const [{ data }, refetch] = useQuery({
+    query: SettingsTenantFeaturesQuery,
+    variables: { id: tenantId ?? "" },
+    pause: !tenantId,
+  });
+  const [{ fetching: saving }, updateBranding] = useMutation(
+    SettingsUpdateTenantBrandingMutation,
+  );
+
+  const features = useMemo(
+    () => normalizeFeatures(data?.tenant?.settings?.features),
+    [data?.tenant?.settings?.features],
+  );
+  const branding = useMemo(() => brandingFromFeatures(features), [features]);
+
+  // null = untouched (mirror the saved value); string = user is editing.
+  const [textDraft, setTextDraft] = useState<string | null>(null);
+  const headerTextValue = textDraft ?? branding.headerText ?? "";
+  const textDirty =
+    textDraft !== null &&
+    textDraft.trim() !== (branding.headerText ?? "").trim();
+
+  async function saveBranding(next: TenantBranding) {
+    if (!tenantId) return;
+    const nextFeatures = {
+      ...features,
+      branding: {
+        ...(next.logoDataUrl ? { logoDataUrl: next.logoDataUrl } : {}),
+        ...(next.headerText !== undefined
+          ? { headerText: next.headerText }
+          : {}),
+        updatedAt: new Date().toISOString(),
+      },
+    };
+    const result = await updateBranding({
+      tenantId,
+      input: { features: JSON.stringify(nextFeatures) },
+    });
+    if (result.error) {
+      toast.error(`Could not save branding: ${result.error.message}`);
+      return;
+    }
+    toast.success("Branding updated");
+    setTextDraft(null);
+    refetch({ requestPolicy: "network-only" });
+  }
+
+  function handleLogoFile(file: File | undefined) {
+    if (!file) return;
+    if (!LOGO_MIME_TYPES.includes(file.type)) {
+      toast.error("Logo must be a PNG, SVG, JPEG, or WebP image.");
+      return;
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      toast.error(
+        `Logo file is too large (max ${Math.round(MAX_LOGO_BYTES / 1024)} KB).`,
+      );
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : null;
+      if (!dataUrl) {
+        toast.error("Could not read that image file.");
+        return;
+      }
+      void saveBranding({ ...branding, logoDataUrl: dataUrl });
+    };
+    reader.onerror = () => toast.error("Could not read that image file.");
+    reader.readAsDataURL(file);
+  }
+
+  return (
+    <>
+      <SettingsRow
+        label="Logo"
+        description="Replaces the app logo in the navigation headers. PNG or SVG with a transparent background works best."
+      >
+        <div className="flex items-center gap-2">
+          {branding.logoDataUrl ? (
+            <>
+              <img
+                src={branding.logoDataUrl}
+                alt="Custom logo"
+                className="h-8 max-w-36 rounded-sm object-contain"
+                data-testid="branding-logo-preview"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={saving}
+                onClick={() =>
+                  void saveBranding({
+                    headerText: branding.headerText,
+                  })
+                }
+                data-testid="branding-logo-remove"
+              >
+                Remove
+              </Button>
+            </>
+          ) : null}
+          <label>
+            <input
+              type="file"
+              accept={LOGO_MIME_TYPES.join(",")}
+              className="sr-only"
+              disabled={saving}
+              onChange={(event) => {
+                handleLogoFile(event.currentTarget.files?.[0]);
+                event.currentTarget.value = "";
+              }}
+              data-testid="branding-logo-input"
+            />
+            <span className="inline-flex h-8 cursor-pointer items-center rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+              {branding.logoDataUrl ? "Replace…" : "Upload…"}
+            </span>
+          </label>
+        </div>
+      </SettingsRow>
+      <SettingsRow
+        label="Header Text"
+        description="Shown next to the logo in the navigation headers. Leave blank to show only the logo."
+      >
+        <div className="flex items-center gap-2">
+          <Input
+            value={headerTextValue}
+            maxLength={MAX_HEADER_TEXT_LENGTH}
+            placeholder={
+              branding.logoDataUrl ? "Logo only" : DEFAULT_HEADER_TEXT
+            }
+            className="w-56"
+            onChange={(event) => setTextDraft(event.target.value)}
+            data-testid="branding-header-text"
+          />
+          <Button
+            type="button"
+            size="sm"
+            disabled={saving || !textDirty}
+            onClick={() =>
+              void saveBranding({
+                ...branding,
+                headerText: (textDraft ?? "").trim(),
+              })
+            }
+            data-testid="branding-header-text-save"
+          >
+            Save
+          </Button>
+        </div>
+      </SettingsRow>
+    </>
   );
 }
 

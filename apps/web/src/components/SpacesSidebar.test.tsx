@@ -82,6 +82,7 @@ vi.mock("@tanstack/react-router", () => ({
   },
 }));
 vi.mock("@thinkwork/ui", () => ({
+  cn: (...classes: unknown[]) => classes.filter(Boolean).join(" "),
   TooltipIconButton: ({
     children,
     label,

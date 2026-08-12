@@ -450,6 +450,21 @@ export const SettingsUpdateTenantArtifactStyleMutation = graphql(`
   }
 `);
 
+// ─── Branding (operator-only white-label logo/header text) ───────────────
+
+export const SettingsUpdateTenantBrandingMutation = graphql(`
+  mutation SettingsUpdateTenantBranding(
+    $tenantId: ID!
+    $input: UpdateTenantSettingsInput!
+  ) {
+    updateTenantSettings(tenantId: $tenantId, input: $input) {
+      id
+      features
+      updatedAt
+    }
+  }
+`);
+
 // ─── Spaces (operator-only section) ──────────────────────────────────────
 
 export const SettingsSpacesListQuery = graphql(`

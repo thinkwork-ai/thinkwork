@@ -34,6 +34,7 @@ import {
   useSidebar,
 } from "@thinkwork/ui";
 import { useAuth } from "@/context/AuthContext";
+import { BrandMark, PoweredByThinkWork } from "@/components/shell/BrandMark";
 import { ChatSidebar } from "@/components/shell/ChatSidebar";
 import {
   SidebarHealthProvider,
@@ -88,14 +89,7 @@ export function SpacesSidebar() {
               }}
               className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
             >
-              <img
-                src="/logo.png"
-                alt="ThinkWork Agent"
-                className="h-7 w-7 shrink-0 object-contain"
-              />
-              <span className="truncate text-base font-semibold leading-none tracking-tight group-data-[collapsible=icon]:hidden">
-                ThinkWork Agent
-              </span>
+              <BrandMark collapsible />
             </Link>
           </div>
         </SidebarHeader>
@@ -120,6 +114,9 @@ export function SpacesSidebar() {
               signOut();
             }}
           />
+          {/* Tuck the attribution right under the Settings row — the
+              footer's own gap already provides enough separation. */}
+          <PoweredByThinkWork className="-mt-1 pb-1 pl-3.5 pr-2 pt-0" />
         </SidebarFooter>
       </Sidebar>
     </SidebarHealthProvider>

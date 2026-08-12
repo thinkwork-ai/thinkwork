@@ -22,6 +22,8 @@ const {
       "saveEmailProviderCredential",
     ),
     SettingsConfigureEmailProviderMutation: Symbol("configureEmailProvider"),
+    SettingsTenantFeaturesQuery: Symbol("tenantFeatures"),
+    SettingsUpdateTenantBrandingMutation: Symbol("updateTenantBranding"),
   },
   useQueryMock: vi.fn(),
   startPreflightMock: vi.fn(),

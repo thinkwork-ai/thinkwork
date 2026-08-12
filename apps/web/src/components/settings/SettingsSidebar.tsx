@@ -2,6 +2,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { cn } from "@thinkwork/ui";
 import { useTenant } from "@/context/TenantContext";
+import { BrandMark } from "@/components/shell/BrandMark";
 import { getSettingsReturnTo } from "@/lib/settings-return";
 import { visibleSettingsNavItems } from "@/components/settings/settings-nav";
 
@@ -40,14 +41,7 @@ export function SettingsSidebar({
           to="/"
           className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         >
-          <img
-            src="/logo.png"
-            alt="ThinkWork Agent"
-            className="h-7 w-7 shrink-0 object-contain"
-          />
-          <span className="truncate text-base font-semibold leading-none tracking-tight">
-            ThinkWork Agent
-          </span>
+          <BrandMark />
         </Link>
       </div>
       <div className="flex min-h-0 flex-1 flex-col pb-2 pt-0">
