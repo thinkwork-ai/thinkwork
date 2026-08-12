@@ -58,7 +58,7 @@ export function BrandMark({ collapsible = false }: { collapsible?: boolean }) {
           // name still fits; logo-only mode gets the full header height.
           isCustomLogo
             ? headerText
-              ? "h-5 w-auto max-w-24 object-left"
+              ? "h-4.5 w-auto max-w-24 object-left"
               : "h-7 w-auto max-w-44 object-left"
             : "h-7 w-7",
           collapsible && isCustomLogo && "group-data-[collapsible=icon]:w-7",
