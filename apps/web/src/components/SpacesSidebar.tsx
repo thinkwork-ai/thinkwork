@@ -116,7 +116,7 @@ export function SpacesSidebar() {
           />
           {/* Tuck the attribution right under the Settings row — the
               footer's own gap already provides enough separation. */}
-          <PoweredByThinkWork className="-mt-1 px-2 pb-1 pt-0" />
+          <PoweredByThinkWork className="-mt-1 pb-1 pl-3.5 pr-2 pt-0" />
         </SidebarFooter>
       </Sidebar>
     </SidebarHealthProvider>
