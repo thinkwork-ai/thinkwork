@@ -86,7 +86,7 @@ export function GithubAndGoogle() {
 
       <ReportSection id="google-workspace" title="Google Workspace">
         <p>
-          <strong>Settings → Connectors → Connections</strong> in the web app,
+          <strong>Settings → Connectors → Linked Accounts</strong> in the web app,
           or the <strong>Credential Locker</strong> on{" "}
           <DocLink slug="mobile-app">mobile</DocLink>. One row, one Connect
           button, a Google consent screen, done. The row then reads{" "}
@@ -215,7 +215,7 @@ export function GithubAndGoogle() {
           </li>
           <li>
             <strong>Disconnect is a real revoke.</strong> Disconnecting from
-            Connections or the Credential Locker deletes the stored credential
+            Linked Accounts or the Credential Locker deletes the stored credential
             outright. Work already done — threads, memories, artifacts —
             stays; it is a credential, not an eraser.
           </li>

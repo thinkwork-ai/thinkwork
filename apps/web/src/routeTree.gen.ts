@@ -64,6 +64,7 @@ import { Route as AuthedSettingsSkillsDraftsRouteImport } from "./routes/_authed
 import { Route as AuthedSettingsSkillsSkillSlugRouteImport } from "./routes/_authed/settings.skills.$skillSlug";
 import { Route as AuthedSettingsRoutinesRoutineIdRouteImport } from "./routes/_authed/settings.routines.$routineId";
 import { Route as AuthedSettingsMcpServersServersRouteImport } from "./routes/_authed/settings.mcp-servers.servers";
+import { Route as AuthedSettingsMcpServersAccountsRouteImport } from "./routes/_authed/settings.mcp-servers.accounts";
 import { Route as AuthedSettingsMcpServersServerIdRouteImport } from "./routes/_authed/settings.mcp-servers.$serverId";
 import { Route as AuthedSettingsEvaluationsProfilesRouteImport } from "./routes/_authed/settings.evaluations.profiles";
 import { Route as AuthedSettingsEvaluationsCompareRouteImport } from "./routes/_authed/settings.evaluations.compare";
@@ -402,6 +403,12 @@ const AuthedSettingsMcpServersServersRoute =
     path: "/mcp-servers/servers",
     getParentRoute: () => AuthedSettingsRoute,
   } as any);
+const AuthedSettingsMcpServersAccountsRoute =
+  AuthedSettingsMcpServersAccountsRouteImport.update({
+    id: "/mcp-servers/accounts",
+    path: "/mcp-servers/accounts",
+    getParentRoute: () => AuthedSettingsRoute,
+  } as any);
 const AuthedSettingsMcpServersServerIdRoute =
   AuthedSettingsMcpServersServerIdRouteImport.update({
     id: "/mcp-servers/$serverId",
@@ -665,6 +672,7 @@ export interface FileRoutesByFullPath {
   "/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
   "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
+  "/settings/mcp-servers/accounts": typeof AuthedSettingsMcpServersAccountsRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
@@ -752,6 +760,7 @@ export interface FileRoutesByTo {
   "/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
   "/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
+  "/settings/mcp-servers/accounts": typeof AuthedSettingsMcpServersAccountsRoute;
   "/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
   "/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
@@ -846,6 +855,7 @@ export interface FileRoutesById {
   "/_authed/settings/evaluations/compare": typeof AuthedSettingsEvaluationsCompareRoute;
   "/_authed/settings/evaluations/profiles": typeof AuthedSettingsEvaluationsProfilesRoute;
   "/_authed/settings/mcp-servers/$serverId": typeof AuthedSettingsMcpServersServerIdRoute;
+  "/_authed/settings/mcp-servers/accounts": typeof AuthedSettingsMcpServersAccountsRoute;
   "/_authed/settings/mcp-servers/servers": typeof AuthedSettingsMcpServersServersRoute;
   "/_authed/settings/routines/$routineId": typeof AuthedSettingsRoutinesRoutineIdRoute;
   "/_authed/settings/skills/$skillSlug": typeof AuthedSettingsSkillsSkillSlugRoute;
@@ -939,6 +949,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/compare"
     | "/settings/evaluations/profiles"
     | "/settings/mcp-servers/$serverId"
+    | "/settings/mcp-servers/accounts"
     | "/settings/mcp-servers/servers"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
@@ -1026,6 +1037,7 @@ export interface FileRouteTypes {
     | "/settings/evaluations/compare"
     | "/settings/evaluations/profiles"
     | "/settings/mcp-servers/$serverId"
+    | "/settings/mcp-servers/accounts"
     | "/settings/mcp-servers/servers"
     | "/settings/routines/$routineId"
     | "/settings/skills/$skillSlug"
@@ -1119,6 +1131,7 @@ export interface FileRouteTypes {
     | "/_authed/settings/evaluations/compare"
     | "/_authed/settings/evaluations/profiles"
     | "/_authed/settings/mcp-servers/$serverId"
+    | "/_authed/settings/mcp-servers/accounts"
     | "/_authed/settings/mcp-servers/servers"
     | "/_authed/settings/routines/$routineId"
     | "/_authed/settings/skills/$skillSlug"
@@ -1561,6 +1574,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthedSettingsMcpServersServersRouteImport;
       parentRoute: typeof AuthedSettingsRoute;
     };
+    "/_authed/settings/mcp-servers/accounts": {
+      id: "/_authed/settings/mcp-servers/accounts";
+      path: "/mcp-servers/accounts";
+      fullPath: "/settings/mcp-servers/accounts";
+      preLoaderRoute: typeof AuthedSettingsMcpServersAccountsRouteImport;
+      parentRoute: typeof AuthedSettingsRoute;
+    };
     "/_authed/settings/mcp-servers/$serverId": {
       id: "/_authed/settings/mcp-servers/$serverId";
       path: "/mcp-servers/$serverId";
@@ -1988,6 +2008,7 @@ interface AuthedSettingsRouteChildren {
   AuthedSettingsEvaluationsCompareRoute: typeof AuthedSettingsEvaluationsCompareRoute;
   AuthedSettingsEvaluationsProfilesRoute: typeof AuthedSettingsEvaluationsProfilesRoute;
   AuthedSettingsMcpServersServerIdRoute: typeof AuthedSettingsMcpServersServerIdRoute;
+  AuthedSettingsMcpServersAccountsRoute: typeof AuthedSettingsMcpServersAccountsRoute;
   AuthedSettingsMcpServersServersRoute: typeof AuthedSettingsMcpServersServersRoute;
   AuthedSettingsRoutinesRoutineIdRoute: typeof AuthedSettingsRoutinesRoutineIdRoute;
   AuthedSettingsSkillsSkillSlugRoute: typeof AuthedSettingsSkillsSkillSlugRoute;
@@ -2043,6 +2064,7 @@ const AuthedSettingsRouteChildren: AuthedSettingsRouteChildren = {
   AuthedSettingsEvaluationsProfilesRoute:
     AuthedSettingsEvaluationsProfilesRoute,
   AuthedSettingsMcpServersServerIdRoute: AuthedSettingsMcpServersServerIdRoute,
+  AuthedSettingsMcpServersAccountsRoute: AuthedSettingsMcpServersAccountsRoute,
   AuthedSettingsMcpServersServersRoute: AuthedSettingsMcpServersServersRoute,
   AuthedSettingsRoutinesRoutineIdRoute: AuthedSettingsRoutinesRoutineIdRoute,
   AuthedSettingsSkillsSkillSlugRoute: AuthedSettingsSkillsSkillSlugRoute,
