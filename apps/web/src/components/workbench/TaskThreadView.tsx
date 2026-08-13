@@ -98,6 +98,12 @@ import {
   type KnowledgeCitation,
 } from "@/components/ai-elements/sources";
 import {
+  DataSourcesCard,
+  dataCitationsFromInvocations,
+  type DataCitationRow,
+} from "@/components/ai-elements/data-sources";
+import { dataCitePanelId } from "@/lib/data-citation-panel";
+import {
   formatDuration,
   formatTurnHeader,
   isRunningStatus,
@@ -2268,6 +2274,17 @@ function ThreadTurnActivity({
     () => parseWorkspaceProjection(contextSnapshot),
     [contextSnapshot],
   );
+  // Data citations open in the same docked artifact panel cited knowledge
+  // documents use. Unlike those there is no URL to fall back to, so below md
+  // (where the panel is hidden) the click is a graceful no-op.
+  const { open: openPanel } = useThreadArtifactPanel(threadId ?? null);
+  const openDataCitation = useCallback(
+    (citation: DataCitationRow) => {
+      if (!window.matchMedia("(min-width: 768px)").matches) return;
+      openPanel(dataCitePanelId(citation));
+    },
+    [openPanel],
+  );
 
   if (!turn) return null;
 
@@ -2275,6 +2292,9 @@ function ThreadTurnActivity({
   const rows = actionRowsForTurn(turn, usage, message);
   const emailApprovalIds = emailApprovalIdsForTurn(usage);
   const knowledgeSources = knowledgeSourcesFromInvocations(
+    parseArray(usage.tool_invocations),
+  );
+  const dataCitations = dataCitationsFromInvocations(
     parseArray(usage.tool_invocations),
   );
 
@@ -2356,6 +2376,9 @@ function ThreadTurnActivity({
       </div>
       {knowledgeSources.length > 0 && !running ? (
         <KnowledgeSourcesCard sources={knowledgeSources} />
+      ) : null}
+      {dataCitations.length > 0 && !running ? (
+        <DataSourcesCard citations={dataCitations} onOpen={openDataCitation} />
       ) : null}
       {emailApprovalIds.map((approvalId) => (
         <InlineEmailApprovalCard key={approvalId} approvalId={approvalId} />
