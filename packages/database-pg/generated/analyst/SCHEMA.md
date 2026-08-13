@@ -4335,6 +4335,7 @@ Join hints:
 | is_operator | boolean | not null |
 | kb_trace | boolean | not null |
 | analytics_key | boolean | not null |
+| brain_subject | text |  |
 | enabled | boolean | not null |
 | notes | text |  |
 | created_at | timestamp with time zone | not null |

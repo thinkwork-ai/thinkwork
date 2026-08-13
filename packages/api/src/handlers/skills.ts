@@ -1423,11 +1423,86 @@ async function mcpOAuthCallback(
     `[mcp-oauth] Token stored for user ${state.userId}, MCP server ${state.mcpServerId}`,
   );
 
+  // Capture the Brain-pool subject this token actually carries (THINK-625
+  // backfill gap): the user-claims manifest's `subject` must match the
+  // Brain ACCESS token's sub, and users.cognito_sub is THIS product's pool
+  // — a different sub, most visibly for federated sign-ins, so the Brain
+  // resolved such users to emptyGrants(). Best-effort by design: a capture
+  // failure must never break the connect the user just completed.
+  await captureBrainSubject(state, tokenData.access_token);
+
   // Redirect to the requested desktop/web return URL, or fall back to
   // the mobile deep link so ASWebAuthenticationSession auto-closes.
   return mcpOAuthRedirect(state.returnTo, "success", {
     mcpServerId: state.mcpServerId,
   });
+}
+
+/** The unverified-decode sub of a JWT, or null for anything else. */
+function jwtSub(token: string): string | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const claims = JSON.parse(
+      Buffer.from(payload, "base64url").toString(),
+    ) as Record<string, unknown>;
+    return typeof claims.sub === "string" && claims.sub ? claims.sub : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist the Brain-pool sub from a just-exchanged Brain access token and
+ * republish the user-claims manifest so the Brain sees it within its 60s
+ * cache.
+ *
+ * This callback serves EVERY registered MCP server's OAuth, so the capture
+ * is gated on the token having come from a Brain (`mcp.brain.*` token
+ * endpoint — the hostname convention every account's Brain MCP deploys
+ * under). Without the gate, a third-party server's JWT sub would poison
+ * the manifest subject and lock the user out of the Brain. The update only
+ * touches an EXISTING claims row: a user with no claims row has no
+ * manifest entry for the subject to matter to, and minting grants is the
+ * operator's decision, never a sign-in side effect.
+ */
+async function captureBrainSubject(
+  state: { tenantId: string; userId: string; tokenEndpoint: string },
+  accessToken: string,
+): Promise<void> {
+  try {
+    const host = new URL(state.tokenEndpoint).hostname;
+    if (!host.startsWith("mcp.brain.")) return;
+    const sub = jwtSub(accessToken);
+    if (!sub) return;
+    const { userBrainClaims } = await import("@thinkwork/database-pg/schema");
+    const updated = await db
+      .update(userBrainClaims)
+      .set({ brain_subject: sub, updated_at: new Date() })
+      .where(
+        and(
+          eq(userBrainClaims.tenant_id, state.tenantId),
+          eq(userBrainClaims.user_id, state.userId),
+          // Only a real change republishes — re-auths are frequent and the
+          // manifest write is not free.
+          or(
+            isNull(userBrainClaims.brain_subject),
+            sql`${userBrainClaims.brain_subject} <> ${sub}`,
+          ),
+        ),
+      )
+      .returning({ id: userBrainClaims.id });
+    if (updated.length === 0) return;
+    const { publishUserClaimsManifest } = await import(
+      "../lib/twin/user-claims-manifest.js"
+    );
+    await publishUserClaimsManifest(state.tenantId);
+    console.log(
+      `[mcp-oauth] brain_subject captured for user ${state.userId} (sub ${sub.slice(0, 8)}…), manifest republished`,
+    );
+  } catch (err) {
+    console.error("[mcp-oauth] brain_subject capture failed", err);
+  }
 }
 
 function legacySkillRestGone(): APIGatewayProxyStructuredResultV2 {
