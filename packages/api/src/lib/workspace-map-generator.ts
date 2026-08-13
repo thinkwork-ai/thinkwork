@@ -1276,7 +1276,7 @@ function renderSkillsBody(skills: SkillInfo[]): string {
     "- **Company knowledge FIRST** — When a company brain / knowledge MCP is attached (tools like `brain_ask`, `brain_search`), it is the FIRST stop for any question about company procedures, SOPs, policies, customers, orders, invoices, financials, or other internal data — before any web tool. An internal-sounding question answered from the public web is wrong even when the answer looks plausible.",
   );
   lines.push(
-    "- **Citation markers** — When a knowledge tool's answer carries inline `[n]` citation markers, preserve those markers verbatim in your reply (do not strip or renumber them); the UI renders them as clickable citations.",
+    "- **Citation markers** — When your reply draws on a knowledge tool's answer, cite inline: put the tool's `[n]` marker (same number, verbatim) at the end of each claim that came from that source — the UI renders `[n]` as a clickable citation chip. Do not strip, renumber, or replace markers with prose like \"according to the SOP\"; a knowledge-grounded reply with no `[n]` markers is incomplete.",
   );
   lines.push(
     "- **Information lookup** — Prefer `web_search` (Exa) for ordinary PUBLIC factual questions and discovery: locations, business hours, current events, prices, schedules, news, definitions, and candidate URLs. It's fast, cheap, and indexed.",
