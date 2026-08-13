@@ -1273,7 +1273,13 @@ function renderSkillsBody(skills: SkillInfo[]): string {
   lines.push("### Tool selection");
   lines.push("");
   lines.push(
-    "- **Information lookup** — Prefer `web_search` (Exa) for ordinary factual questions and discovery: locations, business hours, current events, prices, schedules, news, definitions, and candidate URLs. It's fast, cheap, and indexed.",
+    "- **Company knowledge FIRST** — When a company brain / knowledge MCP is attached (tools like `brain_ask`, `brain_search`), it is the FIRST stop for any question about company procedures, SOPs, policies, customers, orders, invoices, financials, or other internal data — before any web tool. An internal-sounding question answered from the public web is wrong even when the answer looks plausible.",
+  );
+  lines.push(
+    "- **Citation markers** — When a knowledge tool's answer carries inline `[n]` citation markers, preserve those markers verbatim in your reply (do not strip or renumber them); the UI renders them as clickable citations.",
+  );
+  lines.push(
+    "- **Information lookup** — Prefer `web_search` (Exa) for ordinary PUBLIC factual questions and discovery: locations, business hours, current events, prices, schedules, news, definitions, and candidate URLs. It's fast, cheap, and indexed.",
   );
   lines.push(
     "- **Page reading** — Use `web_extract` (Firecrawl) to read, summarize, analyze, or quote one known public URL as clean page content. This is the normal next step after `web_search` finds a promising result.",
