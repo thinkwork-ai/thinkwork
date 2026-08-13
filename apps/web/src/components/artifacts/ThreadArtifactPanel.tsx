@@ -36,9 +36,14 @@ import {
   type ArtifactCardData,
 } from "@/components/artifacts/ArtifactCard";
 import { CanvasHeaderActions } from "@/components/artifacts/canvas/CanvasHeaderActions";
+import { DataCitationViewer } from "@/components/documents/DataCitationViewer";
 import { KnowledgeDocumentViewer } from "@/components/documents/KnowledgeDocumentViewer";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import { THREAD_ARTIFACT_PANEL_LIST } from "@/components/artifacts/thread-artifact-panel-store";
+import {
+  dataCitationTitle,
+  parseDataCitePanelId,
+} from "@/lib/data-citation-panel";
 import {
   knowledgeDocumentFileName,
   opensInDocumentViewer,
@@ -87,24 +92,35 @@ export function ThreadArtifactPanel({
   jsonRenderPartVersions?: ReadonlyMap<string, number>;
 }) {
   const isListState = artifactId === THREAD_ARTIFACT_PANEL_LIST;
-  // Cited knowledge documents ride through the store as `kb-doc:` ids — no
-  // artifact row exists for them, so both queries stay paused.
+  // Cited knowledge documents ride through the store as `kb-doc:` ids and
+  // data citations as `data-cite:` ids — no artifact row exists for either,
+  // so both queries stay paused.
   const kbDoc = useMemo(() => parseKbDocPanelId(artifactId), [artifactId]);
+  const dataCite = useMemo(
+    () => parseDataCitePanelId(artifactId),
+    [artifactId],
+  );
   const [{ data, fetching, error }, reexecuteQuery] =
     useQuery<PanelArtifactResult>({
       query: ArtifactDetailForRouteQuery,
       variables: { id: artifactId },
       requestPolicy: "cache-and-network",
-      pause: isListState || !!kbDoc,
+      pause: isListState || !!kbDoc || !!dataCite,
     });
-  const primaryMissing = !isListState && !kbDoc && !fetching && !data?.artifact;
+  const primaryMissing =
+    !isListState && !kbDoc && !dataCite && !fetching && !data?.artifact;
   const [{ data: fallbackData, fetching: fallbackFetching }] = useQuery<{
     documentArtifact?: (ArtifactBodyNode & { threadId?: string | null }) | null;
   }>({
     query: DocumentArtifactForPanelQuery,
     variables: { documentId: fallbackDocumentId ?? "" },
     requestPolicy: "cache-and-network",
-    pause: isListState || !!kbDoc || !fallbackDocumentId || !primaryMissing,
+    pause:
+      isListState ||
+      !!kbDoc ||
+      !!dataCite ||
+      !fallbackDocumentId ||
+      !primaryMissing,
   });
   const artifact = isListState
     ? null
@@ -169,7 +185,9 @@ export function ThreadArtifactPanel({
             ? "Artifacts"
             : kbDoc
               ? `${knowledgeDocumentFileName(kbDoc.key)}${kbDoc.page ? ` · p.${kbDoc.page}` : ""}`
-              : (artifact?.title ?? "Artifact")}
+              : dataCite
+                ? dataCitationTitle(dataCite)
+                : (artifact?.title ?? "Artifact")}
         </h2>
         {kbDoc ? (
           <TooltipIconButton
@@ -190,7 +208,9 @@ export function ThreadArtifactPanel({
               <Maximize2 className="size-4" />
             </Link>
           </TooltipIconButton>
-        ) : !isListState ? (
+        ) : !isListState && !dataCite ? (
+          // A data citation has no full-page route — its whole content lives
+          // in the encoded panel id, so no open-full-page affordance.
           <TooltipIconButton
             asChild
             size="icon"
@@ -231,7 +251,9 @@ export function ThreadArtifactPanel({
         </TooltipIconButton>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {kbDoc ? (
+        {dataCite ? (
+          <DataCitationViewer citation={dataCite} />
+        ) : kbDoc ? (
           opensInDocumentViewer(kbDoc.key) ? (
             // Office/CSV: no native browser renderer — embedded Zrimo viewer.
             <KnowledgeDocumentViewer
