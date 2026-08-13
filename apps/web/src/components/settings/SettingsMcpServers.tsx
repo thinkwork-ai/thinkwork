@@ -39,16 +39,18 @@ import {
 import { SettingsTablePane } from "@/components/settings/SettingsContent";
 import { SettingsConnections } from "@/components/settings/SettingsConnections";
 
-const CONNECTIONS_ROUTE = "/settings/mcp-servers";
-const MCP_SERVERS_ROUTE = "/settings/mcp-servers/servers";
+// MCP Servers is the section INDEX — the default tab (Eric 2026-08-13);
+// the per-user surface moved to /accounts and got a name that says what
+// its rows are: "Linked Accounts" (external accounts linked to YOU, which
+// the agent acts through), not the everything-word "Connections".
+const MCP_SERVERS_ROUTE = "/settings/mcp-servers";
+const LINKED_ACCOUNTS_ROUTE = "/settings/mcp-servers/accounts";
 
-type ConnectionsTab = "connections" | "servers";
+type ConnectionsTab = "accounts" | "servers";
 
 function tabForPath(pathname: string): ConnectionsTab {
-  // The merged MCP list lives at /servers. The section index is the
-  // Connections tab (per-user integrations).
-  if (pathname.startsWith(MCP_SERVERS_ROUTE)) return "servers";
-  return "connections";
+  if (pathname.startsWith(LINKED_ACCOUNTS_ROUTE)) return "accounts";
+  return "servers";
 }
 
 export function SettingsMcpServers() {
@@ -56,7 +58,11 @@ export function SettingsMcpServers() {
   const { tenant, tenantId, userId, isOperator } = useTenant();
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
-  const activeTab = tabForPath(pathname);
+  // Non-operators have no servers tab at all, so for them the section index
+  // IS the Linked Accounts surface — never a server table they can't use.
+  const activeTab: ConnectionsTab = isOperator
+    ? tabForPath(pathname)
+    : "accounts";
   const tenantSlug = tenant?.slug ?? null;
   const oauthUserId = userId ?? user?.sub ?? null;
   const [servers, setServers] = useState<McpServer[] | null>(null);
@@ -206,12 +212,14 @@ export function SettingsMcpServers() {
     breadcrumbs: [{ label: "Connectors" }],
     tabs: isOperator
       ? [
-          { to: CONNECTIONS_ROUTE, label: "Connections" },
           { to: MCP_SERVERS_ROUTE, label: "MCP Servers" },
+          { to: LINKED_ACCOUNTS_ROUTE, label: "Linked Accounts" },
         ]
-      : [{ to: CONNECTIONS_ROUTE, label: "Connections" }],
+      : // The index renders Linked Accounts for non-operators, so their one
+        // tab points there and stays highlighted.
+        [{ to: MCP_SERVERS_ROUTE, label: "Linked Accounts" }],
     // Each tab shows only the action that creates the thing it lists — New
-    // MCP Server on the servers tab, nothing on the per-user Connections tab.
+    // MCP Server on the servers tab, nothing on the per-user accounts tab.
     action:
       isOperator && activeTab === "servers" ? (
         <TooltipIconButton
@@ -225,12 +233,12 @@ export function SettingsMcpServers() {
     actionKey: `mcp-servers:${activeTab}`,
   });
 
-  if (activeTab === "connections") {
+  if (activeTab === "accounts") {
     return (
       <SettingsTablePane
         embedded
-        title="Connections"
-        description="Your personal integrations — connect the accounts your agent works with on your behalf. Credentials are stored per user; other members connect their own."
+        title="Linked Accounts"
+        description="The accounts your agent works with on your behalf. Credentials are stored per user; other members link their own."
         loading={false}
       >
         <SettingsConnections />

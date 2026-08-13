@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   setHeader: vi.fn(),
-  pathname: "/settings/mcp-servers/servers",
+  pathname: "/settings/mcp-servers",
   listMcpServers: vi.fn(),
   listUserMcpServers: vi.fn(),
   createMcpServer: vi.fn(),
@@ -87,7 +87,7 @@ function clickHeaderAction(name: "New MCP Server") {
 beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.setHeader.mockReset();
-  mocks.pathname = "/settings/mcp-servers/servers";
+  mocks.pathname = "/settings/mcp-servers";
   mocks.listMcpServers.mockReset();
   mocks.listUserMcpServers.mockReset();
   mocks.createMcpServer.mockReset();
@@ -198,8 +198,8 @@ describe("SettingsMcpServers", () => {
     expect(headerConfig?.title).toBe("Connectors");
     expect(headerConfig?.breadcrumbs).toEqual([{ label: "Connectors" }]);
     expect(headerConfig?.tabs).toEqual([
-      { to: "/settings/mcp-servers", label: "Connections" },
-      { to: "/settings/mcp-servers/servers", label: "MCP Servers" },
+      { to: "/settings/mcp-servers", label: "MCP Servers" },
+      { to: "/settings/mcp-servers/accounts", label: "Linked Accounts" },
     ]);
   });
 
@@ -215,10 +215,10 @@ describe("SettingsMcpServers", () => {
     expect(screen.queryByText("Datasource MCPs")).toBeNull();
   });
 
-  it("renders the Connections pane on the section index without server actions", async () => {
+  it("renders the Linked Accounts pane at /accounts without server actions", async () => {
     mocks.listMcpServers.mockResolvedValue({ servers: [] });
     mocks.listUserMcpServers.mockResolvedValue({ servers: [] });
-    mocks.pathname = "/settings/mcp-servers";
+    mocks.pathname = "/settings/mcp-servers/accounts";
 
     render(<SettingsMcpServers />);
 
@@ -372,9 +372,9 @@ describe("SettingsMcpServers", () => {
     ).toBeTruthy();
     cleanup();
 
-    // The per-user Connections tab (section index) owns no create action.
+    // The per-user Linked Accounts tab owns no create action.
     mocks.setHeader.mockClear();
-    mocks.pathname = "/settings/mcp-servers";
+    mocks.pathname = "/settings/mcp-servers/accounts";
     render(<SettingsMcpServers />);
     await screen.findByTestId("connections-pane");
     expect(mocks.setHeader.mock.calls.at(-1)?.[0]?.action).toBeUndefined();

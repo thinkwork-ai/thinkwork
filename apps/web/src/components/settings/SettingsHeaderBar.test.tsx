@@ -69,8 +69,8 @@ const connectorsActions = () => ({
   title: "Connectors",
   breadcrumbs: [{ label: "Connectors" }],
   tabs: [
-    { to: "/settings/mcp-servers", label: "Connections" },
-    { to: "/settings/mcp-servers/servers", label: "MCP Servers" },
+    { to: "/settings/mcp-servers", label: "MCP Servers" },
+    { to: "/settings/mcp-servers/accounts", label: "Linked Accounts" },
     { to: "/settings/mcp-servers/data-sources", label: "Data Sources" },
   ],
   action: <button aria-label="Register data source">Register</button>,
@@ -126,8 +126,8 @@ describe("SettingsHeaderBar", () => {
     expect(tabRow!.contains(tablist)).toBe(true);
     expect(tabRow!.className).toContain("overflow-x-auto");
     // All three tabs are still rendered.
-    expect(screen.getByText("Connections")).toBeTruthy();
     expect(screen.getByText("MCP Servers")).toBeTruthy();
+    expect(screen.getByText("Linked Accounts")).toBeTruthy();
     expect(screen.getByText("Data Sources")).toBeTruthy();
   });
 

@@ -1,15 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { OperatorGuard } from "@/components/settings/OperatorGuard";
-import { SettingsMcpServers } from "@/components/settings/SettingsMcpServers";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-// The merged MCP Servers tab — tenant-registered servers and plugin MCPs on
-// one surface. Analyst data sources live on the sibling Data Sources tab
-// (THINK-285). The section index (/settings/mcp-servers) is the Connections
-// tab.
+// LEGACY PATH. MCP Servers moved to the section index (Eric 2026-08-13 —
+// it is the default tab now); this route survives only so old links and
+// bookmarks land somewhere real instead of 404ing.
 export const Route = createFileRoute("/_authed/settings/mcp-servers/servers")({
-  component: () => (
-    <OperatorGuard>
-      <SettingsMcpServers />
-    </OperatorGuard>
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/mcp-servers" });
+  },
 });
