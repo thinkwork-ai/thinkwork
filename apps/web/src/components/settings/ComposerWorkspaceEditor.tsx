@@ -2043,12 +2043,19 @@ export function ComposerEditablePane({
   const [error, setError] = useState<string | null>(null);
   const loadReq = useRef(0);
 
+  // Keep the latest resolution in a ref and key the load on the STABLE string
+  // identity: `source` is rebuilt by resolveSource() on every parent render,
+  // so depending on `source.target` (a fresh object each time) re-fired this
+  // effect — and re-entered loading — on every parent render, hammering
+  // /api/workspaces/files for as long as the page kept rendering (THINK-806).
+  const sourceRef = useRef(source);
+  sourceRef.current = source;
   useEffect(() => {
     const reqId = ++loadReq.current;
     setLoading(true);
     setError(null);
     spacesWorkspaceFilesClient
-      .getFile(source.target, source.sourceFile)
+      .getFile(sourceRef.current.target, sourceRef.current.sourceFile)
       .then((data) => {
         if (loadReq.current !== reqId) return;
         const text = data.content ?? "";
@@ -2062,7 +2069,7 @@ export function ComposerEditablePane({
       .finally(() => {
         if (loadReq.current === reqId) setLoading(false);
       });
-  }, [source.target, source.sourceFile]);
+  }, [source.targetKey, source.sourceFile]);
 
   async function handleSave() {
     if (readOnly || saving) return;
