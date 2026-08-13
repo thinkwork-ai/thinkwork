@@ -87,6 +87,15 @@ export const userBrainClaims = pgTable(
      * out).
      */
     analytics_key: boolean("analytics_key").notNull().default(true),
+    /**
+     * The user's sub in the BRAIN's end-user Cognito pool (THINK-625
+     * backfill). `users.cognito_sub` is this product's pool; the Brain's
+     * federated sign-in mints a different sub, and the manifest `subject`
+     * must match the Brain access token or claims resolution fails closed.
+     * Captured by the mcp-oauth callback from the token it exchanges;
+     * NULL until the user first connects the Brain.
+     */
+    brain_subject: text("brain_subject"),
     /** False publishes the entry as `disabled: true` — never omits it. */
     enabled: boolean("enabled").notNull().default(true),
     notes: text("notes"),

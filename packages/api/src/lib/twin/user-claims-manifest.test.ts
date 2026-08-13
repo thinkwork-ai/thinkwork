@@ -315,3 +315,19 @@ describe("userClaimsManifestKey", () => {
     );
   });
 });
+
+describe("subject prefers the captured Brain-pool sub (THINK-625 backfill)", () => {
+  it("publishes brain_subject when the mcp-oauth callback captured one", async () => {
+    seed(true, [claimsRow({ brain_subject: "brain-pool-sub-9" })]);
+    await publishUserClaimsManifest(TENANT_ID, { s3, bucket: BUCKET });
+    // users.cognito_sub is THIS product's pool; the Brain matches its own
+    // access token's sub, which is what the callback captured.
+    expect(manifestBody().users[0].subject).toBe("brain-pool-sub-9");
+  });
+
+  it("falls back to cognito_sub for rows that never connected the Brain", async () => {
+    seed(true, [claimsRow({ brain_subject: null })]);
+    await publishUserClaimsManifest(TENANT_ID, { s3, bucket: BUCKET });
+    expect(manifestBody().users[0].subject).toBe("cognito-sub-1");
+  });
+});

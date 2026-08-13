@@ -185,6 +185,7 @@ export async function publishUserClaimsManifest(
         kb_trace: userBrainClaims.kb_trace,
         analytics_key: userBrainClaims.analytics_key,
         enabled: userBrainClaims.enabled,
+        brain_subject: userBrainClaims.brain_subject,
         cognito_sub: users.cognito_sub,
         email: users.email,
         member_status: tenantMembers.status,
@@ -207,7 +208,13 @@ export async function publishUserClaimsManifest(
       generatedAt: (opts.now ?? (() => new Date()))().toISOString(),
       users: rows.map((row) => ({
         userId: row.user_id,
-        subject: row.cognito_sub ?? null,
+        // The Brain matches its ACCESS token's sub against `subject`, and
+        // that token comes from the Brain's own end-user pool — a DIFFERENT
+        // sub than users.cognito_sub (this product's pool), most visibly
+        // for federated sign-ins. Prefer the sub captured from the user's
+        // actual Brain token (mcp-oauth callback); the legacy fallback
+        // keeps rows that never connected byte-identical to before.
+        subject: row.brain_subject ?? row.cognito_sub ?? null,
         email: row.email ? row.email.toLowerCase() : null,
         // A claims row whose membership was disabled or removed is still
         // published — as an explicit revocation, not as silence.
