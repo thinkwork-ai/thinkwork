@@ -202,3 +202,83 @@ describe("MCP knowledge-server invocations", () => {
     ).toEqual([]);
   });
 });
+
+describe("brain_ask grounded-answer citations", () => {
+  // The wire shape brain_ask / brain_ask_result actually return:
+  // citations rows {n, source, doc_link, excerpt_ref}, with the page in the
+  // excerpt_ref's #p= suffix and a brain-presigned viewer URL in doc_link.
+  const askInvocation = (
+    citations: unknown[],
+    toolName = "brain_ask_result",
+  ) => ({
+    tool_name: "mcp_brain_brain_ask_result",
+    result: {
+      content: [{ type: "text", text: "…answer prose…" }],
+      details: {
+        server_name: "brain",
+        mcp_tool_name: toolName,
+        raw: {
+          structuredContent: {
+            ok: true,
+            status: "completed",
+            answer: "…answer prose…",
+            citations,
+          },
+        },
+      },
+    },
+  });
+  const cx18 = (n: number, page: number) => ({
+    n,
+    source: "CX-0018 Manually Submitting Individual Orders to ACE.pdf",
+    doc_link: `https://mcp.brain.example/kb/doc?key=cx-0018&sig=abc${n}`,
+    excerpt_ref: `CX-0018 Manually Submitting Individual Orders to ACE.pdf#p=${page}`,
+  });
+
+  it("extracts deduped sources with page and the brain's doc link", () => {
+    expect(
+      knowledgeSourcesFromInvocations([askInvocation([cx18(3, 2), cx18(6, 2)])]),
+    ).toEqual([
+      {
+        key: "CX-0018 Manually Submitting Individual Orders to ACE.pdf",
+        page: 2,
+        documentUrl: "https://mcp.brain.example/kb/doc?key=cx-0018&sig=abc3",
+      },
+    ]);
+  });
+
+  it("numbers citations by the row's own n, not row order", () => {
+    const citations = knowledgeCitationsFromInvocations([
+      askInvocation([cx18(3, 2), cx18(6, 2)]),
+    ]);
+    expect(citations.get(3)?.key).toBe(
+      "CX-0018 Manually Submitting Individual Orders to ACE.pdf",
+    );
+    expect(citations.get(3)?.page).toBe(2);
+    expect(citations.get(6)).toBeDefined();
+    expect(citations.get(1)).toBeUndefined();
+  });
+
+  it("falls back to source when excerpt_ref is missing and skips empty rows", () => {
+    const sources = knowledgeSourcesFromInvocations([
+      askInvocation(
+        [
+          { n: 1, source: "Policy Handbook.pdf" },
+          { n: 2 }, // no key material at all
+        ],
+        "brain_ask",
+      ),
+    ]);
+    expect(sources).toEqual([
+      { key: "Policy Handbook.pdf", page: undefined, documentUrl: undefined },
+    ]);
+  });
+
+  it("ignores brain tools that are not brain_ask", () => {
+    expect(
+      knowledgeSourcesFromInvocations([
+        askInvocation([cx18(1, 1)], "brain_search"),
+      ]),
+    ).toEqual([]);
+  });
+});
