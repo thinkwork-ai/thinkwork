@@ -101,6 +101,67 @@ function mcpKnowledgeRows(
   );
 }
 
+/**
+ * Grounded-answer citations from a brain_ask / brain_ask_result MCP
+ * invocation. brain_ask answers from held documents and reports what it
+ * cited as `structuredContent.citations` rows `{n, source, doc_link,
+ * excerpt_ref}` — `excerpt_ref` carries the `#p=<n>` page suffix and
+ * `doc_link` is the brain's own presigned viewer URL (the document lives in
+ * the brain's store, not this deployment's KB Files API). Recognition is by
+ * the server's REAL tool name in `details.mcp_tool_name`, mirroring
+ * brainAskCitations in data-sources.tsx.
+ */
+function brainAskKnowledgeRows(
+  record: Record<string, unknown>,
+): Record<string, unknown>[] {
+  const result = record.result as Record<string, unknown> | undefined;
+  const details = result?.details as Record<string, unknown> | undefined;
+  const mcpTool =
+    typeof details?.mcp_tool_name === "string" ? details.mcp_tool_name : "";
+  if (!/brain_ask/i.test(mcpTool)) return [];
+  const raw = details?.raw as Record<string, unknown> | undefined;
+  const structured = raw?.structuredContent as
+    Record<string, unknown> | undefined;
+  const rows = structured?.citations;
+  if (!Array.isArray(rows)) return [];
+  return rows.filter(
+    (row): row is Record<string, unknown> =>
+      Boolean(row) && typeof row === "object",
+  );
+}
+
+/** Iterate the brain_ask invocations of one turn that carry KB citations. */
+function forEachBrainAskInvocation(
+  invocations: unknown[],
+  visit: (rows: Record<string, unknown>[]) => void,
+): void {
+  for (const value of invocations) {
+    if (!value || typeof value !== "object") continue;
+    const rows = brainAskKnowledgeRows(value as Record<string, unknown>);
+    if (rows.length > 0) visit(rows);
+  }
+}
+
+/** One brain_ask citation row → the shared citation fields, or null. */
+function brainAskCitationFields(
+  row: Record<string, unknown>,
+): { key: string; page?: number; documentUrl?: string } | null {
+  const ref =
+    (typeof row.excerpt_ref === "string" && row.excerpt_ref) ||
+    (typeof row.source === "string" && row.source) ||
+    "";
+  const split = splitPageDocumentKey(ref);
+  if (!split.key) return null;
+  return {
+    key: split.key,
+    page: split.page,
+    documentUrl:
+      typeof row.doc_link === "string" && row.doc_link
+        ? row.doc_link
+        : undefined,
+  };
+}
+
 /** Iterate the MCP knowledge-server invocations of one turn. */
 function forEachMcpKnowledgeInvocation(
   invocations: unknown[],
@@ -201,6 +262,18 @@ export function knowledgeCitationsFromInvocations(
     });
   });
 
+  // brain_ask grounded answers carry their own [n] markers; the row's `n`
+  // is authoritative. First-occurrence-wins keeps the earlier ask's
+  // numbering when a turn asks more than once.
+  forEachBrainAskInvocation(invocations, (rows) => {
+    for (const row of rows) {
+      if (typeof row.n !== "number") continue;
+      const fields = brainAskCitationFields(row);
+      if (!fields) continue;
+      add({ n: row.n, ...fields });
+    }
+  });
+
   return citations;
 }
 
@@ -295,6 +368,15 @@ export function knowledgeSourcesFromInvocations(
             ? row.documentUrl
             : undefined,
       });
+    }
+  });
+  // brain_ask grounded-answer citations: same dedupe, first wins the page.
+  forEachBrainAskInvocation(invocations, (rows) => {
+    for (const row of rows) {
+      const fields = brainAskCitationFields(row);
+      if (!fields || seen.has(fields.key)) continue;
+      seen.add(fields.key);
+      sources.push(fields);
     }
   });
   return sources;
