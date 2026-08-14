@@ -24,6 +24,20 @@
  * constant exists in this repo — only the user-visible warm/cold effect is
  * stated). The warm-session material stays phrased as user-visible effect
  * rather than AWS wiring; the reader does not operate the runtime.
+ *
+ * Sources section (2026-08-13, #4277/#4278): claims verified against
+ * apps/web/src/components/ai-elements/sources.tsx (knowledge sources +
+ * numbered citations from search_knowledge, MCP knowledge servers and
+ * brain_ask grounded answers), data-sources.tsx + documents/
+ * DataCitationViewer.tsx (dataCitations rows; query text present only when
+ * the caller's access allowed it server-side — the viewer states when it is
+ * withheld), and workbench/TaskThreadView.tsx (cards anchor to the reply;
+ * inline [n] markers linkify against the turn's citation map; citations are
+ * read from the stored turn payloads, so history renders them too).
+ * Deliberately not claimed: that every reply carries inline [n] markers —
+ * marker emission is the model following workspace instructions, so the
+ * inline chips are documented conditionally ("when the reply cites
+ * inline") while the cards are unconditional.
  */
 import {
   CardGrid,
@@ -42,6 +56,7 @@ import type { DocTocEntry } from "../registry";
 export const THREADS_TOC: DocTocEntry[] = [
   { id: "anatomy", title: "Anatomy of a thread" },
   { id: "live-progress", title: "Live progress" },
+  { id: "sources", title: "Where an answer came from" },
   { id: "history", title: "History and resumption" },
 ];
 
@@ -173,6 +188,46 @@ export function Threads() {
           about ten minutes and the next message runs normally; a thread that
           appears stuck for longer than that is worth reporting, not waiting
           on.
+        </p>
+      </ReportSection>
+
+      <ReportSection id="sources" title="Where an answer came from">
+        <p>
+          When a turn draws on your company&apos;s held knowledge or data, the
+          reply says so — with receipts, not just prose. Two cards can appear
+          with a reply, one for each kind of grounding:
+        </p>
+        <CardGrid>
+          <InfoCard title="Knowledge sources">
+            <p>
+              The documents behind the answer — an SOP, a policy, a manual —
+              each with the page the passage came from. Click one and the
+              document opens in a side panel at the cited page, so you can
+              read the original rather than trust the summary.
+            </p>
+          </InfoCard>
+          <InfoCard title="Data sources">
+            <p>
+              The queries behind a number — which tables were read and how
+              many rows came back. Click one for the details: the database,
+              the row count, and the executed query itself when your access
+              allows it (the panel says so plainly when it is withheld).
+            </p>
+          </InfoCard>
+        </CardGrid>
+        <p>
+          When the reply cites inline — the small <code>[n]</code> chips at
+          the end of a claim — each chip is clickable and opens the same
+          document panel as its row in the card. A claim, its source, and the
+          original document are one click apart.
+        </p>
+        <p>
+          Citations are stored with the turn, like everything else in the
+          receipt: an old thread shows its sources the same way a fresh one
+          does. If an answer states a figure or a rule and shows no source
+          card at all, that is worth noticing — it means the answer came from
+          the model&apos;s own reasoning or the public web, not from your
+          company&apos;s knowledge.
         </p>
       </ReportSection>
 
