@@ -137,7 +137,9 @@ if (!("IntersectionObserver" in globalThis)) {
 }
 
 // jsdom Elements have no scrollTo; the message-scroller viewport calls it
-// for autoscroll and anchor jumps. A no-op keeps mounts clean.
-if (!Element.prototype.scrollTo) {
+// for autoscroll and anchor jumps. A no-op keeps mounts clean. Guarded on
+// Element existing — the iframe-shell smoke tests run in a plain Node
+// environment with no DOM globals at all.
+if (typeof Element !== "undefined" && !Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }
