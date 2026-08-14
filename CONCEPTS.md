@@ -197,6 +197,12 @@ Runtime human-in-the-loop for capability invocation (Eve's HITL model; the THINK
 
 Sub-agent definitions are compiled state: edits take effect at the next capabilities compile + workspace sync boundary, never mid-thread at the next dispatch. The manifest's agent entry pins the compiled `INSTRUCTIONS.md` etag; Pi verifies the synced file against the pin before spawning and skips the profile loudly on mismatch, so the fingerprint recorded on a run (the eval-comparability join key) is always truthful.
 
+### Workspace Re-Render
+
+The event that propagates instruction content to agents: it recompiles an agent's stored source folder — including the generator-computed sections of its root `INSTRUCTIONS.md` (tool selection, routing, folder structure) — and only then does new content reach the baseline that thread composition reads. Re-renders fire on workspace mutations (blueprint repair, capability or skill changes), never on a code deploy.
+
+The consequence cuts both ways: a deployed change to generator-owned instruction text is inert for existing agents until their next re-render, and a hand edit inside a computed section survives only until one. Instruction propagation therefore has two distinct events — deploy updates the code, re-render updates the stored source agents obey — and "merged and deployed" is not "live" for instruction text.
+
 ### Eve Deviations (recorded)
 
 ThinkWork's workspace aligns with Vercel Eve's model (eve.dev/docs) with three deliberate deviations that future "align with Eve" passes must not churn back: (1) `connectors/` where Eve says `connections/` — dissolves the collision with the legacy `connections` DB table; (2) UPPERCASE marker files (`INSTRUCTIONS.md`, `SKILL.md`, `CONNECTION.md`) where Eve uses lowercase `instructions.md` — house style; (3) grants-by-presence with zero inheritance where Eve copies context into subagents (see Grants-by-Presence).
