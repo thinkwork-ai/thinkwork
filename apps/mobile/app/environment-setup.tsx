@@ -151,7 +151,7 @@ export default function EnvironmentSetupScreen() {
           <View className="gap-4">
             <Input
               label="Environment URL"
-              placeholder="app.thinkwork.ai"
+              placeholder="Enter environment URL"
               value={url}
               onChangeText={setUrl}
               autoCapitalize="none"
