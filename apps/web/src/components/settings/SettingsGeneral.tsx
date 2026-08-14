@@ -1374,13 +1374,13 @@ function BrandingRows() {
       </SettingsRow>
       <SettingsRow
         label="Mobile Header Text"
-        description="Shown as the title in the mobile app header. Leave blank to show the agent name."
+        description="Shown as the title in the mobile app header. Leave blank to show the default title."
       >
         <div className="flex items-center gap-2">
           <Input
             value={mobileHeaderTextValue}
             maxLength={MAX_HEADER_TEXT_LENGTH}
-            placeholder="Agent name"
+            placeholder="Default title"
             className="w-56"
             onChange={(event) => setMobileTextDraft(event.target.value)}
             data-testid="branding-mobile-header-text"
