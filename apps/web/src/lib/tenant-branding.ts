@@ -29,6 +29,8 @@ export const LOGO_SIZE_OPTIONS = [
 export type TenantBranding = {
   logoDataUrl?: string;
   headerText?: string;
+  /** Title shown in the mobile app header; undefined/blank = agent name. */
+  mobileHeaderText?: string;
   logoHeightPx?: number;
 };
 
@@ -67,6 +69,10 @@ export function brandingFromFeatures(
         : undefined,
     headerText:
       typeof branding.headerText === "string" ? branding.headerText : undefined,
+    mobileHeaderText:
+      typeof branding.mobileHeaderText === "string"
+        ? branding.mobileHeaderText
+        : undefined,
     logoHeightPx:
       typeof branding.logoHeightPx === "number" &&
       Number.isFinite(branding.logoHeightPx)

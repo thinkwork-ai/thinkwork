@@ -824,6 +824,18 @@ export const TenantQuery = graphql(`
   }
 `);
 
+export const TenantMobileBrandingQuery = graphql(`
+  query TenantMobileBranding($id: ID!) {
+    tenant(id: $id) {
+      id
+      settings {
+        id
+        features
+      }
+    }
+  }
+`);
+
 export const TenantBySlugQuery = graphql(`
   query TenantBySlug($slug: String!) {
     tenantBySlug(slug: $slug) {

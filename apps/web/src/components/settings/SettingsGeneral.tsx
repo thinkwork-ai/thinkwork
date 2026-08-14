@@ -1203,6 +1203,12 @@ function BrandingRows() {
   const textDirty =
     textDraft !== null &&
     textDraft.trim() !== (branding.headerText ?? "").trim();
+  const [mobileTextDraft, setMobileTextDraft] = useState<string | null>(null);
+  const mobileHeaderTextValue =
+    mobileTextDraft ?? branding.mobileHeaderText ?? "";
+  const mobileTextDirty =
+    mobileTextDraft !== null &&
+    mobileTextDraft.trim() !== (branding.mobileHeaderText ?? "").trim();
 
   async function saveBranding(next: TenantBranding) {
     if (!tenantId) return;
@@ -1212,6 +1218,9 @@ function BrandingRows() {
         ...(next.logoDataUrl ? { logoDataUrl: next.logoDataUrl } : {}),
         ...(next.headerText !== undefined
           ? { headerText: next.headerText }
+          : {}),
+        ...(next.mobileHeaderText !== undefined
+          ? { mobileHeaderText: next.mobileHeaderText }
           : {}),
         ...(next.logoHeightPx !== undefined
           ? { logoHeightPx: next.logoHeightPx }
@@ -1229,6 +1238,7 @@ function BrandingRows() {
     }
     toast.success("Branding updated");
     setTextDraft(null);
+    setMobileTextDraft(null);
     refetch({ requestPolicy: "network-only" });
   }
 
@@ -1357,6 +1367,35 @@ function BrandingRows() {
               })
             }
             data-testid="branding-header-text-save"
+          >
+            Save
+          </Button>
+        </div>
+      </SettingsRow>
+      <SettingsRow
+        label="Mobile Header Text"
+        description="Shown as the title in the mobile app header. Leave blank to show the default title."
+      >
+        <div className="flex items-center gap-2">
+          <Input
+            value={mobileHeaderTextValue}
+            maxLength={MAX_HEADER_TEXT_LENGTH}
+            placeholder="Default title"
+            className="w-56"
+            onChange={(event) => setMobileTextDraft(event.target.value)}
+            data-testid="branding-mobile-header-text"
+          />
+          <Button
+            type="button"
+            size="sm"
+            disabled={saving || !mobileTextDirty}
+            onClick={() =>
+              void saveBranding({
+                ...branding,
+                mobileHeaderText: (mobileTextDraft ?? "").trim(),
+              })
+            }
+            data-testid="branding-mobile-header-text-save"
           >
             Save
           </Button>

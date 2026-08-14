@@ -126,6 +126,7 @@ import {
   type QuickAction,
 } from "@/lib/hooks/use-quick-actions";
 import { getThreadHeaderLabel } from "@/lib/thread-display";
+import { useMobileHeaderText } from "@/lib/use-mobile-header-text";
 import { deriveThreadAgentDefault } from "@/lib/thread-agent-mode";
 import {
   mentionCandidatesForTargets,
@@ -157,6 +158,7 @@ export default function ThreadsScreen() {
   const params = useLocalSearchParams<{ segment?: string }>();
   const { user, refreshCounter, signOut, isAuthenticated } = useAuth();
   const authTenantId = user?.tenantId ?? null;
+  const mobileHeaderText = useMobileHeaderText(authTenantId);
 
   const { colorScheme } = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -947,8 +949,12 @@ export default function ThreadsScreen() {
   );
 
   // ── Render ─────────────────────────────────────────────────────────────
+  // Tenant white-label title (Settings → General → Mobile Header Text)
+  // wins over the agent name when set.
   const computerDisplayName =
-    selectedComputer?.name || (computersFetching ? "" : "Agent");
+    mobileHeaderText ||
+    selectedComputer?.name ||
+    (computersFetching ? "" : "Agent");
   const noAssignedComputer = !computersFetching && computers.length === 0;
 
   return (
