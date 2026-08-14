@@ -1222,12 +1222,13 @@ describe("TaskThreadView", () => {
     expect(
       screen.getByTestId("thread-conversation-content").className,
     ).not.toContain("pt-10");
-    expect(
-      screen.getByTestId("thread-conversation-column").className,
-    ).toContain("max-w-[750px]");
-    expect(
-      screen.getByTestId("thread-conversation-column").className,
-    ).toContain("px-3");
+    // Column width now lives on each scroller item (items must be direct
+    // children of the scroller content for anchor/visibility tracking).
+    const firstItem = document.querySelector(
+      '[data-slot="message-scroller-item"]',
+    );
+    expect(firstItem?.className).toContain("max-w-[750px]");
+    expect(firstItem?.className).toContain("px-3");
     expect(screen.getByTestId("follow-up-composer-dock").className).toContain(
       "md:pr-[336px]",
     );

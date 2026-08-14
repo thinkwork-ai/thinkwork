@@ -262,8 +262,11 @@ export function buildTurnPrompt(args: RunAgentLoopArgs): string {
   return `${historyBlock}Current user message:\n${args.message}`;
 }
 
-/** Short, render-safe preview of a tool arg/result for the thread activity UI. */
-function toolPreview(value: unknown, max = 600): string {
+/** Render-safe preview of a tool arg/result for the thread activity UI.
+ * The cap bounds per-invocation payload size in usage blobs and activity
+ * events; the UI shows the preview in a scrollable pane, so it can be
+ * generous without bloating the transcript view. */
+function toolPreview(value: unknown, max = 4000): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value.slice(0, max);
   try {

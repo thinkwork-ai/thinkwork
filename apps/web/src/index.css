@@ -1,4 +1,7 @@
 @import "@thinkwork/ui/theme.css";
+/* shadcn v4 utility layer — provides `scroll-fade-b` and friends used by the
+   vendored message-scroller (src/components/ai-elements/message-scroller.tsx). */
+@import "shadcn/tailwind.css";
 /* React Flow base styles — required for the routine workflow graph (nodes,
    edges, handles, zoom controls, attribution) to render and position. */
 @import "@xyflow/react/dist/style.css";

@@ -56,12 +56,6 @@ vi.mock("@/context/AuthContext", () => ({
 vi.mock("@/components/shell/ChatSidebar", () => ({
   ChatSidebar: () => <nav data-testid="chat-sidebar" />,
 }));
-// The teach dialog has its own suite (TeachBrainDialog.test.tsx); here it
-// only matters that the menu item opens it.
-vi.mock("@/components/workbench/TeachBrainDialog", () => ({
-  TeachBrainDialog: ({ open }: { open: boolean }) =>
-    open ? <div data-testid="teach-brain-dialog" /> : null,
-}));
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
     children,
@@ -268,14 +262,11 @@ describe("SpacesSidebar", () => {
     expect(routerMocks.navigate).not.toHaveBeenCalled();
   });
 
-  it("opens the Teach-the-Brain dialog from the account menu (THINK-784)", () => {
+  it("no longer offers Teach the Brain in the account menu (brain teaching moved to the Brain console)", () => {
     render(<SpacesSidebar />);
 
-    expect(screen.queryByTestId("teach-brain-dialog")).toBeNull();
-    fireEvent.click(screen.getByTestId("sidebar-teach-brain"));
-
-    expect(screen.getByTestId("teach-brain-dialog")).toBeTruthy();
-    expect(routerMocks.navigate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("sidebar-teach-brain")).toBeNull();
+    expect(screen.queryByText("Teach the Brain")).toBeNull();
   });
 
   it("shows the server-reported deployed release in the account menu footer", () => {

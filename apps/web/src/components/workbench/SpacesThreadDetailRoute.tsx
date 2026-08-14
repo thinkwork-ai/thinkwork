@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useClient, useMutation, useQuery, useSubscription } from "urql";
-import { Brain, Flag, GraduationCap, Info, PanelRight } from "lucide-react";
+import { Brain, Flag, Info, PanelRight } from "lucide-react";
 import { toast } from "sonner";
 import { describeSendMessageError } from "@/lib/send-message-error";
 import {
@@ -37,7 +37,6 @@ import {
 import { ThreadDetailActions } from "@/components/workbench/ThreadDetailActions";
 import { FlagThreadForEvalDialog } from "@/components/workbench/FlagThreadForEvalDialog";
 import { SendToBrainDialog } from "@/components/workbench/SendToBrainDialog";
-import { TeachBrainDialog } from "@/components/workbench/TeachBrainDialog";
 import { ThreadTitleInlineRename } from "@/components/workbench/ThreadTitleInlineRename";
 import type { MentionTarget } from "@/components/spaces/MentionMenu";
 import type { UserQuestionRecord } from "@/lib/ui-message-types";
@@ -457,9 +456,6 @@ export function SpacesThreadDetailRoute({
   const [flagEvalOpen, setFlagEvalOpen] = useState(false);
   // "Send to the Brain" dialog (THINK-781): member-level, no turn required.
   const [brainFlagOpen, setBrainFlagOpen] = useState(false);
-  // "Teach the Brain" from this thread (THINK-784): the conversation rides
-  // along as context_thread_url.
-  const [teachBrainOpen, setTeachBrainOpen] = useState(false);
   // Start null — NEVER the global stored pick. The composer must reflect
   // what THIS thread runs on: its own last-used model, or the tenant
   // Agent's configured default while the first turn is still in flight.
@@ -1774,13 +1770,6 @@ export function SpacesThreadDetailRoute({
               <Brain className="size-4" />
               Send to the Brain
             </DropdownMenuItem>
-            <DropdownMenuItem
-              data-testid="thread-flag-teach-brain"
-              onSelect={() => setTeachBrainOpen(true)}
-            >
-              <GraduationCap className="size-4" />
-              Teach a correction from this conversation
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <TooltipIconButton
@@ -2094,11 +2083,6 @@ export function SpacesThreadDetailRoute({
       <SendToBrainDialog
         open={brainFlagOpen}
         onOpenChange={setBrainFlagOpen}
-        threadId={threadId}
-      />
-      <TeachBrainDialog
-        open={teachBrainOpen}
-        onOpenChange={setTeachBrainOpen}
         threadId={threadId}
       />
     </>

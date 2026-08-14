@@ -54,9 +54,18 @@ import {
   type ReactNode,
 } from "react";
 import {
-  Conversation,
-  ConversationContent,
-} from "@/components/ai-elements/conversation";
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ai-elements/message-scroller";
+import {
+  compactMinimapPreview,
+  ThreadMinimap,
+  type ThreadMinimapItem,
+} from "@/components/workbench/ThreadMinimap";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import {
   PromptInput,
@@ -721,6 +730,12 @@ export function TaskThreadView({
   const showStreamingBuffer =
     (streamingChunks.length > 0 || hasTypedStreamParts) &&
     !hasAssistantAfterLatestUser(visibleMessages);
+  // The scroller follows the live edge only while a turn is actually in
+  // flight; on a settled thread it stays where the reader put it.
+  const hasPendingTurn =
+    isSending ||
+    showStreamingBuffer ||
+    (thread.turns ?? []).some((turn) => !isTurnFinished(turn.status));
   const latestUserIndex = findLastIndex(
     transcriptMessages,
     (message) => message.role.toUpperCase() === "USER",
@@ -729,6 +744,28 @@ export function TaskThreadView({
     transcriptMessages,
     thread.turns ?? [],
   );
+  // Position rail (ThreadMinimap): one dash per user message; the preview
+  // pairs the question with the FINAL assistant reply of that turn.
+  const minimapItems: ThreadMinimapItem[] = [];
+  for (let index = 0; index < transcriptMessages.length; index += 1) {
+    const message = transcriptMessages[index];
+    if (message.role.toUpperCase() !== "USER") continue;
+    let assistantText: string | null = null;
+    for (let next = index + 1; next < transcriptMessages.length; next += 1) {
+      const candidate = transcriptMessages[next];
+      if (candidate.role.toUpperCase() === "USER") break;
+      if (candidate.role.toUpperCase() === "ASSISTANT") {
+        assistantText = candidate.content ?? assistantText;
+      }
+    }
+    minimapItems.push({
+      id: message.id,
+      userText: compactMinimapPreview(message.content),
+      // Raw markdown, not compacted — the preview renders it formatted, and
+      // whitespace collapse would destroy headings/tables.
+      assistantText: assistantText?.trim() || null,
+    });
+  }
   // Document cards (THINK-147) render inside the agent's reply message, next
   // to the byline — not as a floating block under the turn header. While the
   // reply hasn't landed yet (turn still streaming), the card anchors to the
@@ -802,87 +839,115 @@ export function TaskThreadView({
               className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background"
               aria-label="Thread conversation"
             >
-              <Conversation
-                // Leave the outer StickToBottom div as a layout container only.
-                // The library's inner scroll wrapper (set up in StickToBottom.Content
-                // with overflow:auto + scrollbarGutter "stable both-edges") owns
-                // scrolling. Adding overflow-y-auto here forces a second scroll
-                // container and produces visible double scrollbars at the right
-                // edge of the conversation column once the artifact side panel
-                // narrows it.
-                className="flex-1"
-                aria-label="Thread transcript"
+              {/* shadcn MessageScroller (vendored, Brain-console precedent):
+                  `last-anchor` opens a thread at the top of the latest user
+                  message instead of pinned to the bottom, autoScroll follows
+                  the live edge only while a turn is in flight, and the
+                  floating arrow button jumps to the bottom on demand. Item
+                  identity is the message id — stable across refetches. */}
+              <MessageScrollerProvider
+                key={thread.id}
+                defaultScrollPosition="last-anchor"
+                autoScroll={hasPendingTurn}
               >
-                <ConversationContent
-                  data-testid="thread-conversation-content"
-                  className={cn(
-                    "w-full gap-0 px-4 pt-4 sm:px-6",
-                    infoPanelOpen && "md:pr-[336px]",
-                  )}
-                  style={{ paddingBottom: composerBottomInsetPx }}
+                <MessageScroller
+                  className="min-h-0 flex-1"
+                  role="log"
+                  aria-label="Thread transcript"
                 >
-                  <div
-                    data-testid="thread-conversation-column"
-                    className="mx-auto grid w-full max-w-[750px] gap-3 px-3"
-                  >
-                    {transcriptMessages.length === 0 ? (
-                      <ThinkingRow
-                        title="Working…"
-                        running
-                        detail="ThinkWork is preparing this thread."
-                      />
-                    ) : (
-                      transcriptMessages.map((message, index) => {
-                        const turn = turnByUserMessageId.get(message.id);
-                        return (
-                          <TranscriptSegment
-                            key={message.id}
-                            message={message}
-                            turn={turn}
-                            knowledgeCitations={citationsByMessageId.get(
-                              message.id,
-                            )}
-                            documentCards={documentCardsByMessageId.get(
-                              message.id,
-                            )}
-                            canvasesByStablePartId={canvasesByStablePartId}
-                            threadId={thread.id}
-                            latestProjection={latestProjection}
-                            isLatestUser={index === latestUserIndex}
-                            streamingChunks={
-                              index === latestUserIndex && showStreamingBuffer
-                                ? streamingChunks
-                                : []
-                            }
-                            streamState={
-                              index === latestUserIndex && showStreamingBuffer
-                                ? streamState
-                                : undefined
-                            }
-                            onOpenArtifactPanel={canvasPanel.open}
-                            onSendFollowUp={onSendFollowUp}
-                            isSending={isSending}
-                            threadAttachments={
-                              infoPanelState?.attachments ?? []
-                            }
-                            onDownloadAttachment={
-                              infoPanelState?.onDownloadAttachment
-                            }
-                            currentUser={currentUser}
-                            mentionTargets={mentionTargets}
-                            skillCatalog={skillCatalog}
-                            viewerIsOperator={isOperator}
-                            onJsonRenderActionSuccess={
-                              onJsonRenderActionSuccess
-                            }
-                            onRetryDispatch={onRetryDispatch}
+                  <MessageScrollerViewport>
+                    <MessageScrollerContent
+                      data-testid="thread-conversation-content"
+                      // Items must be DIRECT children of Content — the
+                      // scroller primitive walks content.children for
+                      // anchor + visibility tracking, so the max-width
+                      // column constraint lives on each item, not on an
+                      // intermediate wrapper.
+                      className={cn(
+                        "w-full gap-3 px-4 pt-4 sm:px-6",
+                        infoPanelOpen && "md:pr-[336px]",
+                      )}
+                      style={{ paddingBottom: composerBottomInsetPx }}
+                    >
+                      {transcriptMessages.length === 0 ? (
+                        <div
+                          data-testid="thread-conversation-column"
+                          className="mx-auto grid w-full max-w-[750px] gap-3 px-3"
+                        >
+                          <ThinkingRow
+                            title="Working…"
+                            running
+                            detail="ThinkWork is preparing this thread."
                           />
-                        );
-                      })
-                    )}
-                  </div>
-                </ConversationContent>
-              </Conversation>
+                        </div>
+                      ) : (
+                        transcriptMessages.map((message, index) => {
+                          const turn = turnByUserMessageId.get(message.id);
+                          return (
+                            <MessageScrollerItem
+                              key={message.id}
+                              messageId={message.id}
+                              className="mx-auto grid w-full max-w-[750px] px-3"
+                              // User messages are the scroll anchors —
+                              // "last-anchor" lands a reopened thread at the
+                              // question that produced the newest reply.
+                              scrollAnchor={
+                                message.role.toUpperCase() === "USER"
+                              }
+                            >
+                              <TranscriptSegment
+                                message={message}
+                                turn={turn}
+                                knowledgeCitations={citationsByMessageId.get(
+                                  message.id,
+                                )}
+                                documentCards={documentCardsByMessageId.get(
+                                  message.id,
+                                )}
+                                canvasesByStablePartId={canvasesByStablePartId}
+                                threadId={thread.id}
+                                latestProjection={latestProjection}
+                                isLatestUser={index === latestUserIndex}
+                                streamingChunks={
+                                  index === latestUserIndex &&
+                                  showStreamingBuffer
+                                    ? streamingChunks
+                                    : []
+                                }
+                                streamState={
+                                  index === latestUserIndex &&
+                                  showStreamingBuffer
+                                    ? streamState
+                                    : undefined
+                                }
+                                onOpenArtifactPanel={canvasPanel.open}
+                                onSendFollowUp={onSendFollowUp}
+                                isSending={isSending}
+                                threadAttachments={
+                                  infoPanelState?.attachments ?? []
+                                }
+                                onDownloadAttachment={
+                                  infoPanelState?.onDownloadAttachment
+                                }
+                                currentUser={currentUser}
+                                mentionTargets={mentionTargets}
+                                skillCatalog={skillCatalog}
+                                viewerIsOperator={isOperator}
+                                onJsonRenderActionSuccess={
+                                  onJsonRenderActionSuccess
+                                }
+                                onRetryDispatch={onRetryDispatch}
+                              />
+                            </MessageScrollerItem>
+                          );
+                        })
+                      )}
+                    </MessageScrollerContent>
+                  </MessageScrollerViewport>
+                  <MessageScrollerButton />
+                  <ThreadMinimap items={minimapItems} />
+                </MessageScroller>
+              </MessageScrollerProvider>
 
               <ThreadInfoPanel
                 state={infoPanelState}
@@ -4357,7 +4422,7 @@ function ActionRow({
         <ChevronRight className="size-4 transition-transform group-open/action:rotate-90" />
       </summary>
       {detail ? (
-        <pre className="ml-7 mt-2 max-w-[calc(100%-1.75rem)] whitespace-pre-wrap break-words rounded-lg bg-muted/30 p-3 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
+        <pre className="ml-7 mt-2 max-h-80 max-w-[calc(100%-1.75rem)] overflow-y-auto overscroll-contain whitespace-pre-wrap break-words rounded-lg bg-muted/30 p-3 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
           {detail}
         </pre>
       ) : null}
@@ -4834,32 +4899,18 @@ export function actionRowsForTurn(
     const invocationDurationMs = toolInvocationDurationMs(record);
     const emitRow = emitDocumentActionRow(name, record);
     if (emitRow) {
-      rows.push(emitRow);
-      if (isTurnFinished(turn.status)) {
-        rows.push({
-          title: "tool invocation completed",
-          detail: toolInvocationCompletionDetail(record),
-          kind: toolKind(name),
-          durationMs: invocationDurationMs,
-        });
-      }
+      rows.push({ ...emitRow, durationMs: invocationDurationMs });
       continue;
     }
-    const detail = toolInvocationDetail(record);
+    // One row per tool: the invocation detail already carries input, output,
+    // status, and model routing — a separate "tool invocation completed" row
+    // just duplicated it and buried the activity list.
     rows.push({
       title: toolActionTitle(name),
-      detail,
+      detail: toolInvocationDetail(record),
       kind: toolKind(name),
       durationMs: invocationDurationMs,
     });
-    if (detail && isTurnFinished(turn.status)) {
-      rows.push({
-        title: "tool invocation completed",
-        detail: toolInvocationCompletionDetail(record),
-        kind: toolKind(name),
-        durationMs: invocationDurationMs,
-      });
-    }
   }
 
   for (const name of toolsCalled) {
@@ -4871,6 +4922,15 @@ export function actionRowsForTurn(
       detail: toolCalledFallbackDetail(name),
       kind: toolKind(name),
     });
+  }
+
+  // A completed event supersedes its own started event (matched by
+  // invocation id) so the one row that renders carries the tool output.
+  const completedInvocationIds = new Set<string>();
+  for (const event of sortedEvents) {
+    if (stringValue(event.eventType) !== "tool_invocation_completed") continue;
+    const id = stringValue(parseRecord(event.payload).id);
+    if (id) completedInvocationIds.add(id);
   }
 
   for (const event of sortedEvents) {
@@ -4886,8 +4946,20 @@ export function actionRowsForTurn(
     // dedup against the post-turn `usage.tool_invocations` row. Once the
     // turn finishes and the invocation is in `seen` by tool-name, the live
     // event for the same tool would otherwise re-render as a duplicate.
-    if (stringValue(event.eventType) === "tool_invocation_started") {
+    const liveEventType = stringValue(event.eventType);
+    if (
+      liveEventType === "tool_invocation_started" ||
+      liveEventType === "tool_invocation_completed"
+    ) {
       const payload = parseRecord(event.payload);
+      if (
+        liveEventType === "tool_invocation_started" &&
+        completedInvocationIds.has(stringValue(payload.id) ?? "")
+      ) {
+        // Superseded by its completed event — let that row render instead
+        // (same tool key, but with the tool's output attached).
+        continue;
+      }
       const toolName =
         stringValue(payload.tool_name) ||
         stringValue(payload.toolName) ||
@@ -5188,14 +5260,11 @@ function actionRowForEvent(event: TaskThreadEvent): ActionRowData | null {
   const payload = parseRecord(event.payload);
   const detail = eventDetail(event, payload);
 
-  // HTML Document Artifacts (THINK-147 U6): document.card events render as an
-  // always-visible inline card at the turn level (documentCardsForTurn), never
-  // as a collapsed activity row — burying the deliverable behind two
-  // disclosures made it invisible in live E2E.
-  if (
-    eventType === "ui_message_chunk" &&
-    stringValue(payload.kind) === "document.card"
-  ) {
+  // ui_message_chunk events never render as activity rows: document.card
+  // chunks render as inline cards at the turn level (documentCardsForTurn,
+  // THINK-147 U6), genui/thread_json_render chunks fold into the message
+  // body, and a raw "ui message chunk" row is transport noise.
+  if (eventType === "ui_message_chunk") {
     return null;
   }
 
@@ -5217,7 +5286,13 @@ function actionRowForEvent(event: TaskThreadEvent): ActionRowData | null {
       event_detail: detail,
     });
   }
-  if (eventType === "tool_invocation_started") {
+  if (
+    eventType === "tool_invocation_started" ||
+    eventType === "tool_invocation_completed"
+  ) {
+    // Completed events title as the tool itself — never a generic
+    // "tool invocation completed" row (the async polling stream emits one
+    // per invocation, which drowned the activity list in identical rows).
     const toolName =
       stringValue(payload.tool_name) ||
       stringValue(payload.toolName) ||
