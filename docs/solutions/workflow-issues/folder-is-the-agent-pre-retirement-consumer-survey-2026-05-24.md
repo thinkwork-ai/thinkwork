@@ -8,7 +8,7 @@ component: development_workflow
 severity: high
 status: stale
 stale_date: 2026-05-26
-stale_reason: "The legacy root files have since been retired from workspace defaults and prompt loaders. Use docs/runbooks/folder-canon-default-files-retirement-2026-05-24.md and docs/src/content/docs/concepts/agents/folder-is-the-agent.mdx for current behavior."
+stale_reason: "The legacy root files have since been retired from workspace defaults and prompt loaders. Use docs/runbooks/folder-canon-default-files-retirement-2026-05-24.md and docs/reference/concepts/agents/folder-is-the-agent.mdx for current behavior."
 applies_when:
   - "Retiring SOUL.md, IDENTITY.md, PLATFORM.md, or CAPABILITIES.md from tenant workspace roots"
   - "Changing the system-prompt file order for Pi or Strands runtimes"
@@ -23,7 +23,7 @@ tags:
 
 # Folder-Is-The-Agent Legacy Root-File Consumer Survey
 
-> Stale as current guidance. This survey captured pre-retirement blast radius before `SOUL.md`, `IDENTITY.md`, `PLATFORM.md`, and `CAPABILITIES.md` were removed from the canonical defaults and runtime prompt loaders. Keep it only as historical evidence for why the migration was staged. For current behavior, use `docs/src/content/docs/concepts/agents/folder-is-the-agent.mdx`; for operator cleanup, use `docs/runbooks/folder-canon-default-files-retirement-2026-05-24.md`.
+> Stale as current guidance. This survey captured pre-retirement blast radius before `SOUL.md`, `IDENTITY.md`, `PLATFORM.md`, and `CAPABILITIES.md` were removed from the canonical defaults and runtime prompt loaders. Keep it only as historical evidence for why the migration was staged. For current behavior, use `docs/reference/concepts/agents/folder-is-the-agent.mdx`; for operator cleanup, use `docs/runbooks/folder-canon-default-files-retirement-2026-05-24.md`.
 
 ## Scope
 
@@ -254,7 +254,7 @@ Breakage if removed now:
 
 Files:
 
-- `docs/src/content/docs/applications/admin/agent-templates.mdx`
+- `docs/reference/applications/admin/agent-templates.mdx`
 - `docs/src/content/docs/concepts/agents/workspace-overlay.mdx`
 - `docs/src/content/docs/agent-design/folder-is-the-agent.mdx`
 - `docs/src/content/docs/agent-design/authoring-templates.mdx`

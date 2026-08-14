@@ -1,7 +1,8 @@
 # Managed workspace folders: removal must sever the assignment record before deleting files
 
 **Date:** 2026-07-06
-**Surface:** Composer workspace tree (`ComposerWorkspaceEditor` / `SettingsCapabilities`), `connections/<slug>` folders
+**Last updated:** 2026-08-13 (connections/ → connectors/ root rename; cross-link)
+**Surface:** Composer workspace tree (`ComposerWorkspaceEditor` / `SettingsCapabilities`), `connectors/<slug>` folders (named `connections/<slug>` when this fix shipped; the root was renamed in the subagent-folders U15 flip, PR #3819, with a dual-read window — un-moved workspaces may still show `connections/`)
 **Shipped fix:** PR #3455 (THINK-190 follow-up)
 
 ## Symptom
@@ -15,7 +16,7 @@ agent's workspace through any visible affordance:
 ## Root cause: two records, two half-actions
 
 For folder-dispatch agents the connection has **two coupled pieces of state**: the
-assignment record (`connections/<slug>/.assignment.json` sidecar, the source of truth
+assignment record (`connectors/<slug>/.assignment.json` sidecar, the source of truth
 the reconciler enforces) and the materialized folder contents. The old UI exposed two
 actions that each handled only one piece:
 
@@ -44,5 +45,11 @@ reconciler-managed folders.
 ## How to recognize it again
 
 "Delete works but the thing comes back" or "revoke succeeds but nothing changes" on
-any workspace-materialized surface (connections, skills, future managed folders) —
+any workspace-materialized surface (connectors, skills, future managed folders) —
 check whether the action touches both the record and the files, in record-first order.
+
+## Related
+
+- [Composer file pane infinite loading from unstable useEffect object dependency](composer-file-pane-infinite-loading-unstable-useeffect-dependency.md) —
+  a different failure class (React effect-deps loop, THINK-806) on the same
+  `ComposerWorkspaceEditor` surface; together these are the component's known traps.
