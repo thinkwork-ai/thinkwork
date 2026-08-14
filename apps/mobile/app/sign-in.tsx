@@ -240,9 +240,16 @@ export default function SignInScreen() {
             <View className="mb-3">
               <SignInLogo logoDataUrl={logoDataUrl} />
             </View>
-            <H2 className="text-center" numberOfLines={1} adjustsFontSizeToFit>
-              Log in to ThinkWork
-            </H2>
+            {/* A custom tenant logo is the whole identity — no app tagline. */}
+            {!logoDataUrl && (
+              <H2
+                className="text-center"
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                Log in to ThinkWork
+              </H2>
+            )}
           </View>
 
           {!activeEnvironment && (
