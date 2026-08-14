@@ -12,6 +12,8 @@ import {
   tenantAuthHosts,
   tenantAuthPolicies,
   tenantAuthProviderReferences,
+  tenantSettings,
+  tenants,
 } from "@thinkwork/database-pg/schema";
 import { db as defaultDb } from "../lib/db.js";
 import {
@@ -27,7 +29,17 @@ export interface PublicAuthOptionsResponse {
   password: { enabled: boolean; clientId?: string };
   oauthOptions: NativeAuthOption[];
   legacyMigration?: { authorizePath: string };
+  /** Tenant white-label branding for pre-auth surfaces (mobile sign-in). */
+  branding?: PublicSignInBranding;
 }
+
+export interface PublicSignInBranding {
+  logoDataUrl: string;
+}
+
+/** Data-URL logos are capped at 300KB of file bytes on upload; allow base64
+ *  expansion plus header slack before treating a stored value as garbage. */
+const MAX_LOGO_DATA_URL_LENGTH = 500 * 1024;
 
 export type PublicOAuthOption = NativeAuthOption;
 
@@ -36,6 +48,9 @@ export interface PublicAuthOptionsDeps {
     host: string | null,
     clientFamily: string,
   ): Promise<AuthPolicySnapshot>;
+  /** Branding for the host-resolved tenant, or — when the host doesn't map
+   *  to a tenant — the deployment's sole tenant if there is exactly one. */
+  loadBranding?(tenantId: string | null): Promise<PublicSignInBranding | null>;
 }
 
 export function createPublicAuthOptionsHandler(
@@ -96,12 +111,16 @@ export async function resolvePublicAuthOptions(args: {
       ? normalizeTrustedHost(args.trustedDomainName)
       : args.routingHost;
   const clientFamily = args.clientFamily ?? "web";
-  const resolved = resolveNativeAuthPolicy(
-    await deps.loadPolicy(host ?? null, clientFamily),
-    clientFamily,
-  );
+  const snapshot = await deps.loadPolicy(host ?? null, clientFamily);
+  const resolved = resolveNativeAuthPolicy(snapshot, clientFamily);
+  const branding = deps.loadBranding
+    ? await deps.loadBranding(
+        snapshot.scope === "tenant" ? (snapshot.tenantId ?? null) : null,
+      )
+    : null;
   return {
     ...resolved,
+    ...(branding ? { branding } : {}),
     ...(process.env.AUTH_RETIREMENT_PHASE === "coexistence"
       ? {
           legacyMigration: {
@@ -117,7 +136,53 @@ export function createDefaultPublicAuthOptionsDeps(
 ): PublicAuthOptionsDeps {
   return {
     loadPolicy: (host, clientFamily) => loadPolicy(host, clientFamily, db),
+    loadBranding: (tenantId) => loadBranding(tenantId, db),
   };
+}
+
+async function loadBranding(
+  tenantId: string | null,
+  db: DbLike,
+): Promise<PublicSignInBranding | null> {
+  const brandingTenantId = tenantId ?? (await soleTenantId(db));
+  if (!brandingTenantId) return null;
+  const rows = await db
+    .select({ features: tenantSettings.features })
+    .from(tenantSettings)
+    .where(eq(tenantSettings.tenant_id, brandingTenantId))
+    .limit(1);
+  return publicSignInBrandingFromFeatures(rows[0]?.features);
+}
+
+/** The deployment's only tenant, or null when there are zero or several —
+ *  a multi-tenant deployment has no unambiguous pre-auth branding. */
+async function soleTenantId(db: DbLike): Promise<string | null> {
+  const rows = await db.select({ id: tenants.id }).from(tenants).limit(2);
+  return rows.length === 1 ? rows[0].id : null;
+}
+
+export function publicSignInBrandingFromFeatures(
+  features: unknown,
+): PublicSignInBranding | null {
+  if (typeof features === "string") {
+    try {
+      features = JSON.parse(features);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof features !== "object" || features === null) return null;
+  const branding = (features as Record<string, unknown>).branding;
+  if (typeof branding !== "object" || branding === null) return null;
+  const logoDataUrl = (branding as Record<string, unknown>).logoDataUrl;
+  if (
+    typeof logoDataUrl !== "string" ||
+    !logoDataUrl.startsWith("data:image/") ||
+    logoDataUrl.length > MAX_LOGO_DATA_URL_LENGTH
+  ) {
+    return null;
+  }
+  return { logoDataUrl };
 }
 
 async function loadPolicy(

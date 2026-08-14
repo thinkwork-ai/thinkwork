@@ -3,6 +3,7 @@ import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import {
   createPublicAuthOptionsHandler,
   normalizeTrustedHost,
+  publicSignInBrandingFromFeatures,
   resolvePublicAuthOptions,
   type PublicAuthOptionsDeps,
 } from "./public-auth-options.js";
@@ -112,6 +113,64 @@ describe("resolvePublicAuthOptions", () => {
         deps: deps(),
       }),
     ).resolves.not.toHaveProperty("legacyMigration");
+  });
+});
+
+describe("sign-in branding", () => {
+  const logo = `data:image/png;base64,${"A".repeat(64)}`;
+
+  it("includes branding from the host-resolved tenant", async () => {
+    const loadBranding = vi.fn(async () => ({ logoDataUrl: logo }));
+    const result = await resolvePublicAuthOptions({
+      routingHost: "customer.thinkwork.ai",
+      deps: {
+        loadPolicy: vi.fn(async () => ({
+          ...snapshot,
+          scope: "tenant" as const,
+          tenantId: "tenant-1",
+        })),
+        loadBranding,
+      },
+    });
+
+    expect(loadBranding).toHaveBeenCalledWith("tenant-1");
+    expect(result.branding).toEqual({ logoDataUrl: logo });
+  });
+
+  it("asks for deployment-scope branding with a null tenant id", async () => {
+    const loadBranding = vi.fn(async () => null);
+    const result = await resolvePublicAuthOptions({
+      routingHost: "app.thinkwork.ai",
+      deps: { loadPolicy: vi.fn(async () => snapshot), loadBranding },
+    });
+
+    expect(loadBranding).toHaveBeenCalledWith(null);
+    expect(result.branding).toBeUndefined();
+  });
+
+  it("extracts only a plausible data-URL logo from tenant features", () => {
+    expect(
+      publicSignInBrandingFromFeatures({ branding: { logoDataUrl: logo } }),
+    ).toEqual({ logoDataUrl: logo });
+    expect(
+      publicSignInBrandingFromFeatures(
+        JSON.stringify({ branding: { logoDataUrl: logo } }),
+      ),
+    ).toEqual({ logoDataUrl: logo });
+    expect(
+      publicSignInBrandingFromFeatures({
+        branding: { logoDataUrl: "https://evil.example.com/logo.png" },
+      }),
+    ).toBeNull();
+    expect(
+      publicSignInBrandingFromFeatures({
+        branding: {
+          logoDataUrl: `data:image/png;base64,${"A".repeat(600 * 1024)}`,
+        },
+      }),
+    ).toBeNull();
+    expect(publicSignInBrandingFromFeatures(null)).toBeNull();
+    expect(publicSignInBrandingFromFeatures({ branding: {} })).toBeNull();
   });
 });
 

@@ -152,4 +152,30 @@ describe("mobile auth options", () => {
       failed: false,
     });
   });
+
+  it("parses tenant sign-in branding and rejects non-data-URL logos", () => {
+    const logo = "data:image/png;base64,AAAA";
+    expect(
+      parsePublicAuthOptions({
+        password: { enabled: false },
+        oauthOptions: [],
+        branding: { logoDataUrl: logo },
+      }).branding,
+    ).toEqual({ logoDataUrl: logo });
+
+    expect(
+      parsePublicAuthOptions({
+        password: { enabled: false },
+        oauthOptions: [],
+        branding: { logoDataUrl: "https://evil.example.com/logo.png" },
+      }).branding,
+    ).toBeUndefined();
+
+    expect(
+      parsePublicAuthOptions({
+        password: { enabled: false },
+        oauthOptions: [],
+      }).branding,
+    ).toBeUndefined();
+  });
 });

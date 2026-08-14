@@ -5,7 +5,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Image,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Scan } from "lucide-react-native";
@@ -13,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Text, H2 } from "@/components/ui/typography";
 import { AuthOptions, useAuthOptions } from "@/components/auth/AuthOptions";
+import { SignInLogo } from "@/components/auth/SignInLogo";
+import { readCachedSignInBranding } from "@/lib/auth-options";
 import {
   EnvironmentPickerSheet,
   type EnvironmentPickerSheetRef,
@@ -58,6 +59,27 @@ export default function SignInScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const authOptions = useAuthOptions(deploymentConfig.apiUrl);
   const authDisplay = deriveAuthOptionsDisplay(authOptions.state);
+  const [cachedLogoDataUrl, setCachedLogoDataUrl] = useState<string | null>(
+    null,
+  );
+  const activeEnvironmentHost = activeEnvironment?.host ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    void readCachedSignInBranding(activeEnvironmentHost).then((branding) => {
+      if (!cancelled) setCachedLogoDataUrl(branding?.logoDataUrl ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeEnvironmentHost]);
+  // Live branding once the auth-options fetch settles (it also refreshes the
+  // cache); until then, last-known branding for this environment so the
+  // tenant logo paints without flashing the default mark.
+  const logoDataUrl = authOptions.state.loading
+    ? (authOptions.state.options.branding?.logoDataUrl ?? cachedLogoDataUrl)
+    : authOptions.state.failed
+      ? cachedLogoDataUrl
+      : (authOptions.state.options.branding?.logoDataUrl ?? null);
 
   const biometricName = getBiometricName(biometricType);
   const configBlocked = !deploymentConfig.configured;
@@ -216,11 +238,7 @@ export default function SignInScreen() {
         <View className="w-[90%] max-w-md">
           <View className="mb-6 items-center">
             <View className="mb-3">
-              <Image
-                source={require("@/assets/logo.png")}
-                style={{ width: 96, height: 78 }}
-                resizeMode="contain"
-              />
+              <SignInLogo logoDataUrl={logoDataUrl} />
             </View>
             <H2 className="text-center" numberOfLines={1} adjustsFontSizeToFit>
               Log in to ThinkWork
@@ -234,121 +252,119 @@ export default function SignInScreen() {
                 variant="muted"
                 className="text-center leading-relaxed"
               >
-                Connect to your organization's ThinkWork environment to sign
-                in. Choose one to see its sign-in options.
+                Connect to your organization's ThinkWork environment to sign in.
+                Choose one to see its sign-in options.
               </Text>
-              <Button
-                onPress={() => environmentSheetRef.current?.present()}
-              >
+              <Button onPress={() => environmentSheetRef.current?.present()}>
                 Select environment
               </Button>
             </View>
           )}
 
           {activeEnvironment && (
-          <View className="gap-4">
-            <AuthOptions
-              state={authOptions.state}
-              onRetry={authOptions.retry}
-              onPressOAuth={handleOAuthPress}
-              disabled={configBlocked || ssoLoading || loading}
-            />
+            <View className="gap-4">
+              <AuthOptions
+                state={authOptions.state}
+                onRetry={authOptions.retry}
+                onPressOAuth={handleOAuthPress}
+                disabled={configBlocked || ssoLoading || loading}
+              />
 
-            {biometricSupported &&
-              hasStoredCredentials &&
-              !biometricLoading &&
-              Platform.OS !== "web" && (
-                <Button
-                  variant="outline"
-                  onPress={handleBiometricLogin}
-                  loading={biometricLoading2}
-                  disabled={configBlocked}
-                >
-                  <View className="flex-row items-center">
-                    <Scan size={20} color={colors.foreground} />
-                    <Text className="ml-2 text-neutral-900 dark:text-neutral-100 font-semibold">
-                      Sign in with {biometricName}
-                    </Text>
-                  </View>
-                </Button>
-              )}
-
-            {authDisplay.showPasswordForm && (
-              <>
-                <Input
-                  label="Email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-
-                <View>
-                  <Input
-                    label="Password"
-                    placeholder="Password"
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                  />
-                  <Pressable
-                    className="absolute right-4"
-                    style={{ top: 42 }}
-                    onPress={() => setShowPassword(!showPassword)}
+              {biometricSupported &&
+                hasStoredCredentials &&
+                !biometricLoading &&
+                Platform.OS !== "web" && (
+                  <Button
+                    variant="outline"
+                    onPress={handleBiometricLogin}
+                    loading={biometricLoading2}
+                    disabled={configBlocked}
                   >
-                    <Text size="base" variant="muted">
-                      {showPassword ? "Hide" : "Show"}
+                    <View className="flex-row items-center">
+                      <Scan size={20} color={colors.foreground} />
+                      <Text className="ml-2 text-neutral-900 dark:text-neutral-100 font-semibold">
+                        Sign in with {biometricName}
+                      </Text>
+                    </View>
+                  </Button>
+                )}
+
+              {authDisplay.showPasswordForm && (
+                <>
+                  <Input
+                    label="Email"
+                    placeholder="your@email.com"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+
+                  <View>
+                    <Input
+                      label="Password"
+                      placeholder="Password"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry={!showPassword}
+                      autoCapitalize="none"
+                    />
+                    <Pressable
+                      className="absolute right-4"
+                      style={{ top: 42 }}
+                      onPress={() => setShowPassword(!showPassword)}
+                    >
+                      <Text size="base" variant="muted">
+                        {showPassword ? "Hide" : "Show"}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  <Button
+                    onPress={handleSubmit}
+                    loading={loading}
+                    disabled={configBlocked}
+                  >
+                    Sign in
+                  </Button>
+
+                  <Pressable
+                    className="pt-1"
+                    onPress={() => router.push("/forgot-password")}
+                  >
+                    <Text size="sm" variant="muted" className="text-center">
+                      Reset password
                     </Text>
                   </Pressable>
-                </View>
+                </>
+              )}
 
-                <Button
-                  onPress={handleSubmit}
-                  loading={loading}
-                  disabled={configBlocked}
-                >
-                  Sign in
-                </Button>
-
-                <Pressable
-                  className="pt-1"
-                  onPress={() => router.push("/forgot-password")}
-                >
-                  <Text size="sm" variant="muted" className="text-center">
-                    Reset password
-                  </Text>
-                </Pressable>
-              </>
-            )}
-
-            {authDisplay.showUnavailable && (
-              <Text size="sm" variant="muted" className="text-center">
-                Sign-in options are unavailable.
-              </Text>
-            )}
-
-            {error && (
-              <View className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
-                <Text size="sm" className="text-destructive">
-                  {error}
+              {authDisplay.showUnavailable && (
+                <Text size="sm" variant="muted" className="text-center">
+                  Sign-in options are unavailable.
                 </Text>
-              </View>
-            )}
+              )}
 
-            <Pressable
-              className="pt-2"
-              onPress={() => environmentSheetRef.current?.present()}
-            >
-              <Text size="xs" variant="muted" className="text-center">
-                {deploymentConfig.configured
-                  ? footerLabel
-                  : `Configuration incomplete for ${deploymentConfig.stage}`}
-              </Text>
-            </Pressable>
-          </View>
+              {error && (
+                <View className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
+                  <Text size="sm" className="text-destructive">
+                    {error}
+                  </Text>
+                </View>
+              )}
+
+              <Pressable
+                className="pt-2"
+                onPress={() => environmentSheetRef.current?.present()}
+              >
+                <Text size="xs" variant="muted" className="text-center">
+                  {deploymentConfig.configured
+                    ? footerLabel
+                    : `Configuration incomplete for ${deploymentConfig.stage}`}
+                </Text>
+              </Pressable>
+            </View>
           )}
         </View>
       </ScrollView>
