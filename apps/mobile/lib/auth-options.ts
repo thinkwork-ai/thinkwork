@@ -4,6 +4,12 @@ import { getActiveEnvironmentEntry } from "./environments/store";
 export interface PublicAuthOptions {
   password: { enabled: boolean; clientId?: string };
   oauthOptions: PublicOAuthOption[];
+  /** Tenant white-label branding for the pre-auth sign-in screen. */
+  branding?: PublicSignInBranding;
+}
+
+export interface PublicSignInBranding {
+  logoDataUrl: string;
 }
 
 export interface PublicOAuthOption {
@@ -48,12 +54,66 @@ export async function fetchAuthOptionsForActiveEnvironment(
     if (!response.ok) {
       return { options: FALLBACK_AUTH_OPTIONS, failed: true };
     }
-    return {
-      options: parsePublicAuthOptions(await response.json()),
-      failed: false,
-    };
+    const options = parsePublicAuthOptions(await response.json());
+    if (environmentHost) {
+      void writeCachedSignInBranding(environmentHost, options.branding ?? null);
+    }
+    return { options, failed: false };
   } catch {
     return { options: FALLBACK_AUTH_OPTIONS, failed: true };
+  }
+}
+
+// Last-known branding per environment host, persisted so the sign-in screen
+// shows the tenant logo immediately on later launches instead of flashing
+// the default mark while /api/auth/options is in flight. Reconciled (or
+// cleared) every time the fetch settles successfully.
+const SIGN_IN_BRANDING_CACHE_PREFIX = "thinkwork.signInBranding.v1:";
+
+export async function readCachedSignInBranding(
+  host: string | null | undefined,
+): Promise<PublicSignInBranding | null> {
+  if (!host) return null;
+  try {
+    const storage = await brandingStorage();
+    const raw = await storage?.getItem(
+      `${SIGN_IN_BRANDING_CACHE_PREFIX}${host}`,
+    );
+    if (!raw) return null;
+    return parseSignInBranding(JSON.parse(raw)) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCachedSignInBranding(
+  host: string,
+  branding: PublicSignInBranding | null,
+): Promise<void> {
+  const key = `${SIGN_IN_BRANDING_CACHE_PREFIX}${host}`;
+  try {
+    const storage = await brandingStorage();
+    if (!storage) return;
+    if (branding) {
+      await storage.setItem(key, JSON.stringify(branding));
+    } else {
+      await storage.removeItem(key);
+    }
+  } catch {
+    // Storage failures just mean no instant logo next launch.
+  }
+}
+
+async function brandingStorage(): Promise<{
+  getItem(key: string): Promise<string | null>;
+  setItem(key: string, value: string): Promise<void>;
+  removeItem(key: string): Promise<void>;
+} | null> {
+  try {
+    const module = await import("@react-native-async-storage/async-storage");
+    return module.default;
+  } catch {
+    return null;
   }
 }
 
@@ -70,7 +130,22 @@ export function parsePublicAuthOptions(raw: unknown): PublicAuthOptions {
     const option = parseOAuthOption(entry);
     return option ? [option] : [];
   });
-  return { password, oauthOptions };
+  const branding = parseSignInBranding(record.branding);
+  return { password, oauthOptions, ...(branding ? { branding } : {}) };
+}
+
+export function parseSignInBranding(
+  raw: unknown,
+): PublicSignInBranding | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const logoDataUrl = (raw as Record<string, unknown>).logoDataUrl;
+  if (
+    typeof logoDataUrl !== "string" ||
+    !logoDataUrl.startsWith("data:image/")
+  ) {
+    return undefined;
+  }
+  return { logoDataUrl };
 }
 
 export interface AuthOptionsUiState {
