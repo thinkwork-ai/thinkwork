@@ -8,6 +8,14 @@ import {
 } from "@/lib/user-question-record";
 import { LoadingShimmer } from "@/components/LoadingShimmer";
 import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ai-elements/message-scroller";
+import {
   resolveMessageAttachments,
   type MessageAttachmentDisplay,
   type ThreadAttachmentSummary,
@@ -80,24 +88,46 @@ export function ThreadConversation({
   }
 
   const groups = groupMessages(messages);
+  // shadcn MessageScroller (same as the main thread transcript): opens at
+  // the last user-sent group instead of the hard bottom, with a floating
+  // jump-to-end button. Items must be DIRECT children of Content for the
+  // primitive's anchor/visibility tracking, so the column constraint lives
+  // on each item.
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-      <div className="mx-auto flex max-w-4xl flex-col gap-4">
-        {groups.map((group) =>
-          group.kind === "milestone" ? (
-            <MilestoneRow key={group.message.id} message={group.message} />
-          ) : (
-            <MessageGroup
-              key={group.id}
-              group={group}
-              attachments={attachments}
-              mentionTargets={mentionTargets}
-              onDownloadAttachment={onDownloadAttachment}
-            />
-          ),
-        )}
-      </div>
-    </div>
+    <MessageScrollerProvider defaultScrollPosition="last-anchor">
+      <MessageScroller className="min-h-0 flex-1">
+        <MessageScrollerViewport>
+          <MessageScrollerContent className="gap-4 px-4 py-3">
+            {groups.map((group) =>
+              group.kind === "milestone" ? (
+                <MessageScrollerItem
+                  key={group.message.id}
+                  messageId={group.message.id}
+                  className="mx-auto w-full max-w-4xl"
+                >
+                  <MilestoneRow message={group.message} />
+                </MessageScrollerItem>
+              ) : (
+                <MessageScrollerItem
+                  key={group.id}
+                  messageId={group.id}
+                  scrollAnchor={group.senderType !== "agent"}
+                  className="mx-auto w-full max-w-4xl"
+                >
+                  <MessageGroup
+                    group={group}
+                    attachments={attachments}
+                    mentionTargets={mentionTargets}
+                    onDownloadAttachment={onDownloadAttachment}
+                  />
+                </MessageScrollerItem>
+              ),
+            )}
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+        <MessageScrollerButton />
+      </MessageScroller>
+    </MessageScrollerProvider>
   );
 }
 

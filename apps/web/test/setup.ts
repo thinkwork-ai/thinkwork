@@ -112,3 +112,34 @@ if (
     },
   });
 }
+
+// jsdom has no IntersectionObserver; @shadcn/react's message-scroller
+// primitive observes item visibility with one. A no-op stub (shadcn's own
+// test approach) lets the component mount — visibility/scroll physics are
+// deliberately not assertable under jsdom and are covered manually.
+if (!("IntersectionObserver" in globalThis)) {
+  class IntersectionObserverStub {
+    readonly root = null;
+    readonly rootMargin = "";
+    readonly thresholds: readonly number[] = [];
+
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  }
+  Object.defineProperty(globalThis, "IntersectionObserver", {
+    configurable: true,
+    value: IntersectionObserverStub,
+  });
+}
+
+// jsdom Elements have no scrollTo; the message-scroller viewport calls it
+// for autoscroll and anchor jumps. A no-op keeps mounts clean. Guarded on
+// Element existing — the iframe-shell smoke tests run in a plain Node
+// environment with no DOM globals at all.
+if (typeof Element !== "undefined" && !Element.prototype.scrollTo) {
+  Element.prototype.scrollTo = () => {};
+}

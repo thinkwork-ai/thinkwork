@@ -33,8 +33,12 @@ function turnWith(
 }
 
 function completedDetail(rows: ReturnType<typeof actionRowsForTurn>) {
-  const row = rows.find((row) => row.title === "tool invocation completed");
-  expect(row).toBeTruthy();
+  // One row per tool — the completion output lives on the tool's own row,
+  // never on a separate generic "tool invocation completed" row.
+  expect(
+    rows.some((row) => row.title === "tool invocation completed"),
+  ).toBe(false);
+  const row = rows[0];
   expect(row?.detail).toBeTruthy();
   return row?.detail ?? "";
 }
@@ -103,10 +107,7 @@ describe("actionRowsForTurn — live/finalized convergence", () => {
     });
     const detail = completedDetail(rows);
 
-    expect(rows.map((row) => row.title)).toEqual([
-      "Using web extract",
-      "tool invocation completed",
-    ]);
+    expect(rows.map((row) => row.title)).toEqual(["Using web extract"]);
     expect(rows[0].detail).toContain('"url": "https://example.com/"');
     expect(rows[0].detail).toContain('"ok": true');
     expect(detail).toContain('"url": "https://example.com/"');
