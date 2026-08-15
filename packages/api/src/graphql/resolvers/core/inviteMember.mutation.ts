@@ -343,10 +343,16 @@ async function bindDefaultCognitoInviteIdentity(
         eq(userAuthIdentities.cognito_sub, input.cognitoSub),
       ),
     );
-  if (identities.length > 1) {
+  // Multi-lane (0288): rows for OTHER connections are this same person's
+  // other admitted providers — only a row that maps the subject to a
+  // different product user, or a mismatched row on THIS connection, is a
+  // conflict.
+  if (identities.some((row) => row.user_id !== input.userId)) {
     throw inviteIdentityConflict();
   }
-  const identity = identities[0];
+  const identity = identities.find(
+    (row) => row.auth_provider_resource_id === resource.id,
+  );
   if (identity) {
     if (
       identity.user_id !== input.userId ||
