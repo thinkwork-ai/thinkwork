@@ -966,22 +966,6 @@ export type BootstrapResult = {
   user: User;
 };
 
-export type BrainExpertQuestion = {
-  __typename?: 'BrainExpertQuestion';
-  createdAt?: Maybe<Scalars['String']['output']>;
-  domain?: Maybe<Scalars['String']['output']>;
-  /**
-   * Server-minted question id (UUID) — pass as `answersQuestionId` when
-   * answering via `teachBrain`.
-   */
-  id: Scalars['String']['output'];
-  question: Scalars['String']['output'];
-  /** The Brain-side Platform Agent task awaiting this answer. */
-  taskId?: Maybe<Scalars['String']['output']>;
-  /** Why the Brain is asking (context.why), when provided. */
-  why?: Maybe<Scalars['String']['output']>;
-};
-
 export type BudgetPolicy = {
   __typename?: 'BudgetPolicy';
   actionOnExceed: Scalars['String']['output'];
@@ -4307,13 +4291,6 @@ export type Mutation = {
   /** Submit a draft for trust/review. */
   submitSkillDraft: SkillDraft;
   /**
-   * Send expert knowledge to the ThinkWork Brain for review (THINK-784).
-   * `taught_by` is attributed server-side from the signed-in caller. 4xx
-   * from the Brain surfaces as BAD_USER_INPUT; 5xx/timeouts surface as
-   * SERVICE_UNAVAILABLE ("couldn't reach the Brain — try again").
-   */
-  teachBrain: TeachBrainResult;
-  /**
    * Inserts a synthetic delivery row for the webhook so an operator can
    * confirm the config exists and the delivery-log pipeline is reachable.
    * Does NOT trigger any downstream dispatch — the row carries
@@ -5763,11 +5740,6 @@ export type MutationSubmitSkillDraftArgs = {
 };
 
 
-export type MutationTeachBrainArgs = {
-  input: TeachBrainInput;
-};
-
-
 export type MutationTestWebhookArgs = {
   id: Scalars['ID']['input'];
 };
@@ -6596,13 +6568,6 @@ export type Query = {
   artifactShares: Array<ArtifactShare>;
   artifacts: Array<Artifact>;
   bedrockModelImportCandidates: Array<BedrockModelImportCandidate>;
-  /**
-   * Open Brain questions addressed to the signed-in user, oldest first
-   * (THINK-787). Empty when the caller is not a registered expert or has
-   * no open questions. Errors from the Brain surface as
-   * SERVICE_UNAVAILABLE; an unconfigured Brain connection returns [].
-   */
-  brainExpertQuestions: Array<BrainExpertQuestion>;
   budgetPolicies: Array<BudgetPolicy>;
   budgetStatus: Array<BudgetStatus>;
   canonicalEntities: Array<CanonicalEntity>;
@@ -9644,43 +9609,6 @@ export enum SubscriptionInvalidationField {
   OnThreadUpdated = 'ON_THREAD_UPDATED',
   OnWorkspaceAccessRevoked = 'ON_WORKSPACE_ACCESS_REVOKED'
 }
-
-export type TeachBrainInput = {
-  /**
-   * When answering a Brain expert question (THINK-787): the question's id
-   * (UUID). The Brain links the teaching to the question and flips it to
-   * answered.
-   */
-  answersQuestionId?: InputMaybe<Scalars['ID']['input']>;
-  /**
-   * Required free-text statement — what the Brain should know, in the
-   * expert's own words. Truncated to the Brain's 4000-char cap.
-   */
-  text: Scalars['String']['input'];
-  /**
-   * Optional thread the teaching was taught from; resolves to
-   * `context_thread_url` server-side. The caller must be able to see the
-   * thread.
-   */
-  threadId?: InputMaybe<Scalars['ID']['input']>;
-};
-
-export type TeachBrainResult = {
-  __typename?: 'TeachBrainResult';
-  /**
-   * Brain-side annotation, present when the teaching was accepted but the
-   * investigation could not be dispatched immediately.
-   */
-  note?: Maybe<Scalars['String']['output']>;
-  /**
-   * The dispatched teaching-distill Platform Agent task. Null when the
-   * Brain accepted the teaching but could not immediately dispatch the
-   * investigation (see `note`).
-   */
-  taskId?: Maybe<Scalars['String']['output']>;
-  /** Server-minted teaching id — always present on acceptance. */
-  teachingId: Scalars['String']['output'];
-};
 
 export type Tenant = {
   __typename?: 'Tenant';
