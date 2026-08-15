@@ -388,7 +388,12 @@ export async function automaticallyLinkFederatedIdentity(
   const cognitoSub = auth.principalId;
   const cognitoIssuer = auth.cognitoIssuer;
   return db.transaction(async (tx) => {
-    const [existing] = await tx
+    // ALL lanes for this subject (0288 multi-lane): only the SAME-lane row
+    // decides linked/conflict — a subject may enroll one lane per
+    // connection. Other-lane rows still matter: they pin which product
+    // user this subject is, because one Cognito subject must never map to
+    // two product users.
+    const existingLanes = await tx
       .select({
         userId: userAuthIdentities.user_id,
         tenantId: userAuthIdentities.tenant_id,
@@ -403,12 +408,16 @@ export async function automaticallyLinkFederatedIdentity(
         ),
       )
       .for("update");
-    if (existing) {
-      return existing.status === "active" &&
-        existing.resourceId === route.connectionId
+    const sameLane = existingLanes.find(
+      (lane) => lane.resourceId === route.connectionId,
+    );
+    if (sameLane) {
+      return sameLane.status === "active"
         ? "already_linked"
         : "identity_conflict";
     }
+    const pinnedUserIds = new Set(existingLanes.map((lane) => lane.userId));
+    if (pinnedUserIds.size > 1) return "identity_conflict";
 
     const normalizedEmail = auth.email?.trim().toLowerCase() ?? "";
     const hasTrustedProviderEmail =
@@ -462,6 +471,12 @@ export async function automaticallyLinkFederatedIdentity(
     `);
     if (candidates.rows.length !== 1) return "not_linked";
     const candidate = candidates.rows[0]!;
+    // Cross-user guard (0288): when other lanes already pin this subject
+    // to a product user, an email match resolving to a DIFFERENT user is a
+    // conflict, never a second mapping.
+    if (pinnedUserIds.size === 1 && !pinnedUserIds.has(candidate.user_id)) {
+      return "identity_conflict";
+    }
 
     await tx.insert(userAuthIdentities).values({
       tenant_id: candidate.tenant_id,
@@ -639,7 +654,7 @@ export async function consumeEnrollment(
       return "invalid_grant";
     }
 
-    const [conflict] = await tx
+    const lanes = await tx
       .select({
         id: userAuthIdentities.id,
         userId: userAuthIdentities.user_id,
@@ -653,8 +668,26 @@ export async function consumeEnrollment(
           eq(userAuthIdentities.cognito_issuer, cognitoIssuer),
           eq(userAuthIdentities.cognito_sub, cognitoSub),
         ),
-      )
-      .limit(1);
+      );
+    // Cross-user guard (0288 multi-lane): a subject already mapped to a
+    // different product user can never consume a grant for this one.
+    if (lanes.some((lane) => lane.userId !== intendedUserId)) {
+      return "identity_conflict";
+    }
+    // Only the SAME-lane row participates in the conflict decision — other
+    // lanes are this same user's other admitted providers. One exception:
+    // identity_recovery may promote (REBIND) the user's quarantined row
+    // onto this connection, whatever it was bound to before — recovery
+    // replaces a lost lane rather than adding one beside it.
+    const conflict =
+      lanes.find((lane) => lane.resourceId === route.connectionId) ??
+      (enrollment.recipient_grant_kind === "identity_recovery"
+        ? lanes.find(
+            (lane) =>
+              lane.status === "quarantined" &&
+              lane.tenantId === enrollment.tenant_id,
+          )
+        : undefined);
     const promotesQuarantinedRecovery =
       enrollment.recipient_grant_kind === "identity_recovery" &&
       conflict?.userId === intendedUserId &&

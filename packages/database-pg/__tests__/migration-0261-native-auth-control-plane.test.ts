@@ -65,7 +65,9 @@ describe("migration 0261 — native auth control plane", () => {
     expect(getTableName(auth.userAuthIdentities)).toBe("user_auth_identities");
     const config = getTableConfig(auth.userAuthIdentities);
     const indexes = config.indexes.map((index) => index.config.name);
-    expect(indexes).toContain("uq_user_auth_identities_cognito_sub");
+    // Renamed by 0288 (multi-lane): one enrollment per (subject,
+    // connection), not one per subject.
+    expect(indexes).toContain("uq_user_auth_identities_sub_connection");
     expect(indexes).toContain("uq_user_auth_identities_provider_subject");
     expect(indexes).toContain("idx_user_auth_identities_user_status");
     expect(config.foreignKeys.map((foreignKey) => foreignKey.onDelete)).toEqual(

@@ -1066,7 +1066,12 @@ describe("identity enrollment", () => {
   it.each([
     ["revoked identity", { status: "revoked" }],
     ["quarantined identity", { status: "quarantined" }],
-    ["identity on another route", { resourceId: "connection-2" }],
+    // Multi-lane (0288): a subject already mapped to a DIFFERENT product
+    // user is a conflict on every connection — the cross-user guard.
+    [
+      "identity owned by another user",
+      { resourceId: "connection-2", userId: "user-2" },
+    ],
   ])(
     "rejects an existing %s instead of accepting it",
     async (_label, override) => {
@@ -1101,6 +1106,45 @@ describe("identity enrollment", () => {
       expect(updates).toEqual([]);
     },
   );
+
+  // Multi-lane (0288): the same user's ACTIVE row on another connection is
+  // no conflict — it is exactly the "add another admitted provider" case,
+  // and the consume enrolls this connection beside it.
+  it("enrolls a second lane beside the same user's identity on another route", async () => {
+    const grant = enrollment();
+    selectQueue.push(
+      [grant],
+      [grant],
+      [{ id: "member-1", status: "pending" }],
+      [
+        {
+          userId: "user-1",
+          tenantId: "tenant-1",
+          resourceId: "connection-2",
+          status: "active",
+        },
+      ],
+    );
+
+    await expect(
+      consumeEnrollment(
+        {
+          startToken: "start-token",
+          recipientChallenge: "654321",
+          redirectUri: "https://app.example.com/auth/callback",
+        },
+        auth,
+        new Date("2026-07-18T00:00:00Z"),
+      ),
+    ).resolves.toBe("consumed");
+    expect(inserts[0]).toMatchObject({
+      values: expect.objectContaining({
+        user_id: "user-1",
+        auth_provider_resource_id: "connection-1",
+        status: "active",
+      }),
+    });
+  });
 });
 
 function recoveryEvent(token: string): APIGatewayProxyEventV2 {

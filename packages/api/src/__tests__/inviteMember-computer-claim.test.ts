@@ -255,9 +255,13 @@ describe("inviteMember onboarding claim", () => {
       identityUserId: "different-thinkwork-user",
       identityResourceId: "connection-local",
     },
+    // Multi-lane (0288): a row on ANOTHER connection is only a conflict
+    // when it maps the subject to a DIFFERENT user — the cross-user guard.
+    // The same user's other-lane row is their other admitted provider and
+    // no longer blocks the local invite (covered by the test below).
     {
-      conflict: "local resource",
-      identityUserId: "thinkwork-user-1",
+      conflict: "ThinkWork user on another lane",
+      identityUserId: "different-thinkwork-user",
       identityResourceId: "different-local-connection",
     },
   ])("fails closed on a conflicting $conflict binding", async (conflict) => {
@@ -332,6 +336,86 @@ describe("inviteMember onboarding claim", () => {
 
     expect(transactionMock).toHaveBeenCalledOnce();
     expect(insertCalls).toEqual([]);
+  });
+
+  // Multi-lane (0288): the SAME user's row on another connection is their
+  // other admitted provider — the local invite enrolls the local lane
+  // beside it instead of failing closed.
+  it("enrolls the local lane beside the same user's other-connection identity", async () => {
+    cognitoSendMock.mockResolvedValueOnce({
+      User: {
+        Attributes: [{ Name: "sub", Value: "cognito-user-1" }],
+      },
+    });
+    const cognitoIssuer = "https://cognito-idp.us-east-1.amazonaws.com/pool-1";
+    selectRowsQueue.push(
+      [],
+      [
+        {
+          id: "thinkwork-user-1",
+          cognito_sub: "cognito-user-1",
+          email: "alex@acme.example",
+        },
+      ],
+      [
+        {
+          id: "member-existing",
+          tenant_id: "tenant-A",
+          principal_type: "user",
+          principal_id: "thinkwork-user-1",
+          role: "member",
+          status: "active",
+        },
+      ],
+      [
+        {
+          id: "connection-local",
+          connection_key: "local",
+          validation_status: "valid",
+        },
+      ],
+      [
+        {
+          user_id: "thinkwork-user-1",
+          auth_provider_resource_id: "different-local-connection",
+          cognito_issuer: cognitoIssuer,
+          cognito_sub: "cognito-user-1",
+          provider_issuer: cognitoIssuer,
+          provider_subject: "cognito-user-1",
+          status: "active",
+        },
+      ],
+    );
+
+    await expect(
+      inviteMember(
+        null,
+        {
+          tenantId: "tenant-A",
+          input: {
+            email: "alex@acme.example",
+            name: "Alex Acme",
+            role: "member",
+          },
+        },
+        {
+          auth: {
+            authType: "cognito",
+            principalId: "operator-user",
+            tenantId: "tenant-A",
+            email: "operator@acme.example",
+          },
+        } as any,
+      ),
+    ).resolves.toBeTruthy();
+
+    expect(
+      insertCalls.some(
+        (call) =>
+          call.values.auth_provider_resource_id === "connection-local" &&
+          call.values.user_id === "thinkwork-user-1",
+      ),
+    ).toBe(true);
   });
 
   it("uses the active Resend channel for invite delivery", async () => {

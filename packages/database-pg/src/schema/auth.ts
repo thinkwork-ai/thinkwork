@@ -416,9 +416,15 @@ export const userAuthIdentities = pgTable(
       .default(sql`now()`),
   },
   (table) => [
-    uniqueIndex("uq_user_auth_identities_cognito_sub").on(
+    // One enrollment per (subject, connection) — NOT one per subject
+    // (0288, Eric 2026-08-15): a Cognito user with linked providers keeps
+    // one sub across lanes, and each lane needs its own enrollment. The
+    // one-subject-one-product-user invariant moved into the writers'
+    // cross-user guards.
+    uniqueIndex("uq_user_auth_identities_sub_connection").on(
       table.cognito_issuer,
       table.cognito_sub,
+      table.auth_provider_resource_id,
     ),
     uniqueIndex("uq_user_auth_identities_provider_subject").on(
       table.auth_provider_resource_id,
