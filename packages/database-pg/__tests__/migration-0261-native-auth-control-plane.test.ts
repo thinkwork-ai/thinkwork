@@ -99,7 +99,9 @@ describe("migration 0261 — native auth control plane", () => {
       "public.auth_reconciliation_sets",
       "public.auth_cutover_runs",
       "public.auth_identity_proofs",
-      "public.uq_user_auth_identities_cognito_sub",
+      // Renamed by 0288 (multi-lane) — 0261 is replayed as desired
+      // state on deploy, so it declares the CURRENT index.
+      "public.uq_user_auth_identities_sub_connection",
       "public.uq_user_auth_identities_provider_subject",
       "public.uq_auth_reconciliation_sets_stage_revision",
       "public.uq_auth_cutover_runs_stage_inventory",
