@@ -94,8 +94,6 @@ const {
   spaceThreadsReexecuteMock: vi.fn(),
   subscriptionResultMock: { data: undefined as unknown },
   queryDocs: {
-    BrainExpertQuestionsQuery: Symbol("BrainExpertQuestionsQuery"),
-    TeachBrainMutation: Symbol("TeachBrainMutation"),
     ChatGlobalInboxQuery: Symbol("ChatGlobalInboxQuery"),
     ComputerApprovalsQuery: Symbol("ComputerApprovalsQuery"),
     ComputerThreadQuery: Symbol("ComputerThreadQuery"),

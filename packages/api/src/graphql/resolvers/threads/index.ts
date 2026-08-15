@@ -29,8 +29,6 @@ import { unpinThread } from "./unpinThread.mutation.js";
 import { reorderPinnedThreads } from "./reorderPinnedThreads.mutation.js";
 import { setThreadNotificationPreference } from "./setThreadNotificationPreference.mutation.js";
 import { flagThreadToBrain } from "./flagThreadToBrain.mutation.js";
-import { teachBrain } from "./teachBrain.mutation.js";
-import { brainExpertQuestions } from "./brainExpertQuestions.query.js";
 
 export const threadQueries = {
   threads: threads_query,
@@ -43,7 +41,6 @@ export const threadQueries = {
   tenantMentionTargets,
   unreadThreadCount,
   pinnedThreads,
-  brainExpertQuestions,
 };
 
 export const threadMutations = {
@@ -67,5 +64,4 @@ export const threadMutations = {
   reorderPinnedThreads,
   setThreadNotificationPreference,
   flagThreadToBrain,
-  teachBrain,
 };

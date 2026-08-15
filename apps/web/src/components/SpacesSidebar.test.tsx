@@ -262,13 +262,6 @@ describe("SpacesSidebar", () => {
     expect(routerMocks.navigate).not.toHaveBeenCalled();
   });
 
-  it("no longer offers Teach the Brain in the account menu (brain teaching moved to the Brain console)", () => {
-    render(<SpacesSidebar />);
-
-    expect(screen.queryByTestId("sidebar-teach-brain")).toBeNull();
-    expect(screen.queryByText("Teach the Brain")).toBeNull();
-  });
-
   it("shows the server-reported deployed release in the account menu footer", () => {
     render(<SpacesSidebar />);
 
