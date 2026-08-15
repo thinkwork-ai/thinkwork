@@ -21,7 +21,7 @@
 -- creates: public.uq_auth_route_clients_app_client
 -- creates: public.idx_auth_route_clients_lifecycle_status
 -- creates: public.user_auth_identities
--- creates: public.uq_user_auth_identities_cognito_sub
+-- creates: public.uq_user_auth_identities_sub_connection
 -- creates: public.uq_user_auth_identities_provider_subject
 -- creates: public.idx_user_auth_identities_user_status
 -- creates: public.idx_user_auth_identities_tenant_status
@@ -233,8 +233,12 @@ CREATE TABLE IF NOT EXISTS public.user_auth_identities (
     CHECK (status = 'quarantined' OR auth_provider_resource_id IS NOT NULL)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_user_auth_identities_cognito_sub
-  ON public.user_auth_identities (cognito_issuer, cognito_sub);
+-- 0288 SUPERSEDED the one-per-subject index: enrollment is one lane per
+-- (subject, connection) now. This file is replayed as desired state on
+-- every deploy (deploy.yml native-auth loop), so it must describe the
+-- CURRENT index — recreating the old one fails on any multi-lane DB.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_auth_identities_sub_connection
+  ON public.user_auth_identities (cognito_issuer, cognito_sub, auth_provider_resource_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_user_auth_identities_provider_subject
   ON public.user_auth_identities (auth_provider_resource_id, provider_issuer, provider_subject);
 CREATE INDEX IF NOT EXISTS idx_user_auth_identities_user_status

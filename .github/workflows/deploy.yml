@@ -1403,7 +1403,8 @@ jobs:
             0262_auth_subscription_tickets.sql \
             0264_auth_enrollment_attempt_limits.sql \
             0265_require_fully_valid_auth_publication.sql \
-            0266_auth_identity_recovery_grants.sql; do
+            0266_auth_identity_recovery_grants.sql \
+            0288_multi_lane_identities.sql; do
             psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
               -f "../../../packages/database-pg/drizzle/$migration"
           done
