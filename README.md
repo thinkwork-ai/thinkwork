@@ -4,7 +4,7 @@
 
 <h1 align="center">ThinkWork Agent</h1>
 
-<p align="center"><strong>The open runtime that puts your enterprise brain to work — in the AWS account you own.</strong></p>
+<p align="center"><strong>The open Agent Harness for Business — production-grade AI work, in the AWS account you own.</strong></p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/thinkwork-cli"><img src="https://img.shields.io/npm/v/thinkwork-cli.svg?color=0ea5e9&label=thinkwork-cli" alt="npm version" /></a>
@@ -13,16 +13,9 @@
 
 ---
 
-<!-- Positioning note: this README now leads Brain-first per the founder-signed
-     direction (2026-08-16). docs/POSITIONING.md is still harness-led and now
-     disagrees with this opening; it is intentionally left unchanged here and
-     should be updated in a follow-up (see PR description). -->
+ThinkWork Agent is the open Agent Harness for Business. The harness is the runtime around the model — threads, memory, controls, cost, evaluations, and audit, built in from day one. It deploys into your AWS account via Terraform and gives agents the runtime they need to do production work, not just demos.
 
-ThinkWork Agent is the open runtime that puts your enterprise brain to work — threads, memory, controls, cost, and audit, in the AWS account you own. It's an Agent Harness for Business: it deploys into your AWS account via Terraform and gives agents the runtime they need to do production work, not just demos.
-
-The moat is not the harness. Runtimes get swapped. **ThinkWork Brain** is the asset: a digital twin built from your systems of record, governed by an ontology you control. The Brain is a sibling product with its own repo (`thinkwork-ai/thinkwork-brain`); Agent is how that brain shows up in the work.
-
-If ThinkWork the company disappears tomorrow, both keep running. The brain stays yours. So does the runtime. Eight commands, one AWS account, and you own a production-grade agent runtime that stays open, portable, and under your control.
+Eight commands, one AWS account, and you own a production-grade agent runtime that stays open, portable, and under your control. **If ThinkWork the company disappears tomorrow, your deployment keeps working.**
 
 If you're not on AWS, this isn't the right tool for you — and that's the point. No Kubernetes, no shared SaaS control plane, no tire-kicker mode.
 
