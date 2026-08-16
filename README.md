@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="./apps/web/public/logo.png" alt="Thinkwork" width="240" />
+  <img src="./apps/web/public/logo.png" alt="ThinkWork Agent" width="240" />
 </p>
 
-<h1 align="center">ThinkWork</h1>
+<h1 align="center">ThinkWork Agent</h1>
 
-<p align="center"><strong>The open Agent Harness for Business — production-grade AI work, on the AWS account you own.</strong></p>
+<p align="center"><strong>The open Agent Harness for Business — production-grade AI work, in the AWS account you own.</strong></p>
 
 <p align="center">
   <a href="https://www.npmjs.com/package/thinkwork-cli"><img src="https://img.shields.io/npm/v/thinkwork-cli.svg?color=0ea5e9&label=thinkwork-cli" alt="npm version" /></a>
@@ -13,23 +13,11 @@
 
 ---
 
-ThinkWork is the open Agent Harness for Business. The harness is the runtime around the model — threads, memory, sandboxing, tools, controls, cost, evaluations, and audit, built in from day one. It deploys into your AWS account via Terraform and gives agents the runtime they need to do production work, not just demos.
+ThinkWork Agent is the open Agent Harness for Business. The harness is the runtime around the model — threads, memory, controls, cost, evaluations, and audit, built in from day one. It deploys into your AWS account via Terraform and gives agents the runtime they need to do production work, not just demos.
 
 Eight commands, one AWS account, and you own a production-grade agent runtime that stays open, portable, and under your control. **If ThinkWork the company disappears tomorrow, your deployment keeps working.**
 
 If you're not on AWS, this isn't the right tool for you — and that's the point. No Kubernetes, no shared SaaS control plane, no tire-kicker mode.
-
-## One harness, three ways to run it
-
-ThinkWork is a three-tier deployment ladder. The runtime is identical across tiers; only who operates it differs.
-
-| Tier                        | What you get                                                                                                                         | Who operates it |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
-| **ThinkWork** _(this repo)_ | Apache 2.0. Self-host the harness in your AWS. Full product, no operating partner. Community-supported.                              | You             |
-| **ThinkWork for Business**  | Same harness, deployed in your AWS, operated by us. Managed updates, priority support, SLA. **Managed does not mean vendor-hosted.** | Us, in your AWS |
-| **ThinkWork Enterprise**    | Strategy, pilot launch, managed operations, and workflow expansion services on top of either path.                                   | Us, with you    |
-
-The harness remains yours regardless of tier. See [thinkwork.ai](https://www.thinkwork.ai) for the operated and services tiers; the rest of this README is the open self-host path.
 
 ## Status
 
@@ -105,7 +93,7 @@ thinkwork login --stage dev        # 7. Sign in to the Cognito pool (OAuth)
 thinkwork me                       # 8. Confirm identity + tenant
 ```
 
-Eight commands, one AWS account, and you own a production-grade Agent Harness — open and yours, not rented from a black box. The harness stays yours. Full walkthrough in the Getting Started page of the in-app docs (`/docs` in the deployed web app) and per-command reference in [`apps/cli/README.md`](./apps/cli/README.md).
+Eight commands, one AWS account, and you own a production-grade agent runtime — open and yours, not rented from a black box. The runtime stays yours. Full walkthrough in the Getting Started page of the in-app docs (`/docs` in the deployed web app) and per-command reference in [`apps/cli/README.md`](./apps/cli/README.md).
 
 ## Upgrading an external environment
 
@@ -159,6 +147,18 @@ thinkwork/
 
 TypeScript (apps, packages, CLI, docs) + Python (Strands agent runtime) + Terraform (HCL, OpenTofu-compatible). Aurora Postgres + Bedrock + AppSync + Cognito + Lambda + Step Functions + S3 + CloudFront.
 
+## Three ways to run it
+
+ThinkWork Agent is a three-tier deployment ladder. The runtime is identical across tiers; only who operates it differs.
+
+| Tier                              | What you get                                                                                                                         | Who operates it |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------- |
+| **ThinkWork Agent** _(this repo)_ | Apache 2.0. Self-host the runtime in your AWS. Full product, no operating partner. Community-supported.                              | You             |
+| **ThinkWork for Business**        | Same runtime, deployed in your AWS, operated by us. Managed updates, priority support, SLA. **Managed does not mean vendor-hosted.** | Us, in your AWS |
+| **ThinkWork Enterprise**          | Strategy, pilot launch, managed operations, and workflow expansion services on top of either path.                                   | Us, with you    |
+
+The runtime remains yours regardless of tier. See [thinkwork.ai](https://www.thinkwork.ai) for the operated and services tiers; the rest of this README is the open self-host path.
+
 ## Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and the [CLA](./CLA.md). Issues and discussions are open. Note the AWS-native scope — feature requests that assume a non-AWS substrate will be politely declined.
@@ -179,4 +179,5 @@ Apache 2.0 — see [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
 - Title: Thinkwork Symphony GitHub setup smoke 2026-05-08T02-00-18-550Z
 - URL: https://linear.app/lastmileintel/issue/TECH-70/thinkwork-symphony-github-setup-smoke-2026-05-08t02-00-18-550z
 - Connector task: b6f0f01d-71c3-4abc-bdf8-a2c1f5f7f952
+
 <!-- thinkwork-symphony:TECH-70:end -->
