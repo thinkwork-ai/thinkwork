@@ -1,11 +1,16 @@
 /**
  * Brain thread-flag client (THINK-781).
  *
- * Builds and posts a "Send to the Brain" flag to the Brain ops API
- * (`POST {brain_ops_api}/flags`, THINK-780). The ops base URL is derived
+ * Builds and posts a "Send to the Brain" flag to the Brain ops API as a
+ * Cortex submission (`POST {brain_ops_api}/submissions` with
+ * `kind: "flag"` — the THINK-814 front door that replaced the original
+ * `POST /flags` intake; the Brain kept `/flags` only as a compatibility
+ * alias for agents not yet on this contract). The ops base URL is derived
  * from the tenant's provisioned Brain MCP URL the same way the KB surface
  * is (`/mcp` or `/mcp/twin` suffix stripped); auth is the account's
- * existing Brain m2m bearer resolved by the connector machinery.
+ * existing Brain m2m bearer resolved by the connector machinery — the
+ * submissions door sits under the same `etl-agent/tasks` machine scope
+ * the retired route used.
  *
  * The Brain validates server-side; these caps mirror its limits so an
  * oversize conversation is truncated defensively client-side instead of
@@ -53,13 +58,14 @@ function toIso(value: Date | string | null | undefined): string | null {
 }
 
 /**
- * Derive the Brain ops-API `/flags` URL from the connector's MCP URL
- * (`https://mcp.brain.thinkwork.ai/mcp` or `.../mcp/twin` → `.../flags`) —
- * the same suffix rewrite `twinKbUrlFrom` uses for the KB surface.
+ * Derive the Brain ops-API `/submissions` URL from the connector's MCP URL
+ * (`https://mcp.brain.thinkwork.ai/mcp` or `.../mcp/twin` →
+ * `.../submissions`) — the same suffix rewrite `twinKbUrlFrom` uses for
+ * the KB surface.
  */
-export function brainFlagsUrlFrom(mcpUrl: string): string {
+export function brainSubmissionsUrlFrom(mcpUrl: string): string {
   const base = mcpUrl.replace(/\/mcp(\/twin)?\/?$/, "").replace(/\/+$/, "");
-  return `${base}/flags`;
+  return `${base}/submissions`;
 }
 
 /**
@@ -130,14 +136,21 @@ export type PostBrainFlagResult =
   | { kind: "unreachable"; message: string };
 
 /**
- * POST the flag to the Brain ops API. 2xx with a flag_id is acceptance
- * (202 per contract; task_id may be absent when the Brain accepted the
- * flag but could not immediately dispatch — that is still success). 4xx
- * is validation feedback to surface verbatim; 5xx / network errors /
- * timeouts are retryable ("couldn't reach the Brain").
+ * POST the flag to the Brain ops API as a `kind: "flag"` submission. 2xx
+ * with a submission_id is acceptance (202 per contract; task_id may be
+ * absent when the Brain accepted the flag but could not immediately
+ * dispatch — that is still success). 4xx is validation feedback to
+ * surface verbatim; 5xx / network errors / timeouts are retryable
+ * ("couldn't reach the Brain").
+ *
+ * The flag body rides unchanged as the envelope's `payload` — the Brain
+ * validates it with the same fences the retired `/flags` route ran. The
+ * flagger's email additionally travels as the envelope's `submitted_by`,
+ * the assertion about the PERSON the submission row stores beside the
+ * server-derived machine principal.
  */
 export async function postBrainFlag(input: {
-  flagsUrl: string;
+  submissionsUrl: string;
   token: string | null;
   headers?: Record<string, string>;
   payload: BrainFlagPayload;
@@ -145,11 +158,17 @@ export async function postBrainFlag(input: {
   timeoutMs?: number;
 }): Promise<PostBrainFlagResult> {
   const result = await postBrainOps({
-    url: input.flagsUrl,
-    idField: "flag_id",
+    url: input.submissionsUrl,
+    idField: "submission_id",
     token: input.token,
     headers: input.headers,
-    payload: input.payload,
+    payload: {
+      kind: "flag",
+      payload: input.payload,
+      ...(input.payload.flagged_by
+        ? { submitted_by: input.payload.flagged_by }
+        : {}),
+    },
     fetchImpl: input.fetchImpl,
     timeoutMs: input.timeoutMs,
   });

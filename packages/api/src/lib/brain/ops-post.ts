@@ -1,12 +1,13 @@
 /**
- * Shared Brain ops-API POST semantics (THINK-781 / THINK-784).
+ * Shared Brain ops-API POST semantics (THINK-781 / THINK-784, now the
+ * Cortex `/submissions` front door).
  *
- * Both `/flags` and `/teachings` answer the same way: 2xx with a
- * server-minted id is acceptance (202 per contract; `task_id` may be
- * absent when the Brain accepted but could not immediately dispatch the
- * investigation — still success, annotated via `note`). 4xx is
- * validation feedback to surface verbatim; 5xx / network errors /
- * timeouts are retryable ("couldn't reach the Brain").
+ * Every intake answers the same way: 2xx with a server-minted id is
+ * acceptance (202 per contract; `task_id` may be absent when the Brain
+ * accepted but could not immediately dispatch the investigation — still
+ * success, annotated via `note`). 4xx is validation feedback to surface
+ * verbatim; 5xx / network errors / timeouts are retryable ("couldn't
+ * reach the Brain").
  */
 
 /** Default request timeout — the Brain answers ops POSTs quickly. */
@@ -24,7 +25,7 @@ export type PostBrainOpsResult =
 
 export async function postBrainOps(input: {
   url: string;
-  /** Response body key carrying the server-minted id (e.g. `flag_id`). */
+  /** Response body key carrying the server-minted id (e.g. `submission_id`). */
   idField: string;
   token: string | null;
   headers?: Record<string, string>;

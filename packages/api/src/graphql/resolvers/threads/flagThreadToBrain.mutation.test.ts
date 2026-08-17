@@ -208,8 +208,8 @@ describe("flagThreadToBrain", () => {
       expect.objectContaining({ clientId: "client" }),
     );
     const call = mockPostBrainFlag.mock.calls[0][0];
-    expect(call.flagsUrl).toBe(
-      "https://opsapi.execute-api.us-east-1.amazonaws.com/flags",
+    expect(call.submissionsUrl).toBe(
+      "https://opsapi.execute-api.us-east-1.amazonaws.com/submissions",
     );
     expect(call.token).toBe("m2m-token");
     expect(call.payload).toEqual({
