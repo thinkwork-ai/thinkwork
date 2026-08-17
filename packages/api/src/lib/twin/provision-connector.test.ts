@@ -633,6 +633,7 @@ describe("Brain tool surface + routing guidance (THINK-629)", () => {
       "brain_capabilities",
       "brain_counts",
       "brain_describe_entity",
+      "brain_report_create",
     ]);
   });
 
@@ -660,6 +661,21 @@ describe("Brain tool surface + routing guidance (THINK-629)", () => {
     expect(guidance).toContain("`brain_ask_submit`");
     expect(guidance).toContain("poll `brain_ask_result`");
     expect(guidance).toContain("Call `brain_capabilities` once");
+  });
+
+  it("teaches the living-report lane", () => {
+    // An answer worth keeping becomes a saved view plus a report the
+    // person can open again; without this the agent freezes numbers
+    // into prose and the analysis dies with the thread.
+    const guidance = TWIN_CONNECTION_GUIDANCE.replace(/\s+/g, " ");
+    expect(guidance).toContain("`compose_view: true`");
+    expect(guidance).toContain("`analyticsView.viewId`");
+    expect(guidance).toContain("call `brain_report_create`");
+    expect(guidance).toContain("`report_url`");
+    // brain_report_create is an end-user tool, so it has to be in the
+    // operations list too — guidance for a tool the allowlist filters
+    // out is guidance the agent can never act on.
+    expect([...TWIN_CONNECTOR_OPERATIONS]).toContain("brain_report_create");
   });
 
   it("appends the guidance to every materialized connector folder", async () => {
