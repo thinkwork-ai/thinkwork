@@ -13,12 +13,14 @@
  * user with no path to raise a false conclusion. Cross-tenant or invisible
  * threads surface as NOT_FOUND (no existence oracle).
  *
- * Transport: POST {BRAIN_OPS_API_URL}/flags with a bearer minted from the
- * Brain's AGENT-IDENTITY m2m secret (BRAIN_OPS_M2M_SECRET_ARN — the
- * `etl-platform/agent/cognito-m2m-brain` blob, operator pool, scope
- * `etl-agent/tasks`). Deliberately NOT the /mcp platform-agent lane
- * credential: /flags verifies against the ops-api's own Cognito pool and
- * a brain-mcp lane token gets a 401 there (verified live, 2026-08-10).
+ * Transport: POST {BRAIN_OPS_API_URL}/submissions with `kind: "flag"`
+ * (the Cortex front door that replaced the original POST /flags intake)
+ * and a bearer minted from the Brain's AGENT-IDENTITY m2m secret
+ * (BRAIN_OPS_M2M_SECRET_ARN — the `etl-platform/agent/cognito-m2m-brain`
+ * blob, operator pool, scope `etl-agent/tasks`). Deliberately NOT the
+ * /mcp platform-agent lane credential: the ops-api verifies against its
+ * own Cognito pool and a brain-mcp lane token gets a 401 there (verified
+ * live, 2026-08-10).
  */
 
 import { GraphQLError } from "graphql";
@@ -35,7 +37,7 @@ import {
   m2mCredentialsFromSecret,
 } from "../../../lib/twin/m2m-token.js";
 import {
-  brainFlagsUrlFrom,
+  brainSubmissionsUrlFrom,
   buildBrainFlagPayload,
   postBrainFlag,
 } from "../../../lib/brain/flag-thread.js";
@@ -150,7 +152,7 @@ export const flagThreadToBrain = async (
   });
 
   const result = await postBrainFlag({
-    flagsUrl: brainFlagsUrlFrom(opsApiUrl),
+    submissionsUrl: brainSubmissionsUrlFrom(opsApiUrl),
     token,
     payload,
   });

@@ -10,28 +10,28 @@ import {
   BRAIN_FLAG_MAX_CONVERSATION_MESSAGES,
   BRAIN_FLAG_MAX_MESSAGE_TEXT_CHARS,
   BRAIN_FLAG_MAX_NOTE_CHARS,
-  brainFlagsUrlFrom,
+  brainSubmissionsUrlFrom,
   buildBrainFlagConversation,
   buildBrainFlagPayload,
   postBrainFlag,
 } from "./flag-thread.js";
 
-describe("brainFlagsUrlFrom", () => {
-  it("rewrites /mcp and /mcp/twin suffixes to /flags", () => {
-    expect(brainFlagsUrlFrom("https://mcp.brain.thinkwork.ai/mcp")).toBe(
-      "https://mcp.brain.thinkwork.ai/flags",
+describe("brainSubmissionsUrlFrom", () => {
+  it("rewrites /mcp and /mcp/twin suffixes to /submissions", () => {
+    expect(brainSubmissionsUrlFrom("https://mcp.brain.thinkwork.ai/mcp")).toBe(
+      "https://mcp.brain.thinkwork.ai/submissions",
     );
-    expect(brainFlagsUrlFrom("https://mcp.brain.thinkwork.ai/mcp/twin")).toBe(
-      "https://mcp.brain.thinkwork.ai/flags",
+    expect(brainSubmissionsUrlFrom("https://mcp.brain.thinkwork.ai/mcp/twin")).toBe(
+      "https://mcp.brain.thinkwork.ai/submissions",
     );
-    expect(brainFlagsUrlFrom("https://mcp.brain.thinkwork.ai/mcp/")).toBe(
-      "https://mcp.brain.thinkwork.ai/flags",
+    expect(brainSubmissionsUrlFrom("https://mcp.brain.thinkwork.ai/mcp/")).toBe(
+      "https://mcp.brain.thinkwork.ai/submissions",
     );
   });
 
-  it("appends /flags to a bare base URL", () => {
-    expect(brainFlagsUrlFrom("https://brain.example.com")).toBe(
-      "https://brain.example.com/flags",
+  it("appends /submissions to a bare base URL", () => {
+    expect(brainSubmissionsUrlFrom("https://brain.example.com")).toBe(
+      "https://brain.example.com/submissions",
     );
   });
 });
@@ -166,41 +166,47 @@ describe("postBrainFlag", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(
-        jsonResponse(202, { flag_id: "flag-1", task_id: "task-1" }),
+        jsonResponse(202, { submission_id: "sub-1", task_id: "task-1" }),
       );
     const result = await postBrainFlag({
-      flagsUrl: "https://brain.example.com/flags",
+      submissionsUrl: "https://brain.example.com/submissions",
       token: "tok",
       payload,
       fetchImpl,
     });
     expect(result).toEqual({
       kind: "accepted",
-      flagId: "flag-1",
+      flagId: "sub-1",
       taskId: "task-1",
       note: null,
     });
     const [url, init] = fetchImpl.mock.calls[0];
-    expect(url).toBe("https://brain.example.com/flags");
+    expect(url).toBe("https://brain.example.com/submissions");
     expect(init.headers.authorization).toBe("Bearer tok");
-    expect(JSON.parse(init.body).source).toBe("thinkwork-agent");
+    // The submission envelope: the flag body rides unchanged as payload,
+    // and the flagger travels as the envelope's submitted_by.
+    const body = JSON.parse(init.body);
+    expect(body.kind).toBe("flag");
+    expect(body.payload.source).toBe("thinkwork-agent");
+    expect(body.payload.note).toBe("looks wrong");
+    expect(body.submitted_by).toBe("user@example.com");
   });
 
   it("treats an accepted-but-not-dispatched response (note, no task_id) as success", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(
-        jsonResponse(202, { flag_id: "flag-1", note: "queued for later" }),
+        jsonResponse(202, { submission_id: "sub-1", note: "queued for later" }),
       );
     const result = await postBrainFlag({
-      flagsUrl: "https://brain.example.com/flags",
+      submissionsUrl: "https://brain.example.com/submissions",
       token: "tok",
       payload,
       fetchImpl,
     });
     expect(result).toEqual({
       kind: "accepted",
-      flagId: "flag-1",
+      flagId: "sub-1",
       taskId: null,
       note: "queued for later",
     });
@@ -211,7 +217,7 @@ describe("postBrainFlag", () => {
       .fn()
       .mockResolvedValue(jsonResponse(400, { error: "note is required" }));
     const result = await postBrainFlag({
-      flagsUrl: "https://brain.example.com/flags",
+      submissionsUrl: "https://brain.example.com/submissions",
       token: "tok",
       payload,
       fetchImpl,
@@ -225,7 +231,7 @@ describe("postBrainFlag", () => {
 
   it("maps 5xx and network errors to unreachable (retryable)", async () => {
     const serverError = await postBrainFlag({
-      flagsUrl: "https://brain.example.com/flags",
+      submissionsUrl: "https://brain.example.com/submissions",
       token: "tok",
       payload,
       fetchImpl: vi.fn().mockResolvedValue(jsonResponse(503, {})),
@@ -233,7 +239,7 @@ describe("postBrainFlag", () => {
     expect(serverError.kind).toBe("unreachable");
 
     const networkError = await postBrainFlag({
-      flagsUrl: "https://brain.example.com/flags",
+      submissionsUrl: "https://brain.example.com/submissions",
       token: "tok",
       payload,
       fetchImpl: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
@@ -244,9 +250,9 @@ describe("postBrainFlag", () => {
     });
   });
 
-  it("treats a 2xx without a flag_id as unreachable rather than success", async () => {
+  it("treats a 2xx without a submission_id as unreachable rather than success", async () => {
     const result = await postBrainFlag({
-      flagsUrl: "https://brain.example.com/flags",
+      submissionsUrl: "https://brain.example.com/submissions",
       token: "tok",
       payload,
       fetchImpl: vi.fn().mockResolvedValue(jsonResponse(202, {})),
