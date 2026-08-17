@@ -181,4 +181,5 @@ The ops sequencing works because Cognito's `DEVELOPER` mode delegates entirely t
 - `docs/solutions/integration-issues/twenty-crm-email-ses-config-2026-06-06.md` — same failure class (email config missing from the deployment contract), different email path; its "deployment-runner pass-through fixture test" prevention did not generalize to the Cognito vars — this doc is the recurrence
 - `docs/solutions/architecture-patterns/github-free-customer-deployments-aws-control-plane-pattern-2026-06-06.md` — the controller architecture this gap lives in
 - `docs/solutions/patterns/apply-invocation-env-field-passthrough-2026-04-24.md` — same lesson shape in another layer: an allowlist/subset dict silently drops fields a downstream consumer needs
+- `release-deploy-runner-script-lags-one-release.md` — the deployment-timing corollary to the three-wiring-points rule: even a correctly wired variable misses the first customer release deploy, because release N applies with the runner staged by release N−1
 - `docs/verification/tei-new-environment-deployment-e2e.md` — TEI remediation evidence and redeploy runbook

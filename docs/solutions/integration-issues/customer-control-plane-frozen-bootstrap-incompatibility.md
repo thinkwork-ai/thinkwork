@@ -104,7 +104,7 @@ aws iam put-role-policy \
 
 The module fix reaches **future bootstraps only**: existing customer roles never re-apply the controller module, so every already-bootstrapped environment needs Step 2 manually.
 
-After the successful run, the runner's normal end-of-run self-update resumed — future releases update the S3 script automatically again.
+After the successful run, the runner's normal end-of-run self-update resumed — future releases update the S3 script automatically again. ("Automatically" still means one release behind: the run applying release N executes the runner staged by release N−1, which can silently drop newly runner-wired variables on a first pass — see [release-deploy-runner-script-lags-one-release](release-deploy-runner-script-lags-one-release.md).)
 
 ## Why This Works
 
@@ -122,6 +122,7 @@ The S3 runner script is the unit of execution inside CodeBuild and is fully deco
 - PR #2401 — the customer-domain release that triggered both failures (added `aws.us_east_1` requirement and Route53 resources)
 - PR #2402 — durable `route53:*` grant in the control-plane module
 - PR #2374 — runner self-update mechanism (this incident documents its blind spot)
+- `release-deploy-runner-script-lags-one-release.md` — the silent-success sibling: same stale-runner mechanism, but the old runner completes the run and drops newly runner-wired variables instead of crashing; re-validates the `compatibility.minRunnerVersion` prevention above
 - PR #2371 — ledger-driven migrations; earlier instance of the same frozen-bootstrap class
 - Issue #2375 — graphql-http Lambda env at the 4KB ceiling; same class (customer environment unable to absorb a release change)
 - `docs/solutions/architecture-patterns/github-free-customer-deployments-aws-control-plane-pattern-2026-06-06.md` — the architecture this failure mode lives in (its guardrails predate this learning)

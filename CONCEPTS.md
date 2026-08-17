@@ -38,6 +38,12 @@ The property that Deployment Controller components (including the Deployment Run
 
 The mechanism by which a successful deploy replaces the Deployment Runner with the version from the release just deployed. It runs only after success, so it cannot rescue a runner too old to complete the current release — that gap is closed manually.
 
+The corollary is a built-in one-release lag: the deploy applying release N always executes the runner staged by release N−1, even when that run succeeds. A release whose effect depends on new runner behavior (most commonly a new Runner-Wired Variable) half-applies silently on its first pass and fully applies only on a second identical deploy — or the runner change ships one release ahead of the release that depends on it.
+
+### Runner-Wired Variable
+
+A customer-settable Terraform variable whose value reaches a customer Stage through the Deployment Runner: the runner reads it from the stage's runner secrets and passes it through its variable allowlist into the rendered deployment root. All wiring points must exist together for the value to flow; a variable missing any of them silently falls back to its default under a green deploy, and even a fully wired variable takes effect one deploy late on customer Stages (see Runner Self-Update).
+
 ### Migration Ledger
 
 The per-stage-database record of which schema migration files have been applied there. During a customer deploy, the Deployment Runner sweeps every migration file the ledger does not record and applies each unattended, in filename order, with no inputs beyond the stage name — so a migration that requires any other caller-supplied input fails the first environment whose ledger has not recorded it. Pre-ledger environments were transitioned by recording their history without re-running it.
