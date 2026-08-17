@@ -87,6 +87,7 @@ export const TWIN_CONNECTOR_OPERATIONS = [
   "brain_capabilities",
   "brain_counts",
   "brain_describe_entity",
+  "brain_report_create",
 ] as const;
 
 /**
@@ -263,6 +264,16 @@ follow-up about the same topic.
 
 **Deep multi-hop asks** that may outlive this call: \`brain_ask_submit\`,
 then poll \`brain_ask_result\` with the task id.
+
+**Living reports** — an answer worth keeping or repeating: a recurring
+question, a metric someone will watch, anything the person asks to save
+or turn into a report. Ask with \`compose_view: true\` so
+\`brain_ask_result\` carries an \`analyticsView.viewId\`, keep those ids,
+then call \`brain_report_create\` with them as \`sql-view\` sections
+alongside your own \`narrative\` sections, and hand back the
+\`report_url\` it returns. Each open re-runs the views under the reader's
+own access, so the numbers stay live; the report is private until its
+owner shares it. Never do this for a throwaway answer.
 
 Unsure whether this brain covers the subject at all? Call
 \`brain_capabilities\` once — it lists the entity types, populations, and
