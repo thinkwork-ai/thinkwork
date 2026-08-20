@@ -32,6 +32,9 @@ const mocks = vi.hoisted(() => {
     claimThreadCheckout: vi.fn(),
     releaseThreadCheckout: vi.fn(),
     insertValues: [] as Array<Record<string, unknown>>,
+    // THINK-946: coarse ordering trace — proves the workspace render is in
+    // flight before the thread_turn row is written, not strictly after it.
+    sequence: [] as string[],
   };
 });
 
@@ -61,6 +64,7 @@ vi.mock("@thinkwork/database-pg", () => ({
     insert: () => ({
       values: (value: Record<string, unknown>) => {
         mocks.insertValues.push(value);
+        if ("thread_id" in value) mocks.sequence.push("turn-insert");
         return {
           returning: async () => [
             { id: (value.id as string) ?? "turn-fixed-1" },
@@ -135,6 +139,7 @@ vi.mock("@aws-sdk/client-lambda", () => ({
     }) => {
       mocks.lambdaInvokes.push(cmd.input);
       if (cmd.input.FunctionName === "renderer-fn") {
+        mocks.sequence.push("renderer-invoke");
         return {
           Payload: new TextEncoder().encode(
             JSON.stringify(mocks.rendererResponse ?? {}),
@@ -230,6 +235,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.lambdaInvokes = [];
   mocks.insertValues = [];
+  mocks.sequence = [];
   mocks.rendererResponse = RENDERER_RESPONSE;
   vi.stubEnv("AGENTCORE_PI_FUNCTION_NAME", "pi-runtime-fn");
   vi.stubEnv("WORKSPACE_RENDERER_FUNCTION_NAME", "renderer-fn");
@@ -321,6 +327,115 @@ describe("chat-agent-invoke — R12 dispatch payload characterization", () => {
     expect(payload).toMatchSnapshot();
   });
 });
+
+describe("chat-agent-invoke — render overlaps turn creation (THINK-946)", () => {
+  it("starts the workspace render before the thread_turn row is written", async () => {
+    const { handler } = await import("./chat-agent-invoke.js");
+    await handler(BASE_EVENT);
+    expect(mocks.sequence).toContain("renderer-invoke");
+    expect(mocks.sequence).toContain("turn-insert");
+    expect(mocks.sequence.indexOf("renderer-invoke")).toBeLessThan(
+      mocks.sequence.indexOf("turn-insert"),
+    );
+  });
+});
+
+describe("chat-agent-invoke — pre-dispatch queue delay (THINK-946)", () => {
+  it("splits the caller-side mutation leg from the async-queue leg", async () => {
+    const { computeInvokeQueueTiming } = await import("./chat-agent-invoke.js");
+    expect(
+      computeInvokeQueueTiming({
+        dispatchRequestedAtMs: 1_000,
+        invokeSentAtMs: 1_450,
+        receivedAtMs: 6_200,
+      }),
+    ).toEqual({ queueDelayMs: 4_750, mutationMs: 450 });
+  });
+
+  it("reports the queue leg alone when only the invoke stamp is present", async () => {
+    const { computeInvokeQueueTiming } = await import("./chat-agent-invoke.js");
+    expect(
+      computeInvokeQueueTiming({ invokeSentAtMs: 1_000, receivedAtMs: 1_120 }),
+    ).toEqual({ queueDelayMs: 120, mutationMs: null });
+  });
+
+  it("clamps cross-sandbox clock skew to zero instead of reporting a negative duration", async () => {
+    const { computeInvokeQueueTiming } = await import("./chat-agent-invoke.js");
+    expect(
+      computeInvokeQueueTiming({
+        dispatchRequestedAtMs: 2_000,
+        invokeSentAtMs: 1_500,
+        receivedAtMs: 1_400,
+      }),
+    ).toEqual({ queueDelayMs: 0, mutationMs: 0 });
+  });
+
+  it("returns null for an unstamped event (older callers, replays)", async () => {
+    const { computeInvokeQueueTiming } = await import("./chat-agent-invoke.js");
+    expect(computeInvokeQueueTiming({ receivedAtMs: 5 })).toBeNull();
+  });
+
+  it("emits api.invoke.queue_delay with both legs when the event is stamped", async () => {
+    const lines = captureStdout();
+    try {
+      const { handler } = await import("./chat-agent-invoke.js");
+      await handler({
+        ...BASE_EVENT,
+        dispatchRequestedAtMs: Date.now() - 5_000,
+        invokeSentAtMs: Date.now() - 4_000,
+      });
+    } finally {
+      lines.restore();
+    }
+    const phase = lines
+      .phases()
+      .find((p) => p.phase === "api.invoke.queue_delay");
+    expect(phase).toBeTruthy();
+    expect(phase!.status).toBe("completed");
+    expect(phase!.durationMs).toBeGreaterThanOrEqual(4_000);
+    expect(String(phase!.detail)).toMatch(/^queue=\d+ms;mutation=\d+ms$/);
+  });
+
+  it("marks the phase skipped when the caller sent no timestamps", async () => {
+    const lines = captureStdout();
+    try {
+      const { handler } = await import("./chat-agent-invoke.js");
+      await handler(BASE_EVENT);
+    } finally {
+      lines.restore();
+    }
+    const phase = lines
+      .phases()
+      .find((p) => p.phase === "api.invoke.queue_delay");
+    expect(phase).toMatchObject({
+      status: "skipped",
+      detail: "no_dispatch_timestamps",
+    });
+    expect(phase).not.toHaveProperty("durationMs");
+  });
+});
+
+function captureStdout() {
+  const written: string[] = [];
+  const original = process.stdout.write.bind(process.stdout);
+  process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
+    written.push(String(chunk));
+    return (original as (...args: never[]) => boolean)(
+      ...([chunk, ...rest] as never[]),
+    );
+  }) as typeof process.stdout.write;
+  return {
+    restore() {
+      process.stdout.write = original;
+    },
+    phases(): Array<Record<string, unknown>> {
+      return written
+        .flatMap((line) => line.split("\n"))
+        .filter((line) => line.includes('"agentcore_phase"'))
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+    },
+  };
+}
 
 /**
  * The turn id is client-generated (randomUUID) when checkout-eligible, so

@@ -356,6 +356,63 @@ interface InvokeEvent {
     latestObservedCheckpointSeq?: number;
     unsafeCheckpointSkipped?: boolean;
   };
+  /**
+   * THINK-946 pre-dispatch latency instrumentation. `dispatchRequestedAtMs`
+   * is stamped when the originating mutation started; `invokeSentAtMs` right
+   * before the Event invoke leaves the caller. Together they split the
+   * previously unmeasured send → api.invoke.received window (4.5-7 s live,
+   * with a 30 s outlier class) into mutation processing vs Lambda
+   * async-queue delivery. Both optional — callers that don't stamp them get
+   * a skipped `api.invoke.queue_delay` phase.
+   */
+  dispatchRequestedAtMs?: number;
+  invokeSentAtMs?: number;
+}
+
+/**
+ * THINK-946: the workspace render runs as a detached promise so it can
+ * overlap turn creation + the budget gate. It resolves to an outcome instead
+ * of rejecting, so an early return can never orphan a rejected promise; the
+ * await site rethrows `error` into the original try/catch, preserving the
+ * fail-to-legacy-sync and access-denied semantics byte for byte.
+ */
+type WorkspaceRenderOutcome =
+  | {
+      ok: true;
+      carried: boolean;
+      result: RenderWorkspaceTupleForInvokeResult;
+      durationMs: number;
+    }
+  | { ok: false; error: unknown; durationMs: number };
+
+export interface InvokeQueueTiming {
+  /** Event invoke accepted → this handler's entry. */
+  queueDelayMs: number;
+  /** Mutation start → Event invoke accepted (null when unstamped). */
+  mutationMs: number | null;
+}
+
+/**
+ * Pure timing math for the `api.invoke.queue_delay` phase. Returns null when
+ * the caller did not stamp `invokeSentAtMs` (older callers / replayed
+ * events), which the handler reports as a skipped phase rather than a
+ * fabricated zero. Negative deltas clamp to 0 — the two stamps come from
+ * different Lambda sandboxes and small clock skew must not read as a
+ * negative duration.
+ */
+export function computeInvokeQueueTiming(input: {
+  invokeSentAtMs?: number;
+  dispatchRequestedAtMs?: number;
+  receivedAtMs: number;
+}): InvokeQueueTiming | null {
+  if (!Number.isFinite(input.invokeSentAtMs)) return null;
+  const invokeSentAtMs = input.invokeSentAtMs as number;
+  return {
+    queueDelayMs: Math.max(0, input.receivedAtMs - invokeSentAtMs),
+    mutationMs: Number.isFinite(input.dispatchRequestedAtMs)
+      ? Math.max(0, invokeSentAtMs - (input.dispatchRequestedAtMs as number))
+      : null,
+  };
 }
 
 export interface RenderWorkspaceTupleForInvokeInput {
@@ -854,8 +911,41 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     threadId,
     threadTurnId: existingThreadTurnId || undefined,
   });
+  // THINK-946: the send → api.invoke.received window used to be invisible —
+  // it is now a top-3 chat latency contributor (4.5-7 s typical, one 30 s
+  // outlier observed). This phase splits it: `durationMs` is the Lambda
+  // async-queue delivery leg, `detail` carries the caller-side mutation leg.
+  const queueTiming = computeInvokeQueueTiming({
+    invokeSentAtMs: event.invokeSentAtMs,
+    dispatchRequestedAtMs: event.dispatchRequestedAtMs,
+    receivedAtMs: setupStart,
+  });
+  logAgentCorePhase({
+    source: "chat-agent-invoke",
+    phase: "api.invoke.queue_delay",
+    status: queueTiming ? "completed" : "skipped",
+    traceId,
+    tenantId,
+    agentId,
+    threadId,
+    threadTurnId: existingThreadTurnId || undefined,
+    durationMs: queueTiming?.queueDelayMs,
+    detail: queueTiming
+      ? `queue=${queueTiming.queueDelayMs}ms;mutation=${
+          queueTiming.mutationMs === null
+            ? "unknown"
+            : `${queueTiming.mutationMs}ms`
+        }`
+      : "no_dispatch_timestamps",
+  });
 
   let turnId: string | undefined = existingThreadTurnId || undefined;
+  // THINK-946: detached setup work (the workspace render, the bookkeeping
+  // writes it produces) is tracked here so every exit path — including the
+  // outer setup-error catch — can settle it instead of leaving an in-flight
+  // SDK call to resume inside a later invocation of this warm sandbox.
+  // Nothing pushed here rejects on its own.
+  const pendingBackgroundWork: Array<Promise<unknown>> = [];
   try {
     const desktopDelegation = event.desktopDelegation;
     // U2 (plan 2026-08-03-001, R12): data-independent setup reads start
@@ -1099,6 +1189,104 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // retired the parallel skill.yaml). No sub_agents payload needed —
     // removed DB-based sub-agent query.
 
+    // THINK-946: bookkeeping writes nothing downstream of setup reads. They
+    // are collected here and flushed right after the dispatch enqueue so
+    // they stop sitting between the render and the runtime invoke. Every
+    // queued write swallows its own errors, so this never rejects.
+    const postDispatchWrites = pendingBackgroundWork;
+    const flushPostDispatchWrites = async () => {
+      if (postDispatchWrites.length === 0) return;
+      await Promise.allSettled(postDispatchWrites.splice(0));
+    };
+
+    // THINK-946: the workspace render is the single largest setup leg
+    // (0.7-3.1 s on a miss) and depends only on ids + runtimeConfig — never
+    // on the turn row. It starts here so it overlaps thread checkout, the
+    // turn insert + its AppSync notify, and the budget gate, instead of
+    // running strictly after them. The promise NEVER rejects (failures come
+    // back as an outcome) so the early-return paths below cannot produce an
+    // unhandled rejection; they await it via settleWorkspaceRender() so no
+    // in-flight SDK call is left to resume in a later invocation.
+    const workspaceRenderPromise: Promise<WorkspaceRenderOutcome> | null =
+      spaceId
+        ? (async (): Promise<WorkspaceRenderOutcome> => {
+            const startedAt = Date.now();
+            try {
+              // Render-skip (U2, plan 2026-08-03-001 / KTD7, R11): reuse the
+              // thread's persisted last render only when ALL of (a) the
+              // DB-derived routing signature, (b) the config fingerprint
+              // computed against the carried manifest, and (c) the S3 mtime
+              // probe over the render's own source prefixes agree nothing
+              // changed. Any mismatch — or any probe failure — renders exactly
+              // as before (fail-closed to render). The signature + probe
+              // promises started right after stage 1 (hoisted off the critical
+              // path); the probe result is injected into evaluateRenderSkip so
+              // it is not re-run here.
+              let carriedRender: RenderWorkspaceTupleForInvokeResult | null =
+                null;
+              if (lastRenderMarker && routingSignaturePromise) {
+                const candidate =
+                  renderResultFromLastRenderMarker(lastRenderMarker);
+                if (candidate) {
+                  const probeResult = (await sourceProbePromise) ?? false;
+                  const decision = await evaluateRenderSkip({
+                    marker: lastRenderMarker,
+                    bucket: workspaceBucket() || undefined,
+                    deps: { probe: async () => probeResult },
+                    currentRoutingSignature: await routingSignaturePromise,
+                    currentConfigFingerprint: computeConfigFingerprint(
+                      {
+                        tenantId,
+                        agentId,
+                        spaceId,
+                        agentProfileId: null,
+                        perspectiveUserId: currentUserId || null,
+                      },
+                      {
+                        ...fingerprintInputsFromRuntimeConfig(runtimeConfig),
+                        ...fingerprintInputsFromCapabilitiesManifest(
+                          candidate.capabilities?.manifest ?? null,
+                        ),
+                      },
+                    ),
+                  });
+                  if (decision.skip) {
+                    carriedRender = candidate;
+                  } else {
+                    console.log(
+                      `[chat-agent-invoke] render-skip declined: ${decision.reason}`,
+                    );
+                  }
+                }
+              }
+              const result =
+                carriedRender ??
+                (await renderWorkspaceTupleForInvoke({
+                  tenantId,
+                  agentId,
+                  spaceId,
+                  threadId,
+                  threadSlug: threadId,
+                  userId: currentUserId || null,
+                  agentBlockedTools: runtimeConfig.blockedTools,
+                }));
+              return {
+                ok: true,
+                carried: Boolean(carriedRender),
+                result,
+                durationMs: Date.now() - startedAt,
+              };
+            } catch (error) {
+              return { ok: false, error, durationMs: Date.now() - startedAt };
+            }
+          })()
+        : null;
+    if (workspaceRenderPromise)
+      pendingBackgroundWork.push(workspaceRenderPromise);
+    const settleWorkspaceRender = async () => {
+      if (workspaceRenderPromise) await workspaceRenderPromise;
+    };
+
     // 2a. Create a thread_turn record so the UI shows normal chat invocations,
     // or reuse the durable mobile turn row when a managed handoff has already
     // claimed ownership.
@@ -1125,6 +1313,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           console.warn(
             `[chat-agent-invoke] Existing mobile handoff turn is no longer dispatchable: ${existingThreadTurnId}`,
           );
+          // Let the detached render settle before returning (THINK-946).
+          await settleWorkspaceRender();
           return { ok: false, threadTurnId: existingThreadTurnId };
         }
         await notifyThreadTurnUpdate({
@@ -1241,6 +1431,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             console.log(
               `[chat-agent-invoke] Thread busy — deferred message as wakeup: thread=${threadId} message=${event.messageId}`,
             );
+            // Let the detached render settle before returning (THINK-946):
+            // the promoted turn reuses the freshly rendered prefix anyway.
+            await settleWorkspaceRender();
             return { ok: false, deferred: true, reason: "thread_busy" };
           } catch (deferErr) {
             // Defer-insert failure: fall through and dispatch anyway
@@ -1399,6 +1592,8 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             senderId: agentId,
           });
         }
+        // Let the detached render settle before returning (THINK-946).
+        await settleWorkspaceRender();
         return { ok: false, threadTurnId: turnId };
       }
     }
@@ -1516,64 +1711,16 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
       thread_id: threadId ?? "",
       turn_id: turnId ?? "",
     });
-    if (spaceId) {
-      const workspaceRenderStart = Date.now();
+    if (spaceId && workspaceRenderPromise) {
+      // THINK-946: the render itself started before turn creation; its own
+      // elapsed time (not the wall clock since then) stays the reported
+      // phase duration so the metric keeps meaning the same thing.
+      const outcome = await workspaceRenderPromise;
+      const workspaceRenderDurationMs = outcome.durationMs;
       try {
-        // Render-skip (U2, plan 2026-08-03-001 / KTD7, R11): reuse the
-        // thread's persisted last render only when ALL of (a) the DB-derived
-        // routing signature, (b) the config fingerprint computed against the
-        // carried manifest, and (c) the S3 mtime probe over the render's own
-        // source prefixes agree nothing changed. Any mismatch — or any probe
-        // failure — renders exactly as before (fail-closed to render). The
-        // signature + probe promises started right after stage 1 (hoisted off
-        // the critical path); the probe result is injected into
-        // evaluateRenderSkip so it is not re-run here.
-        let carriedRender: RenderWorkspaceTupleForInvokeResult | null = null;
-        if (lastRenderMarker && routingSignaturePromise) {
-          const candidate = renderResultFromLastRenderMarker(lastRenderMarker);
-          if (candidate) {
-            const probeResult = (await sourceProbePromise) ?? false;
-            const decision = await evaluateRenderSkip({
-              marker: lastRenderMarker,
-              bucket: workspaceBucket() || undefined,
-              deps: { probe: async () => probeResult },
-              currentRoutingSignature: await routingSignaturePromise,
-              currentConfigFingerprint: computeConfigFingerprint(
-                {
-                  tenantId,
-                  agentId,
-                  spaceId,
-                  agentProfileId: null,
-                  perspectiveUserId: currentUserId || null,
-                },
-                {
-                  ...fingerprintInputsFromRuntimeConfig(runtimeConfig),
-                  ...fingerprintInputsFromCapabilitiesManifest(
-                    candidate.capabilities?.manifest ?? null,
-                  ),
-                },
-              ),
-            });
-            if (decision.skip) {
-              carriedRender = candidate;
-            } else {
-              console.log(
-                `[chat-agent-invoke] render-skip declined: ${decision.reason}`,
-              );
-            }
-          }
-        }
-        renderedWorkspace =
-          carriedRender ??
-          (await renderWorkspaceTupleForInvoke({
-            tenantId,
-            agentId,
-            spaceId,
-            threadId,
-            threadSlug: threadId,
-            userId: currentUserId || null,
-            agentBlockedTools: runtimeConfig.blockedTools,
-          }));
+        if (!outcome.ok) throw outcome.error;
+        const carriedRender = outcome.carried;
+        renderedWorkspace = outcome.result;
         if (
           !carriedRender &&
           renderedWorkspace.rendered &&
@@ -1582,48 +1729,52 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         ) {
           // Persist the marker that makes the NEXT turn skip-eligible.
           // Best-effort (writeThreadLastRender swallows errors): a lost
-          // marker only means the next turn renders.
-          await writeThreadLastRender({
-            tenantId,
-            threadId,
-            marker: {
-              version: THREAD_LAST_RENDER_VERSION,
-              generatedAt: new Date().toISOString(),
-              renderedPrefix: renderedWorkspace.renderedPrefix,
-              sourcePrefixes: renderedWorkspace.sourcePrefixes ?? [],
-              activeSpace: renderedWorkspace.activeSpace,
-              effectivePolicy: renderedWorkspace.effectivePolicy,
-              capabilities: renderedWorkspace.capabilities
-                ? {
-                    fingerprint: renderedWorkspace.capabilities.fingerprint,
-                    manifest: renderedWorkspace.capabilities.manifest,
-                  }
-                : undefined,
-              hydrateManifest: renderedWorkspace.hydrateManifest,
-              routingSignature: await (routingSignaturePromise ??
-                computeRoutingSignature({
-                  tenantId,
-                  agentId,
-                  spaceId,
-                  userId: currentUserId || null,
-                })),
-              configFingerprint: computeConfigFingerprint(
-                {
-                  tenantId,
-                  agentId,
-                  spaceId,
-                  agentProfileId: null,
-                  perspectiveUserId: currentUserId || null,
-                },
-                {
-                  ...fingerprintInputsFromRuntimeConfig(runtimeConfig),
-                  ...fingerprintInputsFromCapabilitiesManifest(
-                    renderedWorkspace.capabilities?.manifest ?? null,
-                  ),
-                },
-              ),
-            } satisfies ThreadLastRenderMarker,
-          });
+          // marker only means the next turn renders. THINK-946: queued
+          // rather than awaited — nothing downstream of here reads it, so it
+          // rides alongside the rest of setup and is flushed after dispatch.
+          postDispatchWrites.push(
+            writeThreadLastRender({
+              tenantId,
+              threadId,
+              marker: {
+                version: THREAD_LAST_RENDER_VERSION,
+                generatedAt: new Date().toISOString(),
+                renderedPrefix: renderedWorkspace.renderedPrefix,
+                sourcePrefixes: renderedWorkspace.sourcePrefixes ?? [],
+                activeSpace: renderedWorkspace.activeSpace,
+                effectivePolicy: renderedWorkspace.effectivePolicy,
+                capabilities: renderedWorkspace.capabilities
+                  ? {
+                      fingerprint: renderedWorkspace.capabilities.fingerprint,
+                      manifest: renderedWorkspace.capabilities.manifest,
+                    }
+                  : undefined,
+                hydrateManifest: renderedWorkspace.hydrateManifest,
+                routingSignature: await (routingSignaturePromise ??
+                  computeRoutingSignature({
+                    tenantId,
+                    agentId,
+                    spaceId,
+                    userId: currentUserId || null,
+                  })),
+                configFingerprint: computeConfigFingerprint(
+                  {
+                    tenantId,
+                    agentId,
+                    spaceId,
+                    agentProfileId: null,
+                    perspectiveUserId: currentUserId || null,
+                  },
+                  {
+                    ...fingerprintInputsFromRuntimeConfig(runtimeConfig),
+                    ...fingerprintInputsFromCapabilitiesManifest(
+                      renderedWorkspace.capabilities?.manifest ?? null,
+                    ),
+                  },
+                ),
+              } satisfies ThreadLastRenderMarker,
+            }),
+          );
         }
         if (renderedWorkspace.rendered) {
           renderedWorkspacePrefix = renderedWorkspace.renderedPrefix;
@@ -1633,22 +1784,28 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             renderedWorkspace.effectivePolicy?.blockedTools ??
             runtimeConfig.blockedTools;
           // U6 (plan 2026-06-12-002): record the dispatch-time workspace
-          // projection BEFORE the agent invoke so a crashed turn still
-          // carries it. Never fails dispatch — the recorder swallows errors.
+          // projection so a crashed turn still carries it. Never fails
+          // dispatch — the recorder swallows errors. THINK-946: queued here
+          // and flushed immediately after the dispatch enqueue instead of
+          // blocking it. The write still completes inside this invocation
+          // (the container cannot finalize the turn before its own dispatch
+          // event is even delivered), so the crash-carry guarantee holds.
           if (turnId && renderedWorkspacePrefix) {
-            await recordDispatchWorkspaceProjectionSnapshot({
-              threadTurnId: turnId,
-              tenantId,
-              renderedPrefix: renderedWorkspacePrefix,
-              hydrateManifest: renderedWorkspace.hydrateManifest,
-              // U7: the turn's effective active skill ids (flag-thread
-              // attribution intersects these with installed catalog skills).
-              activeSkills: skillsConfig.map((s) => s.skillId),
-              source: "chat-agent-invoke",
-            });
+            postDispatchWrites.push(
+              recordDispatchWorkspaceProjectionSnapshot({
+                threadTurnId: turnId,
+                tenantId,
+                renderedPrefix: renderedWorkspacePrefix,
+                hydrateManifest: renderedWorkspace.hydrateManifest,
+                // U7: the turn's effective active skill ids (flag-thread
+                // attribution intersects these with installed catalog skills).
+                activeSkills: skillsConfig.map((s) => s.skillId),
+                source: "chat-agent-invoke",
+              }),
+            );
           }
           console.log(
-            `[chat-agent-invoke] rendered workspace tuple space=${renderedWorkspace.activeSpace?.slug ?? spaceId} prefix=${renderedWorkspacePrefix} cache=${renderedWorkspace.cacheStatus ?? "unknown"} duration_ms=${Date.now() - workspaceRenderStart}`,
+            `[chat-agent-invoke] rendered workspace tuple space=${renderedWorkspace.activeSpace?.slug ?? spaceId} prefix=${renderedWorkspacePrefix} cache=${renderedWorkspace.cacheStatus ?? "unknown"} duration_ms=${workspaceRenderDurationMs}`,
           );
           logAgentCorePhase({
             source: "chat-agent-invoke",
@@ -1660,12 +1817,12 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             threadId,
             threadTurnId: turnId,
             runtimeType,
-            durationMs: Date.now() - workspaceRenderStart,
+            durationMs: workspaceRenderDurationMs,
             detail: renderedWorkspace.cacheStatus ?? "unknown",
           });
         } else {
           console.log(
-            `[chat-agent-invoke] rendered workspace tuple skipped: ${renderedWorkspace.reason} duration_ms=${Date.now() - workspaceRenderStart}`,
+            `[chat-agent-invoke] rendered workspace tuple skipped: ${renderedWorkspace.reason} duration_ms=${workspaceRenderDurationMs}`,
           );
           logAgentCorePhase({
             source: "chat-agent-invoke",
@@ -1677,7 +1834,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
             threadId,
             threadTurnId: turnId,
             runtimeType,
-            durationMs: Date.now() - workspaceRenderStart,
+            durationMs: workspaceRenderDurationMs,
             detail: renderedWorkspace.reason ?? "not_rendered",
           });
           if (renderedWorkspace.errorCode === "SpaceAccessDenied") {
@@ -1723,7 +1880,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           return;
         }
         console.error(
-          `[chat-agent-invoke] rendered workspace tuple failed after ${Date.now() - workspaceRenderStart}ms; falling back to legacy workspace sync:`,
+          `[chat-agent-invoke] rendered workspace tuple failed after ${workspaceRenderDurationMs}ms; falling back to legacy workspace sync:`,
           err,
         );
         logAgentCorePhase({
@@ -1736,7 +1893,7 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
           threadId,
           threadTurnId: turnId,
           runtimeType,
-          durationMs: Date.now() - workspaceRenderStart,
+          durationMs: workspaceRenderDurationMs,
           errorType: err instanceof Error ? err.name : "Error",
         });
       }
@@ -2148,8 +2305,13 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         durationMs: Date.now() - setupStart,
         detail: `setup=${Date.now() - setupStart}ms;invoke=${Date.now() - invokeStart}ms`,
       });
+      // THINK-946: the queued bookkeeping writes (last-render marker,
+      // dispatch projection snapshot) complete here, after the turn is on
+      // its way, instead of in front of it.
+      await flushPostDispatchWrites();
       return { ok: true, threadTurnId: turnId };
     } catch (dispatchErr) {
+      await flushPostDispatchWrites();
       const errMsgText = `AgentCore dispatch failed: ${dispatchErr instanceof Error ? dispatchErr.message : String(dispatchErr)}`;
       console.error(`[chat-agent-invoke] ${errMsgText}`);
       logAgentCorePhase({
@@ -2216,6 +2378,9 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
     // gone, the only paths that reach here are pre-dispatch setup
     // failures (agent lookup, runtime config resolve, etc.).
     console.error(`[chat-agent-invoke] Setup error:`, err);
+    // THINK-946: settle any detached setup work before returning so nothing
+    // resumes in a later invocation of this sandbox.
+    await Promise.allSettled(pendingBackgroundWork.splice(0));
     if (turnId) {
       await markThreadTurnSetupFailed({
         turnId,

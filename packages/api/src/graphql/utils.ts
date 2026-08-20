@@ -325,8 +325,9 @@ export async function getChatAgentInvokeFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } =
-      await import("@aws-sdk/client-ssm");
+    const { SSMClient, GetParameterCommand } = await import(
+      "@aws-sdk/client-ssm"
+    );
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -392,6 +393,15 @@ export async function invokeChatAgent(payload: {
    * but never retained to memory.
    */
   askMode?: boolean;
+  /**
+   * THINK-946: epoch-ms stamp for when the originating mutation started
+   * executing. Rides the Event payload so chat-agent-invoke can report the
+   * pre-dispatch legs it otherwise cannot see — mutation processing time
+   * (mutation start → Event invoke) and Lambda async-queue delivery time
+   * (Event invoke → handler entry). Optional: dispatch callers that don't
+   * stamp it simply get a skipped queue-delay phase.
+   */
+  dispatchRequestedAtMs?: number;
 }): Promise<boolean> {
   try {
     const fnArn = await getChatAgentInvokeFnArn();
@@ -401,18 +411,26 @@ export async function invokeChatAgent(payload: {
       );
       return false;
     }
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
+    // Stamped as late as possible (immediately before the SDK call) so the
+    // delta the handler computes is pure async-queue delivery, not our own
+    // client construction.
+    const eventPayload = { ...payload, invokeSentAtMs: Date.now() };
     await lambda.send(
       new InvokeCommand({
         FunctionName: fnArn,
         InvocationType: "Event",
-        Payload: new TextEncoder().encode(JSON.stringify(payload)),
+        Payload: new TextEncoder().encode(JSON.stringify(eventPayload)),
       }),
     );
     console.log(
-      `[sendMessage] Direct chat-agent-invoke fired for thread=${payload.threadId}`,
+      `[sendMessage] Direct chat-agent-invoke fired for thread=${payload.threadId}` +
+        (typeof payload.dispatchRequestedAtMs === "number"
+          ? ` mutation_ms=${Math.max(0, eventPayload.invokeSentAtMs - payload.dispatchRequestedAtMs)}`
+          : ""),
     );
     return true;
   } catch (err) {
@@ -436,8 +454,9 @@ export async function getJobScheduleManagerFnArn(): Promise<string | null> {
       } catch {}
     }
     if (!stage) stage = "dev";
-    const { SSMClient, GetParameterCommand } =
-      await import("@aws-sdk/client-ssm");
+    const { SSMClient, GetParameterCommand } = await import(
+      "@aws-sdk/client-ssm"
+    );
     const ssm = new SSMClient({});
     const res = await ssm.send(
       new GetParameterCommand({
@@ -466,8 +485,9 @@ export async function invokeJobScheduleManager(
       console.error("[graphql]", msg);
       return { ok: false, error: msg };
     }
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
     const res = await lambda.send(
       new InvokeCommand({
@@ -636,8 +656,9 @@ export async function invokeSkillRun(
         error: `${runtimeType} agentcore-invoke Lambda name not configured`,
       };
     }
-    const { LambdaClient, InvokeCommand } =
-      await import("@aws-sdk/client-lambda");
+    const { LambdaClient, InvokeCommand } = await import(
+      "@aws-sdk/client-lambda"
+    );
     const lambda = new LambdaClient({});
     const body = JSON.stringify(payload);
     const lambdaPayload = JSON.stringify({

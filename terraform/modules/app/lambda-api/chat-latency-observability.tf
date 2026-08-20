@@ -147,6 +147,29 @@ resource "aws_cloudwatch_log_metric_filter" "agent_loop_ms" {
   }
 }
 
+# THINK-946: pre-dispatch latency — the Lambda async-queue leg between the
+# GraphQL resolver's Event invoke and chat-agent-invoke's first line. Measured
+# live at 4.5-7 s with a 30 s outlier class, and previously invisible: no phase
+# spanned it, so the turn timeline simply began late. `detail` carries the
+# caller-side mutation leg (`queue=Nms;mutation=Nms`) for Logs Insights; the
+# metric is the queue leg alone, which is the part no code change can shorten
+# and which spikes when a spillover invoke misses the single provisioned
+# instance on chat-agent-invoke's `live` alias.
+resource "aws_cloudwatch_log_metric_filter" "pre_dispatch_queue_ms" {
+  count = local.chat_latency_metric_filters_enabled ? 1 : 0
+
+  name           = "thinkwork-${var.stage}-pre-dispatch-queue-ms"
+  log_group_name = "/aws/lambda/${local.chat_latency_invoke_fn}"
+  pattern        = "{ $.event = \"agentcore_phase\" && $.phase = \"api.invoke.queue_delay\" && $.status = \"completed\" && $.durationMs = * }"
+
+  metric_transformation {
+    name      = "PreDispatchQueueMs"
+    namespace = local.chat_latency_namespace
+    value     = "$.durationMs"
+    unit      = "Milliseconds"
+  }
+}
+
 ################################################################################
 # Alarms
 #
@@ -364,12 +387,31 @@ locals {
           ]
         }
       },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 21
+        width  = 24
+        height = 6
+        properties = {
+          title  = "Pre-dispatch queue — api.invoke.queue_delay (ms)"
+          region = local.chat_latency_dashboard_region
+          view   = "timeSeries"
+          period = 300
+          metrics = [
+            [local.chat_latency_namespace, "PreDispatchQueueMs", { stat = "p50", label = "p50" }],
+            ["...", { stat = "p95", label = "p95" }],
+            ["...", { stat = "Maximum", label = "max (outlier class)" }],
+          ]
+          yAxis = { left = { label = "ms", showUnits = false } }
+        }
+      },
     ],
     [for w in [
       {
         type   = "log"
         x      = 0
-        y      = 21
+        y      = 27
         width  = 24
         height = 6
         properties = {

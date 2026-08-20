@@ -92,28 +92,41 @@ export const sendMessage = async (
   args: any,
   ctx: GraphQLContext,
 ) => {
+  // THINK-946: the pre-dispatch path (this mutation + the async hop into
+  // chat-agent-invoke) measured 4.5-7 s live. This stamp rides the dispatch
+  // payload so chat-agent-invoke can attribute that window between mutation
+  // processing and Lambda async-queue delivery.
+  const mutationStartedAtMs = Date.now();
   const i = args.input;
   const role = i.role.toLowerCase();
   const senderType = normalizeMessageSenderType(i.senderType);
+  // Caller identity and the thread row are independent reads — one round
+  // trip instead of two on every send.
+  const [callerUserId, threadRows] = await Promise.all([
+    senderType === "user"
+      ? resolveCallerFromAuth(ctx.auth).then((caller) => caller.userId ?? null)
+      : Promise.resolve(null),
+    db
+      .select({
+        tenant_id: threads.tenant_id,
+        computer_id: threads.computer_id,
+        space_id: threads.space_id,
+        user_id: threads.user_id,
+        title: threads.title,
+        status: threads.status,
+        mode_override: threads.mode_override,
+        metadata: threads.metadata,
+      })
+      .from(threads)
+      .where(eq(threads.id, i.threadId)),
+  ]);
   const senderId =
     senderType === "user"
-      ? ((await resolveCallerFromAuth(ctx.auth)).userId ?? i.senderId)
+      ? (callerUserId ?? i.senderId)
       : senderType === "agent"
         ? (i.senderId ?? ctx.auth.agentId)
         : i.senderId;
-  const [thread] = await db
-    .select({
-      tenant_id: threads.tenant_id,
-      computer_id: threads.computer_id,
-      space_id: threads.space_id,
-      user_id: threads.user_id,
-      title: threads.title,
-      status: threads.status,
-      mode_override: threads.mode_override,
-      metadata: threads.metadata,
-    })
-    .from(threads)
-    .where(eq(threads.id, i.threadId));
+  const [thread] = threadRows;
   if (!thread) throw new Error("Thread not found");
   if (senderType === "agent" && senderId) {
     const [agent] = await db
@@ -174,6 +187,18 @@ export const sendMessage = async (
       });
     }
   }
+
+  // THINK-946: the mention-target catalog depends only on the thread, so it
+  // loads concurrently with metadata canonicalization + the model-approval
+  // check instead of after them. The rejection is consumed at the await site
+  // below; the no-op catch here only keeps an earlier throw (approval,
+  // attachment refs) from turning this into an unhandled rejection — error
+  // precedence is unchanged.
+  const mentionTargetsPromise = loadThreadMentionTargets({
+    tenantId: thread.tenant_id,
+    threadId: i.threadId,
+  });
+  mentionTargetsPromise.catch(() => {});
 
   // metadata.attachments is the message ↔ thread_attachments link for the
   // finance pilot (U3 of 2026-05-14-002). The presign/finalize handlers
@@ -241,10 +266,7 @@ export const sendMessage = async (
   );
   const skillCreatorCommand =
     parseSkillCreatorCommandMetadata(canonicalMetadata);
-  const mentionTargets = await loadThreadMentionTargets({
-    tenantId: thread.tenant_id,
-    threadId: i.threadId,
-  });
+  const mentionTargets = await mentionTargetsPromise;
   validateExplicitMentions(i.mentions, mentionTargets);
   const parsedMentions = parseMessageMentions({
     content: i.content,
@@ -265,6 +287,18 @@ export const sendMessage = async (
   // cost nothing. chat-agent-invoke keeps its own gate for the dispatch
   // routes that don't come through this mutation.
   if (isUserMessage && senderType === "user" && senderId) {
+    // THINK-946: the budget lookup does not depend on the Thread Mode
+    // derivation, so both start together instead of chaining two serial
+    // round trips ahead of the message insert. The lookup still only
+    // *decides* anything when the send would actually dispatch a turn, and
+    // it still fails open (a broken budget lookup must not take down chat).
+    const budgetStatusPromise = getUserBudgetStatus({
+      tenantId: thread.tenant_id,
+      userId: senderId,
+    }).catch((err) => {
+      console.error("[sendMessage] budget pre-check failed:", err);
+      return null;
+    });
     const wouldDispatchAgentTurn =
       (hasAgentMentions &&
         !shouldSuppressAgentMentionDispatch({
@@ -292,25 +326,14 @@ export const sendMessage = async (
           ],
         }),
       });
-    if (wouldDispatchAgentTurn) {
-      let overBudgetError: GraphQLError | null = null;
-      try {
-        const budget = await getUserBudgetStatus({
-          tenantId: thread.tenant_id,
-          userId: senderId,
-        });
-        if (budget.overBudget) {
-          overBudgetError = new GraphQLError(
-            `Monthly budget exceeded: $${budget.spentUsd.toFixed(2)} of $${budget.limitUsd.toFixed(2)} used. Ask your operator to raise the limit or unpause your budget.`,
-            { extensions: { code: "BUDGET_EXCEEDED" } },
-          );
-        }
-      } catch (err) {
-        // Fail open on infra errors — a broken budget lookup must not take
-        // down chat. The chat-agent-invoke gate is the backstop.
-        console.error("[sendMessage] budget pre-check failed:", err);
-      }
-      if (overBudgetError) throw overBudgetError;
+    // A budget lookup that errored resolves to null above (fail open — the
+    // chat-agent-invoke gate is the backstop).
+    const budget = await budgetStatusPromise;
+    if (wouldDispatchAgentTurn && budget?.overBudget) {
+      throw new GraphQLError(
+        `Monthly budget exceeded: $${budget.spentUsd.toFixed(2)} of $${budget.limitUsd.toFixed(2)} used. Ask your operator to raise the limit or unpause your budget.`,
+        { extensions: { code: "BUDGET_EXCEEDED" } },
+      );
     }
   }
   const messageActivityAt = new Date();
@@ -563,6 +586,7 @@ export const sendMessage = async (
         ...(skillCreatorCommand ? { skillCreatorCommand } : {}),
         ...(pendingQuestionAnswers ? { pendingQuestionAnswers } : {}),
         sender: { type: senderType, id: senderId },
+        dispatchRequestedAtMs: mutationStartedAtMs,
       });
     } catch (err) {
       // R7: a synchronous dispatch failure is never only logged — stamp a
