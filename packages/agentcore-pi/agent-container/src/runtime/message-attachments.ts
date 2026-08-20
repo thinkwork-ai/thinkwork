@@ -1,4 +1,11 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
@@ -146,6 +153,58 @@ export async function cleanupMessageAttachments(
 ): Promise<void> {
   if (!turnDir) return;
   await rm(path.dirname(turnDir), { recursive: true, force: true });
+}
+
+/** Default age after which an abandoned turn scratch dir is reapable. */
+const STALE_TURN_SCRATCH_MS = 15 * 60 * 1000;
+
+/**
+ * Sweep abandoned per-turn scratch directories (THINK-909).
+ *
+ * Every turn removes its own staging dir in its finally block, but a hard
+ * container kill (OOM, 424, runtime recycle) leaves one behind — and on a
+ * per-user runtime session that microVM goes on to serve the user's OTHER
+ * threads, so the residue is now cross-thread rather than merely wasted
+ * disk. Called best-effort at turn start; never throws.
+ *
+ * Returns the directories removed (for tests/observability).
+ */
+export async function sweepStaleTurnScratch(input?: {
+  tmpRoot?: string;
+  prefixes?: string[];
+  maxAgeMs?: number;
+  now?: number;
+  logger?: (message: string, details?: Record<string, unknown>) => void;
+}): Promise<string[]> {
+  const tmpRoot = input?.tmpRoot ?? "/tmp";
+  const prefixes = input?.prefixes ?? ["pi-turn-", "pi-sessions-"];
+  const maxAgeMs = input?.maxAgeMs ?? STALE_TURN_SCRATCH_MS;
+  const now = input?.now ?? Date.now();
+  const removed: string[] = [];
+  let names: string[];
+  try {
+    names = await readdir(tmpRoot);
+  } catch {
+    return removed;
+  }
+  for (const name of names) {
+    if (!prefixes.some((prefix) => name.startsWith(prefix))) continue;
+    const dir = path.join(tmpRoot, name);
+    try {
+      const info = await stat(dir);
+      if (!info.isDirectory()) continue;
+      const ageMs = now - info.mtimeMs;
+      if (ageMs < maxAgeMs) continue;
+      await rm(dir, { recursive: true, force: true });
+      removed.push(dir);
+    } catch (err) {
+      input?.logger?.("turn_scratch_sweep_failed", {
+        dir,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return removed;
 }
 
 export function formatMessageAttachmentsPreamble(

@@ -379,6 +379,12 @@ locals {
       # (5-min cache) and derives the ARN from identity env. Stage-scoped
       # param name is config, not identity — env is the right layer.
       AGENTCORE_PI_RUNTIME_SSM_NAME = "/thinkwork/${var.stage}/agentcore/runtime-id-pi"
+      # THINK-909: runtime session scope. "thread" (default) keys the
+      # AgentCore session per thread — today's behavior. "user" keys it per
+      # (tenant, agent, user) so a new thread reuses the warm microVM, with
+      # an immediate per-thread fallback on a 409. Flip a stage to "user"
+      # ONLY after its Pi runtime image dual-accepts both session ids.
+      AGENTCORE_SESSION_SCOPE = var.agentcore_session_scope
     }
     "chat-agent-invoke" = {
       # THINK-324 C18: mint the signed-turn assertion with the active key.

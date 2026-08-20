@@ -16,7 +16,10 @@
  *
  * Failure surface:
  * - 409 RetryableConflictException (another invocation holds the session):
- *   bounded backoff retries, then the turn fails cleanly.
+ *   under `AGENTCORE_SESSION_SCOPE=user` (THINK-909) the FIRST 409 on the
+ *   per-user session re-invokes immediately with this thread's per-thread
+ *   id instead of waiting; after that (and always under the default
+ *   `thread` scope) bounded backoff retries, then the turn fails cleanly.
  * - 424 RuntimeClientError (container crashed / bad response): turn marked
  *   failed with a pointer at the runtime log group. Never retried — the
  *   agent loop is not idempotent.
@@ -30,7 +33,11 @@ import { threadTurns } from "@thinkwork/database-pg/schema";
 import { notifyThreadTurnUpdate } from "../lib/chat-finalize/notify.js";
 import { releaseThreadCheckout } from "../lib/thread-checkout.js";
 import { logAgentCorePhase } from "../lib/agentcore-phase-log.js";
-import { deriveAgentCoreSessionId } from "../lib/agentcore-session-id.js";
+import {
+  deriveAgentCoreSessionId,
+  deriveAgentCoreUserSessionId,
+  resolveAgentCoreSessionScope,
+} from "../lib/agentcore-session-id.js";
 
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
 
@@ -222,12 +229,26 @@ export async function handler(event: LwaInvocationEnvelope): Promise<void> {
     throw err;
   }
 
-  const sessionId = deriveAgentCoreSessionId({
+  // THINK-909 — session scope. `thread` (default) keeps v1 per-thread keying
+  // byte-for-byte. `user` invokes with the v2 per-user id so a user's new
+  // thread reuses the microVM their previous thread warmed; a busy per-user
+  // session (409 = another of this user's threads is mid-turn) falls back
+  // once, immediately, to this thread's own v1 id.
+  const sessionScope = resolveAgentCoreSessionScope();
+  const perThreadSessionId = deriveAgentCoreSessionId({
     tenantId: identity.tenantId,
     agentId: identity.agentId,
     userId: identity.userId,
     threadId: identity.threadId,
   });
+  const primarySessionId =
+    sessionScope === "user"
+      ? deriveAgentCoreUserSessionId({
+          tenantId: identity.tenantId,
+          agentId: identity.agentId,
+          userId: identity.userId,
+        })
+      : perThreadSessionId;
 
   try {
     const runtimeArn = await resolvePiRuntimeArn();
@@ -249,15 +270,16 @@ export async function handler(event: LwaInvocationEnvelope): Promise<void> {
       status: "started",
       threadTurnId: identity.threadTurnId,
       threadId: identity.threadId,
+      detail: `session_scope=${sessionScope}`,
     });
 
     let lastConflict: unknown = null;
     let conflictWaitTotalMs = 0;
-    for (
-      let attempt = 0;
-      attempt <= CONFLICT_RETRY_DELAYS_MS.length;
-      attempt += 1
-    ) {
+    let attempt = 0;
+    let sessionId = primarySessionId;
+    // Consumed by the FIRST 409 under `user` scope only.
+    let perThreadFallbackAvailable = sessionScope === "user";
+    for (;;) {
       try {
         // THINK-911 — stamp the moment we hand the payload to AgentCore so
         // the container can compute (and record) the otherwise-invisible
@@ -294,6 +316,28 @@ export async function handler(event: LwaInvocationEnvelope): Promise<void> {
         });
         return;
       } catch (err) {
+        if (isRetryableConflict(err) && perThreadFallbackAvailable) {
+          // The user-scoped session is busy: another of this user's threads
+          // is mid-turn. Waiting would queue this thread behind it, so give
+          // this thread its own microVM immediately — deterministic, one
+          // extra invoke, at worst today's per-thread cold start. No sleep
+          // and no ladder rung is consumed here.
+          perThreadFallbackAvailable = false;
+          lastConflict = err;
+          sessionId = perThreadSessionId;
+          console.warn(
+            `[agentcore-runtime-dispatch] 409 conflict on the per-user session for turn ${identity.threadTurnId} — falling back to the per-thread session.`,
+          );
+          logAgentCorePhase({
+            source: "agentcore-runtime-dispatch",
+            phase: "api.runtime_dispatch.session_fallback",
+            status: "completed",
+            threadTurnId: identity.threadTurnId,
+            threadId: identity.threadId,
+            detail: "per_user_session_busy",
+          });
+          continue;
+        }
         if (
           isRetryableConflict(err) &&
           attempt < CONFLICT_RETRY_DELAYS_MS.length
@@ -327,6 +371,7 @@ export async function handler(event: LwaInvocationEnvelope): Promise<void> {
             threadId: identity.threadId,
             detail: `attempt=${attempt + 1}/${CONFLICT_RETRY_DELAYS_MS.length};total=${conflictWaitTotalMs}ms`,
           });
+          attempt += 1;
           continue;
         }
         if (isRetryableConflict(err)) {

@@ -41,7 +41,15 @@
 
 import http from "node:http";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readlink, realpath, stat } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  stat,
+} from "node:fs/promises";
 import path from "node:path";
 import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
@@ -219,6 +227,7 @@ import {
   cleanupMessageAttachments,
   formatMessageAttachmentsPreamble,
   stageMessageAttachments,
+  sweepStaleTurnScratch,
 } from "./runtime/message-attachments.js";
 import {
   retainConversation,
@@ -1400,7 +1409,15 @@ let warmSessionCacheSingleton:
 function getWarmSessionCache(): WarmSessionCache<WarmTurnProducts> | null {
   if (warmSessionCacheSingleton === undefined) {
     warmSessionCacheSingleton =
-      createWarmSessionCacheIfRuntime<WarmTurnProducts>();
+      createWarmSessionCacheIfRuntime<WarmTurnProducts>(process.env, {
+        // THINK-909 — LRU spill and the idle sweep drop entries with no
+        // caller to tear them down; close their retained MCP transports so a
+        // long-lived (per-user) microVM does not leak one connection per
+        // evicted thread.
+        dispose: (products) => {
+          void products.mcpRetention?.close().catch(() => undefined);
+        },
+      });
   }
   return warmSessionCacheSingleton;
 }
@@ -3020,6 +3037,18 @@ export async function handleInvocation(
     deps.warmSessionCache !== undefined
       ? deps.warmSessionCache
       : getWarmSessionCache();
+  // THINK-909 — reap scratch left behind by turns that died hard (OOM, 424,
+  // runtime recycle). Best-effort and non-blocking: a shared per-user microVM
+  // must not carry one thread's staged attachments or transcript into
+  // another's turn. Also drops the pre-THINK-909 shared transcript dir.
+  void sweepStaleTurnScratch({
+    tmpRoot: TURN_SCRATCH_ROOT,
+    logger: (event, details) =>
+      logStructured({ level: "warn", event, ...details }),
+  }).catch(() => undefined);
+  void rm(LEGACY_SESSION_DIR, { recursive: true, force: true }).catch(
+    () => undefined,
+  );
   const lockThreadId = asString(args.payload.thread_id);
   if (!warmCache || !lockThreadId) {
     return runInvocationTurn(args, deps, warmCache ?? null);
@@ -3030,6 +3059,13 @@ export async function handleInvocation(
     runInvocationTurn(args, deps, warmCache),
   );
 }
+
+/** Root for per-turn scratch dirs (session transcripts, attachment staging). */
+const TURN_SCRATCH_ROOT = "/tmp";
+/** mkdtemp prefix for a turn's local durable-session transcript scratch. */
+const TURN_SESSION_DIR_PREFIX = "pi-sessions-";
+/** Legacy shared transcript scratch dir, swept alongside stale turn dirs. */
+const LEGACY_SESSION_DIR = "/tmp/pi-sessions";
 
 async function runInvocationTurn(
   args: HandleInvocationArgs,
@@ -3469,6 +3505,9 @@ async function runInvocationTurn(
         total: bootstrapResult.total,
         durationMs: workspaceBootstrapDurationMs,
         skipped: bootstrapResult.skipped ?? 0,
+        // THINK-909 — true when a tenant/agent/prefix change forced a
+        // clean-slate wipe before the sync.
+        wiped: bootstrapResult.wiped === true,
       });
       recordRuntimePhase({
         phase: "runtime.workspace_bootstrap",
@@ -4356,6 +4395,17 @@ async function runInvocationTurn(
       {},
     ),
   );
+  // THINK-909 — per-turn session scratch. The durable-session manager writes
+  // the thread's transcript to a local `<uuid>-<threadId>.jsonl` scratch file
+  // and never deletes it. On a per-user runtime session one microVM serves
+  // several of the user's threads, so a shared scratch root would leave
+  // thread A's transcript on disk during thread B's turn. Give every turn its
+  // own mkdtemp dir and remove it in the finally below. Still outside the
+  // workspace dir, so the per-turn workspace S3 sync (delete-extraneous)
+  // cannot reap an in-flight session file.
+  const turnSessionDir = await mkdtemp(
+    path.join(TURN_SCRATCH_ROOT, TURN_SESSION_DIR_PREFIX),
+  );
   try {
     // Durable per-thread session (U4): resume the thread's persisted Pi session
     // from S3 instead of replaying full history as prompt text. Requires the
@@ -4579,7 +4629,7 @@ async function runInvocationTurn(
           agentDir: env.piAgentDir,
           builtinToolNames: bundle.builtinToolNames,
           sessionStore,
-          sessionDir: "/tmp/pi-sessions",
+          sessionDir: turnSessionDir,
         },
         runLoop,
         log: (entry) => logStructured(entry),
@@ -4612,7 +4662,7 @@ async function runInvocationTurn(
           // Session scratch lives outside the workspace dir so the per-turn
           // workspace S3 sync (delete-extraneous) cannot reap an in-flight
           // session file.
-          sessionDir: "/tmp/pi-sessions",
+          sessionDir: turnSessionDir,
           goalRunExtractor: ({ sessionEntries, toolInvocations }) =>
             extractGoalRunEvidence({
               payload: args.payload,
@@ -4654,7 +4704,7 @@ async function runInvocationTurn(
             agentDir: env.piAgentDir,
             builtinToolNames: bundle.builtinToolNames,
             sessionStore,
-            sessionDir: "/tmp/pi-sessions",
+            sessionDir: turnSessionDir,
           },
           {
             log: (entry) => logStructured(entry),
@@ -4948,6 +4998,19 @@ async function runInvocationTurn(
       logStructured({
         level: "warn",
         event: "message_attachment_cleanup_failed",
+        tenantId: identity.tenantId,
+        threadId: identity.threadId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+    // THINK-909 — the turn's local transcript scratch never outlives the
+    // turn, so a later thread on the same (per-user) microVM cannot find it.
+    try {
+      await rm(turnSessionDir, { recursive: true, force: true });
+    } catch (err) {
+      logStructured({
+        level: "warn",
+        event: "turn_session_scratch_cleanup_failed",
         tenantId: identity.tenantId,
         threadId: identity.threadId,
         error: err instanceof Error ? err.message : String(err),
@@ -5296,6 +5359,66 @@ async function readBody(req: http.IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+/**
+ * The runtime session IDs this container accepts for an envelope identity
+ * (THINK-585 KTD1 + THINK-909).
+ *
+ * - v1 (per-thread): `sha256("session:" + tenant + ":" + agent + ":" + user
+ *   + ":" + thread)`
+ * - v2 (per-user):   `sha256("session:v2:" + tenant + ":" + agent + ":" + user)`
+ *
+ * Both derivations bind tenant + agent + user, so accepting either does not
+ * widen the tenant/user boundary; the dispatcher chooses which one to
+ * present (`AGENTCORE_SESSION_SCOPE`), and during a rollout both are in
+ * flight at once. Mirrors packages/api/src/lib/agentcore-session-id.ts.
+ */
+export function acceptedRuntimeSessionIds(identity: {
+  tenantId: string;
+  agentId: string;
+  userId: string;
+  threadId: string;
+}): string[] {
+  const { tenantId, agentId, userId, threadId } = identity;
+  return [
+    createHash("sha256")
+      .update(`session:${tenantId}:${agentId}:${userId}:${threadId}`)
+      .digest("hex"),
+    createHash("sha256")
+      .update(`session:v2:${tenantId}:${agentId}:${userId}`)
+      .digest("hex"),
+  ];
+}
+
+/**
+ * Verdict for the presented runtime session header:
+ * - `skip`   — nothing to verify (no header, or the envelope lacks a
+ *              complete identity, e.g. the Lambda path).
+ * - `accept` — the header equals the v1 per-thread or v2 per-user id.
+ * - `reject` — anything else → 403.
+ */
+export function verifyRuntimeSessionHeader(
+  presentedSessionId: string | undefined,
+  payload: Record<string, unknown>,
+): "skip" | "accept" | "reject" {
+  if (!presentedSessionId) return "skip";
+  const identity = [
+    payload.tenant_id,
+    payload.assistant_id,
+    payload.user_id,
+    payload.thread_id,
+  ];
+  if (!identity.every((value) => typeof value === "string" && value !== "")) {
+    return "skip";
+  }
+  const accepted = acceptedRuntimeSessionIds({
+    tenantId: identity[0] as string,
+    agentId: identity[1] as string,
+    userId: identity[2] as string,
+    threadId: identity[3] as string,
+  });
+  return accepted.includes(presentedSessionId) ? "accept" : "reject";
+}
+
 async function handleHttpInvocation(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -5323,41 +5446,32 @@ async function handleHttpInvocation(
   }
   // THINK-585 U6 (KTD1): container-side session verification. When the
   // AgentCore runtime exposes the session ID as a request header, recompute
-  // the expected per-thread session key from the envelope's identity fields
-  // and hard-fail a mismatch — a tampered envelope cannot ride another
-  // thread's warm session. Lambda-path requests carry no header and skip
-  // this check (LWA does not forward AgentCore session headers).
+  // the expected session key(s) from the envelope's identity fields and
+  // hard-fail a mismatch — a tampered envelope cannot ride another thread's
+  // warm session. Lambda-path requests carry no header and skip this check
+  // (LWA does not forward AgentCore session headers).
+  //
+  // THINK-909: the dispatcher may key the session per-thread (v1) or
+  // per-user (v2, so a new thread reuses the user's warm microVM). Accept
+  // EITHER — both bind tenant + agent + user server-side, so the tenant/user
+  // boundary is identical; only the thread component differs.
   const sessionHeader =
     req.headers["x-amzn-bedrock-agentcore-runtime-session-id"];
   const presentedSessionId = Array.isArray(sessionHeader)
     ? sessionHeader[0]
     : sessionHeader;
-  if (presentedSessionId) {
-    const identity = [
-      payload.tenant_id,
-      payload.assistant_id,
-      payload.user_id,
-      payload.thread_id,
-    ];
-    if (identity.every((value) => typeof value === "string" && value !== "")) {
-      const expected = createHash("sha256")
-        .update(`session:${identity.join(":")}`)
-        .digest("hex");
-      if (presentedSessionId !== expected) {
-        logStructured({
-          level: "error",
-          event: "session_id_mismatch",
-          error:
-            "runtime session ID does not match the envelope identity fields",
-          statusCode: 403,
-        });
-        sendJson(res, 403, {
-          error: "session/identity mismatch",
-          runtime: "pi",
-        });
-        return;
-      }
-    }
+  if (verifyRuntimeSessionHeader(presentedSessionId, payload) === "reject") {
+    logStructured({
+      level: "error",
+      event: "session_id_mismatch",
+      error: "runtime session ID does not match the envelope identity fields",
+      statusCode: 403,
+    });
+    sendJson(res, 403, {
+      error: "session/identity mismatch",
+      runtime: "pi",
+    });
+    return;
   }
   try {
     const result = await handleInvocation({ payload });
