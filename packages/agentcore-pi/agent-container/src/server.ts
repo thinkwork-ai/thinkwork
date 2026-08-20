@@ -188,6 +188,18 @@ import {
 } from "./runtime/capabilities-json.js";
 import { formatWithheldCapabilitiesNotice } from "./runtime/withheld-capabilities-notice.js";
 import {
+  buildPromptBreakdown,
+  type PromptBreakdown,
+} from "./runtime/prompt-breakdown.js";
+import {
+  mcpServersInTools,
+  readSidecarOperations,
+  resolveToolScopeMode,
+  scopeTools,
+  type ScopeManifest,
+  type ToolScopeMode,
+} from "./runtime/tool-scope.js";
+import {
   createPiGoalExtensionFactory,
   extractGoalRunEvidence,
   goalCommandForRuntimeMode,
@@ -830,6 +842,30 @@ interface RuntimeDiagnostics {
    * turns omit the field entirely.
    */
   session_reuse?: "warm" | "cold";
+  /**
+   * THINK-910 — per-turn prompt-size self-report (system-prompt chars vs
+   * tool-schema chars vs tool counts). Lands in
+   * `thread_turns.usage_json -> diagnostics -> prompt_breakdown` so prompt
+   * bloat can be queried from ops without re-running a live turn.
+   */
+  prompt_breakdown?: PromptBreakdown;
+  /**
+   * THINK-910 — capability-scoped tool loading outcome. Always present so a
+   * turn record states which mode was in force, including the default
+   * no-op `all`.
+   */
+  tool_scope?: {
+    mode: ToolScopeMode;
+    before: number;
+    after: number;
+    dropped: string[];
+    connections: Array<{
+      server: string;
+      kept: number;
+      dropped: number;
+      reason: string;
+    }>;
+  };
 }
 
 function mergeRuntimeDiagnostics(
@@ -852,6 +888,10 @@ function mergeRuntimeDiagnostics(
       ...(diagnostics.session_reuse
         ? { session_reuse: diagnostics.session_reuse }
         : {}),
+      ...(diagnostics.prompt_breakdown
+        ? { prompt_breakdown: diagnostics.prompt_breakdown }
+        : {}),
+      ...(diagnostics.tool_scope ? { tool_scope: diagnostics.tool_scope } : {}),
       ...(diagnostics.workspace_diagnostics
         ? {
             workspace_diagnostics: {
@@ -869,12 +909,14 @@ async function ensureWorkspaceDir(workspaceDir: string): Promise<void> {
     await mkdir(workspaceDir, { recursive: true });
     return;
   } catch (err) {
-    if (!(
-      err &&
-      typeof err === "object" &&
-      "code" in err &&
-      err.code === "ENOENT"
-    )) {
+    if (
+      !(
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        err.code === "ENOENT"
+      )
+    ) {
       throw err;
     }
   }
@@ -1376,7 +1418,9 @@ export interface WarmTurnProducts {
  * so the Lambda path resolves null here and takes today's cold path.
  */
 let warmSessionCacheSingleton:
-  WarmSessionCache<WarmTurnProducts> | null | undefined;
+  | WarmSessionCache<WarmTurnProducts>
+  | null
+  | undefined;
 
 function getWarmSessionCache(): WarmSessionCache<WarmTurnProducts> | null {
   if (warmSessionCacheSingleton === undefined) {
@@ -2758,7 +2802,10 @@ export interface SkillRunContext {
 }
 
 export type CompletionStatus =
-  "complete" | "failed" | "cancelled" | "cost_bounded_error";
+  | "complete"
+  | "failed"
+  | "cancelled"
+  | "cost_bounded_error";
 
 export interface CompletionCallbackArgs {
   secrets: SecretsSnapshot;
@@ -3946,6 +3993,53 @@ async function runInvocationTurn(
       };
     }
 
+  // ── THINK-910: capability-scoped tool loading ──────────────────────────
+  // Ships DARK: `TOOL_SCOPE_MODE` defaults to `all`, which returns the
+  // assembled tool list untouched. Applied here — after both the warm and
+  // cold assembly paths converge, and after the warm-cache snapshot was
+  // taken — so the cache keeps the full assembled surface and the scope
+  // decision is re-made from the current manifest/sidecars every turn.
+  // Only MCP-built tools are ever candidates for removal; built-ins,
+  // extension tools, and every platform/manifest capability tool are
+  // untouched (see runtime/tool-scope.ts).
+  const toolScopeMode = resolveToolScopeMode(process.env);
+  const scopeResult = scopeTools({
+    mode: toolScopeMode,
+    tools: bundle.tools,
+    manifest: (capabilitiesManifest ?? null) as ScopeManifest | null,
+    sidecarOperations:
+      toolScopeMode === "all"
+        ? new Map()
+        : await readSidecarOperations(
+            env.workspaceDir,
+            mcpServersInTools(bundle.tools),
+          ).catch(() => new Map<string, string[]>()),
+  });
+  if (scopeResult.droppedNames.length > 0) {
+    const droppedToolNames = new Set(scopeResult.droppedNames);
+    bundle.tools = bundle.tools.filter(
+      (tool) => !droppedToolNames.has(tool.name),
+    );
+    logStructured({
+      level: "info",
+      event: "tool_scope_applied",
+      tenantId: identity.tenantId,
+      agentSlug: identity.agentSlug,
+      threadId: identity.threadId,
+      mode: scopeResult.mode,
+      before: scopeResult.before,
+      after: scopeResult.after,
+      droppedCount: scopeResult.before - scopeResult.after,
+    });
+  }
+  runtimeDiagnostics.tool_scope = {
+    mode: scopeResult.mode,
+    before: scopeResult.before,
+    after: scopeResult.after,
+    dropped: scopeResult.dropped,
+    connections: scopeResult.connections,
+  };
+
   // Run the agent loop inside try/finally so the HandleStore is cleared
   // even if the LLM throws or a tool raises.
   // THINK-586 U7 — the products this turn will cache (warm: the reused
@@ -4750,6 +4844,27 @@ async function runInvocationTurn(
       count: runResult.toolInvocations.length,
       detail: `toolsCalled=${runResult.toolsCalled.length}`,
     });
+    // THINK-910 — prompt-size self-report. Computed HERE (not at loop start)
+    // because `composedSystemPrompt` is only populated once the system-prompt
+    // extension's `before_agent_start` hook has run inside the session. One
+    // JSON.stringify over the tool specs; never allowed to fail the turn.
+    try {
+      runtimeDiagnostics.prompt_breakdown = buildPromptBreakdown({
+        systemPrompt: composedSystemPrompt,
+        tools: bundle.tools,
+        builtinToolNames: bundle.builtinToolNames,
+        extensionToolNames: bundle.extensionToolNames,
+        payload: args.payload as Record<string, unknown>,
+      });
+    } catch (err) {
+      logStructured({
+        level: "warn",
+        event: "prompt_breakdown_failed",
+        tenantId: identity.tenantId,
+        threadId: identity.threadId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     runResult = mergeRuntimeDiagnostics(runResult, runtimeDiagnostics);
     if (warmCache && !warmEntry) {
       // THINK-586 U7 — name the exact reason a cold turn did not populate
