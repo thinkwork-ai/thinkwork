@@ -108,6 +108,69 @@ export interface RetainedMcpConnection {
   hasAuthorization: boolean;
 }
 
+/** One tools/list entry, as cached for cross-thread reuse. */
+export interface McpListedTool {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+}
+
+/**
+ * THINK-946 — a retained connection that can also serve a DIFFERENT thread
+ * of the same (tenant, agent, user, config) without reconnecting: it carries
+ * the MCP client plus the tools/list result, so a later turn rebuilds its
+ * `AgentTool[]` locally instead of paying `initialize` + `tools/list` again.
+ *
+ * The AgentTool closures are NEVER reused across turns — only the transport
+ * and the listing metadata are. Every turn rebuilds the closures against its
+ * own registry, on-behalf-of identity, result transforms and record-link
+ * hints, so nothing turn- or thread-shaped survives in the pool.
+ */
+export interface ReusableMcpConnection extends RetainedMcpConnection {
+  /** Identity of the connection's connect-time shape (see
+   * {@link mcpConnectionReuseKey}). Only an exact match may be reused. */
+  reuseKey: string;
+  client: Client;
+  toolListing: McpListedTool[];
+}
+
+function isReusable(
+  connection: RetainedMcpConnection,
+): connection is ReusableMcpConnection {
+  return (
+    typeof (connection as ReusableMcpConnection).reuseKey === "string" &&
+    Array.isArray((connection as ReusableMcpConnection).toolListing)
+  );
+}
+
+/**
+ * Everything about a connect call that must be identical before a retained
+ * connection may serve another turn. Excludes per-turn inputs (the minted
+ * Authorization handle, the egress fetch, registry, on-behalf-of identity,
+ * result transforms, record-link hints) — those are re-applied or rebuilt.
+ */
+export function mcpConnectionReuseKey(args: {
+  serverName: string;
+  url: string;
+  transport?: "streamable-http" | "sse";
+  toolWhitelist?: string[];
+  longRunning?: boolean;
+  hasAuthorization: boolean;
+}): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        serverName: args.serverName,
+        url: args.url,
+        transport: args.transport ?? "streamable-http",
+        toolWhitelist: [...(args.toolWhitelist ?? [])].sort(),
+        longRunning: args.longRunning === true,
+        hasAuthorization: args.hasAuthorization,
+      }),
+    )
+    .digest("hex");
+}
+
 export interface McpRetentionRebindArgs {
   /** The current turn's egress (scrubbing) fetch. */
   fetch: typeof fetch;
@@ -133,6 +196,15 @@ export interface McpConnectionRetention {
   rebind(args: McpRetentionRebindArgs): Promise<void>;
   close(): Promise<void>;
   readonly size: number;
+  /**
+   * THINK-946 — cross-thread lookup: a retained connection whose connect-time
+   * shape matches `reuseKey`, or null. Present on retentions built by
+   * {@link createMcpConnectionRetention}; absent on caller-supplied fakes,
+   * which therefore always take the fresh-connect path.
+   */
+  acquire?(reuseKey: string): ReusableMcpConnection | null;
+  /** Close and forget one connection (a reuse attempt found it dead). */
+  dropConnection?(connection: RetainedMcpConnection): Promise<void>;
 }
 
 export function createMcpConnectionRetention(): McpConnectionRetention {
@@ -140,6 +212,18 @@ export function createMcpConnectionRetention(): McpConnectionRetention {
   return {
     register(connection) {
       connections.push(connection);
+    },
+    acquire(reuseKey) {
+      const found = connections.find(
+        (connection) =>
+          isReusable(connection) && connection.reuseKey === reuseKey,
+      );
+      return (found as ReusableMcpConnection | undefined) ?? null;
+    },
+    async dropConnection(connection) {
+      const index = connections.indexOf(connection);
+      if (index >= 0) connections.splice(index, 1);
+      await connection.close().catch(() => undefined);
     },
     async rebind(args) {
       for (const connection of connections) {
@@ -313,6 +397,21 @@ export interface CreateConnectMcpServerOptions {
    * path / non-cacheable turns) → behavior identical to before.
    */
   retention?: McpConnectionRetention;
+  /**
+   * THINK-946 — liveness-ping wall applied when a retained connection is
+   * reused for a different thread (default 3s). A slow ping falls back to a
+   * full connect rather than stalling tool assembly.
+   */
+  warmPingTimeoutMs?: number;
+  /**
+   * THINK-946 — notified when a connect call was served from a retained
+   * connection instead of a fresh `initialize` + `tools/list`. The trusted
+   * handler counts these for the tool-assembly phase detail.
+   */
+  onConnectionReused?: (info: {
+    serverName: string;
+    toolCount: number;
+  }) => void;
 }
 
 export interface TransportFactoryArgs {
@@ -579,22 +678,14 @@ export function createConnectMcpServer(
   const customFetch = options.fetch;
   const retention = options.retention;
 
+  const warmPingTimeoutMs =
+    options.warmPingTimeoutMs ?? DEFAULT_WARM_PING_TIMEOUT_MS;
+
   return async function connectMcpServer(
     args: ConnectMcpServerArgs,
   ): Promise<AgentTool<any>[]> {
     const url = new URL(args.url);
     const initialAuthorization = args.headers.Authorization ?? null;
-    const fetchState: IndirectFetchState | null = retention
-      ? { fetch: customFetch, authorization: initialAuthorization }
-      : null;
-    const transport = transportFactory({
-      url,
-      headers: args.headers,
-      transport: args.transport ?? "streamable-http",
-      fetch: fetchState ? makeIndirectFetch(fetchState) : customFetch,
-    });
-    const client = clientFactory();
-    await client.connect(transport, { timeout: connectTimeoutMs });
 
     // THINK-623 — servers that stream MCP progress notifications during a
     // long tool call opt into a per-attempt wall that RESETS on every
@@ -610,13 +701,66 @@ export function createConnectMcpServer(
         }
       : { timeout: callToolTimeoutMs };
 
-    // THINK-626 — resolved once per connection because the identity is
-    // fixed for the turn (buildMcpTools re-runs every turn, warm sessions
-    // included, so a thread whose next turn has a different sender gets a
-    // freshly-built closure). Null for every server that did not opt in
-    // and for every turn with no signed-in human — in both cases the
-    // tools/call params stay byte-identical to the pre-THINK-626 wire.
-    const onBehalfOfMeta = buildOnBehalfOfMeta(args.onBehalfOf);
+    const reuseKey = mcpConnectionReuseKey({
+      serverName: args.serverName,
+      url: args.url,
+      transport: args.transport,
+      toolWhitelist: args.toolWhitelist,
+      longRunning: args.longRunning,
+      hasAuthorization: initialAuthorization !== null,
+    });
+
+    // THINK-946 — cross-thread reuse. A retained connection from an EARLIER
+    // thread of the same (tenant, agent, user, config) is repointed at this
+    // turn's egress + freshly minted handle, liveness-pinged, and its cached
+    // tools/list metadata rebuilt into this turn's AgentTools. Skips MCP
+    // `initialize` + `tools/list` (the dominant cost of tool assembly).
+    // Any doubt — missing handle, dead transport — drops the connection and
+    // falls through to a full connect below.
+    const reusable = retention?.acquire?.(reuseKey) ?? null;
+    if (reusable) {
+      try {
+        reusable.setFetch(customFetch);
+        if (reusable.hasAuthorization) {
+          if (!initialAuthorization) {
+            throw new Error(
+              `warm MCP reuse: no current-turn authorization for server ${args.serverName}`,
+            );
+          }
+          reusable.setAuthorization(initialAuthorization);
+        }
+        await reusable.ping({ timeout: warmPingTimeoutMs }).catch((err) => {
+          // -32601 (Method not found) still proves the transport is alive.
+          if (isMethodNotFound(err)) return undefined;
+          throw err;
+        });
+        options.onConnectionReused?.({
+          serverName: args.serverName,
+          toolCount: reusable.toolListing.length,
+        });
+        return buildToolsFromListing({
+          listing: reusable.toolListing,
+          client: reusable.client,
+          args,
+          callToolOptions,
+          readResourceTimeoutMs,
+        });
+      } catch {
+        await retention?.dropConnection?.(reusable);
+      }
+    }
+
+    const fetchState: IndirectFetchState | null = retention
+      ? { fetch: customFetch, authorization: initialAuthorization }
+      : null;
+    const transport = transportFactory({
+      url,
+      headers: args.headers,
+      transport: args.transport ?? "streamable-http",
+      fetch: fetchState ? makeIndirectFetch(fetchState) : customFetch,
+    });
+    const client = clientFactory();
+    await client.connect(transport, { timeout: connectTimeoutMs });
 
     const closeTransport = async () => {
       try {
@@ -627,10 +771,18 @@ export function createConnectMcpServer(
         // loop.
       }
     };
+    const listing = await client.listTools(undefined, {
+      timeout: listToolsTimeoutMs,
+    });
+
     if (retention && fetchState) {
       // Warm-cache retention (U7): the connection outlives the turn; the
       // per-turn cleanup drain must not tear it down. Eviction closes it.
-      retention.register({
+      // THINK-946 — it also carries its reuse identity + tools/list result
+      // so ANOTHER thread of the same user can rebuild tools without a
+      // round-trip. Registered after `listTools` so a connection that never
+      // produced a listing is not offered for reuse.
+      const reusable: ReusableMcpConnection = {
         serverName: args.serverName,
         ping: (opts) => client.ping(opts),
         close: closeTransport,
@@ -641,104 +793,140 @@ export function createConnectMcpServer(
           fetchState.authorization = value;
         },
         hasAuthorization: initialAuthorization !== null,
-      });
+        reuseKey,
+        client,
+        toolListing: listing.tools.map((tool) => ({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+        })),
+      };
+      retention.register(reusable);
     } else {
       cleanupQueue.push(closeTransport);
     }
 
-    const listing = await client.listTools(undefined, {
-      timeout: listToolsTimeoutMs,
+    return buildToolsFromListing({
+      listing: listing.tools,
+      client,
+      args,
+      callToolOptions,
+      readResourceTimeoutMs,
     });
-    const allowlist = args.toolWhitelist?.length
-      ? new Set(args.toolWhitelist)
-      : null;
-    return listing.tools
-      .filter((tool) => !allowlist || allowlist.has(tool.name))
-      .map((tool): AgentTool<any> => {
-        // Plan §006 U4 — populate the per-invocation registry from the
-        // SAME post-whitelist-filter loop that builds AgentTools. The
-        // proxy AgentTool reads this registry for list/search/call;
-        // populating AFTER the filter preserves the operator's
-        // toolWhitelist contract (tools the operator hid cannot be
-        // addressed via `mcp.call_tool({ server, tool })`).
-        args.registry?.register(args.serverName, {
-          tool: tool.name,
-          description: tool.description ?? "",
-          inputSchema: tool.inputSchema,
-        });
-        const name = exposedToolName(args.serverName, tool.name);
-        return {
-          name,
-          label: `${args.serverName}: ${tool.name}`,
-          description: [
-            `Call the ${tool.name} MCP tool on ${args.serverName}.`,
-            tool.description ?? "",
-          ]
-            .filter(Boolean)
-            .join(" "),
-          parameters: schemaFor(tool.inputSchema),
-          executionMode: "sequential",
-          execute: async (_toolCallId, params) => {
-            const response = await client.callTool(
-              {
-                name: tool.name,
-                arguments: paramsRecord(params),
-                // Never model-controlled: `_meta` is built from the
-                // platform's dispatch payload, sits outside `arguments`,
-                // and is overwritten here even if a tool schema somehow
-                // invited one.
-                ...(onBehalfOfMeta ? { _meta: onBehalfOfMeta } : {}),
-              },
-              undefined,
-              callToolOptions,
-            );
-            const content =
-              "content" in response ? response.content : response.toolResult;
-            const rawText = textFromMcpContent(content);
-            const mcpApps = mcpAppsFromContent({
-              content,
+  };
+}
+
+/**
+ * Build this turn's `AgentTool[]` from a tools/list result. Shared by the
+ * fresh-connect path and the THINK-946 cross-thread reuse path, so a reused
+ * connection produces byte-identical tools to a fresh one — the closures are
+ * always built against THIS turn's registry, on-behalf-of identity, result
+ * transforms and record-link hints.
+ */
+function buildToolsFromListing(input: {
+  listing: McpListedTool[];
+  client: Client;
+  args: ConnectMcpServerArgs;
+  callToolOptions: RequestOptions;
+  readResourceTimeoutMs: number;
+}): AgentTool<any>[] {
+  const { client, args, callToolOptions, readResourceTimeoutMs } = input;
+  // THINK-626 — resolved once per connection because the identity is
+  // fixed for the turn (buildMcpTools re-runs every turn, warm sessions
+  // included, so a thread whose next turn has a different sender gets a
+  // freshly-built closure). Null for every server that did not opt in
+  // and for every turn with no signed-in human — in both cases the
+  // tools/call params stay byte-identical to the pre-THINK-626 wire.
+  const onBehalfOfMeta = buildOnBehalfOfMeta(args.onBehalfOf);
+  const allowlist = args.toolWhitelist?.length
+    ? new Set(args.toolWhitelist)
+    : null;
+  return input.listing
+    .filter((tool) => !allowlist || allowlist.has(tool.name))
+    .map((tool): AgentTool<any> => {
+      // Plan §006 U4 — populate the per-invocation registry from the
+      // SAME post-whitelist-filter loop that builds AgentTools. The
+      // proxy AgentTool reads this registry for list/search/call;
+      // populating AFTER the filter preserves the operator's
+      // toolWhitelist contract (tools the operator hid cannot be
+      // addressed via `mcp.call_tool({ server, tool })`).
+      args.registry?.register(args.serverName, {
+        tool: tool.name,
+        description: tool.description ?? "",
+        inputSchema: tool.inputSchema,
+      });
+      const name = exposedToolName(args.serverName, tool.name);
+      return {
+        name,
+        label: `${args.serverName}: ${tool.name}`,
+        description: [
+          `Call the ${tool.name} MCP tool on ${args.serverName}.`,
+          tool.description ?? "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        parameters: schemaFor(tool.inputSchema),
+        executionMode: "sequential",
+        execute: async (_toolCallId, params) => {
+          const response = await client.callTool(
+            {
+              name: tool.name,
+              arguments: paramsRecord(params),
+              // Never model-controlled: `_meta` is built from the
+              // platform's dispatch payload, sits outside `arguments`,
+              // and is overwritten here even if a tool schema somehow
+              // invited one.
+              ...(onBehalfOfMeta ? { _meta: onBehalfOfMeta } : {}),
+            },
+            undefined,
+            callToolOptions,
+          );
+          const content =
+            "content" in response ? response.content : response.toolResult;
+          const rawText = textFromMcpContent(content);
+          const mcpApps = mcpAppsFromContent({
+            content,
+            serverName: args.serverName,
+            toolName: tool.name,
+          });
+          mcpApps.push(
+            ...(await mcpAppsFromTemplateResources({
+              client,
+              response,
               serverName: args.serverName,
               toolName: tool.name,
-            });
-            mcpApps.push(
-              ...(await mcpAppsFromTemplateResources({
-                client,
-                response,
-                serverName: args.serverName,
-                toolName: tool.name,
-                timeoutMs: readResourceTimeoutMs,
-              })),
+              timeoutMs: readResourceTimeoutMs,
+            })),
+          );
+          if ("isError" in response && response.isError) {
+            throw new Error(
+              rawText || `MCP tool ${tool.name} returned isError`,
             );
-            if ("isError" in response && response.isError) {
-              throw new Error(
-                rawText || `MCP tool ${tool.name} returned isError`,
-              );
-            }
-            const text = textFromMcpContent(
-              transformMcpResultContent(content, args.resultTransforms),
-            );
-            const enriched = enrichMcpRecordLinks({
-              hints: args.recordLinkHints,
-              response,
-              text,
-              toolName: tool.name,
-            });
-            return {
-              content: [{ type: "text", text: enriched.text }],
-              details: {
-                server_name: args.serverName,
-                mcp_server: args.serverName,
-                mcp_tool_name: tool.name,
-                exposed_tool_name: name,
-                ...(enriched.recordLinks.length > 0
-                  ? { recordLinks: enriched.recordLinks }
-                  : {}),
-                ...(mcpApps.length > 0 ? { mcp_apps: mcpApps } : {}),
-                raw: response,
-              },
-            };
-          },
-        };
-      });
-  };
+          }
+          const text = textFromMcpContent(
+            transformMcpResultContent(content, args.resultTransforms),
+          );
+          const enriched = enrichMcpRecordLinks({
+            hints: args.recordLinkHints,
+            response,
+            text,
+            toolName: tool.name,
+          });
+          return {
+            content: [{ type: "text", text: enriched.text }],
+            details: {
+              server_name: args.serverName,
+              mcp_server: args.serverName,
+              mcp_tool_name: tool.name,
+              exposed_tool_name: name,
+              ...(enriched.recordLinks.length > 0
+                ? { recordLinks: enriched.recordLinks }
+                : {}),
+              ...(mcpApps.length > 0 ? { mcp_apps: mcpApps } : {}),
+              raw: response,
+            },
+          };
+        },
+      };
+    });
 }

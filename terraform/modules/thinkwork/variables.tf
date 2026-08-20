@@ -893,7 +893,7 @@ variable "enable_workspace_orchestration" {
 }
 
 variable "agentcore_session_scope" {
-  description = "THINK-909 AgentCore runtime session scope. \"thread\" (default) keys the session per thread; \"user\" keys it per (tenant, agent, user) so a new thread reuses the user's warm microVM. Set \"user\" only after the stage's Pi runtime image dual-accepts both session ids."
+  description = "THINK-909/THINK-946 AgentCore runtime session scope. \"thread\" (default) keys the session per thread; \"user\" keys it per (tenant, agent, user) so a new thread lands on the user's warm microVM and reuses its retained MCP connections and toolset (THINK-946). Set \"user\" only after the stage's Pi runtime image dual-accepts both session ids. mcpherson runs \"user\"; every other stage keeps the default."
   type        = string
   default     = "thread"
 

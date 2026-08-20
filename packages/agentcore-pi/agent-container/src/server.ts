@@ -159,7 +159,9 @@ import {
 } from "./mcp-connect.js";
 import {
   createWarmSessionCacheIfRuntime,
+  warmConnectionKey,
   warmSessionKey,
+  WARM_CONNECTION_MARKER,
   type WarmSessionCache,
   type WarmSessionEntry,
 } from "./warm-session-cache.js";
@@ -1366,6 +1368,12 @@ export interface HandlerDependencies {
    */
   warmSessionCache?: WarmSessionCache<WarmTurnProducts> | null;
   /**
+   * THINK-946 — connection-scoped warm cache override (the second index:
+   * tenant/agent/user/config, no thread). `undefined` (production) resolves
+   * the process-wide factory singleton, null off the AgentCore runtime.
+   */
+  warmConnectionCache?: WarmSessionCache<McpConnectionRetention> | null;
+  /**
    * THINK-586 U7 test seam — MCP connection retention factory for
    * warm-cacheable turns. Production omits this and uses the real
    * `createMcpConnectionRetention` from mcp-connect.
@@ -1441,30 +1449,59 @@ export interface WarmTurnProducts {
 }
 
 /**
- * Process-wide lazy singleton. Factory-constructed (never a module-level
- * bare Map — tenant-isolation audit) and gated on the runtime-only env
- * signal: the Pi Lambda env never defines AGENTCORE_RUNTIME_SESSION_CACHE,
- * so the Lambda path resolves null here and takes today's cold path.
+ * Process-wide lazy singletons. Factory-constructed (never module-level bare
+ * Maps — tenant-isolation audit) and gated on the runtime-only env signal:
+ * the Pi Lambda env never defines AGENTCORE_RUNTIME_SESSION_CACHE, so the
+ * Lambda path resolves null here and takes today's cold path.
  */
-let warmSessionCacheSingleton:
-  | WarmSessionCache<WarmTurnProducts>
-  | null
-  | undefined;
+/**
+ * THINK-946 — build the pair of warm caches, wired so ownership of the
+ * retained MCP transports is unambiguous:
+ *
+ * - the CONNECTION cache (tenant/agent/user/config, no thread) owns them;
+ *   its LRU spill and 15-minute idle sweep close them (the THINK-909
+ *   disposal contract, moved here);
+ * - the per-THREAD cache disposes a spilled entry's transports only when the
+ *   connection cache no longer holds them — otherwise a thread spill would
+ *   tear down connections the user's other threads are about to reuse.
+ *
+ * Both come from the same runtime-only env gate, so off the AgentCore
+ * runtime (the Pi Lambda path) both are null and every turn runs cold.
+ */
+export function createWarmCaches(
+  env: Record<string, string | undefined> = process.env,
+): {
+  sessionCache: WarmSessionCache<WarmTurnProducts> | null;
+  connectionCache: WarmSessionCache<McpConnectionRetention> | null;
+} {
+  const connectionCache =
+    createWarmSessionCacheIfRuntime<McpConnectionRetention>(env, {
+      dispose: (retention) => {
+        void retention.close().catch(() => undefined);
+      },
+    });
+  const sessionCache = createWarmSessionCacheIfRuntime<WarmTurnProducts>(env, {
+    dispose: (products) => {
+      const retention = products.mcpRetention;
+      if (!retention || connectionCache?.values().includes(retention)) return;
+      void retention.close().catch(() => undefined);
+    },
+  });
+  return { sessionCache, connectionCache };
+}
+
+let warmCachesSingleton: ReturnType<typeof createWarmCaches> | undefined;
+
+function getWarmCaches(): ReturnType<typeof createWarmCaches> {
+  return (warmCachesSingleton ??= createWarmCaches());
+}
 
 function getWarmSessionCache(): WarmSessionCache<WarmTurnProducts> | null {
-  if (warmSessionCacheSingleton === undefined) {
-    warmSessionCacheSingleton =
-      createWarmSessionCacheIfRuntime<WarmTurnProducts>(process.env, {
-        // THINK-909 — LRU spill and the idle sweep drop entries with no
-        // caller to tear them down; close their retained MCP transports so a
-        // long-lived (per-user) microVM does not leak one connection per
-        // evicted thread.
-        dispose: (products) => {
-          void products.mcpRetention?.close().catch(() => undefined);
-        },
-      });
-  }
-  return warmSessionCacheSingleton;
+  return getWarmCaches().sessionCache;
+}
+
+function getWarmConnectionCache(): WarmSessionCache<McpConnectionRetention> | null {
+  return getWarmCaches().connectionCache;
 }
 
 /**
@@ -3123,6 +3160,11 @@ export async function handleInvocation(
     deps.warmSessionCache !== undefined
       ? deps.warmSessionCache
       : getWarmSessionCache();
+  // THINK-946 — the connection-scoped (thread-less) second index.
+  const warmConnectionCache =
+    deps.warmConnectionCache !== undefined
+      ? deps.warmConnectionCache
+      : getWarmConnectionCache();
   // THINK-909 — reap scratch left behind by turns that died hard (OOM, 424,
   // runtime recycle). Best-effort and non-blocking: a shared per-user microVM
   // must not carry one thread's staged attachments or transcript into
@@ -3137,12 +3179,17 @@ export async function handleInvocation(
   );
   const lockThreadId = asString(args.payload.thread_id);
   if (!warmCache || !lockThreadId) {
-    return runInvocationTurn(args, deps, warmCache ?? null);
+    return runInvocationTurn(
+      args,
+      deps,
+      warmCache ?? null,
+      warmConnectionCache ?? null,
+    );
   }
   // Per-thread in-process lock around the fast path: concurrent turns for
   // the same thread on one container must not interleave cache state.
   return warmCache.withThreadLock(lockThreadId, () =>
-    runInvocationTurn(args, deps, warmCache),
+    runInvocationTurn(args, deps, warmCache, warmConnectionCache ?? null),
   );
 }
 
@@ -3157,6 +3204,7 @@ async function runInvocationTurn(
   args: HandleInvocationArgs,
   deps: HandlerDependencies,
   warmCache: WarmSessionCache<WarmTurnProducts> | null,
+  warmConnectionCache: WarmSessionCache<McpConnectionRetention> | null,
 ): Promise<HandleInvocationResult> {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const runLoop = deps.runAgentLoop ?? runAgentLoop;
@@ -3366,9 +3414,42 @@ async function runInvocationTurn(
   };
   const warmEligible = Object.values(warmEligibility).every(Boolean);
   let warmKey = "";
+  /** THINK-946 — the same identity minus the thread (connection scope). */
+  let connectionKey = "";
   let warmAuthVersion = "";
   let warmEntry: WarmSessionEntry<WarmTurnProducts> | null = null;
+  /** True while the connection-scoped cache still holds this retention —
+   * it, not the per-thread entry, then owns the transports' lifetime. */
+  const connectionCacheOwns = (
+    retention: McpConnectionRetention | null,
+  ): boolean =>
+    Boolean(retention && warmConnectionCache?.values().includes(retention));
+  /** Close a turn's retained transports unless the connection-scoped cache
+   * owns them (THINK-946: another thread of this user is about to reuse). */
+  const closeUnlessPooled = (retention: McpConnectionRetention | null) => {
+    if (!retention || connectionCacheOwns(retention)) return;
+    void retention.close().catch(() => undefined);
+  };
+  /** Close a retention and drop it from the connection-scoped cache, so a
+   * dead or stale set of transports is never handed to another thread. */
+  const dropWarmConnections = (
+    retention: McpConnectionRetention | null,
+  ): void => {
+    if (!retention) return;
+    if (warmConnectionCache && connectionKey) {
+      if (warmConnectionCache.peek(connectionKey)?.value === retention) {
+        warmConnectionCache.evict(connectionKey);
+      }
+    }
+    void retention.close().catch(() => undefined);
+  };
   if (warmCache && warmEligible) {
+    connectionKey = warmConnectionKey({
+      tenantSlug: identity.tenantSlug,
+      agentSlug: identity.agentSlug,
+      userId: identity.userId,
+      configFingerprint: warmConfigFingerprint,
+    });
     warmKey = warmSessionKey({
       tenantSlug: identity.tenantSlug,
       agentSlug: identity.agentSlug,
@@ -3394,8 +3475,10 @@ async function runInvocationTurn(
       });
       if (!warmEntry) {
         // The gate mismatch evicted the entry: close its retained
-        // transports so a replaced credential set gets fresh clients.
-        void candidate.value.mcpRetention?.close().catch(() => undefined);
+        // transports so a replaced credential set gets fresh clients —
+        // unless the connection-scoped cache owns them, in which case its
+        // own authorization gate (checked just below) decides their fate.
+        closeUnlessPooled(candidate.value.mcpRetention);
       } else if (
         !(await warmWorkspaceStampMatches({
           workspaceDir: env.workspaceDir,
@@ -3411,7 +3494,7 @@ async function runInvocationTurn(
           agentSlug: identity.agentSlug,
           threadId: identity.threadId,
         });
-        void warmEntry.value.mcpRetention?.close().catch(() => undefined);
+        closeUnlessPooled(warmEntry.value.mcpRetention);
         warmCache.evict(warmKey);
         warmEntry = null;
       }
@@ -3445,9 +3528,34 @@ async function runInvocationTurn(
           threadId: identity.threadId,
           error: err instanceof Error ? err.message : String(err),
         });
-        void warmEntry.value.mcpRetention.close().catch(() => undefined);
+        // Dead transports: drop them from BOTH indexes (THINK-946) so the
+        // cross-thread path does not hand the same corpses to another thread.
+        dropWarmConnections(warmEntry.value.mcpRetention);
         warmCache.evict(warmKey);
         warmEntry = null;
+      }
+    }
+  }
+  // THINK-946 — connection-scoped lookup. Runs whenever the per-thread entry
+  // did NOT hit (a brand-new thread on a warm per-user microVM is exactly
+  // this case): the retained MCP transports + their tools/list metadata are a
+  // function of (tenant, agent, user, config), so tool assembly can rebuild
+  // this turn's tools without `initialize` + `tools/list` round-trips.
+  let warmConnectionRetention: McpConnectionRetention | null = null;
+  if (warmConnectionCache && connectionKey && !warmEntry) {
+    const candidate = warmConnectionCache.peek(connectionKey);
+    if (candidate) {
+      const hit = warmConnectionCache.take(connectionKey, {
+        durableStoreMarker: WARM_CONNECTION_MARKER,
+        authorizationVersion: warmAuthVersion,
+      });
+      if (hit) {
+        warmConnectionRetention = hit.value;
+      } else {
+        // Authorization version moved (rotated bearer, changed mcp_configs):
+        // `take` dropped the entry without disposing — close it here so the
+        // next turn connects with the current credentials.
+        void candidate.value.close().catch(() => undefined);
       }
     }
   }
@@ -3455,20 +3563,28 @@ async function runInvocationTurn(
   // diverts transport teardown away from the per-turn cleanup queue so the
   // clients survive into the cache. Null on non-cacheable turns → today's
   // per-turn teardown, byte-identical.
+  // THINK-946 — a connection-scope hit supplies the retention for this turn,
+  // so `connectMcpServer` below serves each server from the retained
+  // transport (repoint + ping + cached tools/list) instead of connecting.
   const mcpRetention: McpConnectionRetention | null = warmEntry
     ? warmEntry.value.mcpRetention
-    : warmCache && warmEligible
-      ? (deps.mcpRetentionFactory ?? createMcpConnectionRetention)()
-      : null;
+    : (warmConnectionRetention ??
+      (warmCache && warmEligible
+        ? (deps.mcpRetentionFactory ?? createMcpConnectionRetention)()
+        : null));
   if (warmCache) {
     runtimeDiagnostics.session_reuse = warmEntry ? "warm" : "cold";
   }
+  let mcpConnectionsReused = 0;
 
   const connectMcpServer =
     deps.connectMcpServerFactory ??
     createConnectMcpServer({
       cleanup,
       fetch: scrubbingFetch,
+      onConnectionReused: () => {
+        mcpConnectionsReused += 1;
+      },
       ...(mcpRetention && !warmEntry ? { retention: mcpRetention } : {}),
     });
 
@@ -3484,11 +3600,18 @@ async function runInvocationTurn(
   // snapshot, workspace root prepare, warm-cache probe incl. the S3 durable
   // head, MCP transport rebind) was unmeasured. One coarse phase so the panel
   // accounts for it instead of leaving a gap before workspace bootstrap.
+  // THINK-946 — `connections=warm` names the cross-thread win: a cold
+  // (new-thread) turn that still skipped every MCP connect.
+  const turnSetupDetail = warmEntry
+    ? "session_reuse=warm"
+    : warmConnectionRetention
+      ? "session_reuse=cold;connections=warm"
+      : "session_reuse=cold";
   recordRuntimePhase({
     phase: "runtime.turn_setup",
     status: "completed",
     duration_ms: Date.now() - start,
-    detail: warmEntry ? "session_reuse=warm" : "session_reuse=cold",
+    detail: turnSetupDetail,
   });
   logAgentCorePhase({
     phase: "runtime.turn_setup",
@@ -3501,7 +3624,7 @@ async function runInvocationTurn(
     traceId: identity.traceId,
     runtimeType: "pi",
     durationMs: Date.now() - start,
-    detail: warmEntry ? "session_reuse=warm" : "session_reuse=cold",
+    detail: turnSetupDetail,
   });
 
   if (workspaceBucket && warmEntry) {
@@ -4036,6 +4159,9 @@ async function runInvocationTurn(
             },
           ),
       });
+      // THINK-946 — `mcpReused` counts servers whose transport + tools/list
+      // came from the connection-scoped cache (no round-trip this turn).
+      const toolAssemblyDetail = `extensionTools=${bundle.extensionToolNames.length};mcpReused=${mcpConnectionsReused}`;
       logAgentCorePhase({
         phase: "runtime.tool_assembly",
         status: "completed",
@@ -4048,14 +4174,14 @@ async function runInvocationTurn(
         runtimeType: "pi",
         durationMs: Date.now() - toolAssemblyStart,
         count: bundle.tools.length,
-        detail: `extensionTools=${bundle.extensionToolNames.length}`,
+        detail: toolAssemblyDetail,
       });
       recordRuntimePhase({
         phase: "runtime.tool_assembly",
         status: "completed",
         duration_ms: Date.now() - toolAssemblyStart,
         count: bundle.tools.length,
-        detail: `extensionTools=${bundle.extensionToolNames.length}`,
+        detail: toolAssemblyDetail,
       });
       if (warmCache && warmEligible) {
         // THINK-586 U7 — snapshot the reusable products NOW, before per-turn
@@ -4114,7 +4240,7 @@ async function runInvocationTurn(
           });
         }
       }
-      if (mcpRetention) {
+      if (mcpRetention && !connectionCacheOwns(mcpRetention)) {
         // THINK-586 U7 — the retained MCP teardowns were diverted away from
         // the cleanup queue; nothing will cache them on this failed path.
         await mcpRetention.close();
@@ -4626,7 +4752,9 @@ async function runInvocationTurn(
                 if (warmKey) warmCache.evict(warmKey);
                 // Evicted entries own their retained transports — close
                 // them (idempotent; per-connection failures swallowed).
-                void warmProducts.mcpRetention?.close().catch(() => undefined);
+                // A divergent session says nothing about the connections, so
+                // pooled ones (THINK-946) survive for the user's threads.
+                closeUnlessPooled(warmProducts.mcpRetention);
                 logStructured({
                   level: "warn",
                   event: "warm_session_evicted_on_write_failure",
@@ -5092,9 +5220,28 @@ async function runInvocationTurn(
         authorizationVersion: warmAuthVersion,
         cachedAtMs: Date.now(),
       });
+    }
+    // THINK-946 — the connection-scoped index is written independently of
+    // the per-thread one: a turn whose TOOLSET was not cacheable (per-turn
+    // cleanup closures) still leaves usable MCP transports behind, and the
+    // write also refreshes `cachedAtMs` so the idle sweep does not reap
+    // connections an active user is still driving.
+    if (warmConnectionCache && connectionKey && mcpRetention) {
+      const previous = warmConnectionCache.peek(connectionKey)?.value;
+      if (previous && previous !== mcpRetention) {
+        // Replacing a different retention at this key (e.g. the credentials
+        // rotated mid-turn): `set` drops it without disposing, so close it.
+        void previous.close().catch(() => undefined);
+      }
+      warmConnectionCache.set(connectionKey, {
+        value: mcpRetention,
+        durableStoreMarker: WARM_CONNECTION_MARKER,
+        authorizationVersion: warmAuthVersion,
+        cachedAtMs: Date.now(),
+      });
     } else if (mcpRetention && !warmEntry) {
-      // Cold turn that ended up not cacheable: close the retained MCP
-      // transports the cleanup drain deliberately skipped.
+      // Cold turn that ended up not cacheable anywhere: close the retained
+      // MCP transports the cleanup drain deliberately skipped.
       await mcpRetention.close();
     }
   } catch (err) {

@@ -596,8 +596,9 @@ describe("McpConnectionRetention rebind ping tolerance (THINK-586 U7)", () => {
   }
 
   it("treats JSON-RPC -32601 (ping unimplemented) as liveness proof", async () => {
-    const { createMcpConnectionRetention } =
-      await import("../src/mcp-connect.js");
+    const { createMcpConnectionRetention } = await import(
+      "../src/mcp-connect.js"
+    );
     const retention = createMcpConnectionRetention();
     retention.register(
       retainedConnection(() =>
@@ -617,8 +618,9 @@ describe("McpConnectionRetention rebind ping tolerance (THINK-586 U7)", () => {
   });
 
   it("still fails rebind on transport-level ping errors", async () => {
-    const { createMcpConnectionRetention } =
-      await import("../src/mcp-connect.js");
+    const { createMcpConnectionRetention } = await import(
+      "../src/mcp-connect.js"
+    );
     const retention = createMcpConnectionRetention();
     retention.register(
       retainedConnection(() => Promise.reject(new Error("fetch failed"))),
@@ -629,6 +631,222 @@ describe("McpConnectionRetention rebind ping tolerance (THINK-586 U7)", () => {
         authorizationForServer: () => null,
       }),
     ).rejects.toThrow(/fetch failed/);
+  });
+});
+
+// ─── THINK-946: cross-thread connection reuse ───────────────────────────────
+
+describe("createConnectMcpServer — cross-thread reuse (THINK-946)", () => {
+  /** One turn's worth of MCP-connect wiring, sharing a retention across
+   * "turns" the way the connection-scoped warm cache does. */
+  function turn(options: {
+    retention: import("../src/mcp-connect.js").McpConnectionRetention;
+    client: FakeClient & { ping: ReturnType<typeof vi.fn> };
+    transport: Transport;
+    fetchImpl: typeof fetch;
+    reused: string[];
+  }) {
+    const transportFetches: Array<typeof fetch | undefined> = [];
+    const factory = createConnectMcpServer({
+      cleanup: [],
+      fetch: options.fetchImpl,
+      retention: options.retention,
+      onConnectionReused: (info) => options.reused.push(info.serverName),
+      transportFactory: (args) => {
+        transportFetches.push(args.fetch);
+        return options.transport;
+      },
+      clientFactory: () => options.client as never,
+    });
+    return { factory, transportFetches };
+  }
+
+  function pingableClient(tools: FakeListing["tools"] = [{ name: "alpha" }]) {
+    const fake = makeFakeClient(tools);
+    const ping = vi.fn(async () => ({}));
+    return {
+      ...fake,
+      ping,
+      client: { ...fake.client, ping } as FakeClient & {
+        ping: ReturnType<typeof vi.fn>;
+      },
+    };
+  }
+
+  const connectArgs = (overrides: Record<string, unknown> = {}) => ({
+    url: "https://mcp.example.com/mcp",
+    headers: { Authorization: "Handle turn-1-uuid" },
+    serverName: "demo",
+    ...overrides,
+  });
+
+  it("serves a second thread's connect from the retained transport — no initialize, no tools/list", async () => {
+    const { createMcpConnectionRetention } = await import(
+      "../src/mcp-connect.js"
+    );
+    const retention = createMcpConnectionRetention();
+    const fake = pingableClient([{ name: "alpha" }, { name: "beta" }]);
+    const transport = makeFakeTransport();
+    const reused: string[] = [];
+
+    const first = turn({
+      retention,
+      client: fake.client,
+      transport,
+      fetchImpl: globalThis.fetch,
+      reused,
+    });
+    const firstTools = await first.factory(connectArgs());
+    expect(fake.connect).toHaveBeenCalledTimes(1);
+    expect(fake.listTools).toHaveBeenCalledTimes(1);
+
+    // A different thread of the same user: fresh turn wiring, same retention.
+    const second = turn({
+      retention,
+      client: fake.client,
+      transport,
+      fetchImpl: globalThis.fetch,
+      reused,
+    });
+    const secondTools = await second.factory(
+      connectArgs({ headers: { Authorization: "Handle turn-2-uuid" } }),
+    );
+
+    expect(fake.connect).toHaveBeenCalledTimes(1);
+    expect(fake.listTools).toHaveBeenCalledTimes(1);
+    expect(fake.ping).toHaveBeenCalledTimes(1);
+    expect(reused).toEqual(["demo"]);
+    expect(secondTools.map((tool) => tool.name)).toEqual(
+      firstTools.map((tool) => tool.name),
+    );
+    // Rebuilt closures, never the previous turn's objects.
+    expect(secondTools[0]).not.toBe(firstTools[0]);
+  });
+
+  it("repoints the retained transport at THIS turn's fetch and minted handle", async () => {
+    const { createMcpConnectionRetention } = await import(
+      "../src/mcp-connect.js"
+    );
+    const retention = createMcpConnectionRetention();
+    const fake = pingableClient();
+    const transport = makeFakeTransport();
+    const reused: string[] = [];
+    const firstFetch = vi.fn(async () => new Response("first"));
+    const secondFetch = vi.fn(async () => new Response("second"));
+
+    const first = turn({
+      retention,
+      client: fake.client,
+      transport,
+      fetchImpl: firstFetch as unknown as typeof fetch,
+      reused,
+    });
+    await first.factory(connectArgs());
+    // The transport was handed the indirection, not the raw turn fetch.
+    const indirect = first.transportFetches[0]!;
+
+    const second = turn({
+      retention,
+      client: fake.client,
+      transport,
+      fetchImpl: secondFetch as unknown as typeof fetch,
+      reused,
+    });
+    await second.factory(
+      connectArgs({ headers: { Authorization: "Handle turn-2-uuid" } }),
+    );
+
+    await indirect(
+      new Request("https://mcp.example.com/mcp", {
+        headers: { authorization: "Handle turn-1-uuid" },
+      }),
+    );
+    expect(firstFetch).not.toHaveBeenCalled();
+    expect(secondFetch).toHaveBeenCalledTimes(1);
+    const sent = (secondFetch.mock.calls[0] as unknown as [Request])[0];
+    expect(sent.headers.get("authorization")).toBe("Handle turn-2-uuid");
+  });
+
+  it("a dead retained transport falls back to a full connect and is dropped", async () => {
+    const { createMcpConnectionRetention } = await import(
+      "../src/mcp-connect.js"
+    );
+    const retention = createMcpConnectionRetention();
+    const fake = pingableClient();
+    const transport = makeFakeTransport();
+    const reused: string[] = [];
+
+    await turn({
+      retention,
+      client: fake.client,
+      transport,
+      fetchImpl: globalThis.fetch,
+      reused,
+    }).factory(connectArgs());
+    expect(retention.size).toBe(1);
+
+    fake.ping.mockRejectedValueOnce(new Error("fetch failed"));
+    const tools = await turn({
+      retention,
+      client: fake.client,
+      transport,
+      fetchImpl: globalThis.fetch,
+      reused,
+    }).factory(connectArgs());
+
+    expect(reused).toEqual([]);
+    expect(fake.connect).toHaveBeenCalledTimes(2);
+    expect(fake.listTools).toHaveBeenCalledTimes(2);
+    expect(transport.close).toHaveBeenCalledTimes(1);
+    expect(tools).toHaveLength(1);
+    // The corpse was replaced, not accumulated.
+    expect(retention.size).toBe(1);
+  });
+
+  it("never reuses across a changed connect shape (url, whitelist, transport, auth presence)", async () => {
+    const { createMcpConnectionRetention } = await import(
+      "../src/mcp-connect.js"
+    );
+    const fake = pingableClient([{ name: "alpha" }, { name: "beta" }]);
+    const reused: string[] = [];
+    for (const changed of [
+      { url: "https://other.example.com/mcp" },
+      { toolWhitelist: ["alpha"] },
+      { transport: "sse" as const },
+      { headers: {} },
+      { serverName: "other" },
+    ]) {
+      const retention = createMcpConnectionRetention();
+      const transport = makeFakeTransport();
+      const wiring = {
+        retention,
+        client: fake.client,
+        transport,
+        fetchImpl: globalThis.fetch,
+        reused,
+      };
+      fake.connect.mockClear();
+      await turn(wiring).factory(connectArgs());
+      await turn(wiring).factory(connectArgs(changed));
+      expect(fake.connect).toHaveBeenCalledTimes(2);
+    }
+    expect(reused).toEqual([]);
+  });
+
+  it("without a retention (Lambda path) nothing is retained or reused", async () => {
+    const fake = pingableClient();
+    const cleanup: Array<() => Promise<void>> = [];
+    const factory = createConnectMcpServer({
+      cleanup,
+      transportFactory: () => makeFakeTransport(),
+      clientFactory: () => fake.client as never,
+    });
+    await factory(connectArgs());
+    await factory(connectArgs());
+    expect(fake.connect).toHaveBeenCalledTimes(2);
+    expect(fake.ping).not.toHaveBeenCalled();
+    // Per-turn teardown, exactly as before.
+    expect(cleanup).toHaveLength(2);
   });
 });
 

@@ -806,7 +806,7 @@ variable "compliance_exports_runner_role_name" {
 }
 
 variable "agentcore_session_scope" {
-  description = "THINK-909 AgentCore runtime session scope for agentcore-runtime-dispatch. \"thread\" (default) keys the session per thread; \"user\" keys it per (tenant, agent, user) so a new thread reuses the user's warm microVM, falling back to the per-thread session on a 409. Set \"user\" only after the stage's Pi runtime image dual-accepts both session ids."
+  description = "THINK-909/THINK-946 AgentCore runtime session scope for agentcore-runtime-dispatch. \"thread\" (default) keys the session per thread; \"user\" keys it per (tenant, agent, user) so a new thread reuses the user's warm microVM — and, per THINK-946, its retained MCP connections and toolset — falling back to the per-thread session on a 409. Set \"user\" only after the stage's Pi runtime image dual-accepts both session ids. mcpherson runs \"user\"; every other stage keeps the default."
   type        = string
   default     = "thread"
 

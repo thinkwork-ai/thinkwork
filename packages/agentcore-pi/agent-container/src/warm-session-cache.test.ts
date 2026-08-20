@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   WarmSessionCache,
   createWarmSessionCacheIfRuntime,
+  warmConnectionKey,
   warmSessionKey,
 } from "./warm-session-cache.js";
 
@@ -189,6 +190,60 @@ describe("WarmSessionCache", () => {
     cache.set(key, entry("ancient", 0));
     expect(cache.sweepIdle()).toBe(0);
     expect(cache.take(key, freshGates)?.value).toBe("ancient");
+  });
+});
+
+// ─── THINK-946: the connection-scoped second index ──────────────────────────
+
+describe("warmConnectionKey (THINK-946)", () => {
+  const connectionParts = {
+    tenantSlug: "acme",
+    agentSlug: "helper",
+    userId: "user-1",
+    configFingerprint: "fp-1",
+  };
+
+  it("is the SAME for two threads of one user, agent and config", () => {
+    expect(warmConnectionKey(connectionParts)).toBe(
+      warmConnectionKey({ ...connectionParts }),
+    );
+    // …and it is never the per-thread key, so the indexes cannot collide.
+    expect(warmConnectionKey(connectionParts)).not.toBe(
+      warmSessionKey({ ...connectionParts, threadId: "thread-1" }),
+    );
+  });
+
+  it("still separates users, agents, tenants and config fingerprints", () => {
+    const base = warmConnectionKey(connectionParts);
+    expect(
+      warmConnectionKey({ ...connectionParts, userId: "user-2" }),
+    ).not.toBe(base);
+    expect(
+      warmConnectionKey({ ...connectionParts, agentSlug: "other" }),
+    ).not.toBe(base);
+    expect(
+      warmConnectionKey({ ...connectionParts, tenantSlug: "other" }),
+    ).not.toBe(base);
+    expect(
+      warmConnectionKey({ ...connectionParts, configFingerprint: "fp-2" }),
+    ).not.toBe(base);
+  });
+
+  it("rejects empty fields", () => {
+    expect(() => warmConnectionKey({ ...connectionParts, userId: "" })).toThrow(
+      /non-empty/,
+    );
+  });
+});
+
+describe("WarmSessionCache.values (THINK-946 ownership probe)", () => {
+  it("lists live values so a second cache can check ownership", () => {
+    const cache = new WarmSessionCache<string>();
+    cache.set("a", entry("one"));
+    cache.set("b", entry("two"));
+    expect(cache.values()).toEqual(["one", "two"]);
+    cache.evict("a");
+    expect(cache.values()).toEqual(["two"]);
   });
 });
 
