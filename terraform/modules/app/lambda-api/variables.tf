@@ -1034,7 +1034,7 @@ variable "chat_turn_latency_metric_namespace" {
 }
 
 variable "chat_turn_runtime_log_group_name" {
-  description = "THINK-915: explicit AgentCore Pi runtime log group (/aws/bedrock-agentcore/runtimes/thinkwork_<stage>_pi-<runtimeId>-DEFAULT). Empty (default) discovers it by prefix at plan time; the runtime-sourced metric, widgets, and query leg are skipped until it exists."
+  description = "THINK-915: explicit AgentCore Pi runtime log group (/aws/bedrock-agentcore/runtimes/thinkwork_<stage>_pi-<runtimeId>-DEFAULT). Empty (default) skips the runtime-sourced metric, widgets, and query leg — plan-time prefix discovery was removed because it defers to apply in customer deployment-runner plans and breaks them."
   type        = string
   default     = ""
 }

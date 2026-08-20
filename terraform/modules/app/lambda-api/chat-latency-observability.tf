@@ -48,12 +48,11 @@
 # The AgentCore runtime log group is `/aws/bedrock-agentcore/runtimes/
 # thinkwork_<stage>_pi-<runtimeId>-DEFAULT`, and the runtime is reconciled by
 # scripts/post-deploy.sh (runtime id in SSM), not by Terraform — so no resource
-# here knows the name. It is discovered at plan time with the
-# `aws_cloudwatch_log_groups` prefix data source, with
-# `chat_turn_runtime_log_group_name` as an explicit override. Before the runtime
-# has logged anything the discovery comes back empty and the runtime-sourced
-# pieces (AgentLoopMs filter, its dashboard widgets, that leg of the saved
-# query) are simply skipped; the next apply picks them up.
+# here knows the name. It is supplied explicitly via
+# `chat_turn_runtime_log_group_name` (see the revised note in locals below —
+# plan-time prefix discovery broke customer deployment-runner plans). While it
+# is unset the runtime-sourced pieces (AgentLoopMs filter, its dashboard
+# widgets, that leg of the saved query) are simply skipped.
 ################################################################################
 
 locals {
@@ -77,30 +76,24 @@ locals {
 
   chat_latency_lambda_log_groups = [for fn in local.chat_latency_functions : "/aws/lambda/${fn}"]
 
-  # Constraint 4: explicit override wins, else prefix discovery, else "".
-  chat_latency_discovered_runtime_log_group = try(
-    [
-      for name in data.aws_cloudwatch_log_groups.agentcore_pi_runtime[0].log_group_names :
-      name if endswith(name, "-DEFAULT")
-    ][0],
-    "",
-  )
-
-  chat_latency_runtime_log_group = (
-    var.chat_turn_runtime_log_group_name != ""
-    ? var.chat_turn_runtime_log_group_name
-    : (local.chat_latency_enabled ? local.chat_latency_discovered_runtime_log_group : "")
-  )
+  # Constraint 4, revised after the canary.467/468 mcpherson deploys: the
+  # runtime log group comes ONLY from the explicit variable. The prefix
+  # discovery data source (aws_cloudwatch_log_groups) defers to apply in the
+  # customer deployment-runner flow, and the resulting unknown value first
+  # broke a count ("Invalid count argument") and then, once the count was
+  # fixed, broke the dashboard-widget conditionals ("Inconsistent conditional
+  # result types" — an unknown condition forces both arms of every dependent
+  # conditional to unify to one type, which heterogeneous widget objects
+  # cannot). A plan-known variable sidesteps the whole class. When it is
+  # empty, the runtime-sourced pieces (AgentLoopMs filter, runtime widgets,
+  # that leg of the saved query) are skipped; set it per stage once the
+  # runtime exists:
+  #   /aws/bedrock-agentcore/runtimes/thinkwork_<stage>_pi-<runtimeId>-DEFAULT
+  chat_latency_runtime_log_group = var.chat_turn_runtime_log_group_name
 
   chat_latency_has_runtime_log_group = local.chat_latency_runtime_log_group != ""
 
   chat_latency_metric_filters_enabled = local.chat_latency_enabled && var.enable_chat_turn_latency_metric_filters
-}
-
-data "aws_cloudwatch_log_groups" "agentcore_pi_runtime" {
-  count = local.chat_latency_enabled && var.chat_turn_runtime_log_group_name == "" ? 1 : 0
-
-  log_group_name_prefix = "/aws/bedrock-agentcore/runtimes/thinkwork_${var.stage}_pi-"
 }
 
 ################################################################################
@@ -235,7 +228,7 @@ locals {
             "Turn path: **graphql-http** (sendMessage) → **chat-agent-invoke** (setup) → **agentcore-runtime-dispatch** → **AgentCore Runtime (Pi)** → **chat-agent-finalize**.",
             "",
             local.chat_latency_metric_filters_enabled ? "Phase metrics come from `agentcore_phase` log metric filters in `${local.chat_latency_namespace}`." : "**Phase metrics are OFF for this stage** (`enable_chat_turn_latency_metric_filters = false`) — the phase widgets stay empty. Lambda-native widgets below still populate.",
-            local.chat_latency_has_runtime_log_group ? "Runtime log group: `${local.chat_latency_runtime_log_group}`." : "**AgentCore runtime log group not discovered yet** — `AgentLoopMs` and the runtime-overhead widget stay empty until the runtime has logged and Terraform re-plans.",
+            local.chat_latency_has_runtime_log_group ? "Runtime log group: `${local.chat_latency_runtime_log_group}`." : "**AgentCore runtime log group not configured** — set `chat_turn_runtime_log_group_name` to light up `AgentLoopMs` and the runtime-overhead widget.",
             "",
             "Timeline for a single turn: Logs Insights → saved query **thinkwork-${var.stage}-turn-timeline** (paste a `threadTurnId`).",
           ])
