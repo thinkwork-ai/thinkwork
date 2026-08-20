@@ -594,6 +594,56 @@ describe("bootstrapWorkspace (Pi runtime)", () => {
     expect(files["AGENTS.md"]).toBe("# Other tenant");
   });
 
+  // THINK-909 — on a per-user runtime session one microVM serves several of
+  // the user's threads, and two threads can project different Space files
+  // into the same workspace dir. The incremental delete loop swallows unlink
+  // failures, so a rendered-prefix change must wipe the dir rather than trust
+  // it.
+  it("wipes the workspace when the rendered prefix changes (thread switch)", async () => {
+    const threadA = "tenants/acme/threads/thread-a/";
+    const threadB = "tenants/acme/threads/thread-b/";
+    stubRemote(
+      { "AGENTS.md": "# A", "Space/notes.md": "thread A only" },
+      threadA,
+    );
+    await bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+      workspacePrefix: threadA,
+    });
+    expect(Object.keys(await readFiles(tmp)).sort()).toEqual([
+      "AGENTS.md",
+      "Space/notes.md",
+    ]);
+
+    s3Mock.reset();
+    stubRemote({ "AGENTS.md": "# B" }, threadB);
+    const result = await bootstrapWorkspace("acme", "marco", tmp, s3, "test", {
+      workspacePrefix: threadB,
+    });
+
+    expect(result).toMatchObject({
+      synced: 1,
+      total: 1,
+      prefix: threadB,
+      wiped: true,
+    });
+    // The clean slate — not the (failure-swallowing) delete loop — removed
+    // thread A's residue: nothing was left for the loop to delete.
+    expect(result.deleted).toBe(0);
+    const files = await readFiles(tmp);
+    expect(Object.keys(files)).toEqual(["AGENTS.md"]);
+    expect(files["AGENTS.md"]).toBe("# B");
+  });
+
+  it("does not wipe when the same workspace identity re-bootstraps", async () => {
+    stubRemote({ "AGENTS.md": "# Marco" });
+    await bootstrapWorkspace("acme", "marco", tmp, s3, "test");
+    const result = await bootstrapWorkspace("acme", "marco", tmp, s3, "test");
+    expect(result.wiped).toBeUndefined();
+    // Warm cache still serves the unchanged file.
+    expect(result.skipped).toBe(1);
+    expect(result.synced).toBe(0);
+  });
+
   it("rejects workspace prefixes outside the tenant/agent scope", async () => {
     await expect(
       bootstrapWorkspace("acme", "marco", tmp, s3, "test", {

@@ -1,4 +1,12 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -8,6 +16,7 @@ import {
   cleanupMessageAttachments,
   formatMessageAttachmentsPreamble,
   stageMessageAttachments,
+  sweepStaleTurnScratch,
 } from "../src/runtime/message-attachments.js";
 
 function s3ClientWithBody(body: Buffer | string) {
@@ -182,5 +191,42 @@ describe("buildFileReadTool", () => {
     } finally {
       await rm(tmpRoot, { recursive: true, force: true });
     }
+  });
+});
+
+describe("sweepStaleTurnScratch (THINK-909)", () => {
+  it("removes only turn scratch dirs older than the max age", async () => {
+    const tmpRoot = await mkdtemp(path.join(os.tmpdir(), "pi-sweep-"));
+    try {
+      const stale = path.join(tmpRoot, "pi-turn-stale");
+      const fresh = path.join(tmpRoot, "pi-turn-fresh");
+      const staleSession = path.join(tmpRoot, "pi-sessions-stale");
+      const unrelated = path.join(tmpRoot, "something-else");
+      for (const dir of [stale, fresh, staleSession, unrelated]) {
+        await mkdir(path.join(dir, "attachments"), { recursive: true });
+        await writeFile(path.join(dir, "attachments", "f.txt"), "x");
+      }
+      const old = new Date(Date.now() - 60 * 60 * 1000);
+      await utimes(stale, old, old);
+      await utimes(staleSession, old, old);
+      await utimes(unrelated, old, old);
+
+      const removed = await sweepStaleTurnScratch({
+        tmpRoot,
+        maxAgeMs: 15 * 60 * 1000,
+      });
+
+      expect(removed.sort()).toEqual([staleSession, stale].sort());
+      const left = await readdir(tmpRoot);
+      expect(left.sort()).toEqual(["pi-turn-fresh", "something-else"]);
+    } finally {
+      await rm(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("never throws on a missing tmp root", async () => {
+    await expect(
+      sweepStaleTurnScratch({ tmpRoot: "/nonexistent-pi-sweep-root" }),
+    ).resolves.toEqual([]);
   });
 });

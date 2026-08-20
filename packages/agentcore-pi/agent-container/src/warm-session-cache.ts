@@ -55,11 +55,66 @@ export function warmSessionKey(parts: WarmSessionKeyParts): string {
   return fields.join("");
 }
 
+export interface WarmSessionCacheOptions<T> {
+  /**
+   * THINK-909 — disposer for entries the cache drops on its OWN initiative
+   * (LRU spill, idle-TTL sweep). Those evictions have no caller to close the
+   * retained MCP transports the entry holds, so without this the container
+   * leaks a live streamable-HTTP connection per spilled entry.
+   *
+   * NOT called for caller-driven removals ({@link WarmSessionCache.take}
+   * gate mismatches, {@link WarmSessionCache.evict},
+   * {@link WarmSessionCache.evictThread}) — those call sites already own
+   * teardown and would otherwise double-close.
+   */
+  dispose?: (value: T) => void;
+  /** Drop entries idle longer than this (ms). 0 disables the sweep. */
+  idleTtlMs?: number;
+}
+
+/** Entries idle longer than this are swept; a runtime microVM that has been
+ * idle this long is past its keep-warm window, so its retained transports are
+ * dead weight (and likely dead connections). */
+const DEFAULT_IDLE_TTL_MS = 15 * 60 * 1000;
+
 export class WarmSessionCache<T> {
   private readonly entries = new Map<string, WarmSessionEntry<T>>();
   private readonly locks = new Map<string, Promise<unknown>>();
+  private readonly dispose?: (value: T) => void;
+  private readonly idleTtlMs: number;
 
-  constructor(private readonly maxEntries = 8) {}
+  constructor(
+    private readonly maxEntries = 8,
+    options: WarmSessionCacheOptions<T> = {},
+  ) {
+    this.dispose = options.dispose;
+    this.idleTtlMs = options.idleTtlMs ?? DEFAULT_IDLE_TTL_MS;
+  }
+
+  /** Best-effort disposal — a throwing disposer must never break the cache. */
+  private disposeValue(entry: WarmSessionEntry<T>): void {
+    try {
+      this.dispose?.(entry.value);
+    } catch {
+      // Ignore: eviction hygiene is never worth failing a turn.
+    }
+  }
+
+  /**
+   * Drop (and dispose) entries idle past the TTL. Runs on {@link set} and is
+   * safe to call directly; `now` is injectable for tests.
+   */
+  sweepIdle(now = Date.now()): number {
+    if (this.idleTtlMs <= 0) return 0;
+    let swept = 0;
+    for (const [key, entry] of [...this.entries.entries()]) {
+      if (now - entry.cachedAtMs < this.idleTtlMs) continue;
+      this.entries.delete(key);
+      this.disposeValue(entry);
+      swept += 1;
+    }
+    return swept;
+  }
 
   /**
    * Serialize fast-path entry per thread: the durable-session design allows
@@ -112,13 +167,21 @@ export class WarmSessionCache<T> {
   }
 
   set(key: string, entry: WarmSessionEntry<T>): void {
-    // Small LRU-ish bound: a microVM serves one thread session in practice,
-    // but fingerprint churn must not grow the map unboundedly.
-    if (!this.entries.has(key) && this.entries.size >= this.maxEntries) {
-      const oldest = this.entries.keys().next().value;
-      if (oldest !== undefined) this.entries.delete(oldest);
-    }
+    // Idle sweep first so a spill only ever drops a still-live entry.
     this.entries.delete(key);
+    this.sweepIdle();
+    // Small LRU-ish bound: a microVM serves one thread session in practice,
+    // but fingerprint churn must not grow the map unboundedly. THINK-909 —
+    // a per-user session makes multi-thread churn the norm, so the spilled
+    // entry's retained MCP transports must be closed, not orphaned.
+    if (this.entries.size >= this.maxEntries) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest !== undefined) {
+        const spilled = this.entries.get(oldest);
+        this.entries.delete(oldest);
+        if (spilled) this.disposeValue(spilled);
+      }
+    }
     this.entries.set(key, entry);
   }
 
@@ -146,8 +209,9 @@ export class WarmSessionCache<T> {
  */
 export function createWarmSessionCacheIfRuntime<T>(
   env: Record<string, string | undefined> = process.env,
+  options: WarmSessionCacheOptions<T> = {},
 ): WarmSessionCache<T> | null {
   return env.AGENTCORE_RUNTIME_SESSION_CACHE === "1"
-    ? new WarmSessionCache<T>()
+    ? new WarmSessionCache<T>(8, options)
     : null;
 }

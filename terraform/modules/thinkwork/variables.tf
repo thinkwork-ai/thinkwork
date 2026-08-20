@@ -892,6 +892,17 @@ variable "enable_workspace_orchestration" {
   default     = false
 }
 
+variable "agentcore_session_scope" {
+  description = "THINK-909 AgentCore runtime session scope. \"thread\" (default) keys the session per thread; \"user\" keys it per (tenant, agent, user) so a new thread reuses the user's warm microVM. Set \"user\" only after the stage's Pi runtime image dual-accepts both session ids."
+  type        = string
+  default     = "thread"
+
+  validation {
+    condition     = contains(["thread", "user"], var.agentcore_session_scope)
+    error_message = "agentcore_session_scope must be \"thread\" or \"user\"."
+  }
+}
+
 variable "requester_idle_memory_learning_enabled" {
   description = "Enable requester-scoped 15-minute idle memory learning."
   type        = bool

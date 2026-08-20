@@ -41,6 +41,9 @@ export interface BootstrapResult {
   deleted: number;
   total: number;
   prefix: string;
+  /** THINK-909 — the local workspace was wiped before syncing because the
+   * hydrate stamp named a different tenant/agent/rendered prefix. */
+  wiped?: boolean;
 }
 
 export interface BootstrapWorkspaceOptions {
@@ -332,9 +335,38 @@ export async function bootstrapWorkspace(
   const remoteSet = new Set(remote.map((entry) => entry.rel));
 
   await mkdir(localDir, { recursive: true });
-  const local = await listLocalPaths(localDir);
   const cachePath = await hydrateCachePath(localDir);
-  const cache = await readHydrateCache(cachePath);
+  let cache = await readHydrateCache(cachePath);
+
+  // THINK-909 — clean slate on a workspace identity change. The incremental
+  // delete loop below swallows every unlink failure, so a leftover file from
+  // a different tenant/agent/thread prefix can survive into this turn's
+  // workspace. When the stamp names a different rendered prefix (two threads
+  // of the same user project different Space files) or a different
+  // tenant/agent, wipe the directory before syncing. The cost is the ~2.4 s
+  // full re-download this path already pays: nothing in it is cache-eligible
+  // once the prefix changed.
+  const workspaceIdentityChanged =
+    cache !== null &&
+    (cache.tenantSlug !== tenantSlug ||
+      cache.agentSlug !== agentSlug ||
+      cache.prefix !== prefix);
+  let wiped = false;
+  if (workspaceIdentityChanged) {
+    try {
+      // Empty the directory rather than removing it: WORKSPACE_DIR may be a
+      // symlink to a mounted target, which must survive the clean slate.
+      for (const entry of await readdir(localDir)) {
+        await rm(path.join(localDir, entry), { recursive: true, force: true });
+      }
+      await rm(cachePath, { force: true });
+      cache = null;
+      wiped = true;
+    } catch {
+      // Never fail a turn on cleanup: fall through to the incremental sync.
+    }
+  }
+  const local = wiped ? new Set<string>() : await listLocalPaths(localDir);
 
   let synced = 0;
   let skipped = 0;
@@ -386,6 +418,7 @@ export async function bootstrapWorkspace(
     deleted,
     total: remote.length,
     prefix,
+    ...(wiped ? { wiped } : {}),
   };
 }
 

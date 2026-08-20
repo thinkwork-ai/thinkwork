@@ -805,6 +805,17 @@ variable "compliance_exports_runner_role_name" {
   default     = ""
 }
 
+variable "agentcore_session_scope" {
+  description = "THINK-909 AgentCore runtime session scope for agentcore-runtime-dispatch. \"thread\" (default) keys the session per thread; \"user\" keys it per (tenant, agent, user) so a new thread reuses the user's warm microVM, falling back to the per-thread session on a 409. Set \"user\" only after the stage's Pi runtime image dual-accepts both session ids."
+  type        = string
+  default     = "thread"
+
+  validation {
+    condition     = contains(["thread", "user"], var.agentcore_session_scope)
+    error_message = "agentcore_session_scope must be \"thread\" or \"user\"."
+  }
+}
+
 variable "identity_resolution_tool_enabled" {
   description = "Stage gate for the Pi identity-resolution tools (resolve_entities / propose_mapping_candidates / confirm_mapping, THINK-321 U5). Per-agent tool policy gates on top."
   type        = bool

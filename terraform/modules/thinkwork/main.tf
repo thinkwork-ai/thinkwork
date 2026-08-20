@@ -1220,6 +1220,7 @@ module "api" {
   identity_drift_match_enabled                  = var.identity_drift_match_enabled
   wiki_deterministic_linking_enabled            = var.wiki_deterministic_linking_enabled
   enable_workspace_orchestration                = var.enable_workspace_orchestration
+  agentcore_session_scope                       = var.agentcore_session_scope
   requester_idle_memory_learning_enabled        = var.requester_idle_memory_learning_enabled
   requester_memory_dreaming_enabled             = var.requester_memory_dreaming_enabled
   requester_memory_dreaming_schedule_expression = var.requester_memory_dreaming_schedule_expression

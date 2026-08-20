@@ -1,5 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { deriveAgentCoreSessionId } from "../lib/agentcore-session-id.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  deriveAgentCoreSessionId,
+  deriveAgentCoreUserSessionId,
+} from "../lib/agentcore-session-id.js";
 
 const invokeSend = vi.fn();
 const ssmSend = vi.fn();
@@ -89,8 +92,24 @@ async function loadHandler() {
   return mod;
 }
 
+const perThreadSessionId = deriveAgentCoreSessionId({
+  tenantId: "tenant-1",
+  agentId: "agent-1",
+  userId: "user-1",
+  threadId: "thread-1",
+});
+const perUserSessionId = deriveAgentCoreUserSessionId({
+  tenantId: "tenant-1",
+  agentId: "agent-1",
+  userId: "user-1",
+});
+
+const sessionIdsSent = () =>
+  invokeSend.mock.calls.map((call) => call[0].input.runtimeSessionId);
+
 beforeEach(() => {
   vi.clearAllMocks();
+  delete process.env.AGENTCORE_SESSION_SCOPE;
   process.env.DISPATCH_CONFLICT_RETRY_DELAYS_MS = "1,1,1,1";
   process.env.AGENTCORE_PI_RUNTIME_SSM_NAME =
     "/thinkwork/test/agentcore/runtime-id-pi";
@@ -226,5 +245,114 @@ describe("agentcore-runtime-dispatch", () => {
       /LWA \/invocations envelope/,
     );
     expect(invokeSend).not.toHaveBeenCalled();
+  });
+});
+
+describe("agentcore-runtime-dispatch session scope (THINK-909)", () => {
+  afterEach(() => {
+    delete process.env.AGENTCORE_SESSION_SCOPE;
+  });
+
+  it("default (unset) scope preserves today's per-thread behavior exactly", async () => {
+    const { handler } = await loadHandler();
+    await handler(envelope());
+    expect(sessionIdsSent()).toEqual([perThreadSessionId]);
+  });
+
+  it("AGENTCORE_SESSION_SCOPE=thread preserves today's 409 ladder", async () => {
+    process.env.AGENTCORE_SESSION_SCOPE = "thread";
+    invokeSend.mockRejectedValue(new RetryableConflictException("busy"));
+    const { handler } = await loadHandler();
+    await handler(envelope());
+    // 1 initial + 4 ladder retries, all on the per-thread id, then failure.
+    expect(sessionIdsSent()).toEqual(Array(5).fill(perThreadSessionId));
+    expect(turnUpdateWhere).toHaveBeenCalledTimes(1);
+  });
+
+  it("scope=user invokes the runtime with the v2 per-user session id", async () => {
+    process.env.AGENTCORE_SESSION_SCOPE = "user";
+    const { handler } = await loadHandler();
+    await handler(envelope());
+    expect(sessionIdsSent()).toEqual([perUserSessionId]);
+    expect(perUserSessionId).not.toBe(perThreadSessionId);
+  });
+
+  it("first 409 falls back to the per-thread session immediately (no ladder sleep)", async () => {
+    process.env.AGENTCORE_SESSION_SCOPE = "user";
+    // A ladder rung this long would dominate the elapsed time if the
+    // fallback waited: it must not.
+    process.env.DISPATCH_CONFLICT_RETRY_DELAYS_MS = "60000,60000,60000,60000";
+    invokeSend
+      .mockRejectedValueOnce(new RetryableConflictException("busy"))
+      .mockResolvedValueOnce({
+        response: { transformToByteArray: async () => new Uint8Array() },
+      });
+    const { handler } = await loadHandler();
+    const startedAt = Date.now();
+    await handler(envelope());
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+    expect(sessionIdsSent()).toEqual([perUserSessionId, perThreadSessionId]);
+    expect(turnUpdateWhere).not.toHaveBeenCalled();
+  });
+
+  it("409s on the per-thread fallback still walk the ladder, then fail cleanly", async () => {
+    process.env.AGENTCORE_SESSION_SCOPE = "user";
+    invokeSend.mockRejectedValue(new RetryableConflictException("busy"));
+    const { handler } = await loadHandler();
+    await handler(envelope());
+    // 1 per-user attempt + the untouched per-thread ladder (1 + 4 retries).
+    expect(sessionIdsSent()).toEqual([
+      perUserSessionId,
+      ...Array(5).fill(perThreadSessionId),
+    ]);
+    expect(turnUpdateWhere).toHaveBeenCalledTimes(1);
+    expect(turnUpdateWhere.mock.calls[0][0].values.error_code).toBe(
+      "agentcore_runtime_dispatch_failed",
+    );
+  });
+
+  it("does not fall back on a non-conflict error under scope=user", async () => {
+    process.env.AGENTCORE_SESSION_SCOPE = "user";
+    invokeSend.mockRejectedValue(new RuntimeClientError("container died"));
+    const { handler } = await loadHandler();
+    await handler(envelope());
+    expect(sessionIdsSent()).toEqual([perUserSessionId]);
+  });
+
+  it("logs the fallback as a countable phase event", async () => {
+    process.env.AGENTCORE_SESSION_SCOPE = "user";
+    const logs: string[] = [];
+    const logSpy = vi
+      .spyOn(console, "log")
+      .mockImplementation((line: unknown) => {
+        logs.push(String(line));
+      });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    invokeSend
+      .mockRejectedValueOnce(new RetryableConflictException("busy"))
+      .mockResolvedValueOnce({
+        response: { transformToByteArray: async () => new Uint8Array() },
+      });
+    const { handler } = await loadHandler();
+    await handler(envelope());
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
+
+    const fallback = logs
+      .map((line) => {
+        try {
+          return JSON.parse(line) as Record<string, unknown>;
+        } catch {
+          return null;
+        }
+      })
+      .find(
+        (entry) => entry?.phase === "api.runtime_dispatch.session_fallback",
+      );
+    expect(fallback).toMatchObject({
+      source: "agentcore-runtime-dispatch",
+      detail: "per_user_session_busy",
+      threadTurnId: "turn-1",
+    });
   });
 });

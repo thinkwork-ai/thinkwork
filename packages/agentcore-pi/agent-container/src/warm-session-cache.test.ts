@@ -15,12 +15,12 @@ const keyParts = {
 
 const freshGates = { durableStoreMarker: "head-1", authorizationVersion: "v1" };
 
-function entry(value = "session") {
+function entry(value = "session", cachedAtMs = Date.now()) {
   return {
     value,
     durableStoreMarker: "head-1",
     authorizationVersion: "v1",
-    cachedAtMs: 0,
+    cachedAtMs,
   };
 }
 
@@ -127,6 +127,68 @@ describe("WarmSessionCache", () => {
       );
     }
     expect(cache.size).toBe(2);
+  });
+
+  // THINK-909 — a per-user session means several threads churn through one
+  // cache, so a spilled entry's retained MCP transports must be closed.
+  it("disposes the entry it spills on the LRU bound", () => {
+    const closed: string[] = [];
+    const cache = new WarmSessionCache<string>(2, {
+      dispose: (value) => closed.push(value),
+    });
+    for (let i = 0; i < 4; i += 1) {
+      cache.set(
+        warmSessionKey({ ...keyParts, threadId: `thread-${i}` }),
+        entry(`session-${i}`),
+      );
+    }
+    expect(closed).toEqual(["session-0", "session-1"]);
+    expect(cache.size).toBe(2);
+  });
+
+  it("never disposes on caller-driven removal (the caller owns teardown)", () => {
+    const closed: string[] = [];
+    const cache = new WarmSessionCache<string>(4, {
+      dispose: (value) => closed.push(value),
+    });
+    const key = warmSessionKey(keyParts);
+    cache.set(key, entry());
+    // Gate mismatch, explicit evict, and thread evict all have a caller that
+    // already closes the transports — double-closing would be the bug.
+    expect(cache.take(key, { ...freshGates, authorizationVersion: "v2" })).toBe(
+      null,
+    );
+    cache.set(key, entry());
+    cache.evict(key);
+    cache.set(key, entry());
+    cache.evictThread("thread-1");
+    expect(closed).toEqual([]);
+  });
+
+  it("sweeps and disposes entries idle past the TTL", () => {
+    const closed: string[] = [];
+    const cache = new WarmSessionCache<string>(8, {
+      idleTtlMs: 1000,
+      dispose: (value) => closed.push(value),
+    });
+    const stale = warmSessionKey({ ...keyParts, threadId: "thread-old" });
+    cache.set(stale, entry("stale", Date.now() - 5000));
+    expect(cache.size).toBe(1);
+    // A later write sweeps the idle entry (and disposes it).
+    cache.set(warmSessionKey(keyParts), entry("fresh"));
+    expect(closed).toEqual(["stale"]);
+    expect(cache.take(stale, freshGates)).toBeNull();
+    expect(cache.take(warmSessionKey(keyParts), freshGates)?.value).toBe(
+      "fresh",
+    );
+  });
+
+  it("idleTtlMs=0 disables the sweep", () => {
+    const cache = new WarmSessionCache<string>(8, { idleTtlMs: 0 });
+    const key = warmSessionKey(keyParts);
+    cache.set(key, entry("ancient", 0));
+    expect(cache.sweepIdle()).toBe(0);
+    expect(cache.take(key, freshGates)?.value).toBe("ancient");
   });
 });
 
