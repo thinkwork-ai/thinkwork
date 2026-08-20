@@ -1662,7 +1662,8 @@ describe("handleInvocation — happy path", () => {
     let seenSystemPrompt: string | undefined = "unset";
     let seenTools: AgentTool<any>[] = [];
     let capturedBundle:
-      import("../src/server.js").InvocationResourceBundle | undefined;
+      | import("../src/server.js").InvocationResourceBundle
+      | undefined;
     const result = await handleInvocation({
       payload: VALID_PAYLOAD({
         message: "Summarize the file attached in Slack.",
@@ -2570,6 +2571,114 @@ describe("postFinalizeCallback", () => {
         }),
       ]),
     });
+  });
+
+  // THINK-911 — the dispatcher stamps `dispatched_at_ms` right before
+  // InvokeAgentRuntime; the container turns that into a runtime.session_start
+  // phase so the AgentCore cold session start stops being invisible time.
+  it("records the dispatch→container cold-start gap and the coarse setup phases", async () => {
+    process.env.WORKSPACE_BUCKET = "workspace-bucket";
+    const fetchCalls: Array<[unknown, RequestInit | undefined]> = [];
+    const fetchImpl: typeof fetch = (async (
+      url: unknown,
+      init?: RequestInit,
+    ) => {
+      if (!String(url).endsWith("/api/runtime/manifests"))
+        fetchCalls.push([url, init]);
+      return { ok: true, status: 200 } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const dispatchedAtMs = Date.now() - 12_000;
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({
+        finalize_callback_url:
+          "https://api.example.com/api/threads/thread-1/finalize",
+        finalize_callback_secret: "secret",
+        thread_turn_id: "turn-1",
+        dispatched_at_ms: dispatchedAtMs,
+      }),
+      deps: makeDeps({
+        fetchImpl,
+        bootstrapWorkspaceImpl: async () => ({
+          synced: 0,
+          skipped: 3,
+          deleted: 0,
+          total: 3,
+          prefix: "tenants/tenant-1/threads/thread-1/agent-slug/rendered/",
+        }),
+      }),
+    });
+
+    expect(result.statusCode).toBe(200);
+    const body = JSON.parse(String(fetchCalls[0]![1]?.body));
+    const phases = body.usage.diagnostics.agentcore_phases as Array<
+      Record<string, unknown>
+    >;
+    const byPhase = new Map(phases.map((phase) => [phase.phase, phase]));
+
+    const sessionStart = byPhase.get("runtime.session_start")!;
+    expect(sessionStart.status).toBe("completed");
+    expect(Number(sessionStart.duration_ms)).toBeGreaterThanOrEqual(12_000);
+    expect(sessionStart.detail).toBe("dispatch_to_container");
+
+    // The previously unmeasured container spans now report a duration.
+    for (const phase of [
+      "runtime.turn_setup",
+      "runtime.workspace_index",
+      "runtime.session_store",
+      "runtime.turn_teardown",
+    ]) {
+      const entry = byPhase.get(phase);
+      expect(entry, `missing phase ${phase}`).toBeTruthy();
+      expect(Number(entry!.duration_ms)).toBeGreaterThanOrEqual(0);
+    }
+    // The timings map mirrors every recorded duration.
+    expect(body.usage.diagnostics.agentcore_timings_ms).toMatchObject({
+      session_start_ms: expect.any(Number),
+      turn_setup_ms: expect.any(Number),
+      workspace_index_ms: expect.any(Number),
+      turn_teardown_ms: expect.any(Number),
+    });
+  });
+
+  it("omits the cold-start phase when the payload carries no dispatch stamp", async () => {
+    process.env.WORKSPACE_BUCKET = "workspace-bucket";
+    const fetchCalls: Array<[unknown, RequestInit | undefined]> = [];
+    const fetchImpl: typeof fetch = (async (
+      url: unknown,
+      init?: RequestInit,
+    ) => {
+      if (!String(url).endsWith("/api/runtime/manifests"))
+        fetchCalls.push([url, init]);
+      return { ok: true, status: 200 } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    await handleInvocation({
+      payload: VALID_PAYLOAD({
+        finalize_callback_url:
+          "https://api.example.com/api/threads/thread-1/finalize",
+        finalize_callback_secret: "secret",
+        thread_turn_id: "turn-1",
+      }),
+      deps: makeDeps({
+        fetchImpl,
+        bootstrapWorkspaceImpl: async () => ({
+          synced: 0,
+          skipped: 3,
+          deleted: 0,
+          total: 3,
+          prefix: "tenants/tenant-1/threads/thread-1/agent-slug/rendered/",
+        }),
+      }),
+    });
+
+    const body = JSON.parse(String(fetchCalls[0]![1]?.body));
+    const phases = body.usage.diagnostics.agentcore_phases as Array<
+      Record<string, unknown>
+    >;
+    expect(
+      phases.some((phase) => phase.phase === "runtime.session_start"),
+    ).toBe(false);
   });
 
   it("rejects origin-mismatched finalize URLs before sending the bearer", async () => {
@@ -4897,7 +5006,8 @@ describe("handleInvocation — warm-session fast path (THINK-586 U7)", () => {
   // session_reuse extends its existing diagnostics contract fields.
   function sessionReuseOf(body: Record<string, unknown>): unknown {
     const usage = body.usage as
-      { diagnostics?: { session_reuse?: unknown } } | undefined;
+      | { diagnostics?: { session_reuse?: unknown } }
+      | undefined;
     return usage?.diagnostics?.session_reuse;
   }
 

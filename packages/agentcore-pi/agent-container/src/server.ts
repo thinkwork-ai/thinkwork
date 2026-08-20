@@ -1185,6 +1185,10 @@ function instrumentSessionStore(
     threadId: string;
     threadTurnId?: string;
     traceId?: string;
+    /** THINK-911 — turn-diagnostics recorder. Optional so the Lambda path and
+     * tests can construct the instrumented store without one; when present the
+     * session-resume read becomes a persisted phase instead of stdout only. */
+    recordPhase?: (phase: RuntimePhaseDiagnostic) => void;
   },
 ): SessionStore {
   return {
@@ -1216,12 +1220,19 @@ function instrumentSessionStore(
         durationMs,
         detail: result ? "hit" : "miss",
       });
+      context.recordPhase?.({
+        phase: "runtime.session_resume",
+        status: result ? "completed" : "skipped",
+        duration_ms: durationMs,
+        detail: result ? "hit" : "miss",
+      });
       return result;
     },
 
     async write(key, body, expectedVersion) {
       const start = Date.now();
       const version = await store.write(key, body, expectedVersion);
+      const writeDurationMs = Date.now() - start;
       logStructured({
         level: "info",
         event: "session_store_write",
@@ -1231,7 +1242,15 @@ function instrumentSessionStore(
         threadId: context.threadId,
         key,
         mode: expectedVersion === null ? "create" : "update",
-        durationMs: Date.now() - start,
+        durationMs: writeDurationMs,
+      });
+      // THINK-911 — the durable session append is on the turn's critical path
+      // (it happens inside the agent loop); make it visible in diagnostics.
+      context.recordPhase?.({
+        phase: "runtime.session_persist",
+        status: "completed",
+        duration_ms: writeDurationMs,
+        detail: expectedVersion === null ? "create" : "update",
       });
       return version;
     },
@@ -3099,6 +3118,37 @@ async function runInvocationTurn(
     runtimeType: "pi",
   });
 
+  // THINK-911 — cold session start. The dispatcher (agentcore-runtime-dispatch)
+  // stamps `dispatched_at_ms` immediately before InvokeAgentRuntime; the delta
+  // to this container's turn start is the AgentCore session/container start-up
+  // that was previously invisible to the turn diagnostics (a verified 52 s
+  // mcpherson turn showed only ~28 s of phases; ~24 s lived here). Warm
+  // sessions land at a few ms, so the phase doubles as a cold/warm signal.
+  const dispatchedAtMs = Number(args.payload.dispatched_at_ms);
+  if (Number.isFinite(dispatchedAtMs) && dispatchedAtMs > 0) {
+    const receivedDelayMs = Math.max(0, start - dispatchedAtMs);
+    recordRuntimePhase({
+      phase: "runtime.session_start",
+      status: "completed",
+      duration_ms: receivedDelayMs,
+      detail: "dispatch_to_container",
+    });
+    logAgentCorePhase({
+      phase: "runtime.session_start",
+      status: "completed",
+      tenantId: identity.tenantId,
+      userId: identity.userId,
+      agentId: identity.agentId,
+      agentSlug: identity.agentSlug,
+      threadId: identity.threadId,
+      threadTurnId,
+      traceId: identity.traceId,
+      runtimeType: "pi",
+      durationMs: receivedDelayMs,
+      detail: "dispatch_to_container",
+    });
+  }
+
   const userMessage = asString(args.payload.message);
   const goalModeCommand = goalCommandForRuntimeMode(args.payload);
   const runtimeUserMessage = goalModeCommand ?? userMessage;
@@ -3307,6 +3357,31 @@ async function runInvocationTurn(
   // them into the system prompt. Fail closed when the bucket is known.
   let workspaceBaseline: WorkspaceBaseline | undefined;
   let coldWorkspacePrefix = "";
+
+  // THINK-911 — everything from turn start to this point (identity/secrets/env
+  // snapshot, workspace root prepare, warm-cache probe incl. the S3 durable
+  // head, MCP transport rebind) was unmeasured. One coarse phase so the panel
+  // accounts for it instead of leaving a gap before workspace bootstrap.
+  recordRuntimePhase({
+    phase: "runtime.turn_setup",
+    status: "completed",
+    duration_ms: Date.now() - start,
+    detail: warmEntry ? "session_reuse=warm" : "session_reuse=cold",
+  });
+  logAgentCorePhase({
+    phase: "runtime.turn_setup",
+    status: "completed",
+    tenantId: identity.tenantId,
+    agentId: identity.agentId,
+    agentSlug: identity.agentSlug,
+    threadId: identity.threadId,
+    threadTurnId,
+    traceId: identity.traceId,
+    runtimeType: "pi",
+    durationMs: Date.now() - start,
+    detail: warmEntry ? "session_reuse=warm" : "session_reuse=cold",
+  });
+
   if (workspaceBucket && warmEntry) {
     // Warm hit (THINK-586 U7): every reuse gate passed — the workspace on
     // this container is the one this tenant/agent last synced. Skip the
@@ -3457,6 +3532,10 @@ async function runInvocationTurn(
       };
     }
   }
+  // THINK-911 — start of the workspace-indexing span (baseline hashing, skill
+  // discovery, pinned-skill fetch, mcp.json + capabilities-manifest reads,
+  // session-store construction). Closed just before tool assembly.
+  const workspaceIndexStart = Date.now();
   if (workspaceBucket) {
     workspaceBaseline = await createLocalWorkspaceBaseline({
       workspaceDir: env.workspaceDir,
@@ -3680,6 +3759,26 @@ async function runInvocationTurn(
   // we touch the HandleStore.
   let bundle: InvocationResourceBundle;
   const toolAssemblyStart = Date.now();
+  recordRuntimePhase({
+    phase: "runtime.workspace_index",
+    status: "completed",
+    duration_ms: toolAssemblyStart - workspaceIndexStart,
+    count: workspaceSkills.length,
+    detail: `skills=${workspaceSkills.length}`,
+  });
+  logAgentCorePhase({
+    phase: "runtime.workspace_index",
+    status: "completed",
+    tenantId: identity.tenantId,
+    agentId: identity.agentId,
+    agentSlug: identity.agentSlug,
+    threadId: identity.threadId,
+    threadTurnId,
+    traceId: identity.traceId,
+    runtimeType: "pi",
+    durationMs: toolAssemblyStart - workspaceIndexStart,
+    count: workspaceSkills.length,
+  });
   // THINK-245 U4 — one collector shared by the request-identity extension
   // (parent agent loop) and the Bedrock child-model caller, so every model
   // call's response requestId reaches the finalize payload.
@@ -3959,6 +4058,9 @@ async function runInvocationTurn(
   let runResult: RunAgentLoopResult | undefined;
   let runError: unknown;
   let runLoopStart = 0;
+  /** THINK-911 — start of the post-loop teardown span (cleanup drain,
+   * workspace diff, memory retain), previously unmeasured. */
+  let loopEndedAtMs = 0;
   const stagedAttachments = await stagedAttachmentsPromise;
   const attachmentPreamble = formatMessageAttachmentsPreamble(
     stagedAttachments.staged,
@@ -4259,6 +4361,7 @@ async function runInvocationTurn(
     // from S3 instead of replaying full history as prompt text. Requires the
     // workspace bucket + a tenant slug for isolation; otherwise the loop falls
     // back to the transitional history-prepend path.
+    const sessionStoreSetupStart = Date.now();
     const rawSessionStore =
       workspaceBucket && identity.tenantSlug
         ? createS3SessionStore({
@@ -4275,6 +4378,7 @@ async function runInvocationTurn(
           threadId: identity.threadId,
           threadTurnId,
           traceId: identity.traceId,
+          recordPhase: recordRuntimePhase,
         })
       : undefined;
     // THINK-586 U7 — warm-session store wrapper. A warm hit serves the
@@ -4381,11 +4485,15 @@ async function runInvocationTurn(
       threadTurnId,
       traceId: identity.traceId,
       runtimeType: "pi",
+      // THINK-911 — was duration-less, so the panel rendered a phase with no
+      // time attached and the span read as free.
+      durationMs: Date.now() - sessionStoreSetupStart,
       detail: sessionStore ? "s3" : sessionStoreFallbackReason,
     });
     recordRuntimePhase({
       phase: "runtime.session_store",
       status: sessionStore ? "completed" : "skipped",
+      duration_ms: Date.now() - sessionStoreSetupStart,
       detail: sessionStore ? "s3" : sessionStoreFallbackReason,
     });
     logStructured({
@@ -4820,6 +4928,7 @@ async function runInvocationTurn(
       detail: err instanceof Error ? err.message : String(err),
     });
   } finally {
+    loopEndedAtMs = Date.now();
     bundle.handleStore.clear();
     for (const fn of bundle.cleanup.reverse()) {
       try {
@@ -4896,6 +5005,12 @@ async function runInvocationTurn(
           traceId: identity.traceId,
           runtimeType: "pi",
           durationMs: Date.now() - finalizeStart,
+          detail: "error_result",
+        });
+        recordRuntimePhase({
+          phase: "runtime.finalize_callback",
+          status: "completed",
+          duration_ms: Date.now() - finalizeStart,
           detail: "error_result",
         });
         return {
@@ -5009,6 +5124,18 @@ async function runInvocationTurn(
     });
   }
 
+  // THINK-911 — close the teardown span before the finalize POST serializes
+  // the diagnostics (mergeRuntimeDiagnostics shares the phase array by
+  // reference, so a push before this line still ships with the turn).
+  if (loopEndedAtMs) {
+    recordRuntimePhase({
+      phase: "runtime.turn_teardown",
+      status: "completed",
+      duration_ms: Date.now() - loopEndedAtMs,
+      detail: `changed_files=${changedFiles.length}`,
+    });
+  }
+
   if (isFinalizeCallbackConfigured(args.payload)) {
     const finalizeStart = Date.now();
     const finalized = await postFinalizeCallback({
@@ -5035,6 +5162,15 @@ async function runInvocationTurn(
         durationMs: Date.now() - finalizeStart,
         detail: "ok_result",
       });
+      // Recorded for the in-container diagnostics too (the non-finalize
+      // completion-callback path ships it; the finalize path has already
+      // serialized its payload by definition — it cannot report its own POST).
+      recordRuntimePhase({
+        phase: "runtime.finalize_callback",
+        status: "completed",
+        duration_ms: Date.now() - finalizeStart,
+        detail: "ok_result",
+      });
       return {
         statusCode: 200,
         body: { ok: true, finalize_dispatched: true, runtime: "pi" },
@@ -5052,6 +5188,12 @@ async function runInvocationTurn(
       runtimeType: "pi",
       durationMs: Date.now() - finalizeStart,
       errorType: "FinalizeCallbackFailed",
+    });
+    recordRuntimePhase({
+      phase: "runtime.finalize_callback",
+      status: "failed",
+      duration_ms: Date.now() - finalizeStart,
+      detail: "FinalizeCallbackFailed",
     });
     return {
       statusCode: 500,

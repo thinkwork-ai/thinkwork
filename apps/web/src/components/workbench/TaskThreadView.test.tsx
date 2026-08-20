@@ -2532,20 +2532,85 @@ describe("TaskThreadView", () => {
     expect(screen.getByLabelText("Turn activity")).toBeTruthy();
     openThinkingDisclosure();
     expect(screen.getByText("Workspace sync")).toBeTruthy();
-    expect(screen.getByText(/workspace sync: 12ms/)).toBeTruthy();
+    // THINK-911: the bootstrap measurement + its file counts belong to the
+    // AgentCore phase row; the workspace row no longer repeats them.
+    expect(screen.queryByText(/workspace sync: 12ms/)).toBeNull();
+    expect(screen.queryByText(/skipped files: 5/)).toBeNull();
+    expect(screen.queryByText(/prefix: tenants\/acme/)).toBeNull();
     expect(screen.getByText(/model tool run: 1.4s/)).toBeTruthy();
-    expect(screen.getByText(/skipped files: 5/)).toBeTruthy();
     expect(screen.getByText(/changed files: 2/)).toBeTruthy();
-    expect(screen.getByText(/prefix: tenants\/acme/)).toBeTruthy();
     expect(screen.getByText(/reconcile status: partial_success/)).toBeTruthy();
     expect(screen.getByText("AgentCore phases")).toBeTruthy();
     expect(
-      screen.getByText(/workspace bootstrap: completed · 12ms · count 8/),
+      screen.getByText(/Syncing workspace: completed · 12ms · count 8/),
     ).toBeTruthy();
-    expect(screen.getByText(/agent loop: completed · 1.4s/)).toBeTruthy();
+    expect(screen.getByText(/Agent loop: completed · 1.4s/)).toBeTruthy();
     expect(screen.getByText("Finding sources")).toBeTruthy();
     expect(screen.getByText(/Manual chat/)).toBeTruthy();
     expect(screen.getByText(/1.2K in \/ 300 out/)).toBeTruthy();
+  });
+
+  it("drops the duplicate Workspace sync row and labels the cold-start phase (THINK-911)", () => {
+    // The AgentCore runtime writes the workspace-bootstrap measurement into
+    // workspace_sync_ms, hydration_copy_ms AND the phase list. With phases
+    // present the standalone row is pure duplication and must not render.
+    render(
+      <TaskThreadView
+        thread={{
+          id: "thread-1",
+          title: "Cold start thread",
+          lifecycleStatus: "RUNNING",
+          messages: [{ id: "message-1", role: "USER", content: "Hi" }],
+          turns: [
+            {
+              id: "turn-1",
+              status: "running",
+              invocationSource: "chat_message",
+              usageJson: {
+                diagnostics: {
+                  workspace_diagnostics: {
+                    workspace_sync_ms: 900,
+                    hydration_copy_ms: 900,
+                    file_count: 8,
+                    total_files: 8,
+                    hydrated_files: 3,
+                    synced_files: 3,
+                    skipped_files: 5,
+                    deleted_files: 0,
+                    cache_hit: false,
+                    prefix: "tenants/acme/agents/main/",
+                  },
+                  agentcore_phases: [
+                    {
+                      phase: "runtime.session_start",
+                      status: "completed",
+                      duration_ms: 24000,
+                      detail: "dispatch_to_container",
+                    },
+                    {
+                      phase: "runtime.workspace_bootstrap",
+                      status: "completed",
+                      duration_ms: 900,
+                      count: 8,
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        }}
+      />,
+    );
+
+    openThinkingDisclosure();
+    expect(screen.queryByText("Workspace sync")).toBeNull();
+    expect(screen.getByText("AgentCore phases")).toBeTruthy();
+    expect(
+      screen.getByText(/Starting agent VM: completed · 24.0s/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Syncing workspace: completed · 900ms/),
+    ).toBeTruthy();
   });
 
   it("shows the finalized provider model instead of a different requested model", () => {
