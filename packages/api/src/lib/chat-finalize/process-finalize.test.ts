@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   promoteNextDeferredWakeup: vi.fn(),
   mergeWorkspaceProjectionReconcileSummary: vi.fn(),
   projectAgentLoopFinalize: vi.fn(),
+  projectWorkflowStepFinalizeSafely: vi.fn(),
   autoSubmitSkillCreatorDraft: vi.fn(),
   loadCanonicalHarnessSkillDraftRegistration: vi.fn(),
 }));
@@ -133,6 +134,10 @@ vi.mock("../agent-loops/finalize-projection.js", () => ({
   projectAgentLoopFinalize: mocks.projectAgentLoopFinalize,
 }));
 
+vi.mock("../workflows/workflow-step-finalize.js", () => ({
+  projectWorkflowStepFinalizeSafely: mocks.projectWorkflowStepFinalizeSafely,
+}));
+
 vi.mock("../skill-creator/auto-submit-draft.js", () => ({
   autoSubmitSkillCreatorDraft: mocks.autoSubmitSkillCreatorDraft,
 }));
@@ -237,6 +242,8 @@ beforeEach(() => {
     status: "skipped",
     reason: "not_agent_loop_turn",
   });
+  mocks.projectWorkflowStepFinalizeSafely.mockReset();
+  mocks.projectWorkflowStepFinalizeSafely.mockResolvedValue(undefined);
   mocks.autoSubmitSkillCreatorDraft.mockReset();
   mocks.autoSubmitSkillCreatorDraft.mockResolvedValue({
     status: "skipped",
@@ -2302,6 +2309,129 @@ describe("processFinalize deferred-wakeup promotion", () => {
         response: { content: "done" },
       }),
     ).resolves.toMatchObject({ finalized: true });
+  });
+});
+
+describe("processFinalize post-loop tail ordering (THINK-913)", () => {
+  const completedPayload = {
+    thread_turn_id: TURN_ID,
+    tenant_id: TENANT_ID,
+    agent_id: AGENT_ID,
+    thread_id: THREAD_ID,
+    duration_ms: 1200,
+    status: "completed" as const,
+    usage: {
+      model: "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+      input_tokens: 100,
+      output_tokens: 50,
+    },
+    response: {
+      content: "Here is your answer.",
+      tools_called: ["bash"],
+      tool_costs: [
+        { event_type: "browser_session", amount_usd: 0.01, provider: "nova" },
+      ],
+    },
+  };
+
+  /** First invocation order index of a mock (vitest global call counter). */
+  const order = (mock: { mock: { invocationCallOrder: number[] } }): number => {
+    const [first] = mock.mock.invocationCallOrder;
+    expect(first).toBeDefined();
+    return first;
+  };
+
+  it("inserts the assistant message before cost events, the turn row, and trace evidence", async () => {
+    await expect(processFinalize(completedPayload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
+
+    const insertOrder = order(mocks.insertAssistantMessage);
+    // The whole bookkeeping tail now runs AFTER the message row exists —
+    // the user-visible "Worked for" clock stops at the message insert.
+    expect(insertOrder).toBeLessThan(order(mocks.recordCostEvents));
+    expect(insertOrder).toBeLessThan(order(mocks.checkBudgetAndPause));
+    expect(insertOrder).toBeLessThan(order(mocks.notifyThreadTurnUpdate));
+    expect(insertOrder).toBeLessThan(order(mocks.recordTraceEvidence));
+    expect(insertOrder).toBeLessThan(order(mocks.projectAgentLoopFinalize));
+    expect(insertOrder).toBeLessThan(
+      order(mocks.projectWorkflowStepFinalizeSafely),
+    );
+  });
+
+  it("publishes the new message before the thread_turn succeeded notification", async () => {
+    await processFinalize(completedPayload);
+
+    // Client ordering: the message lands first, then the turn flips to
+    // succeeded. The reverse would show a finished turn with no answer.
+    expect(order(mocks.notifyNewMessage)).toBeLessThan(
+      order(mocks.notifyThreadTurnUpdate),
+    );
+    expect(order(mocks.notifyNewMessage)).toBeLessThan(
+      order(mocks.recordCostEvents),
+    );
+  });
+
+  it("keeps the workspace reconcile writeback ahead of the message insert", async () => {
+    await processFinalize(completedPayload);
+
+    // Load-bearing: reconcile throws on a failed non-empty diff and the
+    // callback is retried. Inserting first would double-post on retry.
+    expect(order(mocks.reconcileChangedFiles)).toBeLessThan(
+      order(mocks.insertAssistantMessage),
+    );
+  });
+
+  it("still writes the aggregate usage row from the deferred cost result", async () => {
+    await processFinalize(completedPayload);
+
+    const succeededUpdate = mocks.updateSets.find(
+      (value) =>
+        value &&
+        typeof value === "object" &&
+        (value as Record<string, unknown>).status === "succeeded",
+    ) as Record<string, unknown> | undefined;
+    expect(succeededUpdate).toBeDefined();
+    expect(succeededUpdate?.usage_json).toMatchObject({
+      input_tokens: 100,
+      output_tokens: 50,
+      cost_usd: 1.23,
+      parent_usage: expect.objectContaining({ cost_usd: 1.23 }),
+    });
+  });
+
+  it("finalizes the turn even when a deferred tail step throws", async () => {
+    mocks.projectWorkflowStepFinalizeSafely.mockRejectedValue(
+      new Error("projection exploded"),
+    );
+
+    await expect(processFinalize(completedPayload)).resolves.toMatchObject({
+      finalized: true,
+      messageId: "msg-1",
+    });
+
+    // A thrown tail must never bubble: the runtime retries a failed
+    // finalize, and the message is already persisted.
+    expect(mocks.sendTurnCompletedPush).toHaveBeenCalledTimes(1);
+    expect(mocks.updateSets).toContainEqual(
+      expect.objectContaining({ finalized_at: expect.any(Date) }),
+    );
+  });
+
+  it("runs the tail before finalizing a turn with no assistant message", async () => {
+    await expect(
+      processFinalize({ ...completedPayload, response: { content: "" } }),
+    ).resolves.toMatchObject({ finalized: true, messageId: null });
+
+    // Empty-response turns insert nothing but must keep their cost,
+    // usage, and trace bookkeeping.
+    expect(mocks.insertAssistantMessage).not.toHaveBeenCalled();
+    expect(mocks.recordCostEvents).toHaveBeenCalledTimes(1);
+    expect(mocks.recordTraceEvidence).toHaveBeenCalledTimes(1);
+    expect(mocks.updateSets).toContainEqual(
+      expect.objectContaining({ status: "succeeded" }),
+    );
   });
 });
 

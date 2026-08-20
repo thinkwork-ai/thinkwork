@@ -11,15 +11,22 @@
  * AgentCore-response shape chat-agent-invoke used to read directly) and
  * does the full chain in order:
  *
- *   1. Resolve assistant response text + guardrail-block detection
- *   2. Insert guardrail-block row (if blocked + guardrail configured)
- *   3. Record Bedrock cost events + budget check + cost notification
- *   5. Record tool costs (Nova Act, browser, etc.)
- *   6. Update the thread_turn (status, finished_at, usage_json,
- *      result_json) + notify subscribers
- *   7. Insert the assistant message + link orphan artifacts + bump
- *      thread timestamps + notify AppSync + push notification
- *   8. Mark the turn finalized_at = now() as the last step (idempotency
+ *   1. Reconcile the workspace diff back to S3 (must precede the message
+ *      insert — a reconcile failure throws and the callback is retried,
+ *      which would double-insert an already-persisted message)
+ *   2. Resolve assistant response text + guardrail-block detection
+ *   3. Insert guardrail-block row (if blocked + guardrail configured)
+ *   4. Insert the assistant message + link orphan artifacts + bump
+ *      thread timestamps + notify AppSync
+ *   5. THINK-913 finalize tail — Bedrock cost events + budget check +
+ *      cost notification, child model / Agent Profile evidence, tool
+ *      costs, the thread_turn update (status, finished_at, usage_json,
+ *      result_json) + notify subscribers, trace evidence, AgentLoop /
+ *      workflow projections. None of this is read by the assistant
+ *      message row, so it runs AFTER it: the user-visible "Worked for"
+ *      clock stops at the message's createdAt.
+ *   6. Push notification + email + Slack reply delivery
+ *   7. Mark the turn finalized_at = now() as the last step (idempotency
  *      gate for retried callbacks)
  *
  * Error semantics: best-effort throughout. Individual steps catch + log
@@ -413,7 +420,9 @@ export async function processFinalize(
     `[chat-finalize] Extracted response (${responseText.length} chars): ${responseText.slice(0, 100)}`,
   );
 
-  // 2. Record Bedrock cost events
+  // 2. Usage snapshot for this turn. Recording the cost events themselves
+  //    is deferred to the finalize tail below (THINK-913) — nothing the
+  //    assistant message row needs depends on it.
   const usage = payload.usage
     ? {
         model: payload.usage.model ?? agentModel ?? null,
@@ -424,234 +433,273 @@ export async function processFinalize(
       }
     : extractUsage({ usage: undefined });
   const bedrockRequestIds = invokeResult.bedrock_request_ids;
+  const toolCosts = invokeResult.tool_costs ?? [];
+  const goalRun = goalRunProjectionFromFinalizePayload(payload);
   let parentCostUsd: number | null = null;
 
-  try {
-    const costResult = await recordCostEvents({
-      tenantId,
-      agentId,
-      userId: costOwnerUserId,
-      requestId: turnId,
-      model: usage.model || agentModel || null,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      cachedReadTokens: usage.cachedReadTokens,
-      cachedWriteTokens: usage.cachedWriteTokens,
-      durationMs,
-      inputText: userMessage,
-      outputText: responseText,
-      threadId,
-      traceId,
-      bedrockRequestIds,
-      runtimeType,
-    });
-    parentCostUsd = costResult.totalUsd;
-    await checkBudgetAndPause(tenantId, agentId, costOwnerUserId);
+  /**
+   * Non-critical finalize tail (THINK-913).
+   *
+   * Everything in here is bookkeeping the user-visible assistant message
+   * does not depend on: Bedrock cost events + budget check, child model /
+   * Agent Profile evidence, tool costs, the `thread_turns` usage+result
+   * row, trace-ledger evidence, and the AgentLoop / workflow projections.
+   * It used to run BEFORE the message insert, which pushed the "Worked
+   * for" clock (user message createdAt → assistant message createdAt)
+   * out by seconds of serial DB work. It now runs after the message is
+   * inserted and published.
+   *
+   * Ordering inside the tail is unchanged, because it is load-bearing:
+   * `recordModelRoutedToolEvidence` / `recordAgentProfileRunEvidence`
+   * backfill `costUsd` on their evidence records, and the aggregate turn
+   * usage written to `thread_turns.usage_json` reads those values.
+   *
+   * Every step keeps its own try/catch (identical to before). The outer
+   * wrapper is a backstop: a thrown finalize is retried by the runtime,
+   * and a retry after the message insert would double-post, so a tail
+   * failure must never bubble.
+   */
+  let finalizeTailRan = false;
+  const runFinalizeTail = async (): Promise<void> => {
+    if (finalizeTailRan) return;
+    finalizeTailRan = true;
+    try {
+      // 3. Record Bedrock cost events
+      try {
+        const costResult = await recordCostEvents({
+          tenantId,
+          agentId,
+          userId: costOwnerUserId,
+          requestId: turnId,
+          model: usage.model || agentModel || null,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cachedReadTokens: usage.cachedReadTokens,
+          cachedWriteTokens: usage.cachedWriteTokens,
+          durationMs,
+          inputText: userMessage,
+          outputText: responseText,
+          threadId,
+          traceId,
+          bedrockRequestIds,
+          runtimeType,
+        });
+        parentCostUsd = costResult.totalUsd;
+        await checkBudgetAndPause(tenantId, agentId, costOwnerUserId);
 
-    if (costResult.totalUsd > 0) {
-      await notifyCostRecorded({
+        if (costResult.totalUsd > 0) {
+          await notifyCostRecorded({
+            tenantId,
+            agentId,
+            agentName: agentName ?? "",
+            userId: costOwnerUserId,
+            eventType: "invocation",
+            amountUsd: costResult.totalUsd,
+            model: usage.model || agentModel || null,
+          });
+        }
+      } catch (costErr) {
+        console.error(`[chat-finalize] Cost recording failed:`, costErr);
+      }
+
+      await recordModelRoutedToolEvidence({
         tenantId,
         agentId,
-        agentName: agentName ?? "",
         userId: costOwnerUserId,
-        eventType: "invocation",
-        amountUsd: costResult.totalUsd,
-        model: usage.model || agentModel || null,
+        turnId,
+        threadId,
+        traceId,
+        runtimeType,
+        agentName,
+        modelRoutedToolCalls,
       });
-    }
-  } catch (costErr) {
-    console.error(`[chat-finalize] Cost recording failed:`, costErr);
-  }
+      await recordAgentProfileRunEvidence({
+        tenantId,
+        agentId,
+        userId: costOwnerUserId,
+        turnId,
+        threadId,
+        traceId,
+        runtimeType,
+        agentName,
+        agentProfileRuns,
+      });
+      applyModelRoutedToolCosts(toolInvocations, modelRoutedToolCalls);
+      applyParentModelFallbackToolEvidence(toolInvocations, {
+        model: usage.model || agentModel || null,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cachedReadTokens: usage.cachedReadTokens,
+        costUsd: parentCostUsd,
+      });
 
-  await recordModelRoutedToolEvidence({
-    tenantId,
-    agentId,
-    userId: costOwnerUserId,
-    turnId,
-    threadId,
-    traceId,
-    runtimeType,
-    agentName,
-    modelRoutedToolCalls,
-  });
-  await recordAgentProfileRunEvidence({
-    tenantId,
-    agentId,
-    userId: costOwnerUserId,
-    turnId,
-    threadId,
-    traceId,
-    runtimeType,
-    agentName,
-    agentProfileRuns,
-  });
-  applyModelRoutedToolCosts(toolInvocations, modelRoutedToolCalls);
-  applyParentModelFallbackToolEvidence(toolInvocations, {
-    model: usage.model || agentModel || null,
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    cachedReadTokens: usage.cachedReadTokens,
-    costUsd: parentCostUsd,
-  });
-
-  // 4. Record tool costs (Nova Act, browser sessions, etc.)
-  const toolCosts = invokeResult.tool_costs ?? [];
-  if (toolCosts.length > 0) {
-    try {
-      const { costEvents } = await import("@thinkwork/database-pg/schema");
-      for (const tc of toolCosts) {
-        await db
-          .insert(costEvents)
-          .values({
-            tenant_id: tenantId,
-            agent_id: agentId,
-            user_id: costOwnerUserId || undefined,
-            thread_id: threadId || undefined,
-            request_id: crypto.randomUUID(),
-            event_type: String(tc.event_type || "tool_cost"),
-            runtime_type: runtimeType || undefined,
-            amount_usd: String(tc.amount_usd || "0.000000"),
-            provider: String(tc.provider || "unknown"),
-            duration_ms: (tc.duration_ms as number) || null,
-            trace_id: traceId || undefined,
-            metadata: {
-              ...((tc.metadata as Record<string, unknown> | undefined) ?? {}),
-              ...(runtimeType ? { runtime_type: runtimeType } : {}),
-            },
-          })
-          .onConflictDoNothing();
+      // 4. Record tool costs (Nova Act, browser sessions, etc.)
+      if (toolCosts.length > 0) {
+        try {
+          const { costEvents } = await import("@thinkwork/database-pg/schema");
+          for (const tc of toolCosts) {
+            await db
+              .insert(costEvents)
+              .values({
+                tenant_id: tenantId,
+                agent_id: agentId,
+                user_id: costOwnerUserId || undefined,
+                thread_id: threadId || undefined,
+                request_id: crypto.randomUUID(),
+                event_type: String(tc.event_type || "tool_cost"),
+                runtime_type: runtimeType || undefined,
+                amount_usd: String(tc.amount_usd || "0.000000"),
+                provider: String(tc.provider || "unknown"),
+                duration_ms: (tc.duration_ms as number) || null,
+                trace_id: traceId || undefined,
+                metadata: {
+                  ...((tc.metadata as Record<string, unknown> | undefined) ??
+                    {}),
+                  ...(runtimeType ? { runtime_type: runtimeType } : {}),
+                },
+              })
+              .onConflictDoNothing();
+          }
+          console.log(
+            `[chat-finalize] Recorded ${toolCosts.length} tool cost(s)`,
+          );
+        } catch (err) {
+          console.error(`[chat-finalize] Tool cost recording failed:`, err);
+        }
       }
-      console.log(`[chat-finalize] Recorded ${toolCosts.length} tool cost(s)`);
-    } catch (err) {
-      console.error(`[chat-finalize] Tool cost recording failed:`, err);
+
+      // 5. Update thread_turn as succeeded
+      const diagnostics = diagnosticsWithWorkspaceReconcile(
+        diagnosticsFromFinalizePayload(payload),
+        reconcileReport,
+        reconcileDurationMs,
+      );
+      const aggregateUsage = aggregateTurnUsage({
+        parent: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cachedReadTokens: usage.cachedReadTokens,
+          cachedWriteTokens: usage.cachedWriteTokens,
+          costUsd: parentCostUsd,
+        },
+        modelRoutedToolCalls,
+        agentProfileRuns,
+      });
+      const parentUsage = {
+        model: usage.model || agentModel || null,
+        input_tokens: usage.inputTokens,
+        output_tokens: usage.outputTokens,
+        cached_read_tokens: usage.cachedReadTokens,
+        cached_write_tokens: usage.cachedWriteTokens,
+        cost_usd: parentCostUsd,
+      };
+      const turnUsage = {
+        model: usage.model || agentModel || null,
+        duration_ms: durationMs,
+        runtime_type: runtimeType,
+        input_tokens: aggregateUsage.inputTokens,
+        output_tokens: aggregateUsage.outputTokens,
+        cached_read_tokens: aggregateUsage.cachedReadTokens,
+        cached_write_tokens: aggregateUsage.cachedWriteTokens,
+        cost_usd: aggregateUsage.costUsd,
+        parent_usage: parentUsage,
+        diagnostics,
+        tools_called: invokeResult.tools_called ?? [],
+        tool_costs: toolCosts.map((tc) => ({
+          event_type: tc.event_type,
+          amount_usd: tc.amount_usd,
+          provider: tc.provider,
+        })),
+        tool_invocations: toolInvocations,
+        model_routed_tool_calls: modelRoutedToolCalls,
+        agent_profile_runs: agentProfileRuns,
+        ...(goalRun ? { goal_run: goalRun } : {}),
+      };
+
+      try {
+        await db
+          .update(threadTurns)
+          .set({
+            status: "succeeded",
+            finished_at: new Date(),
+            runtime_type: runtimeType || undefined,
+            system_prompt: stripNulDeep(capturedSystemPrompt) || undefined,
+            result_json: stripNulDeep({
+              response: responseText.slice(0, 10000),
+              runtime: runtimeType || undefined,
+              ...(goalRun ? { goal_run: goalRun } : {}),
+            }),
+            usage_json: stripNulDeep(turnUsage),
+          })
+          .where(eq(threadTurns.id, turnId));
+
+        await notifyThreadTurnUpdate({
+          runId: turnId,
+          tenantId,
+          threadId,
+          agentId,
+          status: "succeeded",
+          triggerName: "Chat",
+        });
+      } catch (turnErr) {
+        console.error(`[chat-finalize] Failed to update thread_turn:`, turnErr);
+      }
+
+      await recordTraceEvidenceSafely({
+        tenantId,
+        agentId,
+        userId: costOwnerUserId,
+        threadId,
+        threadTurnId: turnId,
+        traceId,
+        runtimeType,
+        status: "completed",
+        durationMs,
+        responseText,
+        usage: {
+          model: usage.model || agentModel || null,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cachedReadTokens: usage.cachedReadTokens,
+          cachedWriteTokens: usage.cachedWriteTokens,
+          costUsd: parentCostUsd,
+        },
+        diagnostics,
+        reconcile: reconcileReport,
+        toolInvocations,
+        modelRoutedToolCalls,
+        agentProfileRuns,
+        bedrockRequestIds,
+      });
+
+      await projectAgentLoopFinalizeSafely({
+        tenantId,
+        threadTurnId: turnId,
+        contextSnapshot: claimed[0]?.contextSnapshot,
+        goalRun,
+        responseText,
+        turnStatus: "completed",
+      });
+      await projectWorkflowStepFinalizeSafely({
+        tenantId,
+        threadTurnId: turnId,
+        contextSnapshot: claimed[0]?.contextSnapshot,
+        goalRun,
+        responseText,
+        turnStatus: "completed",
+      });
+    } catch (tailErr) {
+      console.error(
+        `[chat-finalize] Finalize tail failed (turn still finalizes):`,
+        tailErr,
+      );
     }
-  }
-
-  // 5. Update thread_turn as succeeded
-  const diagnostics = diagnosticsWithWorkspaceReconcile(
-    diagnosticsFromFinalizePayload(payload),
-    reconcileReport,
-    reconcileDurationMs,
-  );
-  const aggregateUsage = aggregateTurnUsage({
-    parent: {
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      cachedReadTokens: usage.cachedReadTokens,
-      cachedWriteTokens: usage.cachedWriteTokens,
-      costUsd: parentCostUsd,
-    },
-    modelRoutedToolCalls,
-    agentProfileRuns,
-  });
-  const parentUsage = {
-    model: usage.model || agentModel || null,
-    input_tokens: usage.inputTokens,
-    output_tokens: usage.outputTokens,
-    cached_read_tokens: usage.cachedReadTokens,
-    cached_write_tokens: usage.cachedWriteTokens,
-    cost_usd: parentCostUsd,
   };
-  const goalRun = goalRunProjectionFromFinalizePayload(payload);
-  const turnUsage = {
-    model: usage.model || agentModel || null,
-    duration_ms: durationMs,
-    runtime_type: runtimeType,
-    input_tokens: aggregateUsage.inputTokens,
-    output_tokens: aggregateUsage.outputTokens,
-    cached_read_tokens: aggregateUsage.cachedReadTokens,
-    cached_write_tokens: aggregateUsage.cachedWriteTokens,
-    cost_usd: aggregateUsage.costUsd,
-    parent_usage: parentUsage,
-    diagnostics,
-    tools_called: invokeResult.tools_called ?? [],
-    tool_costs: toolCosts.map((tc) => ({
-      event_type: tc.event_type,
-      amount_usd: tc.amount_usd,
-      provider: tc.provider,
-    })),
-    tool_invocations: toolInvocations,
-    model_routed_tool_calls: modelRoutedToolCalls,
-    agent_profile_runs: agentProfileRuns,
-    ...(goalRun ? { goal_run: goalRun } : {}),
-  };
-
-  try {
-    await db
-      .update(threadTurns)
-      .set({
-        status: "succeeded",
-        finished_at: new Date(),
-        runtime_type: runtimeType || undefined,
-        system_prompt: stripNulDeep(capturedSystemPrompt) || undefined,
-        result_json: stripNulDeep({
-          response: responseText.slice(0, 10000),
-          runtime: runtimeType || undefined,
-          ...(goalRun ? { goal_run: goalRun } : {}),
-        }),
-        usage_json: stripNulDeep(turnUsage),
-      })
-      .where(eq(threadTurns.id, turnId));
-
-    await notifyThreadTurnUpdate({
-      runId: turnId,
-      tenantId,
-      threadId,
-      agentId,
-      status: "succeeded",
-      triggerName: "Chat",
-    });
-  } catch (turnErr) {
-    console.error(`[chat-finalize] Failed to update thread_turn:`, turnErr);
-  }
-
-  await recordTraceEvidenceSafely({
-    tenantId,
-    agentId,
-    userId: costOwnerUserId,
-    threadId,
-    threadTurnId: turnId,
-    traceId,
-    runtimeType,
-    status: "completed",
-    durationMs,
-    responseText,
-    usage: {
-      model: usage.model || agentModel || null,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      cachedReadTokens: usage.cachedReadTokens,
-      cachedWriteTokens: usage.cachedWriteTokens,
-      costUsd: parentCostUsd,
-    },
-    diagnostics,
-    reconcile: reconcileReport,
-    toolInvocations,
-    modelRoutedToolCalls,
-    agentProfileRuns,
-    bedrockRequestIds,
-  });
-
-  await projectAgentLoopFinalizeSafely({
-    tenantId,
-    threadTurnId: turnId,
-    contextSnapshot: claimed[0]?.contextSnapshot,
-    goalRun,
-    responseText,
-    turnStatus: "completed",
-  });
-  await projectWorkflowStepFinalizeSafely({
-    tenantId,
-    threadTurnId: turnId,
-    contextSnapshot: claimed[0]?.contextSnapshot,
-    goalRun,
-    responseText,
-    turnStatus: "completed",
-  });
 
   // Early exit on empty response (legacy behavior — no message inserted)
   if (!responseText || responseText === "{}") {
     console.warn(`[chat-finalize] Empty response from AgentCore`);
+    await runFinalizeTail();
     await markTurnFinalized(turnId);
     await promoteDeferredWakeupSafely(tenantId, threadId, turnId);
     return { finalized: true, messageId: null, reconcile: reconcileReport };
@@ -661,6 +709,7 @@ export async function processFinalize(
     console.log(
       `[chat-finalize] Hidden desktop delegation ${turnId} finalized without inserting an assistant message`,
     );
+    await runFinalizeTail();
     await markTurnFinalized(turnId);
     await promoteDeferredWakeupSafely(tenantId, threadId, turnId);
     return { finalized: true, messageId: null, reconcile: reconcileReport };
@@ -669,24 +718,6 @@ export async function processFinalize(
   // 6. Compute downstream signals
   const displayResponse = responseText;
   const computerThreadResponse = invokeResult.computer_thread_response;
-
-  // ask_user_question asking-turn finalize (plan 2026-06-09-005 U3): when
-  // this turn called the ask tool AND a pending question row actually
-  // exists, the thread is waiting on the USER, not done — the list
-  // preview shows the question (not the trailing prose) and the
-  // turn-completed push is suppressed. The row probe is the gate (not
-  // the tool name alone): tools_called records at execution START, so a
-  // FAILED/409'd ask leaves no pending row and must finalize normally —
-  // including the completion push. Trailing assistant text still
-  // persists as a normal message below.
-  const askedUserQuestion = turnAskedUserQuestion(invokeResult);
-  let hasPendingQuestion = false;
-  let askingQuestionPreview: string | null = null;
-  if (askedUserQuestion) {
-    const pendingState = await loadPendingQuestionState(threadId);
-    hasPendingQuestion = pendingState.pending;
-    askingQuestionPreview = pendingState.preview;
-  }
 
   // 7. Insert assistant message (or reuse the one the runtime already
   //    created when invoked via the Computer thread surface)
@@ -748,6 +779,28 @@ export async function processFinalize(
     }
   }
 
+  // ask_user_question asking-turn finalize (plan 2026-06-09-005 U3): when
+  // this turn called the ask tool AND a pending question row actually
+  // exists, the thread is waiting on the USER, not done — the list
+  // preview shows the question (not the trailing prose) and the
+  // turn-completed push is suppressed. The row probe is the gate (not
+  // the tool name alone): tools_called records at execution START, so a
+  // FAILED/409'd ask leaves no pending row and must finalize normally —
+  // including the completion push. Trailing assistant text still
+  // persists as a normal message (inserted above).
+  //
+  // THINK-913: the probe moved BELOW the message insert. It only feeds
+  // the thread preview (7b) and the push gate (7e), both of which still
+  // run after it — the message row itself never depended on it.
+  const askedUserQuestion = turnAskedUserQuestion(invokeResult);
+  let hasPendingQuestion = false;
+  let askingQuestionPreview: string | null = null;
+  if (askedUserQuestion) {
+    const pendingState = await loadPendingQuestionState(threadId);
+    hasPendingQuestion = pendingState.pending;
+    askingQuestionPreview = pendingState.preview;
+  }
+
   // 7b. Bump thread timestamps — last_turn_completed_at drives inbox sorting
   if (!computerThreadResponse?.responseMessageId) {
     try {
@@ -801,6 +854,13 @@ export async function processFinalize(
       );
     }
   }
+
+  // 7d-bis. THINK-913 — the message is now persisted and published, so the
+  // "Worked for" clock has stopped. Run the deferred bookkeeping tail
+  // (cost events, evidence, thread_turn usage row + succeeded
+  // notification, trace ledger, projections) before the remaining
+  // external deliveries, so the turn flips to `succeeded` promptly.
+  await runFinalizeTail();
 
   // 7e. Send push notification to user devices — suppressed only when a
   // pending question row exists: the thread is waiting on the user, not

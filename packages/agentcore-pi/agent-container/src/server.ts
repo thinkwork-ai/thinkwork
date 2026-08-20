@@ -231,6 +231,7 @@ import {
 } from "./runtime/message-attachments.js";
 import {
   retainConversation,
+  type RetainConversationResult,
   type RetainPayloadInput,
 } from "./runtime/tools/memory-retain-client.js";
 import {
@@ -878,12 +879,14 @@ async function ensureWorkspaceDir(workspaceDir: string): Promise<void> {
     await mkdir(workspaceDir, { recursive: true });
     return;
   } catch (err) {
-    if (!(
-      err &&
-      typeof err === "object" &&
-      "code" in err &&
-      err.code === "ENOENT"
-    )) {
+    if (
+      !(
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        err.code === "ENOENT"
+      )
+    ) {
       throw err;
     }
   }
@@ -1404,7 +1407,9 @@ export interface WarmTurnProducts {
  * so the Lambda path resolves null here and takes today's cold path.
  */
 let warmSessionCacheSingleton:
-  WarmSessionCache<WarmTurnProducts> | null | undefined;
+  | WarmSessionCache<WarmTurnProducts>
+  | null
+  | undefined;
 
 function getWarmSessionCache(): WarmSessionCache<WarmTurnProducts> | null {
   if (warmSessionCacheSingleton === undefined) {
@@ -2794,7 +2799,10 @@ export interface SkillRunContext {
 }
 
 export type CompletionStatus =
-  "complete" | "failed" | "cancelled" | "cost_bounded_error";
+  | "complete"
+  | "failed"
+  | "cancelled"
+  | "cost_bounded_error";
 
 export interface CompletionCallbackArgs {
   secrets: SecretsSnapshot;
@@ -5159,33 +5167,54 @@ async function runInvocationTurn(
   // End-of-turn auto-retain — fire-and-forget invoke of the memory-retain
   // Lambda with the per-turn transcript. The receiving Lambda routes through
   // the API's normalized memory layer (AgentCore managed memory).
-  // Awaited so the Event invoke is queued before HTTP response —
-  // Lambda Web Adapter's in-flight Promise lifecycle is undocumented in our
-  // institutional record, so we trade ~tens of ms for guaranteed delivery.
+  //
+  // THINK-913: the retain dispatch is STARTED here but no longer awaited
+  // inline. The original comment's reason for awaiting still holds — Lambda
+  // Web Adapter's in-flight Promise lifecycle is undocumented in our
+  // institutional record, so a dangling promise could be frozen with the
+  // microVM and never deliver. We therefore still settle it before this
+  // handler returns (see `settleRetain` below); we just overlap the SDK's
+  // `InvocationType: "Event"` enqueue with the finalize callback POST
+  // instead of paying for them serially, which took the retain enqueue off
+  // the critical path to the assistant message row.
   // Failures are logged but never bubble to the user (retain is best-effort).
-  const retainOutcome = await retainConversation({
+  const retainPromise = retainConversation({
     payload: args.payload as RetainPayloadInput,
     identity,
     env,
     assistantContent: runResult.content,
     lambdaClient: deps.lambdaClientFactory(env.awsRegion),
-  });
-  if (retainOutcome.retained) {
-    logStructured({
-      level: "info",
-      event: "memory_retain_dispatched",
-      tenantId: identity.tenantId,
-      threadId: identity.threadId,
-    });
-  } else if (retainOutcome.error) {
-    logStructured({
-      level: "warn",
-      event: "memory_retain_failed",
-      tenantId: identity.tenantId,
-      threadId: identity.threadId,
-      error: retainOutcome.error,
-    });
-  }
+  }).catch((err: unknown) => ({
+    // retainConversation never throws, but a rejected promise here must not
+    // become an unhandled rejection that kills the container.
+    retained: false,
+    error: err instanceof Error ? err.message : String(err),
+  }));
+
+  let retainOutcome: RetainConversationResult = { retained: false };
+  let retainSettled = false;
+  const settleRetain = async (): Promise<RetainConversationResult> => {
+    if (retainSettled) return retainOutcome;
+    retainSettled = true;
+    retainOutcome = await retainPromise;
+    if (retainOutcome.retained) {
+      logStructured({
+        level: "info",
+        event: "memory_retain_dispatched",
+        tenantId: identity.tenantId,
+        threadId: identity.threadId,
+      });
+    } else if (retainOutcome.error) {
+      logStructured({
+        level: "warn",
+        event: "memory_retain_failed",
+        tenantId: identity.tenantId,
+        threadId: identity.threadId,
+        error: retainOutcome.error,
+      });
+    }
+    return retainOutcome;
+  };
 
   // THINK-911 — close the teardown span before the finalize POST serializes
   // the diagnostics (mergeRuntimeDiagnostics shares the phase array by
@@ -5211,6 +5240,10 @@ async function runInvocationTurn(
       fetchImpl: callbackFetchImpl,
       logger: logStructured,
     });
+    // The finalize POST has returned, so the assistant message is already
+    // being written. Settle the overlapped retain dispatch before returning
+    // — the microVM may be frozen the moment this handler resolves.
+    await settleRetain();
     if (finalized) {
       logAgentCorePhase({
         phase: "runtime.finalize_callback",
@@ -5274,6 +5307,10 @@ async function runInvocationTurn(
     result: { status: "ok", runResult, latencyMs },
     fetchImpl,
   });
+
+  // Non-finalize path (skill runs, direct invokes): the response body
+  // reports the retain outcome, so settle it here.
+  await settleRetain();
 
   const responseBody: InvocationResponse = {
     runtime: "pi",
