@@ -131,11 +131,19 @@ resource "aws_cloudwatch_log_metric_filter" "turn_runtime_invoke_ms" {
 # Model-loop latency from inside the container. Subtracting this from
 # TurnRuntimeInvokeMs is the cold-start / harness-overhead signal (see the
 # dashboard's "runtime overhead" widget).
+#
+# count gates on VARIABLES ONLY — never on the prefix discovery. In the
+# customer deployment-runner flow the aws_cloudwatch_log_groups data source
+# defers to apply, so a count that reads local.chat_latency_has_runtime_log_group
+# fails the whole plan with "Invalid count argument" (canary.467 mcpherson
+# deploy, 2026-08-20). The runtime-side filter therefore requires the explicit
+# chat_turn_runtime_log_group_name override; discovery still feeds the
+# dashboard widgets and saved query, whose bodies tolerate unknown values.
 resource "aws_cloudwatch_log_metric_filter" "agent_loop_ms" {
-  count = local.chat_latency_metric_filters_enabled && local.chat_latency_has_runtime_log_group ? 1 : 0
+  count = local.chat_latency_metric_filters_enabled && var.chat_turn_runtime_log_group_name != "" ? 1 : 0
 
   name           = "thinkwork-${var.stage}-agent-loop-ms"
-  log_group_name = local.chat_latency_runtime_log_group
+  log_group_name = var.chat_turn_runtime_log_group_name
   pattern        = "{ $.event = \"agentcore_phase\" && $.phase = \"runtime.agent_loop\" && $.status = \"completed\" && $.durationMs = * }"
 
   metric_transformation {
