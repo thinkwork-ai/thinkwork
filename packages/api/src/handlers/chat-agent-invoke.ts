@@ -2140,8 +2140,13 @@ export async function handler(event: InvokeEvent): Promise<unknown | void> {
         threadId,
         threadTurnId: turnId,
         runtimeType,
-        durationMs: Date.now() - invokeStart,
-        detail: `setup=${Date.now() - setupStart}ms`,
+        // THINK-911 — the setup phase (thread checkout, workspace render,
+        // manifest + capability resolution) was previously visible only as a
+        // detail string, so the UI phase panel showed nothing for it and the
+        // turn's wall clock had an unexplained hole. Report the setup total as
+        // the phase duration and keep the legacy `setup=Nms` detail token.
+        durationMs: Date.now() - setupStart,
+        detail: `setup=${Date.now() - setupStart}ms;invoke=${Date.now() - invokeStart}ms`,
       });
       return { ok: true, threadTurnId: turnId };
     } catch (dispatchErr) {

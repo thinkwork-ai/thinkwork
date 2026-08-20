@@ -119,11 +119,53 @@ describe("agentcore-runtime-dispatch", () => {
         threadId: "thread-1",
       }),
     );
-    // Transport-identical payload: the container receives the envelope body.
-    expect(new TextDecoder().decode(input.payload)).toBe(
-      JSON.stringify(identityPayload),
-    );
+    // Transport-identical payload plus the THINK-911 dispatch stamp the
+    // container uses to compute the cold session-start gap.
+    const sent = JSON.parse(new TextDecoder().decode(input.payload));
+    const { dispatched_at_ms: dispatchedAtMs, ...rest } = sent;
+    expect(rest).toEqual(identityPayload);
+    expect(typeof dispatchedAtMs).toBe("number");
+    expect(dispatchedAtMs).toBeGreaterThan(0);
     expect(turnUpdateWhere).not.toHaveBeenCalled();
+  });
+
+  it("uses the softened, jittered 409 ladder (THINK-912)", async () => {
+    const { jitteredDelayMs } = await loadHandler();
+    // ±25% around the base delay, never below 1ms.
+    for (const base of [500, 1000, 2000, 4000]) {
+      const value = jitteredDelayMs(base);
+      expect(value).toBeGreaterThanOrEqual(Math.floor(base * 0.75));
+      expect(value).toBeLessThanOrEqual(Math.ceil(base * 1.25));
+    }
+    expect(jitteredDelayMs(0)).toBe(0);
+  });
+
+  it("logs a conflict_wait phase for every 409 retry (THINK-912)", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    invokeSend
+      .mockRejectedValueOnce(new RetryableConflictException("busy"))
+      .mockResolvedValueOnce({
+        response: { transformToByteArray: async () => new Uint8Array() },
+      });
+    const { handler } = await loadHandler();
+    await handler(envelope());
+
+    const phases = logSpy.mock.calls
+      .map((call) => {
+        try {
+          return JSON.parse(String(call[0]));
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry) => entry?.phase === "api.runtime_dispatch.conflict_wait");
+    expect(phases.length).toBe(2);
+    expect(phases[0].status).toBe("started");
+    expect(phases[1].status).toBe("completed");
+    expect(phases[1].durationMs).toBeGreaterThan(0);
+    expect(String(phases[1].detail)).toContain("attempt=1/4");
+    logSpy.mockRestore();
   });
 
   it("retries a 409 conflict and succeeds", async () => {

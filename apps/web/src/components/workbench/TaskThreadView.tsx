@@ -5057,6 +5057,37 @@ function matchingProfileRunForToolInvocation(
   return match?.run ?? null;
 }
 
+/**
+ * THINK-911 — the runtime writes one workspace-bootstrap measurement into
+ * three places (workspace_sync_ms, hydration_copy_ms, and the
+ * runtime.workspace_bootstrap phase). Keys covered by the phase row so the
+ * same milliseconds and file counts are not rendered twice.
+ */
+const WORKSPACE_BOOTSTRAP_DUPLICATE_KEYS = [
+  "workspace_sync_ms",
+  "hydration_copy_ms",
+  "file_count",
+  "total_files",
+  "hydrated_files",
+  "synced_files",
+  "skipped_files",
+  "deleted_files",
+  "cache_hit",
+  "prefix",
+];
+
+/** The recorded runtime.workspace_bootstrap duration, when the turn has phases. */
+function agentCoreWorkspaceBootstrapMs(diagnostics: Record<string, unknown>) {
+  const phase = parseArray(diagnostics.agentcore_phases)
+    .map((entry) => parseRecord(entry))
+    .find(
+      (entry) => stringValue(entry.phase) === "runtime.workspace_bootstrap",
+    );
+  if (!phase) return null;
+  const duration = Number(phase.duration_ms);
+  return Number.isFinite(duration) && duration >= 0 ? duration : null;
+}
+
 function actionRowForWorkspaceDiagnostics(usage: Record<string, unknown>) {
   const diagnostics = parseRecord(usage.diagnostics);
   const workspaceDiagnostics = parseRecord(diagnostics.workspace_diagnostics);
@@ -5067,15 +5098,53 @@ function actionRowForWorkspaceDiagnostics(usage: Record<string, unknown>) {
   ) {
     return null;
   }
-  const detail = formatWorkspaceDiagnostics(workspaceDiagnostics, timings);
-  if (!detail) return null;
   const syncMs = Number(workspaceDiagnostics.workspace_sync_ms);
+  const bootstrapMs = agentCoreWorkspaceBootstrapMs(diagnostics);
+  // Same measurement, already rendered by the AgentCore phases row: drop the
+  // duplicated fields here. Legacy turns (no phases) keep the full row.
+  const duplicated =
+    bootstrapMs !== null &&
+    Number.isFinite(syncMs) &&
+    Math.abs(bootstrapMs - syncMs) <= 1;
+  const detail = formatWorkspaceDiagnostics(
+    workspaceDiagnostics,
+    timings,
+    duplicated ? new Set(WORKSPACE_BOOTSTRAP_DUPLICATE_KEYS) : undefined,
+  );
+  if (!detail) return null;
   return {
     title: "Workspace sync",
     detail,
     kind: "source" as const,
-    ...(Number.isFinite(syncMs) && syncMs >= 0 ? { durationMs: syncMs } : {}),
+    ...(!duplicated && Number.isFinite(syncMs) && syncMs >= 0
+      ? { durationMs: syncMs }
+      : {}),
   };
+}
+
+/**
+ * Friendly names for phases whose raw slug reads as jargon. Anything not
+ * listed falls back to the de-slugged phase name.
+ */
+const AGENTCORE_PHASE_LABELS: Record<string, string> = {
+  "runtime.session_start": "Starting agent VM",
+  "runtime.turn_setup": "Preparing turn",
+  "runtime.workspace_bootstrap": "Syncing workspace",
+  "runtime.workspace_index": "Indexing workspace",
+  "runtime.tool_assembly": "Assembling tools",
+  "runtime.session_resume": "Loading conversation",
+  "runtime.session_persist": "Saving conversation",
+  "runtime.session_store": "Session store",
+  "runtime.agent_loop": "Agent loop",
+  "runtime.turn_teardown": "Wrapping up",
+  "runtime.finalize_callback": "Finalizing turn",
+};
+
+function agentCorePhaseLabel(name: string) {
+  return (
+    AGENTCORE_PHASE_LABELS[name] ??
+    name.replace(/^runtime\./, "").replace(/_/g, " ")
+  );
 }
 
 function actionRowForAgentCorePhases(usage: Record<string, unknown>) {
@@ -5100,7 +5169,7 @@ function actionRowForAgentCorePhases(usage: Record<string, unknown>) {
         : null,
       stringValue(phase.detail),
     ].filter(Boolean);
-    return `${name.replace(/^runtime\./, "").replace(/_/g, " ")}${
+    return `${agentCorePhaseLabel(name)}${
       parts.length ? `: ${parts.join(" · ")}` : ""
     }`;
   });
@@ -5123,6 +5192,7 @@ function isTurnFinished(status: unknown) {
 function formatWorkspaceDiagnostics(
   workspaceDiagnostics: Record<string, unknown>,
   timings: Record<string, unknown>,
+  suppressKeys?: Set<string>,
 ) {
   const normalized: Record<string, unknown> =
     Object.keys(workspaceDiagnostics).length > 0
@@ -5161,6 +5231,7 @@ function formatWorkspaceDiagnostics(
   ]) {
     if (seen.has(key)) continue;
     seen.add(key);
+    if (suppressKeys?.has(key)) continue;
     const value = Number(normalized[key]);
     if (!Number.isFinite(value) || value < 0) continue;
     timingLines.push(`${humanizeTimingKey(key)}: ${formatTimingMs(value)}`);
@@ -5168,13 +5239,16 @@ function formatWorkspaceDiagnostics(
 
   const countLines: string[] = [];
   for (const key of countKeys) {
+    if (suppressKeys?.has(key)) continue;
     const value = Number(normalized[key]);
     if (!Number.isFinite(value) || value < 0) continue;
     countLines.push(`${humanizeTimingKey(key)}: ${Math.round(value)}`);
   }
 
   const stateLines = [
-    booleanDiagnosticLine(normalized, "cache_hit", "cache hit"),
+    suppressKeys?.has("cache_hit")
+      ? null
+      : booleanDiagnosticLine(normalized, "cache_hit", "cache hit"),
     booleanDiagnosticLine(normalized, "cache_stale", "cache stale"),
     booleanDiagnosticLine(
       normalized,
@@ -5184,7 +5258,7 @@ function formatWorkspaceDiagnostics(
     stringValue(normalized.reconcile_status)
       ? `reconcile status: ${stringValue(normalized.reconcile_status)}`
       : null,
-    stringValue(normalized.prefix)
+    !suppressKeys?.has("prefix") && stringValue(normalized.prefix)
       ? `prefix: ${stringValue(normalized.prefix)}`
       : null,
   ].filter(Boolean);

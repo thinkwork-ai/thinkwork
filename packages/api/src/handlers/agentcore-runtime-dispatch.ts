@@ -84,12 +84,23 @@ async function resolvePiRuntimeArn(): Promise<string> {
 
 /** 409 backoff schedule — bounded (KTD2: never an unbounded retry).
  * Env-overridable (comma list, ms) so tests use real timers with tiny
- * delays instead of fake-timer scheduling, which proved CI-flaky. */
+ * delays instead of fake-timer scheduling, which proved CI-flaky.
+ *
+ * THINK-912: softened from 2s/4s/8s/16s to 500ms/1s/2s/4s. The old ladder
+ * spent up to 30 s of user-visible latency waiting on a session that
+ * typically frees within a second; the total budget is now 7.5 s. Jitter
+ * (±25%) keeps concurrent dispatchers from re-colliding in lockstep. */
 const CONFLICT_RETRY_DELAYS_MS = (
-  process.env.DISPATCH_CONFLICT_RETRY_DELAYS_MS ?? "2000,4000,8000,16000"
+  process.env.DISPATCH_CONFLICT_RETRY_DELAYS_MS ?? "500,1000,2000,4000"
 )
   .split(",")
   .map((value) => Number(value));
+
+/** ±25% jitter around the scheduled delay. */
+export function jitteredDelayMs(baseMs: number): number {
+  if (!Number.isFinite(baseMs) || baseMs <= 0) return 0;
+  return Math.max(1, Math.round(baseMs * (0.75 + Math.random() * 0.5)));
+}
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -147,6 +158,9 @@ interface EnvelopeIdentity {
   userId: string;
   threadId: string;
   threadTurnId: string;
+  /** The parsed invocation payload, re-serialized per attempt so the
+   * container receives a fresh `dispatched_at_ms` (THINK-911). */
+  payload: Record<string, unknown>;
 }
 
 function extractIdentity(envelope: LwaInvocationEnvelope): EnvelopeIdentity {
@@ -179,7 +193,7 @@ function extractIdentity(envelope: LwaInvocationEnvelope): EnvelopeIdentity {
       "Envelope body has no user_id; runtime dispatch requires the human invoker (wakeup turns stay on the Lambda path).",
     );
   }
-  return { tenantId, agentId, userId, threadId, threadTurnId };
+  return { tenantId, agentId, userId, threadId, threadTurnId, payload };
 }
 
 function isRetryableConflict(err: unknown): boolean {
@@ -238,18 +252,28 @@ export async function handler(event: LwaInvocationEnvelope): Promise<void> {
     });
 
     let lastConflict: unknown = null;
+    let conflictWaitTotalMs = 0;
     for (
       let attempt = 0;
       attempt <= CONFLICT_RETRY_DELAYS_MS.length;
       attempt += 1
     ) {
       try {
+        // THINK-911 — stamp the moment we hand the payload to AgentCore so
+        // the container can compute (and record) the otherwise-invisible
+        // cold session-start gap between this call and `/invocations`.
+        // Re-stamped per attempt: a 409 retry's wait must not be counted
+        // as container start-up time.
+        const dispatchPayload = JSON.stringify({
+          ...identity.payload,
+          dispatched_at_ms: Date.now(),
+        });
         const response = await client.send(
           new InvokeAgentRuntimeCommand({
             agentRuntimeArn: runtimeArn,
             runtimeSessionId: sessionId,
             contentType: "application/json",
-            payload: new TextEncoder().encode(event.body ?? ""),
+            payload: new TextEncoder().encode(dispatchPayload),
           }),
         );
         // Drain the held response so the container's HTTP exchange fully
@@ -264,6 +288,9 @@ export async function handler(event: LwaInvocationEnvelope): Promise<void> {
           durationMs: Date.now() - dispatchStart,
           threadTurnId: identity.threadTurnId,
           threadId: identity.threadId,
+          ...(conflictWaitTotalMs > 0
+            ? { detail: `conflict_wait=${conflictWaitTotalMs}ms` }
+            : {}),
         });
         return;
       } catch (err) {
@@ -272,11 +299,34 @@ export async function handler(event: LwaInvocationEnvelope): Promise<void> {
           attempt < CONFLICT_RETRY_DELAYS_MS.length
         ) {
           lastConflict = err;
-          const delay = CONFLICT_RETRY_DELAYS_MS[attempt];
+          const delay = jitteredDelayMs(CONFLICT_RETRY_DELAYS_MS[attempt]);
           console.warn(
             `[agentcore-runtime-dispatch] 409 conflict on session ${sessionId.slice(0, 16)}… — retrying in ${delay}ms (attempt ${attempt + 1}/${CONFLICT_RETRY_DELAYS_MS.length})`,
           );
+          // THINK-912 — the 409 wait is real user-visible latency; make it a
+          // phase so a slow turn's diagnostics name it instead of hiding it
+          // inside the invoke total.
+          logAgentCorePhase({
+            source: "agentcore-runtime-dispatch",
+            phase: "api.runtime_dispatch.conflict_wait",
+            status: "started",
+            durationMs: delay,
+            threadTurnId: identity.threadTurnId,
+            threadId: identity.threadId,
+            detail: `attempt=${attempt + 1}/${CONFLICT_RETRY_DELAYS_MS.length}`,
+          });
+          const waitStart = Date.now();
           await sleep(delay);
+          conflictWaitTotalMs += Date.now() - waitStart;
+          logAgentCorePhase({
+            source: "agentcore-runtime-dispatch",
+            phase: "api.runtime_dispatch.conflict_wait",
+            status: "completed",
+            durationMs: delay,
+            threadTurnId: identity.threadTurnId,
+            threadId: identity.threadId,
+            detail: `attempt=${attempt + 1}/${CONFLICT_RETRY_DELAYS_MS.length};total=${conflictWaitTotalMs}ms`,
+          });
           continue;
         }
         if (isRetryableConflict(err)) {
