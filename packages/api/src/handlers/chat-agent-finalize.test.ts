@@ -333,7 +333,11 @@ describe("chat-agent-finalize — happy paths", () => {
   });
 
   it("emits phase records around finalize processing", async () => {
-    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    // THINK-915: phase lines go to stdout raw (no console prefix) so the
+    // CloudWatch metric filters can parse them as JSON.
+    const spy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
     try {
       const res = await handler(
         mockEvent({

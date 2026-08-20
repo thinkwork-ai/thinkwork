@@ -1567,3 +1567,44 @@ variable "agentcore_runtime_dispatch_enabled" {
   type        = bool
   default     = false
 }
+
+################################################################################
+# THINK-915 — chat turn-latency observability (passthrough to the lambda-api
+# module; see terraform/modules/app/lambda-api/chat-latency-observability.tf).
+################################################################################
+
+variable "enable_chat_turn_latency_observability" {
+  description = "THINK-915: create the per-stage chat turn-latency dashboard, the saved turn-timeline Logs Insights query, and the Lambda-native dispatch p95 alarm."
+  type        = bool
+  default     = true
+}
+
+variable "enable_chat_turn_latency_metric_filters" {
+  description = "THINK-915: create the agentcore_phase log metric filters (TurnRuntimeInvokeMs, AgentLoopMs) and the metric-filter-backed p95 alarm. OFF by default because the Lambda log groups are implicit and PutMetricFilter fails on a stage that has never served a chat turn."
+  type        = bool
+  default     = false
+}
+
+variable "chat_turn_latency_metric_namespace" {
+  description = "THINK-915: CloudWatch namespace prefix for the chat phase metrics; the stage is appended (Thinkwork/Chat/<stage>)."
+  type        = string
+  default     = "Thinkwork/Chat"
+}
+
+variable "chat_turn_runtime_log_group_name" {
+  description = "THINK-915: explicit AgentCore Pi runtime log group name. Empty discovers it by prefix at plan time."
+  type        = string
+  default     = ""
+}
+
+variable "chat_turn_p95_alarm_threshold_ms" {
+  description = "THINK-915: p95 threshold (ms) for the whole AgentCore runtime call, breaching on 2 of 3 five-minute periods."
+  type        = number
+  default     = 30000
+}
+
+variable "chat_turn_latency_alarm_actions" {
+  description = "THINK-915: SNS topic ARNs notified by the chat turn-latency alarms. Empty by default (no general alarm topic exists in the stack)."
+  type        = list(string)
+  default     = []
+}
