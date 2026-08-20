@@ -178,6 +178,61 @@ afterEach(async () => {
 // handleInvocation — identity + payload validation.
 // ---------------------------------------------------------------------------
 
+describe("handleInvocation — session warm ping (THINK-908)", () => {
+  const WARM_PING = {
+    kind: "session_warm_ping",
+    tenant_id: "tenant-1",
+    assistant_id: "agent-1",
+    user_id: "user-1",
+    thread_id: "thread-1",
+  };
+
+  it("acks a warm ping without running the agent loop", async () => {
+    const runAgentLoop = vi.fn();
+    const bootstrapWorkspaceImpl = vi.fn();
+    const discoverWorkspaceSkillsImpl = vi.fn();
+    const fetchImpl = vi.fn();
+
+    const result = await handleInvocation({
+      payload: WARM_PING,
+      deps: makeDeps({
+        runAgentLoop,
+        bootstrapWorkspaceImpl,
+        discoverWorkspaceSkillsImpl,
+        fetchImpl,
+      } as never),
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toEqual({ ok: true, runtime: "pi", warm_ping: true });
+    // No agent loop, no workspace hydration, no callbacks — the ping must be
+    // inert and must free the serialized session immediately.
+    expect(runAgentLoop).not.toHaveBeenCalled();
+    expect(bootstrapWorkspaceImpl).not.toHaveBeenCalled();
+    expect(discoverWorkspaceSkillsImpl).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("short-circuits before identity validation (no message, no turn id)", async () => {
+    // A payload this sparse would 400 on the normal path; the discriminator
+    // must be matched first.
+    const result = await handleInvocation({
+      payload: { kind: "session_warm_ping" },
+      deps: makeDeps(),
+    });
+    expect(result.statusCode).toBe(200);
+    expect(result.body.warm_ping).toBe(true);
+  });
+
+  it("does not treat an unknown kind as a warm ping", async () => {
+    const result = await handleInvocation({
+      payload: VALID_PAYLOAD({ kind: "something_else", tenant_id: "" }),
+      deps: makeDeps(),
+    });
+    expect(result.statusCode).toBe(400);
+  });
+});
+
 describe("handleInvocation — payload validation", () => {
   it("returns 400 when tenant_id is missing", async () => {
     const result = await handleInvocation({

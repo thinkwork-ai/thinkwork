@@ -76,6 +76,14 @@ const identityPayload = {
   message: "hello",
 };
 
+const warmPingPayload = {
+  kind: "session_warm_ping",
+  tenant_id: "tenant-1",
+  assistant_id: "agent-1",
+  user_id: "user-1",
+  thread_id: "thread-1",
+};
+
 function envelope(payload: Record<string, unknown> = identityPayload) {
   return {
     requestContext: { http: { method: "POST", path: "/invocations" } },
@@ -236,6 +244,76 @@ describe("agentcore-runtime-dispatch", () => {
     await expect(
       handler(envelope({ ...identityPayload, user_id: undefined })),
     ).rejects.toThrow(/user_id/);
+    expect(invokeSend).not.toHaveBeenCalled();
+  });
+
+  it("dispatches a warm ping on the same session the real turn will use", async () => {
+    const { handler } = await loadHandler();
+    await handler(envelope(warmPingPayload));
+
+    expect(invokeSend).toHaveBeenCalledTimes(1);
+    const input = invokeSend.mock.calls[0][0].input;
+    // Same derived session ID as the real turn for this thread — that is the
+    // whole point: the microVM this boots is the one the turn lands on.
+    expect(input.runtimeSessionId).toBe(
+      deriveAgentCoreSessionId({
+        tenantId: "tenant-1",
+        agentId: "agent-1",
+        userId: "user-1",
+        threadId: "thread-1",
+      }),
+    );
+    expect(JSON.parse(new TextDecoder().decode(input.payload))).toEqual(
+      warmPingPayload,
+    );
+    // No turn bookkeeping of any kind.
+    expect(turnUpdateWhere).not.toHaveBeenCalled();
+    expect(notifyThreadTurnUpdate).not.toHaveBeenCalled();
+    expect(releaseThreadCheckout).not.toHaveBeenCalled();
+  });
+
+  it("treats a warm-ping 409 as success and never retries", async () => {
+    invokeSend.mockRejectedValue(new RetryableConflictException("busy"));
+    const { handler } = await loadHandler();
+    await expect(handler(envelope(warmPingPayload))).resolves.toBeUndefined();
+
+    // One shot only — a queued ping would sit in front of the real turn.
+    expect(invokeSend).toHaveBeenCalledTimes(1);
+    expect(turnUpdateWhere).not.toHaveBeenCalled();
+    expect(notifyThreadTurnUpdate).not.toHaveBeenCalled();
+  });
+
+  it("swallows a warm-ping 424 without failing any turn", async () => {
+    invokeSend.mockRejectedValue(new RuntimeClientError("container died"));
+    const { handler } = await loadHandler();
+    await expect(handler(envelope(warmPingPayload))).resolves.toBeUndefined();
+
+    expect(invokeSend).toHaveBeenCalledTimes(1);
+    expect(turnUpdateWhere).not.toHaveBeenCalled();
+  });
+
+  it("swallows a warm-ping setup failure instead of throwing into the DLQ", async () => {
+    ssmSend.mockRejectedValue(new Error("ssm unavailable"));
+    const { handler } = await loadHandler();
+    await expect(handler(envelope(warmPingPayload))).resolves.toBeUndefined();
+
+    expect(invokeSend).not.toHaveBeenCalled();
+    expect(turnUpdateWhere).not.toHaveBeenCalled();
+  });
+
+  it("rejects a warm ping that smuggles a thread_turn_id", async () => {
+    const { handler } = await loadHandler();
+    await expect(
+      handler(envelope({ ...warmPingPayload, thread_turn_id: "turn-1" })),
+    ).rejects.toThrow(/must not carry thread_turn_id/);
+    expect(invokeSend).not.toHaveBeenCalled();
+  });
+
+  it("rejects a warm ping missing identity fields", async () => {
+    const { handler } = await loadHandler();
+    await expect(
+      handler(envelope({ ...warmPingPayload, user_id: "" })),
+    ).rejects.toThrow(/Warm-ping envelope is missing/);
     expect(invokeSend).not.toHaveBeenCalled();
   });
 
