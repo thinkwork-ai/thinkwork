@@ -38,6 +38,7 @@ import {
   deriveAgentCoreUserSessionId,
   resolveAgentCoreSessionScope,
 } from "../lib/agentcore-session-id.js";
+import { SESSION_WARM_PING_KIND } from "../lib/agentcore-warm-ping.js";
 
 const AWS_REGION = process.env.AWS_REGION || "us-east-1";
 
@@ -168,6 +169,8 @@ interface EnvelopeIdentity {
   /** The parsed invocation payload, re-serialized per attempt so the
    * container receives a fresh `dispatched_at_ms` (THINK-911). */
   payload: Record<string, unknown>;
+  /** THINK-908: this invocation is an inert session pre-warm, not a turn. */
+  warmPing: boolean;
 }
 
 function extractIdentity(envelope: LwaInvocationEnvelope): EnvelopeIdentity {
@@ -187,6 +190,29 @@ function extractIdentity(envelope: LwaInvocationEnvelope): EnvelopeIdentity {
   const userId = String(payload.user_id ?? "");
   const threadId = String(payload.thread_id ?? "");
   const threadTurnId = String(payload.thread_turn_id ?? "");
+  // THINK-908: a warm ping has no turn behind it — `thread_turn_id` is
+  // deliberately absent so no code path here can reach `thread_turns`.
+  if (payload.kind === SESSION_WARM_PING_KIND) {
+    if (!tenantId || !agentId || !userId || !threadId) {
+      throw new Error(
+        "Warm-ping envelope is missing required identity fields (tenant_id, assistant_id, user_id, thread_id).",
+      );
+    }
+    if (threadTurnId) {
+      throw new Error(
+        "Warm-ping envelope must not carry thread_turn_id — a pre-warm never owns a turn.",
+      );
+    }
+    return {
+      tenantId,
+      agentId,
+      userId,
+      threadId,
+      threadTurnId: "",
+      payload,
+      warmPing: true,
+    };
+  }
   if (!tenantId || !agentId || !threadId || !threadTurnId) {
     throw new Error(
       "Envelope body is missing required identity fields (tenant_id, assistant_id, thread_id, thread_turn_id).",
@@ -200,7 +226,15 @@ function extractIdentity(envelope: LwaInvocationEnvelope): EnvelopeIdentity {
       "Envelope body has no user_id; runtime dispatch requires the human invoker (wakeup turns stay on the Lambda path).",
     );
   }
-  return { tenantId, agentId, userId, threadId, threadTurnId, payload };
+  return {
+    tenantId,
+    agentId,
+    userId,
+    threadId,
+    threadTurnId,
+    payload,
+    warmPing: false,
+  };
 }
 
 function isRetryableConflict(err: unknown): boolean {
@@ -266,12 +300,69 @@ export async function handler(event: LwaInvocationEnvelope): Promise<void> {
 
     logAgentCorePhase({
       source: "agentcore-runtime-dispatch",
-      phase: "api.runtime_dispatch.invoke",
+      phase: identity.warmPing
+        ? "api.session_prewarm.invoke"
+        : "api.runtime_dispatch.invoke",
       status: "started",
-      threadTurnId: identity.threadTurnId,
+      threadTurnId: identity.threadTurnId || undefined,
       threadId: identity.threadId,
       detail: `session_scope=${sessionScope}`,
     });
+
+    // THINK-908 warm ping: one shot, no retry ladder, no turn bookkeeping.
+    // A 409 here means the session is ALREADY busy — which is exactly the
+    // outcome the pre-warm wanted, so it is success, not failure. Retrying
+    // would be actively harmful: AgentCore serializes per session, so a
+    // queued ping would sit in front of the real turn it was meant to speed
+    // up.
+    if (identity.warmPing) {
+      try {
+        const response = await client.send(
+          new InvokeAgentRuntimeCommand({
+            agentRuntimeArn: runtimeArn,
+            runtimeSessionId: primarySessionId,
+            contentType: "application/json",
+            payload: new TextEncoder().encode(event.body ?? ""),
+          }),
+        );
+        if (typeof response.response?.transformToByteArray === "function") {
+          await response.response.transformToByteArray();
+        }
+        logAgentCorePhase({
+          source: "agentcore-runtime-dispatch",
+          phase: "api.session_prewarm.invoke",
+          status: "completed",
+          durationMs: Date.now() - dispatchStart,
+          threadId: identity.threadId,
+          tenantId: identity.tenantId,
+          agentId: identity.agentId,
+        });
+      } catch (err) {
+        const alreadyWarm = isRetryableConflict(err);
+        logAgentCorePhase({
+          source: "agentcore-runtime-dispatch",
+          phase: "api.session_prewarm.invoke",
+          status: alreadyWarm ? "skipped" : "failed",
+          durationMs: Date.now() - dispatchStart,
+          threadId: identity.threadId,
+          tenantId: identity.tenantId,
+          agentId: identity.agentId,
+          detail: alreadyWarm ? "session_busy" : undefined,
+          errorType: alreadyWarm
+            ? undefined
+            : ((err as { name?: string } | null)?.name ?? "unknown"),
+        });
+        if (!alreadyWarm) {
+          console.warn(
+            "[agentcore-runtime-dispatch] warm ping failed (ignored):",
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+      // Never falls through to the turn-failure path below — a warm ping has
+      // no turn to fail and must not throw (Event-mode retries + DLQ).
+      return;
+    }
 
     let lastConflict: unknown = null;
     let conflictWaitTotalMs = 0;
@@ -388,6 +479,23 @@ export async function handler(event: LwaInvocationEnvelope): Promise<void> {
       : err instanceof Error
         ? err.message
         : String(err);
+    if (identity.warmPing) {
+      // Setup failure (SSM/ARN/client) on a pre-warm: log and drop. There is
+      // no turn to fail, and throwing would land an inert ping in the DLQ.
+      console.warn(
+        `[agentcore-runtime-dispatch] warm ping setup failed for thread ${identity.threadId} (ignored): ${message}`,
+      );
+      logAgentCorePhase({
+        source: "agentcore-runtime-dispatch",
+        phase: "api.session_prewarm.invoke",
+        status: "failed",
+        durationMs: Date.now() - dispatchStart,
+        threadId: identity.threadId,
+        tenantId: identity.tenantId,
+        agentId: identity.agentId,
+      });
+      return;
+    }
     console.error(
       `[agentcore-runtime-dispatch] Dispatch failed for turn ${identity.threadTurnId}: ${message}`,
     );

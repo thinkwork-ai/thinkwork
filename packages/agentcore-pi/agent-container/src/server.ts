@@ -3071,12 +3071,50 @@ export interface HandleInvocationResult {
 }
 
 /**
+ * THINK-908 — session pre-warm ping discriminator.
+ *
+ * A NEW chat thread pays ~20-24 s of AgentCore microVM provisioning before
+ * this container's `server_listening` line even appears; warm per-thread
+ * sessions only help *within* a thread because the runtime session ID is
+ * derived per-thread. The API fires a ping carrying this discriminator (and
+ * nothing else but identity) at thread creation so the microVM boots while
+ * the user is still typing.
+ *
+ * The ping MUST be inert: no agent loop, no finalize callback, no session
+ * state, no memory writes, no cost events — and it must return fast, because
+ * AgentCore serializes per session and the real turn's dispatcher would
+ * otherwise sit in the 409 retry ladder behind it.
+ */
+export const SESSION_WARM_PING_KIND = "session_warm_ping";
+
+export function isSessionWarmPing(payload: Record<string, unknown>): boolean {
+  return payload?.kind === SESSION_WARM_PING_KIND;
+}
+
+/**
  * The trusted handler entry point. Stateless w.r.t. module-load globals;
  * tests call this directly with a synthesized payload + injected deps.
  */
 export async function handleInvocation(
   args: HandleInvocationArgs,
 ): Promise<HandleInvocationResult> {
+  if (isSessionWarmPing(args.payload)) {
+    // Deliberately BEFORE identity/secret snapshotting, dependency
+    // construction and the warm-session thread lock: the whole point is to
+    // release the session in milliseconds. Reaching this line already means
+    // the expensive part (microVM + Node + module graph) is paid for.
+    logStructured({
+      level: "info",
+      event: "session_warm_ping",
+      tenantId: asString(args.payload.tenant_id) || undefined,
+      threadId: asString(args.payload.thread_id) || undefined,
+      agentId: asString(args.payload.assistant_id) || undefined,
+    });
+    return {
+      statusCode: 200,
+      body: { ok: true, runtime: "pi", warm_ping: true },
+    };
+  }
   const deps: HandlerDependencies = { ...defaultDependencies, ...args.deps };
   // THINK-586 U7 — warm-session fast path (KTD6). `undefined` means "not
   // injected": resolve the process singleton (null off the AgentCore

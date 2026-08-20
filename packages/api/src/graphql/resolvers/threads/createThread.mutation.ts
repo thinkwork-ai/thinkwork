@@ -62,6 +62,10 @@ import {
   resolveRequestedModelId,
   withRequestedModelMetadata,
 } from "../../../lib/turn-model-selection.js";
+import {
+  dispatchSessionPrewarm,
+  isSessionPrewarmEnabled,
+} from "../../../lib/agentcore-session-prewarm.js";
 
 function parseJsonArray(value: unknown): Record<string, unknown>[] {
   if (!value) return [];
@@ -590,8 +594,68 @@ export const createThread = async (
     }
   }
 
+  // THINK-908: a thread created WITHOUT an opening message is the pre-warm
+  // window — the user is about to sit in the composer and type, and their
+  // first turn would otherwise pay ~20-24 s of AgentCore microVM provisioning
+  // (the per-thread session ID means a new thread is always a cold session).
+  // Fire an inert warm ping on that exact session so the microVM boots while
+  // they type. Skipped when an opening message or a seeded mobile turn
+  // already dispatched a real turn — that turn IS the warm-up, and a ping
+  // would only contend with it for the serialized session.
+  if (
+    createdByType === "user" &&
+    createdById &&
+    threadAgentId &&
+    !firstMessageId &&
+    !mobileTurn
+  ) {
+    void prewarmThreadRuntimeSession({
+      tenantId: row.tenant_id,
+      agentId: threadAgentId,
+      userId: createdById,
+      threadId: row.id,
+      runtimeType: pinnedRuntime,
+    });
+  }
+
   return threadToCamel(row);
 };
+
+/**
+ * Best-effort session pre-warm. Resolves the agent's per-agent dispatch flag
+ * (the stage kill-switch is checked inside `dispatchSessionPrewarm`) and fires
+ * the ping. Never awaited by the mutation, never throws.
+ */
+async function prewarmThreadRuntimeSession(input: {
+  tenantId: string;
+  agentId: string;
+  userId: string;
+  threadId: string;
+  runtimeType: string;
+}) {
+  try {
+    if (!isSessionPrewarmEnabled()) return;
+    const [agentRow] = await db
+      .select({
+        agentcore_runtime_dispatch: agents.agentcore_runtime_dispatch,
+      })
+      .from(agents)
+      .where(
+        and(eq(agents.id, input.agentId), eq(agents.tenant_id, input.tenantId)),
+      );
+    if (!agentRow) return;
+    await dispatchSessionPrewarm({
+      tenantId: input.tenantId,
+      agentId: input.agentId,
+      userId: input.userId,
+      threadId: input.threadId,
+      runtimeType: input.runtimeType,
+      agentFlagEnabled: agentRow.agentcore_runtime_dispatch === true,
+    });
+  } catch (err) {
+    console.warn("[createThread] session pre-warm skipped:", err);
+  }
+}
 
 async function createCustomerOnboardingThreadFromSpaceTrigger(input: {
   input: any;
