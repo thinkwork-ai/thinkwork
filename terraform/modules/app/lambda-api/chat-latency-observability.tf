@@ -213,7 +213,14 @@ resource "aws_cloudwatch_metric_alarm" "chat_dispatch_duration_p95" {
 locals {
   chat_latency_dashboard_region = var.region
 
-  chat_latency_widgets = local.chat_latency_enabled ? concat(
+  # No conditional wrapper here: the arms of `enabled ? concat(...) : []`
+  # cannot type-unify (a tuple of heterogeneous widget objects vs an empty
+  # tuple) and Terraform 1.9 fails the apply with "Inconsistent conditional
+  # result types" (canary.469 mcpherson deploy). The only consumer is the
+  # dashboard resource, whose count already gates on chat_latency_enabled, so
+  # this local is never evaluated when disabled. The runtime-sourced widget
+  # uses a for/if filter for the same reason.
+  chat_latency_widgets = concat(
     [
       {
         type   = "text"
@@ -358,7 +365,7 @@ locals {
         }
       },
     ],
-    local.chat_latency_has_runtime_log_group ? [
+    [for w in [
       {
         type   = "log"
         x      = 0
@@ -378,8 +385,8 @@ locals {
           EOT
         }
       },
-    ] : [],
-  ) : []
+    ] : w if local.chat_latency_has_runtime_log_group],
+  )
 }
 
 resource "aws_cloudwatch_dashboard" "chat_turn_latency" {
