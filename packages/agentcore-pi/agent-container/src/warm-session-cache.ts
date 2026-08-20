@@ -55,6 +55,43 @@ export function warmSessionKey(parts: WarmSessionKeyParts): string {
   return fields.join("");
 }
 
+/**
+ * THINK-946 — the SECOND index into the warm products: the same identity
+ * MINUS the thread. MCP transports and their tools/list metadata are a
+ * function of (tenant, agent, user, config) only, so a new thread on a warm
+ * per-user microVM can reuse them instead of paying `initialize` +
+ * `tools/list` again (~1.8-4 s of the cross-thread setup).
+ *
+ * Deliberately NOT the same map as the per-thread entries: thread entries
+ * hold thread-bound state (the durable session body/version and the rendered
+ * workspace prefix) and spill/expire on their own schedule. Splitting the
+ * indexes keeps a thread-cache spill from tearing down connections another
+ * thread is still using.
+ */
+export function warmConnectionKey(
+  parts: Omit<WarmSessionKeyParts, "threadId">,
+): string {
+  const fields = [
+    parts.tenantSlug,
+    parts.agentSlug,
+    parts.userId,
+    parts.configFingerprint,
+  ];
+  if (fields.some((field) => typeof field !== "string" || field === "")) {
+    throw new Error("warmConnectionKey: every key field must be non-empty");
+  }
+  return fields.join("");
+}
+
+/**
+ * Freshness marker for connection-scoped entries. The durable session store
+ * is per-thread and says nothing about a connection's validity — the
+ * authorization-version gate (which covers `mcp_configs` and every other
+ * credential-bearing field) is the real gate, plus a per-connection liveness
+ * ping at reuse time.
+ */
+export const WARM_CONNECTION_MARKER = "connection-scope";
+
 export interface WarmSessionCacheOptions<T> {
   /**
    * THINK-909 — disposer for entries the cache drops on its OWN initiative
@@ -198,6 +235,12 @@ export class WarmSessionCache<T> {
 
   get size(): number {
     return this.entries.size;
+  }
+
+  /** Live cached values (THINK-946: lets a second cache answer "do I still
+   * own this object?" before disposing it). */
+  values(): T[] {
+    return [...this.entries.values()].map((entry) => entry.value);
   }
 }
 

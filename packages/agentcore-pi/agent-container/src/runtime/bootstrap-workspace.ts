@@ -32,8 +32,37 @@ import {
 } from "@aws-sdk/client-s3";
 
 const SKIP_FILES = new Set(["manifest.json", "_defaults_version"]);
+
 const HYDRATE_MANIFEST_PATH = ".hydrate_manifest.json";
 const RENDERED_MARKER_PATH = ".rendered_at";
+
+/**
+ * THINK-946 — in-flight S3 object reads during a workspace sync. High enough
+ * to hide per-request latency on a ~60-file rendered prefix, low enough to
+ * stay inside the SDK's default HTTP agent socket pool (50) with room for the
+ * turn's other S3 traffic.
+ */
+const WORKSPACE_SYNC_CONCURRENCY = 16;
+
+/** Run `worker` over `items` with at most `limit` in flight, preserving
+ * fail-fast semantics (the first rejection propagates). */
+async function mapWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const runners = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (next < items.length) {
+        const item = items[next++];
+        await worker(item);
+      }
+    },
+  );
+  await Promise.all(runners);
+}
 
 export interface BootstrapResult {
   synced: number;
@@ -368,13 +397,11 @@ export async function bootstrapWorkspace(
   }
   const local = wiped ? new Set<string>() : await listLocalPaths(localDir);
 
-  let synced = 0;
   let skipped = 0;
+  const toDownload: RemoteEntry[] = [];
   for (const entry of remote) {
-    const { key, rel } = entry;
-    const localPath = path.join(localDir, rel);
     if (
-      local.has(rel) &&
+      local.has(entry.rel) &&
       hydrateCacheEntryMatches(cache, {
         tenantSlug,
         agentSlug,
@@ -385,22 +412,39 @@ export async function bootstrapWorkspace(
       skipped++;
       continue;
     }
-    const parent = path.dirname(localPath);
-    if (parent) await mkdir(parent, { recursive: true });
-    await writeFile(localPath, await readRemoteBytes(s3, bucket, key));
-    synced++;
+    toDownload.push(entry);
   }
 
+  // THINK-946 — the GETs run with bounded concurrency. A cross-thread turn on
+  // a warm microVM re-downloads the whole rendered prefix (the THINK-909
+  // clean-slate wipe is deliberate: two threads project different Space
+  // files), so this loop's wall time IS the workspace-bootstrap phase.
+  // Serially that is ~one round-trip per file (~60+ files); in flights of
+  // {@link WORKSPACE_SYNC_CONCURRENCY} it is round-trips ÷ concurrency. The
+  // per-file work is unchanged and order-independent — every entry writes its
+  // own path, and `mkdir -p` is idempotent.
+  await mapWithConcurrency(
+    toDownload,
+    WORKSPACE_SYNC_CONCURRENCY,
+    async (entry) => {
+      const localPath = path.join(localDir, entry.rel);
+      const parent = path.dirname(localPath);
+      if (parent) await mkdir(parent, { recursive: true });
+      await writeFile(localPath, await readRemoteBytes(s3, bucket, entry.key));
+    },
+  );
+  const synced = toDownload.length;
+
   let deleted = 0;
-  for (const rel of local) {
-    if (remoteSet.has(rel)) continue;
+  const stale = [...local].filter((rel) => !remoteSet.has(rel));
+  await mapWithConcurrency(stale, WORKSPACE_SYNC_CONCURRENCY, async (rel) => {
     try {
       await rm(path.join(localDir, rel));
       deleted++;
     } catch {
       // ignore
     }
-  }
+  });
 
   // Best-effort orphan-dir cleanup so deletions don't leave empty trees.
   await pruneEmptyDirs(localDir, localDir);
@@ -485,8 +529,8 @@ function hydrateCacheEntryMatches(
   const cached = cache.entries[input.entry.rel];
   return Boolean(
     cached &&
-    cached.sourceKey === input.entry.key &&
-    cached.etag === entryFingerprint,
+      cached.sourceKey === input.entry.key &&
+      cached.etag === entryFingerprint,
   );
 }
 

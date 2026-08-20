@@ -21,12 +21,16 @@ import {
   CompletionCallbackAuthError,
   buildInvocationResources,
   createBedrockChildModelCaller,
+  createWarmCaches,
   handleInvocation,
   postCompletion,
   postFinalizeCallback,
   type WarmTurnProducts,
 } from "../src/server.js";
-import { createWarmSessionCacheIfRuntime } from "../src/warm-session-cache.js";
+import {
+  createWarmSessionCacheIfRuntime,
+  type WarmSessionCache,
+} from "../src/warm-session-cache.js";
 import type { McpConnectionRetention } from "../src/mcp-connect.js";
 import { HandleStore, type ConnectMcpServerFn } from "../src/mcp.js";
 import { McpToolRegistry } from "../src/mcp-registry.js";
@@ -4823,6 +4827,8 @@ interface MakeDepsOptions {
   warmSessionCache?: import("../src/server.js").HandlerDependencies["warmSessionCache"];
   /** THINK-586 U7 — MCP retention factory injection. */
   mcpRetentionFactory?: () => McpConnectionRetention;
+  /** THINK-946 — connection-scoped warm cache injection. */
+  warmConnectionCache?: import("../src/server.js").HandlerDependencies["warmConnectionCache"];
 }
 
 function fakeLambdaClient(): LambdaClient {
@@ -4853,6 +4859,7 @@ function makeDeps(opts: MakeDepsOptions = {}) {
     discoverWorkspaceSkillsImpl: (async () => []) as never,
     onHandlerComplete: opts.onHandlerComplete,
     warmSessionCache: opts.warmSessionCache,
+    warmConnectionCache: opts.warmConnectionCache,
     mcpRetentionFactory: opts.mcpRetentionFactory,
   };
 }
@@ -5087,6 +5094,7 @@ describe("handleInvocation — warm-session fast path (THINK-586 U7)", () => {
 
   function warmDeps(shared: {
     cache: ReturnType<typeof makeWarmCache> | null;
+    connectionCache?: WarmSessionCache<McpConnectionRetention> | null;
     s3: S3Client;
     bootstrap: ReturnType<typeof warmBootstrap>;
     connect: ConnectMcpServerFn;
@@ -5096,6 +5104,7 @@ describe("handleInvocation — warm-session fast path (THINK-586 U7)", () => {
   }) {
     return makeDeps({
       warmSessionCache: shared.cache,
+      warmConnectionCache: shared.connectionCache ?? null,
       s3ClientFactory: () => shared.s3,
       bootstrapWorkspaceImpl: shared.bootstrap,
       connectMcpServerFactory: shared.connect,
@@ -5396,5 +5405,216 @@ describe("handleInvocation — warm-session fast path (THINK-586 U7)", () => {
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
     expect(maxInFlight).toBe(1);
+  });
+
+  // ── THINK-946: connection scope (a NEW thread on a warm microVM) ─────────
+
+  function makeConnectionCache() {
+    const cache = createWarmSessionCacheIfRuntime<McpConnectionRetention>({
+      AGENTCORE_RUNTIME_SESSION_CACHE: "1",
+    });
+    if (!cache) throw new Error("factory refused the runtime env signal");
+    return cache;
+  }
+
+  function countingRetention() {
+    const created: Array<{ close: ReturnType<typeof vi.fn> }> = [];
+    const factory = vi.fn((): McpConnectionRetention => {
+      const retention = {
+        register: vi.fn(),
+        rebind: vi.fn(async () => {}),
+        close: vi.fn(async () => {}),
+        size: 0,
+      };
+      created.push(retention);
+      return retention;
+    });
+    return { factory, created };
+  }
+
+  function phaseDetail(
+    body: Record<string, unknown>,
+    phase: string,
+  ): string | undefined {
+    const diagnostics = (
+      body.usage as {
+        diagnostics?: {
+          agentcore_phases?: Array<{ phase: string; detail?: string }>;
+        };
+      }
+    )?.diagnostics;
+    return diagnostics?.agentcore_phases?.find((entry) => entry.phase === phase)
+      ?.detail;
+  }
+
+  it("a NEW thread on the same warm VM reuses the user's MCP connections while its own session stays cold", async () => {
+    const cache = makeWarmCache();
+    const connectionCache = makeConnectionCache();
+    const { client: s3 } = warmS3State();
+    const bootstrap = warmBootstrap();
+    const connect = countingConnect();
+    const { bodies, fetchImpl } = finalizeCapture();
+    const retention = countingRetention();
+    const shared = {
+      cache,
+      connectionCache,
+      s3,
+      bootstrap,
+      connect,
+      fetchImpl,
+      mcpRetentionFactory: retention.factory,
+    };
+
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    const second = await handleInvocation({
+      payload: WARM_PAYLOAD({
+        thread_id: "thread-2",
+        finalize_callback_url:
+          "https://api.example.com/api/threads/thread-2/finalize",
+      }),
+      deps: warmDeps(shared),
+    });
+
+    expect(second.statusCode).toBe(200);
+    // One retention across both threads: the second thread never built new
+    // MCP transports.
+    expect(retention.factory).toHaveBeenCalledTimes(1);
+    expect(connectionCache.size).toBe(1);
+    expect(connectionCache.values()[0]).toBe(retention.created[0]);
+    // Per-thread state stays per-thread: two entries, and the new thread ran
+    // its own workspace bootstrap and its own (cold) session.
+    expect(cache.size).toBe(2);
+    expect(bootstrap).toHaveBeenCalledTimes(2);
+    expect(sessionReuseOf(bodies[1]!)).toBe("cold");
+    expect(phaseDetail(bodies[1]!, "runtime.turn_setup")).toBe(
+      "session_reuse=cold;connections=warm",
+    );
+    // The same thread's next turn still takes the full warm path.
+    const third = await handleInvocation({
+      payload: WARM_PAYLOAD(),
+      deps: warmDeps(shared),
+    });
+    expect(third.statusCode).toBe(200);
+    expect(sessionReuseOf(bodies[2]!)).toBe("warm");
+  });
+
+  it("a different user on the same VM never reaches the cached connections", async () => {
+    const cache = makeWarmCache();
+    const connectionCache = makeConnectionCache();
+    const { client: s3 } = warmS3State();
+    const bootstrap = warmBootstrap();
+    const connect = countingConnect();
+    const { fetchImpl } = finalizeCapture();
+    const retention = countingRetention();
+    const shared = {
+      cache,
+      connectionCache,
+      s3,
+      bootstrap,
+      connect,
+      fetchImpl,
+      mcpRetentionFactory: retention.factory,
+    };
+
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    await handleInvocation({
+      payload: WARM_PAYLOAD({ thread_id: "thread-2", user_id: "user-2" }),
+      deps: warmDeps(shared),
+    });
+    expect(retention.factory).toHaveBeenCalledTimes(2);
+    expect(connectionCache.size).toBe(2);
+  });
+
+  it("a changed authorization version drops the cached connections instead of reusing them", async () => {
+    const cache = makeWarmCache();
+    const connectionCache = makeConnectionCache();
+    const { client: s3 } = warmS3State();
+    const bootstrap = warmBootstrap();
+    const connect = countingConnect();
+    const { fetchImpl } = finalizeCapture();
+    const retention = countingRetention();
+    const shared = {
+      cache,
+      connectionCache,
+      s3,
+      bootstrap,
+      connect,
+      fetchImpl,
+      mcpRetentionFactory: retention.factory,
+    };
+
+    await handleInvocation({ payload: WARM_PAYLOAD(), deps: warmDeps(shared) });
+    // A rotated MCP bearer moves the authorization version (R20).
+    await handleInvocation({
+      payload: WARM_PAYLOAD({
+        thread_id: "thread-2",
+        mcp_configs: [
+          {
+            name: "srv-warm",
+            url: "https://mcp.example.com/mcp",
+            auth: { token: "tok-rotated" },
+          },
+        ],
+      }),
+      deps: warmDeps(shared),
+    });
+
+    expect(retention.factory).toHaveBeenCalledTimes(2);
+    expect(retention.created[0]!.close).toHaveBeenCalled();
+    expect(connectionCache.size).toBe(1);
+    expect(connectionCache.values()[0]).toBe(retention.created[1]);
+  });
+
+  it("wires disposal so a per-thread spill spares pooled connections but the connection cache closes them", () => {
+    const { sessionCache, connectionCache } = createWarmCaches({
+      AGENTCORE_RUNTIME_SESSION_CACHE: "1",
+    });
+    if (!sessionCache || !connectionCache) throw new Error("caches refused");
+    const close = vi.fn(async () => {});
+    const pooled = {
+      register: vi.fn(),
+      rebind: vi.fn(async () => {}),
+      close,
+      size: 1,
+    } as unknown as McpConnectionRetention;
+    connectionCache.set("connection-key", {
+      value: pooled,
+      durableStoreMarker: "connection-scope",
+      authorizationVersion: "v1",
+      cachedAtMs: Date.now(),
+    });
+    // Nine threads of this user share the one retention; the ninth spills the
+    // oldest per-thread entry (THINK-586's LRU bound is 8).
+    for (let index = 0; index < 9; index += 1) {
+      sessionCache.set(`thread-${index}`, {
+        value: { mcpRetention: pooled } as unknown as WarmTurnProducts,
+        durableStoreMarker: "head",
+        authorizationVersion: "v1",
+        cachedAtMs: Date.now(),
+      });
+    }
+    expect(sessionCache.size).toBe(8);
+    expect(close).not.toHaveBeenCalled();
+
+    // The connection cache owns the lifetime: its own sweep closes them.
+    connectionCache.sweepIdle(Date.now() + 60 * 60 * 1000);
+    expect(connectionCache.size).toBe(0);
+    expect(close).toHaveBeenCalledTimes(1);
+
+    // …and once it no longer owns them, a per-thread spill does close.
+    const orphan = {
+      register: vi.fn(),
+      rebind: vi.fn(async () => {}),
+      close: vi.fn(async () => {}),
+      size: 1,
+    } as unknown as McpConnectionRetention;
+    sessionCache.set("orphan", {
+      value: { mcpRetention: orphan } as unknown as WarmTurnProducts,
+      durableStoreMarker: "head",
+      authorizationVersion: "v1",
+      cachedAtMs: 0,
+    });
+    sessionCache.sweepIdle(Date.now() + 60 * 60 * 1000);
+    expect(orphan.close).toHaveBeenCalledTimes(1);
   });
 });

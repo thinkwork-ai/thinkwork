@@ -533,6 +533,17 @@ variable "agentcore_runtime_dispatch_enabled" {
   default     = false
 }
 
+variable "agentcore_session_scope" {
+  description = "THINK-909/THINK-946 AgentCore runtime session scope. \"thread\" (default) keys the runtime session per thread; \"user\" keys it per (tenant, agent, user) so a user's NEW thread lands on their already-warm microVM and reuses its MCP connections and toolset. Set \"user\" only after the stage's Pi runtime image dual-accepts both session ids. mcpherson runs \"user\"; every other stage runs the default."
+  type        = string
+  default     = "thread"
+
+  validation {
+    condition     = contains(["thread", "user"], var.agentcore_session_scope)
+    error_message = "agentcore_session_scope must be \"thread\" or \"user\"."
+  }
+}
+
 variable "chat_agent_invoke_provisioned_concurrency" {
   description = "Provisioned concurrency on chat-agent-invoke's `live` alias. 0 = disabled (alias still exists)."
   type        = number
@@ -988,6 +999,7 @@ module "thinkwork" {
   api_auth_secret                             = var.api_auth_secret
   platform_operator_emails                    = var.platform_operator_emails
   agentcore_runtime_dispatch_enabled          = var.agentcore_runtime_dispatch_enabled
+  agentcore_session_scope                     = var.agentcore_session_scope
   chat_agent_invoke_provisioned_concurrency   = var.chat_agent_invoke_provisioned_concurrency
   workspace_renderer_provisioned_concurrency  = var.workspace_renderer_provisioned_concurrency
 
