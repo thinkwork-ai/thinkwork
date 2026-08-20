@@ -270,11 +270,16 @@ export function buildDocumentPlatesContract(
       lines.push(`Operator instructions: ${plate.authoringInstructions}`);
     }
     if (plate.sections?.length) {
-      lines.push("Sections (a floor, NOT the full outline):");
+      lines.push("Sections:");
       for (const section of plate.sections) {
+        // THINK-910 — the tier gloss ("waive via tw:waiver when …") and the
+        // "a floor, NOT the full outline" clause used to repeat on EVERY
+        // section of EVERY plate. Both are stated once in the shared
+        // preamble below; the per-section tag is now just the tier name.
+        // No semantic change — same rules, said once.
         const waiveNote =
           section.tier === "required-if-material"
-            ? "required-if-material — waive via tw:waiver when the data is genuinely unavailable"
+            ? "required-if-material"
             : "required";
         const suggested = (section.suggestedDirectives ?? [])
           .map((d) => (d.chartType ? `${d.kind} ${d.chartType}` : d.kind))
@@ -285,8 +290,11 @@ export function buildDocumentPlatesContract(
       }
     }
     if (plate.analyses?.length) {
+      // THINK-910 — the "(author ```tw:analysis blocks with raw inputs; the
+      // server computes)" gloss moved to the shared preamble; it was
+      // identical on every plate.
       lines.push(
-        `Declared analyses (author \`\`\`tw:analysis blocks with raw inputs; the server computes): ${plate.analyses
+        `Declared analyses: ${plate.analyses
           .map(
             (a) =>
               `${a.key} (${a.op}${a.inputHint ? `: ${a.inputHint}` : ""})${a.guidance ? ` — ${a.guidance}` : ""}`,
@@ -301,6 +309,13 @@ export function buildDocumentPlatesContract(
     "## Document plates (report contracts)",
     "",
     "When a request asks for one of these document genres, the plate contract below governs BOTH your research and the final document. BEFORE drafting: gather data per each section's guidance. If a section's guidance names a data source or connector (e.g. \"Pull data from Twenty CRM\"), you MUST query that source for that section — do not substitute another source. Every data-backed section must cite its sources in a tw:sources fence (see the emit_document tool); cited tools are verified against the tools you actually invoked.",
+    "",
+    // THINK-910 — rules that apply to EVERY plate are stated once here
+    // instead of being re-emitted per plate and per section below.
+    "These rules apply to every plate listed here:",
+    "- A plate's sections are a floor, NOT the full outline — add sections the material calls for.",
+    "- A section tagged [required-if-material] may be waived via a tw:waiver when the data is genuinely unavailable; a section tagged [required] may not.",
+    "- For declared analyses, author ```tw:analysis blocks carrying the raw inputs; the server computes the result.",
     "",
     ...plateBlocks,
   ].join("\n");

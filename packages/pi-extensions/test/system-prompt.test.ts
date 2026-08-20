@@ -546,14 +546,45 @@ describe("document plates contract injection (plates provenance 2026-07)", () =>
     expect(block).toContain(
       "Operator instructions: Write for sales leadership.",
     );
-    expect(block).toContain("Sections (a floor, NOT the full outline):");
+    // THINK-910 — the "floor, not the full outline" clause, the tw:waiver
+    // rule, and the tw:analysis authoring gloss are stated ONCE in the shared
+    // preamble instead of repeating on every plate and every section.
+    expect(block).toContain("These rules apply to every plate listed here:");
     expect(block).toContain(
-      '- "Pipeline Health" [required-if-material — waive via tw:waiver when the data is genuinely unavailable] — Pull data from Twenty CRM: funnel stages with conversion rates. (suggested visualization: chart funnel)',
+      "A plate's sections are a floor, NOT the full outline",
+    );
+    expect(block).toContain(
+      "may be waived via a tw:waiver when the data is genuinely unavailable",
+    );
+    expect(block).toContain("author ```tw:analysis blocks");
+    expect(block).toContain("Sections:");
+    expect(block).toContain(
+      '- "Pipeline Health" [required-if-material] — Pull data from Twenty CRM: funnel stages with conversion rates. (suggested visualization: chart funnel)',
     );
     expect(block).toContain('- "Summary" [required]');
     expect(block).toContain(
       "pipeline-conversion (funnel_conversion: ordered stages: [{ label, count }]) — Current quarter only.",
     );
+  });
+
+  it("states the shared plate rules once, not per plate (THINK-910)", () => {
+    const twoPlates = [
+      PLATES_PAYLOAD[0],
+      { ...PLATES_PAYLOAD[0], slug: "second-plate", displayName: "Second" },
+    ];
+    const block = buildDocumentPlatesContract({ document_plates: twoPlates }, [
+      "emit_document",
+    ]);
+    const occurrences = (needle: string) => block.split(needle).length - 1;
+    expect(occurrences("a floor, NOT the full outline")).toBe(1);
+    // The old per-section gloss is gone entirely.
+    expect(occurrences("required-if-material — waive via tw:waiver")).toBe(0);
+    expect(occurrences("may be waived via a tw:waiver")).toBe(1);
+    expect(occurrences("the server computes")).toBe(1);
+    // Both plates still render their own section list.
+    expect(occurrences("Sections:")).toBe(2);
+    // Once per plate section, plus the single preamble mention.
+    expect(occurrences("[required-if-material]")).toBe(3);
   });
 
   it("omits the block without emit_document or without payload plates", () => {
