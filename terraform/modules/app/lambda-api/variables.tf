@@ -998,3 +998,44 @@ variable "auth_state_store" {
     error_message = "auth_state_store must be \"postgres\" or \"dynamo\"."
   }
 }
+
+################################################################################
+# THINK-915 — chat turn-latency observability
+# (see chat-latency-observability.tf for the constraints behind each of these)
+################################################################################
+
+variable "enable_chat_turn_latency_observability" {
+  description = "THINK-915: create the per-stage chat turn-latency dashboard, the saved thinkwork-<stage>-turn-timeline Logs Insights query, and the Lambda-native dispatch p95 alarm. On by default — none of these depend on a log group already existing."
+  type        = bool
+  default     = true
+}
+
+variable "enable_chat_turn_latency_metric_filters" {
+  description = "THINK-915: create the agentcore_phase log metric filters (TurnRuntimeInvokeMs, AgentLoopMs) and the metric-filter-backed p95 alarm. OFF by default: the Lambda log groups are created implicitly on first invocation and are not Terraform-managed, so PutMetricFilter fails with ResourceNotFoundException on a greenfield stage (see memory-alarms.tf). Turn on for a stage that has already served chat traffic."
+  type        = bool
+  default     = false
+}
+
+variable "chat_turn_latency_metric_namespace" {
+  description = "THINK-915: CloudWatch namespace prefix for the chat phase metrics. The stage is appended (Thinkwork/Chat/<stage>) because metric-filter dimensions may only reference JSON fields of the matched log event, and the agentcore_phase record carries no stage field."
+  type        = string
+  default     = "Thinkwork/Chat"
+}
+
+variable "chat_turn_runtime_log_group_name" {
+  description = "THINK-915: explicit AgentCore Pi runtime log group (/aws/bedrock-agentcore/runtimes/thinkwork_<stage>_pi-<runtimeId>-DEFAULT). Empty (default) discovers it by prefix at plan time; the runtime-sourced metric, widgets, and query leg are skipped until it exists."
+  type        = string
+  default     = ""
+}
+
+variable "chat_turn_p95_alarm_threshold_ms" {
+  description = "THINK-915: p95 threshold (ms) for the whole AgentCore runtime call, breaching on 2 of 3 five-minute periods."
+  type        = number
+  default     = 30000
+}
+
+variable "chat_turn_latency_alarm_actions" {
+  description = "THINK-915: SNS topic ARNs notified by the chat turn-latency alarms (also used as OK actions). Empty by default — the only topic in this module is the cost-alert channel, and latency pages do not belong there."
+  type        = list(string)
+  default     = []
+}

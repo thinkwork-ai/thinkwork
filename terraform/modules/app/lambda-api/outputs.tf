@@ -120,6 +120,23 @@ output "mcp_custom_domain_validation" {
   ] : []
 }
 
+# --- THINK-915 chat turn-latency observability -------------------------------
+
+output "chat_turn_latency_dashboard_name" {
+  description = "CloudWatch dashboard carrying the chat turn-latency phase metrics, dispatch Duration p95, and turn-path Lambda invocations/errors. Empty when the feature is disabled."
+  value       = local.chat_latency_enabled ? aws_cloudwatch_dashboard.chat_turn_latency[0].dashboard_name : ""
+}
+
+output "chat_turn_latency_metric_namespace" {
+  description = "CloudWatch namespace holding TurnRuntimeInvokeMs / AgentLoopMs for this stage."
+  value       = local.chat_latency_namespace
+}
+
+output "chat_turn_runtime_log_group_name_effective" {
+  description = "AgentCore Pi runtime log group actually used by the AgentLoopMs metric filter and the saved turn-timeline query (explicit override, else prefix discovery). Empty when the runtime has not logged yet."
+  value       = local.chat_latency_runtime_log_group
+}
+
 output "mcp_custom_domain_target" {
   description = "Regional target for the final mcp.thinkwork.ai → API Gateway CNAME. Only populated on the second apply (when mcp_custom_domain_ready = true). Includes { target_domain_name, hosted_zone_id } so the CF sync script can upsert the record."
   value = var.mcp_custom_domain != "" && var.mcp_custom_domain_ready ? {

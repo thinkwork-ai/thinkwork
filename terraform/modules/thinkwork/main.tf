@@ -1239,6 +1239,14 @@ module "api" {
   workspace_renderer_provisioned_concurrency = var.workspace_renderer_provisioned_concurrency
   agentcore_runtime_dispatch_enabled         = var.agentcore_runtime_dispatch_enabled
 
+  # THINK-915 — chat turn-latency observability.
+  enable_chat_turn_latency_observability  = var.enable_chat_turn_latency_observability
+  enable_chat_turn_latency_metric_filters = var.enable_chat_turn_latency_metric_filters
+  chat_turn_latency_metric_namespace      = var.chat_turn_latency_metric_namespace
+  chat_turn_runtime_log_group_name        = var.chat_turn_runtime_log_group_name
+  chat_turn_p95_alarm_threshold_ms        = var.chat_turn_p95_alarm_threshold_ms
+  chat_turn_latency_alarm_actions         = var.chat_turn_latency_alarm_actions
+
   mcp_custom_domain       = var.mcp_custom_domain
   mcp_custom_domain_ready = var.mcp_custom_domain_ready
 

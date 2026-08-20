@@ -54,8 +54,27 @@ export function buildAgentCorePhaseLog(input: AgentCorePhaseLogInput) {
   };
 }
 
-export function logAgentCorePhase(input: AgentCorePhaseLogInput): void {
-  console.log(JSON.stringify(buildAgentCorePhaseLog(input)));
+/**
+ * Emit one phase line.
+ *
+ * THINK-915: written straight to stdout rather than through `console.log`.
+ * The Lambda Node runtime prefixes every `console.*` line with
+ * `<timestamp>\t<requestId>\tINFO\t…`, which makes the log event invalid JSON
+ * — and CloudWatch **metric filters** only apply JSON filter patterns
+ * (`{ $.event = "agentcore_phase" }`) to events that parse as JSON end to end.
+ * Raw stdout writes reach CloudWatch unprefixed, so the same line feeds both
+ * Logs Insights (which already tolerated the prefix) and the
+ * `Thinkwork/Chat/<stage>` metric filters in
+ * terraform/modules/app/lambda-api/chat-latency-observability.tf.
+ *
+ * This mirrors the Pi container emitter, which has always written phase lines
+ * to `process.stdout` (packages/agentcore-pi/agent-container/src/handler-context.ts).
+ */
+export function logAgentCorePhase(
+  input: AgentCorePhaseLogInput,
+  out: NodeJS.WritableStream = process.stdout,
+): void {
+  out.write(`${JSON.stringify(buildAgentCorePhaseLog(input))}\n`);
 }
 
 function phaseSpanId(source: string, phase: string, sessionId: string): string {
