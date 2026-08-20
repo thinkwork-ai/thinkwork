@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from "vitest";
 import { deriveDispatchIndicatorState } from "./dispatch-indicator";
-import { mapTurnsToUserMessages } from "./TaskThreadView";
+import { isTurnRunning, mapTurnsToUserMessages } from "./TaskThreadView";
 import type { TaskThreadMessage, TaskThreadTurn } from "./TaskThreadView";
 
 function userMessage(
@@ -171,5 +171,74 @@ describe("deriveDispatchIndicatorState", () => {
         turn("t", "", { status: "running" }),
       ).state,
     ).toBe("running");
+  });
+});
+
+/**
+ * THINK-913 follow-up: the assistant message is inserted and published BEFORE
+ * the turn flips to `succeeded`, so "is this turn still working?" cannot be a
+ * function of `turn.status` alone — a delivered reply is terminal for display.
+ */
+describe("turn timing — a delivered reply stops the clock", () => {
+  const assistantMessage = (
+    id: string,
+    createdAt: string,
+  ): TaskThreadMessage => ({ id, role: "ASSISTANT", createdAt });
+
+  it("stamps displayResponseAt from the turn's assistant message", () => {
+    const messages = [
+      userMessage("m1", "2026-08-20T12:00:00.000Z"),
+      assistantMessage("a1", "2026-08-20T12:00:20.000Z"),
+    ];
+    const turns = [
+      turn("t1", "2026-08-20T12:00:05.000Z", {
+        status: "running",
+        triggeringMessageId: "m1",
+      }),
+    ];
+
+    const mapped = mapTurnsToUserMessages(messages, turns).get("m1")!;
+    expect(mapped.displayResponseAt).toBe("2026-08-20T12:00:20.000Z");
+    expect(mapped.displayFinishedAt).toBe("2026-08-20T12:00:20.000Z");
+    expect(isTurnRunning(mapped.status, mapped)).toBe(false);
+  });
+
+  it("leaves displayResponseAt null while no reply has landed", () => {
+    const messages = [userMessage("m1", "2026-08-20T12:00:00.000Z")];
+    const turns = [
+      turn("t1", "2026-08-20T12:00:05.000Z", {
+        status: "running",
+        triggeringMessageId: "m1",
+      }),
+    ];
+
+    const mapped = mapTurnsToUserMessages(messages, turns).get("m1")!;
+    expect(mapped.displayResponseAt ?? null).toBeNull();
+    expect(isTurnRunning(mapped.status, mapped)).toBe(true);
+  });
+
+  it("ignores an assistant message that predates the turn's display start", () => {
+    // A reply belonging to the PREVIOUS turn must not close this one.
+    const messages = [
+      assistantMessage("a1", "2026-08-20T11:59:00.000Z"),
+      userMessage("m1", "2026-08-20T12:00:00.000Z"),
+    ];
+    const turns = [
+      turn("t1", "2026-08-20T12:00:05.000Z", {
+        status: "running",
+        triggeringMessageId: "m1",
+      }),
+    ];
+
+    const mapped = mapTurnsToUserMessages(messages, turns).get("m1")!;
+    expect(mapped.displayResponseAt ?? null).toBeNull();
+    expect(isTurnRunning(mapped.status, mapped)).toBe(true);
+  });
+
+  it("keeps terminal statuses non-running regardless of the reply", () => {
+    expect(isTurnRunning("succeeded", { id: "t", status: "succeeded" })).toBe(
+      false,
+    );
+    expect(isTurnRunning("failed", { id: "t", status: "failed" })).toBe(false);
   });
 });

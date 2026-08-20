@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -3228,6 +3229,107 @@ describe("TaskThreadView", () => {
           (_, element) => element?.textContent === "Working… 20s",
         ),
       ).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // THINK-913 follow-up (mcpherson, 2026-08-20): finalize inserts the assistant
+  // message BEFORE flipping thread_turns to `succeeded`, so the client can hold
+  // a `running` turn whose answer is already on screen. The header used to keep
+  // ticking "Working… 4m 51s" under a finished reply until a refetch landed.
+  it("stops the timer once the turn's assistant message has arrived, even while status is still running", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-02T19:35:00Z"));
+    try {
+      render(
+        <TaskThreadView
+          thread={{
+            id: "thread-1",
+            title: "Answered",
+            lifecycleStatus: "RUNNING",
+            messages: [
+              {
+                id: "m1",
+                role: "USER",
+                content: "Follow up",
+                createdAt: "2026-06-02T19:30:00Z",
+              },
+              {
+                id: "m2",
+                role: "ASSISTANT",
+                content: "Done",
+                createdAt: "2026-06-02T19:30:20Z",
+              },
+            ],
+            turns: [
+              {
+                id: "turn-1",
+                // Stale client-side status: the succeeded update has not
+                // arrived yet.
+                status: "running",
+                invocationSource: "chat_message",
+                startedAt: "2026-06-02T19:30:05Z",
+              },
+            ],
+          }}
+        />,
+      );
+
+      expect(screen.queryByText("Working…")).toBeNull();
+      // Bounded by the assistant message createdAt, not by "now".
+      expect(screen.getByText("Worked for 20s")).toBeTruthy();
+
+      // And it must not resume ticking as wall-clock time advances.
+      act(() => {
+        vi.advanceTimersByTime(10_000);
+      });
+      expect(screen.queryByText("Working…")).toBeNull();
+      expect(screen.getByText("Worked for 20s")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps counting a running turn that has no assistant message yet", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-02T19:30:20Z"));
+    try {
+      render(
+        <TaskThreadView
+          thread={{
+            id: "thread-1",
+            title: "Running",
+            lifecycleStatus: "RUNNING",
+            messages: [
+              {
+                id: "m1",
+                role: "USER",
+                content: "Follow up",
+                createdAt: "2026-06-02T19:30:00Z",
+              },
+              // A later USER message must not be mistaken for a reply.
+              {
+                id: "m2",
+                role: "USER",
+                content: "Also this",
+                createdAt: "2026-06-02T19:30:10Z",
+              },
+            ],
+            turns: [
+              {
+                id: "turn-1",
+                status: "running",
+                invocationSource: "chat_message",
+                triggeringMessageId: "m1",
+                startedAt: "2026-06-02T19:30:00Z",
+              },
+            ],
+          }}
+        />,
+      );
+
+      expect(screen.getByText("Working…")).toBeTruthy();
     } finally {
       vi.useRealTimers();
     }

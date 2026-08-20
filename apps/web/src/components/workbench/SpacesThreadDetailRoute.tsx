@@ -167,6 +167,13 @@ interface OptimisticMessage {
 }
 
 const ACTIVE_AGENT_REFRESH_MS = 2_000;
+/**
+ * Bounded settle window (× ACTIVE_AGENT_REFRESH_MS = 30s) for the gap between
+ * the assistant message landing and the turn flipping to a terminal status.
+ * THINK-913 moved the message insert ahead of that status update, so the reply
+ * routinely arrives ~2s before the turn is marked `succeeded`.
+ */
+const TURN_STATUS_SETTLE_POLLS = 15;
 
 interface ThreadResult {
   thread: {
@@ -814,7 +821,11 @@ export function SpacesThreadDetailRoute({
     [urqlClient, threadId],
   );
   const [{ data: turnUpdate }] = useSubscription<{
-    onThreadTurnUpdated?: { threadId?: string | null } | null;
+    onThreadTurnUpdated?: {
+      threadId?: string | null;
+      status?: string | null;
+      updatedAt?: string | null;
+    } | null;
   }>({
     query: ThreadTurnUpdatedSubscription,
     variables: { tenantId },
@@ -979,8 +990,22 @@ export function SpacesThreadDetailRoute({
     void refreshThreadTurnEvents();
   }, [refreshThreadTurnEvents]);
 
+  // THINK-913 follow-up: identify the turn-update event by threadId + status +
+  // updatedAt, and remember the last one handled. Keyed on threadId alone (both
+  // in the dependency array and with no de-dup), the SECOND event for a thread
+  // (running → succeeded) changed nothing the effect watched, so it never
+  // re-ran: thread_turns stayed frozen at `running` and the turn header kept
+  // ticking "Working…" under a delivered answer. The ref also absorbs AppSync's
+  // at-least-once redelivery of an event already acted on.
+  const turnUpdateThreadId = turnUpdate?.onThreadTurnUpdated?.threadId;
+  const turnUpdateStatus = turnUpdate?.onThreadTurnUpdated?.status;
+  const turnUpdateAt = turnUpdate?.onThreadTurnUpdated?.updatedAt;
+  const lastHandledTurnUpdate = useRef<string | null>(null);
   useEffect(() => {
-    if (turnUpdate?.onThreadTurnUpdated?.threadId === threadId) {
+    if (turnUpdateThreadId === threadId) {
+      const eventKey = `${turnUpdateThreadId}:${turnUpdateStatus ?? ""}:${turnUpdateAt ?? ""}`;
+      if (lastHandledTurnUpdate.current === eventKey) return;
+      lastHandledTurnUpdate.current = eventKey;
       reexecuteTasksQuery({ requestPolicy: "network-only" });
       reexecuteEventsQuery({ requestPolicy: "network-only" });
       reexecuteRunbookRunsQuery({ requestPolicy: "network-only" });
@@ -998,7 +1023,9 @@ export function SpacesThreadDetailRoute({
     reexecuteThreadTurnsQuery,
     reexecuteWorkItemsQuery,
     threadId,
-    turnUpdate?.onThreadTurnUpdated?.threadId,
+    turnUpdateThreadId,
+    turnUpdateStatus,
+    turnUpdateAt,
   ]);
 
   useEffect(() => {
@@ -1327,6 +1354,14 @@ export function SpacesThreadDetailRoute({
       (effectiveOptimisticMessage &&
         effectiveOptimisticMessage.expectAssistantResponse !== false)),
   );
+  // THINK-913 follow-up: finalize inserts the assistant message BEFORE it marks
+  // the turn `succeeded`, so the poll above stops the instant the reply lands —
+  // leaving thread_turns stuck at `running`. Keep refreshing for a bounded
+  // settle window (not forever: a genuinely stuck turn must not poll all day)
+  // until the turn reaches a terminal status.
+  const shouldSettleTurnStatus = Boolean(
+    !shouldPollActiveAgentResult && hasDurableAssistant && hasActiveAgentTurn,
+  );
 
   useEffect(() => {
     // hasDurableAssistant reflects the thread currently on screen — only
@@ -1337,7 +1372,7 @@ export function SpacesThreadDetailRoute({
   }, [hasDurableAssistant, optimisticMessage, threadId]);
 
   useEffect(() => {
-    if (!shouldPollActiveAgentResult) return;
+    if (!shouldPollActiveAgentResult && !shouldSettleTurnStatus) return;
 
     const refreshActiveThread = () => {
       reexecuteQuery({ requestPolicy: "network-only" });
@@ -1350,10 +1385,15 @@ export function SpacesThreadDetailRoute({
       reexecuteThreadTurnsQuery({ requestPolicy: "network-only" });
     };
 
-    const intervalId = window.setInterval(
-      refreshActiveThread,
-      ACTIVE_AGENT_REFRESH_MS,
-    );
+    const maxTicks = shouldPollActiveAgentResult
+      ? Number.POSITIVE_INFINITY
+      : TURN_STATUS_SETTLE_POLLS;
+    let ticks = 0;
+    const intervalId = window.setInterval(() => {
+      ticks += 1;
+      refreshActiveThread();
+      if (ticks >= maxTicks) window.clearInterval(intervalId);
+    }, ACTIVE_AGENT_REFRESH_MS);
     return () => window.clearInterval(intervalId);
   }, [
     reexecuteEventsQuery,
@@ -1365,6 +1405,7 @@ export function SpacesThreadDetailRoute({
     reexecuteThreadTurnsQuery,
     reexecuteWorkItemsQuery,
     shouldPollActiveAgentResult,
+    shouldSettleTurnStatus,
   ]);
   const linkedTasks = linkedTasksData?.threadLinkedTasks ?? [];
   const nativeWorkItems = workItemsData?.threadWorkItems ?? [];

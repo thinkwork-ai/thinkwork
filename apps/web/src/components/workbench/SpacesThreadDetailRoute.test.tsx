@@ -23,6 +23,7 @@ import {
   ThreadGoalFilesQuery,
   ThreadLinkedTasksQuery,
   ThreadProgressMarkdownQuery,
+  ThreadTurnUpdatedSubscription,
   ThreadWorkItemsQuery,
   UpdateThreadMutation,
 } from "@/lib/graphql-queries";
@@ -727,6 +728,57 @@ describe("SpacesThreadDetailRoute", () => {
 
     expect(reexecuteThreadQuery).not.toHaveBeenCalled();
     expect(reexecuteTasksQuery).toHaveBeenCalledWith({
+      requestPolicy: "network-only",
+    });
+  });
+
+  // THINK-913 follow-up: keyed on threadId alone, the second turn-update event
+  // for a thread (running → succeeded) changed no dependency, so the refetch
+  // effect never re-ran and the turn header stayed stuck on "Working…".
+  it("refetches turn status on a later turn update for the same thread", () => {
+    let turnEvent: {
+      threadId: string;
+      status: string;
+      updatedAt: string;
+    } | null = {
+      threadId: "thread-1",
+      status: "running",
+      updatedAt: "2026-08-20T12:00:05.000Z",
+    };
+    vi.mocked(useSubscription).mockImplementation((options: unknown) => {
+      const query = (options as { query?: unknown }).query;
+      if (query === ThreadTurnUpdatedSubscription) {
+        return [
+          {
+            data: { onThreadTurnUpdated: turnEvent },
+            fetching: false,
+            stale: false,
+          },
+          () => {},
+        ];
+      }
+      return [{ data: null, fetching: false, stale: false }, () => {}];
+    });
+
+    const { rerender } = render(
+      <SpacesThreadDetailRoute threadId="thread-1" />,
+    );
+    expect(reexecuteThreadTurnsQuery).toHaveBeenCalled();
+    reexecuteThreadTurnsQuery.mockClear();
+
+    // Redelivery of the SAME event is absorbed (AppSync is at-least-once).
+    rerender(<SpacesThreadDetailRoute threadId="thread-1" />);
+    expect(reexecuteThreadTurnsQuery).not.toHaveBeenCalled();
+
+    // The succeeded event is a new event and must refetch turn status.
+    turnEvent = {
+      threadId: "thread-1",
+      status: "succeeded",
+      updatedAt: "2026-08-20T12:00:25.000Z",
+    };
+    rerender(<SpacesThreadDetailRoute threadId="thread-1" />);
+
+    expect(reexecuteThreadTurnsQuery).toHaveBeenCalledWith({
       requestPolicy: "network-only",
     });
   });
