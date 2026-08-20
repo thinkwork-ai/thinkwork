@@ -281,6 +281,14 @@ export interface TaskThreadTurn {
   finishedAt?: string | null;
   displayStartedAt?: string | null;
   displayFinishedAt?: string | null;
+  /**
+   * THINK-913 follow-up: createdAt of the assistant message this turn already
+   * delivered, when one is present in the transcript. Its presence — not
+   * `turn.status`, which can lag by seconds because finalize inserts the
+   * message BEFORE flipping the turn to `succeeded` — is what stops the live
+   * "Working…" timer. Null when no reply has landed yet.
+   */
+  displayResponseAt?: string | null;
   model?: string | null;
   usageJson?: unknown;
   resultJson?: unknown;
@@ -2327,7 +2335,7 @@ function ThreadTurnActivity({
   ) => Promise<void> | void;
 }) {
   const status = normalizeStatus(turn?.status);
-  const running = isRunningStatus(status);
+  const running = isTurnRunning(status, turn);
   // One hook per turn surface (KTD3): live-elapsed only ticks while running,
   // freezes on terminal status, and is null for not-yet-started turns.
   const elapsedMs = useTurnElapsed(displayStartedAtForTurn(turn), running);
@@ -2476,6 +2484,30 @@ export function emailApprovalIdsForTurn(
     if (approvalId) ids.add(approvalId);
   }
   return [...ids];
+}
+
+/**
+ * Is this turn still user-visibly working?
+ *
+ * `turn.status` alone is not enough (THINK-913 follow-up). Finalize inserts and
+ * publishes the assistant message BEFORE it flips `thread_turns.status` to
+ * `succeeded`, so there is always a window — seconds normally, minutes when a
+ * turn-status refetch is missed — where the client holds a `running` turn whose
+ * answer is already rendered. Ticking "Working… 4m 51s" underneath a finished
+ * answer is the visible symptom.
+ *
+ * A delivered assistant message (`displayResponseAt`, stamped by
+ * withUserVisibleTurnTiming) is therefore treated as terminal for display: the
+ * timer stops and the duration is bounded by the message's createdAt. The
+ * header text still comes from `status`, so a turn that later resolves to
+ * `failed` renders its failure normally.
+ */
+export function isTurnRunning(
+  status: string | null | undefined,
+  turn: TaskThreadTurn | null | undefined,
+): boolean {
+  if (!isRunningStatus(status)) return false;
+  return !turn?.displayResponseAt;
 }
 
 function turnDurationMs(turn: TaskThreadTurn): number | null {
@@ -2644,14 +2676,16 @@ function withUserVisibleTurnTiming(
   const assistantTime = parseEventTimestamp(
     assistantMessage?.createdAt ?? null,
   );
-  const displayFinishedAt =
+  const respondedAt =
     assistantMessage?.createdAt && assistantTime >= displayStartTime
       ? assistantMessage.createdAt
-      : turn.finishedAt;
+      : null;
+  const displayFinishedAt = respondedAt ?? turn.finishedAt;
 
   if (
     displayStartedAt === turn.startedAt &&
-    displayFinishedAt === turn.finishedAt
+    displayFinishedAt === turn.finishedAt &&
+    respondedAt == null
   ) {
     return turn;
   }
@@ -2660,6 +2694,9 @@ function withUserVisibleTurnTiming(
     ...turn,
     displayStartedAt,
     displayFinishedAt,
+    // The reply is on screen, so the turn is user-visibly done even if its
+    // `status` is still `running` in the client's copy of thread_turns.
+    displayResponseAt: respondedAt,
   };
 }
 
