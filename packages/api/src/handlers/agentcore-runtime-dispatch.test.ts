@@ -168,7 +168,10 @@ describe("agentcore-runtime-dispatch", () => {
   });
 
   it("logs a conflict_wait phase for every 409 retry (THINK-912)", async () => {
-    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    // Phase lines go to raw stdout (THINK-915), not console.log.
+    const logSpy = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
     invokeSend
       .mockRejectedValueOnce(new RetryableConflictException("busy"))
@@ -400,10 +403,12 @@ describe("agentcore-runtime-dispatch session scope (THINK-909)", () => {
   it("logs the fallback as a countable phase event", async () => {
     process.env.AGENTCORE_SESSION_SCOPE = "user";
     const logs: string[] = [];
+    // Phase lines go to raw stdout (THINK-915), not console.log.
     const logSpy = vi
-      .spyOn(console, "log")
+      .spyOn(process.stdout, "write")
       .mockImplementation((line: unknown) => {
         logs.push(String(line));
+        return true;
       });
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     invokeSend
