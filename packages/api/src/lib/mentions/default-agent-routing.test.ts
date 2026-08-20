@@ -41,6 +41,138 @@ describe("default agent routing", () => {
     expect(repository.wakeups).toEqual([]);
   });
 
+  it("forwards the mutation-start stamp to the direct invoke (THINK-946)", async () => {
+    const repository = makeRepository({ agentId: "default-agent" });
+    const invoked: Array<Record<string, unknown>> = [];
+
+    await dispatchDefaultAgentChatTurn(
+      {
+        tenantId: "tenant-1",
+        threadId: "thread-1",
+        messageId: "message-1",
+        content: "hello",
+        dispatchRequestedAtMs: 1_700_000_000_000,
+      },
+      repository,
+      {
+        async invokeChatAgent(input) {
+          invoked.push(input as unknown as Record<string, unknown>);
+          return true;
+        },
+      },
+      async () => [],
+      async () => [],
+    );
+
+    expect(invoked[0]).toMatchObject({
+      dispatchRequestedAtMs: 1_700_000_000_000,
+    });
+  });
+
+  it("omits the stamp when the caller did not provide one", async () => {
+    const repository = makeRepository({ agentId: "default-agent" });
+    const invoked: Array<Record<string, unknown>> = [];
+
+    await dispatchDefaultAgentChatTurn(
+      { tenantId: "tenant-1", threadId: "thread-1", messageId: "message-1" },
+      repository,
+      {
+        async invokeChatAgent(input) {
+          invoked.push(input as unknown as Record<string, unknown>);
+          return true;
+        },
+      },
+      async () => [],
+      async () => [],
+    );
+
+    expect(invoked[0]).not.toHaveProperty("dispatchRequestedAtMs");
+  });
+
+  it("resolves the assignment write and both message lookups concurrently (THINK-946)", async () => {
+    const repository = makeRepository({ agentId: "default-agent" });
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const gate = async <T>(value: T): Promise<T> => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return value;
+    };
+    const slowRepository = {
+      ...repository,
+      async assignThreadDefaultAgent(input: { agentId: string }) {
+        repository.assignments.push(input as never);
+        await gate(null);
+      },
+    } as unknown as DefaultAgentRoutingRepository;
+
+    await dispatchDefaultAgentChatTurn(
+      { tenantId: "tenant-1", threadId: "thread-1", messageId: "message-1" },
+      slowRepository,
+      {
+        async invokeChatAgent() {
+          return true;
+        },
+      },
+      async () => gate([]),
+      async () => gate([]),
+    );
+
+    expect(maxInFlight).toBe(3);
+  });
+
+  it("still surfaces an assignment failure to the caller", async () => {
+    const repository = makeRepository({ agentId: "default-agent" });
+    const failing = {
+      ...repository,
+      async assignThreadDefaultAgent() {
+        throw new Error("assign exploded");
+      },
+    } as unknown as DefaultAgentRoutingRepository;
+
+    await expect(
+      dispatchDefaultAgentChatTurn(
+        { tenantId: "tenant-1", threadId: "thread-1", messageId: "message-1" },
+        failing,
+        {
+          async invokeChatAgent() {
+            return true;
+          },
+        },
+        async () => [],
+        async () => [],
+      ),
+    ).rejects.toThrow("assign exploded");
+  });
+
+  it("keeps dispatching when the per-message lookups fail (fail open)", async () => {
+    const repository = makeRepository({ agentId: "default-agent" });
+    const invoked: Array<Record<string, unknown>> = [];
+
+    await dispatchDefaultAgentChatTurn(
+      { tenantId: "tenant-1", threadId: "thread-1", messageId: "message-1" },
+      repository,
+      {
+        async invokeChatAgent(input) {
+          invoked.push(input as unknown as Record<string, unknown>);
+          return true;
+        },
+      },
+      async () => {
+        throw new Error("attachments down");
+      },
+      async () => {
+        throw new Error("skills down");
+      },
+    );
+
+    expect(invoked).toHaveLength(1);
+    expect(invoked[0]).not.toHaveProperty("messageAttachments");
+    expect(invoked[0]).not.toHaveProperty("pinnedSkills");
+  });
+
   it("builds chat_message wakeups for the subscribed/default agent", () => {
     expect(
       buildDefaultAgentTurnWakeup({

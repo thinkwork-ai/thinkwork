@@ -97,6 +97,13 @@ export interface DispatchDefaultAgentTurnInput {
    * flips the inline `use_memory` value, which is exempt from the parity guard.
    */
   askMode?: boolean;
+  /**
+   * THINK-946: epoch ms when the originating mutation started. Forwarded to
+   * chat-agent-invoke on the direct path so the handler can report the
+   * mutation-processing + async-queue legs of the pre-dispatch latency. Never
+   * part of the wakeup fallback payload — it is diagnostics only.
+   */
+  dispatchRequestedAtMs?: number | null;
 }
 
 export interface DefaultAgentChatInvoke {
@@ -135,6 +142,8 @@ export interface DefaultAgentChatInvoke {
    * `use_memory: false` for these so the answer is metered but not retained.
    */
   askMode?: boolean;
+  /** THINK-946 diagnostics: mutation-start epoch ms (see the dispatch input). */
+  dispatchRequestedAtMs?: number;
 }
 
 export interface DefaultAgentChatExecutor {
@@ -174,46 +183,53 @@ export async function dispatchDefaultAgentChatTurn(
       });
   if (!defaultAgent) return null;
 
-  if (!input.agentIdOverride) {
-    await repository.assignThreadDefaultAgent({
-      tenantId: input.tenantId,
-      threadId: input.threadId,
-      agentId: defaultAgent.agentId,
-    });
-  }
+  // THINK-946: the default-agent assignment write and the two per-message
+  // lookups are mutually independent — they used to cost three serial DB
+  // round trips on the pre-dispatch path. Both lookups absorb their own
+  // errors (unchanged fail-open behavior), so only an assignment failure can
+  // reject here, exactly as before.
+  const assignPromise = input.agentIdOverride
+    ? Promise.resolve()
+    : repository.assignThreadDefaultAgent({
+        tenantId: input.tenantId,
+        threadId: input.threadId,
+        agentId: defaultAgent.agentId,
+      });
 
   // Resolve uploaded-file attachments the message references so the agent can
   // read them on the direct-invoke path. The wakeup-processor fallback already
   // resolves these independently, so only the direct call needs them here.
-  let messageAttachments: DispatchMessageAttachment[] = [];
-  try {
-    messageAttachments = await resolveAttachments({
-      tenantId: input.tenantId,
-      threadId: input.threadId,
-      messageId: input.messageId,
-    });
-  } catch (err) {
+  const attachmentsPromise = resolveAttachments({
+    tenantId: input.tenantId,
+    threadId: input.threadId,
+    messageId: input.messageId,
+  }).catch((err) => {
     console.error(
       "[default-agent-routing] Failed to resolve message attachments for dispatch:",
       err,
     );
-  }
+    return [] as DispatchMessageAttachment[];
+  });
 
   // Resolve force-pinned skills the message references (composer slash-command).
   // Raw slugs only — chat-agent-invoke applies the blocklist guardrail.
-  let pinnedSkills: string[] = [];
-  try {
-    pinnedSkills = await resolvePinnedSkills({
-      tenantId: input.tenantId,
-      threadId: input.threadId,
-      messageId: input.messageId,
-    });
-  } catch (err) {
+  const pinnedSkillsPromise = resolvePinnedSkills({
+    tenantId: input.tenantId,
+    threadId: input.threadId,
+    messageId: input.messageId,
+  }).catch((err) => {
     console.error(
       "[default-agent-routing] Failed to resolve pinned skills for dispatch:",
       err,
     );
-  }
+    return [] as string[];
+  });
+
+  const [, messageAttachments, pinnedSkills] = await Promise.all([
+    assignPromise,
+    attachmentsPromise,
+    pinnedSkillsPromise,
+  ]);
 
   const directInvoked = await executor.invokeChatAgent({
     tenantId: input.tenantId,
@@ -243,6 +259,9 @@ export async function dispatchDefaultAgentChatTurn(
         }
       : {}),
     ...(input.askMode ? { askMode: true } : {}),
+    ...(typeof input.dispatchRequestedAtMs === "number"
+      ? { dispatchRequestedAtMs: input.dispatchRequestedAtMs }
+      : {}),
   });
   if (directInvoked) {
     return {
@@ -403,7 +422,9 @@ export function buildDefaultAgentTurnWakeup(
   };
 }
 
-class DrizzleDefaultAgentRoutingRepository implements DefaultAgentRoutingRepository {
+class DrizzleDefaultAgentRoutingRepository
+  implements DefaultAgentRoutingRepository
+{
   private readonly db = getDb();
 
   async loadDefaultAgent(input: { tenantId: string; threadId: string }) {
