@@ -38,10 +38,45 @@
  * marker emission is the model following workspace instructions, so the
  * inline chips are documented conditionally ("when the reply cites
  * inline") while the cards are unconditional.
+ *
+ * Chat-latency program (2026-08-20, #4296-#4308). Eric 2026-08-20: the
+ * phase list and the turn header are the same object read two ways — what
+ * the turn is doing now, and what it cost when it finished — so the phases
+ * extend "Live progress" and the header gets one new section,
+ * `turn-receipt` (permanent slug). Claims verified against apps/web/src/
+ * components/workbench/TaskThreadView.tsx:5097-5221 (the "Workspace sync"
+ * and "AgentCore phases" rows, AGENTCORE_PHASE_LABELS, and the
+ * bootstrap/sync de-duplication), :5949-5972 (formatTokenUsage — "N in /
+ * N out / N cache read / N cache write"), :5767-5769 (formatUsd) and
+ * :4335-4425 (usage and cost chips render only on a finished turn),
+ * workbench/turnHeader.ts ("Queued…" / "Working…" / "Worked for {dur}" /
+ * "Failed after {dur}"), workbench/useTurnElapsed.ts +
+ * TaskThreadView.tsx:2489-2524 (a delivered reply is terminal for display,
+ * so the timer stops when the answer lands), packages/agentcore-pi/
+ * agent-container/src/server.ts (the eleven runtime.* phases the UI can
+ * render; workspace_bootstrap, tool_assembly and session_resume record
+ * `skipped` with detail `session_reuse=warm`), packages/api/src/lib/
+ * chat-finalize/process-finalize.ts (the assistant message is inserted and
+ * published before the deferred tail flips the turn to succeeded — the
+ * answer arrives first, the chips a beat later), packages/api/src/lib/
+ * agentcore-session-prewarm.ts + graphql/resolvers/threads/
+ * createThread.mutation.ts:597-656 (a thread created without an opening
+ * message fires an inert warm ping; enabled unless
+ * AGENTCORE_SESSION_PREWARM is explicitly off), and packages/api/src/lib/
+ * agentcore-session-id.ts + terraform/modules/app/lambda-api/
+ * variables.tf:808-816 (per-user session keying is a per-stage setting,
+ * default "thread", with a per-thread fallback on the first conflict).
+ *
+ * Deliberately not claimed here: the conflict-wait and other api.* phases
+ * (stdout-only operator telemetry that never reaches the panel), any
+ * specific cold-start duration, and that per-user session scope is on for
+ * a given reader — the default is per-thread, so cross-thread warmth is
+ * written as something a deployment may enable, not promised behavior.
  */
 import {
   CardGrid,
   DocLink,
+  DocTable,
   Flow,
   FlowArrow,
   FlowBox,
@@ -56,6 +91,7 @@ import type { DocTocEntry } from "../registry";
 export const THREADS_TOC: DocTocEntry[] = [
   { id: "anatomy", title: "Anatomy of a thread" },
   { id: "live-progress", title: "Live progress" },
+  { id: "turn-receipt", title: "Reading the turn header" },
   { id: "sources", title: "Where an answer came from" },
   { id: "history", title: "History and resumption" },
 ];
@@ -189,6 +225,112 @@ export function Threads() {
           appears stuck for longer than that is worth reporting, not waiting
           on.
         </p>
+        <p>
+          A finished turn also keeps a breakdown of where its time went. Open{" "}
+          <strong>AgentCore phases</strong> in the turn&apos;s activity list
+          and you get one line per stage, each with how long it took and
+          whether it ran at all:
+        </p>
+        <DocTable
+          head={["Phase", "What was happening"]}
+          rows={[
+            [
+              <strong>Starting agent VM</strong>,
+              "Waiting for a machine to run on. This is the part that used to be invisible, and on a cold start it is often the largest single number in the list.",
+            ],
+            [
+              <strong>Preparing turn</strong>,
+              "Working out who is asking, which agent answers, and what this turn is allowed to do.",
+            ],
+            [
+              <strong>Syncing workspace</strong>,
+              "Pulling the space's files down so the agent reads what you would read. Recorded as skipped on a warm session — the files are already there.",
+            ],
+            [
+              <strong>Indexing workspace</strong>,
+              "Making those files searchable for the turn.",
+            ],
+            [
+              <strong>Assembling tools</strong>,
+              "Connecting the connectors and MCP servers this agent can reach. Also skipped on a warm session.",
+            ],
+            [
+              <strong>Loading conversation</strong>,
+              "Restoring the thread's earlier turns. Skipped when the session still holds them.",
+            ],
+            [
+              <strong>Agent loop</strong>,
+              "The model actually working — reasoning, calling tools, writing the reply. On a healthy turn this is where most of the time belongs.",
+            ],
+            [
+              <strong>Saving conversation</strong>,
+              "Writing session state back, so the next turn resumes from it.",
+            ],
+            [
+              <strong>Wrapping up</strong>,
+              "Reconciling the files the turn changed, then handing the result back to the app.",
+            ],
+          ]}
+        />
+        <p>
+          The phases deliberately do not add up to the header&apos;s total,
+          and no sum is shown: the agent loop already contains the tool and
+          model time inside it, so adding the rows together would
+          double-count. Read them as <em>where the time sat</em>, not as a
+          budget.
+        </p>
+        <p>
+          The line worth watching is <strong>Starting agent VM</strong>. A
+          second or two is ordinary. A much larger number means the turn
+          waited for a machine to be provisioned, which is the difference
+          between the first question of a session and every one after it — see{" "}
+          <a href="#history">History and resumption</a>.
+        </p>
+      </ReportSection>
+
+      <ReportSection id="turn-receipt" title="Reading the turn header">
+        <p>
+          Every turn collapses to a single line above the reply, and that line
+          is the whole receipt. While the turn runs it reads{" "}
+          <strong>Working…</strong> with a live clock beside it — or{" "}
+          <strong>Queued…</strong> before it has started. When it finishes,
+          the line carries three things:
+        </p>
+        <Flow>
+          <FlowBox title="Worked for 1m 30s" sub="wall clock for the turn" />
+          <FlowBox title="12.4K in / 1.1K out" sub="tokens the turn used" />
+          <FlowBox title="$0.0342" sub="priced from the model catalog" />
+        </Flow>
+        <p>
+          A turn that ended badly says so in the same place rather than going
+          quiet: <strong>Failed after 12s</strong>,{" "}
+          <strong>Cancelled after 12s</strong>,{" "}
+          <strong>Timed out after 12s</strong>.
+        </p>
+        <p>
+          The clock stops when <em>the answer arrives</em>, not when the
+          platform has finished its own bookkeeping. That ordering is
+          deliberate — the reply is written into the thread first, and the
+          accounting follows a moment later. So the header settles to{" "}
+          <strong>Worked for …</strong> as soon as there is something to read,
+          and the token and cost figures fill in just behind it. A turn whose
+          reply is on screen is done, whatever is still arriving beside it.
+        </p>
+        <p>
+          On a model that supports prompt caching, two more figures join the
+          token line: <strong>cache read</strong> and{" "}
+          <strong>cache write</strong>. Cache read is the part of the prompt
+          that did not have to be paid for again, and it is billed at a
+          fraction of ordinary input — which is why a long thread on a
+          cache-capable model gets cheaper per turn rather than steadily more
+          expensive. Which models do this is a property of the model, not a
+          setting you choose: see{" "}
+          <DocLink slug="model-catalog">the model catalog</DocLink>.
+        </p>
+        <PullQuote who="the turn header, in one sentence">
+          Time, tokens and money for one question, on one line — and the time
+          stops the moment you have your answer.
+        </PullQuote>
       </ReportSection>
 
       <ReportSection id="sources" title="Where an answer came from">
@@ -256,6 +398,41 @@ export function Threads() {
           state are stored durably against the thread, so a cold turn
           reconstructs exactly what a warm one had.
         </PullQuote>
+        <p>
+          Two things quietly shorten that first wait, and neither is something
+          you switch on:
+        </p>
+        <CardGrid>
+          <InfoCard title="The machine boots while you type">
+            <p>
+              Starting a new thread and then writing your question is not dead
+              time. The moment the empty thread exists, the platform sends an
+              inert ping to warm the machine your first message will land on,
+              so the typing and the provisioning overlap. Create a thread and
+              its opening message in one action — from a mobile share, say —
+              and there is nothing to overlap with; that first turn pays the
+              wait.
+            </p>
+          </InfoCard>
+          <InfoCard title="Some deployments stay warm across threads">
+            <p>
+              A deployment can key its warm sessions to <em>you and an
+              agent</em> rather than to one thread, so a brand-new thread
+              lands on the machine your last conversation already warmed —
+              including its open connections to tools. Whether that is on is a
+              deployment-level setting; where it is, the pattern you feel is
+              &ldquo;the first question of the day is slower, everything after
+              it is quick&rdquo;.
+            </p>
+          </InfoCard>
+        </CardGrid>
+        <p>
+          If two of your own threads want the same warm machine at the same
+          moment, the second one is given a machine of its own rather than
+          queued behind the first. You may see a longer{" "}
+          <strong>Starting agent VM</strong> on that turn; you will not see it
+          wait.
+        </p>
         <p>
           Two things do move on between turns rather than freezing, and both
           are deliberate:

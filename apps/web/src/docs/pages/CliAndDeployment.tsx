@@ -33,6 +33,31 @@
  * Still true and still excluded: there is no `thinkwork wiki` command
  * (no commands/wiki.ts exists — compounding memory compiles server-side),
  * and no evaluation seed-cleanup step. Neither may come back.
+ *
+ * Chat turn-latency observability (chat-latency program, 2026-08-20,
+ * THINK-915/THINK-909). Eric 2026-08-20: this is day-two operating, not a
+ * new page — it extends the existing `day-two` section rather than
+ * claiming a new slug. Verified against terraform/modules/app/lambda-api/
+ * chat-latency-observability.tf (dashboard
+ * `thinkwork-<stage>-chat-turn-latency`; saved Logs Insights query
+ * `thinkwork-<stage>-turn-timeline`, filtering event = "agentcore_phase"
+ * on a thread-turn id with a REPLACE_WITH_THREAD_TURN_ID placeholder;
+ * alarms `thinkwork-<stage>-chat-dispatch-duration-p95` — Lambda-native,
+ * no log-group dependency — and
+ * `thinkwork-<stage>-chat-turn-runtime-invoke-p95`, both p95 over
+ * five-minute periods breaching on 2 of 3, treat_missing_data
+ * notBreaching; metrics TurnRuntimeInvokeMs / AgentLoopMs /
+ * PreDispatchQueueMs in namespace Thinkwork/Chat/<stage>) and
+ * variables.tf:1018-1052 for the defaults quoted here (observability
+ * true, metric filters false, chat_turn_runtime_log_group_name "",
+ * threshold 30000 ms, alarm actions []), plus variables.tf:808-816 for
+ * agentcore_session_scope (default "thread"; "user" only once the stage's
+ * runtime image dual-accepts both session ids).
+ *
+ * Deliberately not claimed: that any named stage runs a particular value
+ * of agentcore_session_scope (no in-repo tfvars sets it), and any CLI
+ * surface for these inputs — they are Terraform variables, and no
+ * apps/cli config key references them.
  */
 import {
   CardGrid,
@@ -373,6 +398,63 @@ export function CliAndDeployment() {
             <code>--json</code>.
           </li>
         </ul>
+        <p>
+          It also keeps the job of answering &ldquo;why was that turn
+          slow?&rdquo; — and a deployed stage answers it without any setup on
+          your part. Every stage gets a CloudWatch dashboard, a saved query
+          and an alarm, each named after the stage:
+        </p>
+        <DocTable
+          head={["What", "Name", "What it is for"]}
+          rows={[
+            [
+              "Dashboard",
+              <code>thinkwork-&lt;stage&gt;-chat-turn-latency</code>,
+              "The whole chat turn at a glance: the runtime call, the model loop, the gap between them (where a cold start hides), the pre-dispatch queue, and invocations and errors across the four Lambdas a turn passes through.",
+            ],
+            [
+              "Saved query",
+              <code>thinkwork-&lt;stage&gt;-turn-timeline</code>,
+              <>
+                One turn&apos;s phases in order, across every log group. Open
+                it in Logs Insights, paste the thread-turn id over{" "}
+                <code>REPLACE_WITH_THREAD_TURN_ID</code>, run.
+              </>,
+            ],
+            [
+              "Alarm",
+              <code>thinkwork-&lt;stage&gt;-chat-dispatch-duration-p95</code>,
+              "The regression guard: p95 of the agent-runtime call, breaching on two of three five-minute periods. An idle stage does not alarm.",
+            ],
+          ]}
+        />
+        <p>
+          Those three are on by default and need nothing from you. Richer
+          per-phase metrics are opt-in, and deliberately so:{" "}
+          <code>enable_chat_turn_latency_metric_filters</code> defaults to{" "}
+          <code>false</code>, because the Lambda log groups it reads are
+          created on first invocation rather than by Terraform, so a
+          greenfield apply would fail on them. Turn it on for a stage that has
+          already served chat traffic, and set{" "}
+          <code>chat_turn_runtime_log_group_name</code> to that stage&apos;s
+          agent-runtime log group to light up the model-loop widgets too.
+          Alarms also notify nothing until you give{" "}
+          <code>chat_turn_latency_alarm_actions</code> a topic — an alarm with
+          no destination is a dashboard, not a page.
+        </p>
+        <p>
+          One more stage input belongs in the same conversation.{" "}
+          <code>agentcore_session_scope</code> decides whether a person&apos;s
+          warm agent machine is shared across their threads (<code>user</code>
+          ) or kept per thread (<code>thread</code>, the default). The wider
+          scope is what makes a brand-new thread fast rather than cold, and it
+          is safe only once the stage&apos;s agent runtime accepts both
+          session keys — so treat it as a deliberate flip after a release, not
+          a default to carry into a fresh stage. What people feel either way
+          is described under{" "}
+          <DocLink slug="threads">history and resumption</DocLink>. All three
+          of these are Terraform inputs on the stage, not CLI flags.
+        </p>
         <p>
           Two things you may have read elsewhere, and should not do. Older
           notes mention Terraform inputs for choosing a memory engine
