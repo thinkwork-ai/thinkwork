@@ -20,6 +20,27 @@
  * on enabling a model, and the enable toggle is disabled until it
  * resolves. No amber on this page — the gate is enforced by the platform,
  * not by a person, so it stays teal per the report-style rules.
+ *
+ * Prompt caching (chat-latency program, 2026-08-20). Verified against
+ * packages/api/src/lib/model-catalog/pricing.ts: cache rates are
+ * multipliers over the model's own input rate, ANTHROPIC_CACHE is
+ * { read 0.1x, write 1.25x }, NO_CACHE is { 0, 0 }, every claude-* entry
+ * carries ANTHROPIC_CACHE and every kimi-* and gpt-oss-* entry carries
+ * NO_CACHE ("kimi has no prompt caching on Bedrock"), and unknown models
+ * fall back to Sonnet-class rates with caching. The cache figures a reader
+ * sees come from apps/web/src/components/workbench/TaskThreadView.tsx:
+ * 5949-5966 (formatTokenUsage renders "N cache read" / "N cache write"),
+ * fed by packages/api/src/lib/cost-recording.ts. The composer picker is
+ * apps/web/src/components/workbench/ComposerModelPicker.tsx (group label
+ * "Approved models") with apps/web/src/lib/approved-model-selection.ts
+ * formatModelCostLine ("$X input / $Y output per 1M tokens").
+ *
+ * Deliberately not claimed: how cache breakpoints are placed in a request.
+ * No repo source references cache_control / cachePoint / a
+ * supportsPromptCaching flag — that lives inside the model SDK — so this
+ * page states only what pricing.ts and the rendered turn header prove:
+ * which model families are billed with cache rates, and that the reader
+ * can see the cache figures on a turn.
  */
 import {
   CardGrid,
@@ -162,10 +183,13 @@ export function ModelCatalog() {
           </InfoCard>
           <InfoCard title="The composer">
             <p>
-              When someone has more than one approved model, a model picker
-              appears next to the message input and they can override for a
-              single turn. With one approved model there is no picker and
-              nothing to think about.
+              When someone has more than one approved model, a picker appears
+              next to the message input and they can override for a single
+              turn. It lists their <strong>approved models</strong> with the
+              price beside each one — &ldquo;$3.00 input / $15.00 output per
+              1M tokens&rdquo; — so the choice is made with the cost in view.
+              With one approved model there is no picker and nothing to think
+              about.
             </p>
           </InfoCard>
         </CardGrid>
@@ -188,6 +212,40 @@ export function ModelCatalog() {
           turn as it happens. That feeds the usage figures on a user&apos;s
           page and the monthly budget you can set there — a per-person
           ceiling, expressed in dollars, rather than an abstract token quota.
+        </p>
+        <p>
+          Two of the token counts a turn can report are not fresh input at
+          all: <strong>cache read</strong> and <strong>cache write</strong>.
+          Prompt caching lets a model hold on to the unchanging front of a
+          prompt — the agent&apos;s instructions, the workspace it just read —
+          and charge a fraction of the input rate for it next time. Whether a
+          model does this is a property of the model family, and it is priced
+          accordingly:
+        </p>
+        <DocTable
+          head={["Model family", "Prompt caching", "How repeat context bills"]}
+          rows={[
+            [
+              <strong>Claude</strong>,
+              "Yes",
+              "Cache reads bill at a tenth of that model's input rate; writing a cache entry costs 1.25× input, once.",
+            ],
+            [
+              <strong>Kimi</strong>,
+              "No",
+              "There is no prompt caching for these on Bedrock, so every token of repeated context bills as fresh input.",
+            ],
+          ]}
+        />
+        <p>
+          The consequence is worth knowing before you pick a default. On a
+          long thread — where every turn re-sends a growing conversation — a
+          caching model gets <em>cheaper</em> per turn as the shared prefix
+          settles, while a non-caching model pays full input price for the
+          same text every time. That is the opposite of what the headline
+          per-token prices suggest, and it is visible per turn: the{" "}
+          <DocLink slug="threads">turn header</DocLink> shows the cache read
+          and cache write figures whenever the model reported them.
         </p>
         <p>
           The catalog also records what each model is capable of — context
